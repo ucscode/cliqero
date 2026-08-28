@@ -63,27 +63,33 @@ When the buyer selects `Access`:
 1. Cliqero authenticates the buyer where required.
 2. Cliqero resolves the relevant entitlement.
 3. Cliqero verifies that access is currently authorized.
-4. Cliqero creates an access handoff/token.
-5. Cliqero redirects to the listing destination with `source=<token>` where applicable.
-6. An integrated destination may verify the token through Cliqero's API.
-7. Access attempts may be recorded for audit/security without becoming financial events.
+4. Cliqero creates an access grant and cryptographically random opaque bearer credential.
+5. Cliqero redirects to the listing destination with `source=<opaque-token>` where applicable.
+6. An integrated destination authenticates itself and may verify the token through Cliqero's Access API.
+7. Cliqero resolves the token server-side to the access grant and related entitlement/purchase/listing context.
+8. Access attempts may be recorded for audit/security without becoming financial events.
 
 ## Source token
 
-The `source` value is authorization context, not referral attribution and not merely analytics metadata.
+The `source` value is an opaque bearer credential/reference. It is authorization context, not referral attribution, analytics metadata, or serialized business data.
 
 Security requirements:
 
-- do not use raw user IDs, emails, entitlement IDs, or purchase IDs as proof of authorization;
-- use an opaque server-side token or a cryptographically signed/verifiable token;
-- bind the token to the relevant listing/entitlement/access context;
-- support expiry or one-time semantics where the chosen token model requires it;
-- make verification idempotent and safe for retries;
+- generate `source` using a cryptographically secure random generator with sufficient entropy;
+- do not encode user IDs, emails, entitlement IDs, purchase IDs, listing metadata, JSON claims, or other business data into `source`;
+- do not use JWT, JWE, signed/self-contained tokens, or raw UUID/domain identifiers as the authorization model;
+- persist a secure hash of the raw bearer credential where practical rather than the recoverable raw token;
+- resolve the token server-side to an explicit access grant, which relates to the entitlement and therefore the purchase, listing, buyer, seller, and permitted context;
+- bind the access grant to the relevant entitlement/listing/destination or integration scope;
+- support future expiry, revocation, rotation, one-time consumption, or scopes through server-side access-grant state when real requirements need them;
+- make verification safe for retries;
 - avoid leaking unnecessary buyer personal data to the destination.
+
+Possession of `source` alone must not authorize unrestricted use of Cliqero's verification API. Destination integrations authenticate independently.
 
 ## External destination contract
 
-A destination integration asks Cliqero whether a source token is authorized. Cliqero answers the authorization question and may return the minimum context required by that integration.
+A destination integration authenticates to Cliqero and asks whether a `source` credential is authorized within that integration's permitted scope. Cliqero resolves the opaque credential server-side and returns only the minimum authorization context required by that integration.
 
 The destination then decides what to do: serve a file, create a session, expose software, provision an account, reveal an offer, or perform another service-specific action.
 
@@ -117,6 +123,6 @@ Useful analytics may include:
 - referral-attributed sales;
 - commissions;
 - access attempts;
-- successful token verifications where appropriate.
+- successful source verifications where appropriate.
 
 Analytics observes facts and must not become responsible for payment, entitlement, or ledger processing.
