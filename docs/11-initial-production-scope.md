@@ -6,9 +6,7 @@
 
 Cliqero should not be built as a disposable MVP.
 
-The first release should be deliberately narrow, but every included capability must be reliable, auditable, modular, tested, and designed for real money.
-
-The rule is:
+The first release should be deliberately narrow, but every included capability must be reliable, auditable, modular, tested, and designed for real money and real access rights.
 
 > Reduce scope, never reduce integrity.
 
@@ -17,83 +15,86 @@ The rule is:
 ### Identity and accounts
 
 - one account identity;
-- advertiser capability;
-- promoter capability;
-- referral relationship;
-- account settings and public handle management.
+- seller capability;
+- buyer capability;
+- referrer/promoter capability;
+- account referral relationship where enabled;
+- account settings and public handle/profile management.
 
-### Advertiser
+### Listings
 
-- advertiser profile;
-- reusable social/contact destinations;
-- offer creation and management;
-- offer-specific destination override;
-- public advertiser and offer pages.
+- generic listing creation and management;
+- title, description, price, media, metadata, destination, status/visibility;
+- public listing pages;
+- no separate ebook/software/course/service product models;
+- seller profile/listing discovery surface where useful.
 
-### Campaign
+### Checkout and purchase
 
-- wallet-funded campaign creation;
-- campaign budget reservation;
-- action value configuration;
-- activate/pause/resume/close;
-- basic campaign analytics;
-- budget exhaustion behavior.
+- checkout for a listing;
+- supported payment-provider integration;
+- idempotent payment verification;
+- purchase records with immutable commercial snapshots;
+- explicit purchase state;
+- prevention of duplicate purchase completion from repeated callbacks.
 
-### Promoter
+### Entitlement and access
 
-- browse eligible campaigns;
-- specific offer promotion links;
-- advertiser-focused promotion links;
-- versatile promoter page;
-- attributed sessions/actions;
-- pending and available earnings.
+- entitlement created/activated from a successful purchase;
+- buyer purchase/access library;
+- access endpoint that validates entitlement before redirect;
+- destination redirect with `source=<token>` where applicable;
+- secure opaque or cryptographically protected source token;
+- API for an integrated destination to verify authorization;
+- access audit/history sufficient for security and investigation.
 
-### Referral
+### Referrals / promotion
 
-- platform referral links;
-- direct referral relationship;
-- configurable referral levels;
-- upline/downline queries;
-- distribution calculation only;
-- no direct money processing inside the affiliate/referral module.
+- attributed listing referral links;
+- preservation of valid attribution through checkout;
+- commission triggered by valid purchase, not clicks/views;
+- direct referral commission policy;
+- account referral graph/upline support only to the level actually configured;
+- referral module returns distribution facts but never moves money.
 
 ### Money
 
 - canonical USD accounting;
 - precise Money value object;
 - immutable ledger;
-- wallet;
-- campaign reservations;
-- Paystack funding;
-- USDT TRC-20 funding;
-- idempotent payment verification;
-- internal release/reversal rules;
+- seller and referral earnings;
+- platform share/fee accounting;
+- Paystack funding/payment support where selected;
+- USDT TRC-20 support where selected;
+- idempotent provider verification;
+- auditable reversal/refund model if implemented;
 - manual withdrawals.
 
 ### Currency
 
 - USD canonical values;
 - convenient display conversion;
-- local-currency transaction recording;
+- original transaction currency recording;
 - graceful fallback to USD when conversion is unavailable.
 
-### Attribution and fraud baseline
+### Fraud/security baseline
 
-- promoter/session attribution;
-- two-stage interaction tracking;
-- CTA action records;
-- duplicate/rate/session checks;
-- pending/qualified/rejected action states;
-- basic risk signals sufficient to prevent trivial abuse.
+- referral attribution integrity;
+- duplicate payment/purchase protection;
+- access-token forgery/replay protection appropriate to token design;
+- entitlement authorization checks;
+- basic payment/referral/account risk signals;
+- audit/correlation IDs for critical operations.
 
 ### Administration
 
 - provider enable/disable controls;
 - runtime policy management;
-- offer/campaign moderation tools;
+- listing moderation;
+- purchase/payment/entitlement inspection;
 - withdrawal review and completion;
 - audit visibility;
-- basic fraud/action review.
+- manual corrective actions through explicit state/ledger operations.
 
 ### Infrastructure
 
@@ -101,61 +102,64 @@ The rule is:
 - Docker-based development/production runtime;
 - root Compose composition using `include`;
 - independently composable service directories;
-- durable event handling for critical financial flows;
-- tests for module isolation and financial idempotency.
+- logical modules before unnecessary microservices;
+- durable event handling for critical financial/access flows;
+- tests for module isolation and financial/idempotency boundaries.
 
 ## Deliberately excluded from the initial release
 
-The following may be valuable later but should not block the first reliable production release:
+Do not let these block the first production build:
 
+- product-type-specific ebook readers;
+- file hosting as a requirement of selling;
+- software license management;
+- course hosting;
+- video streaming;
+- SaaS provisioning logic inside Cliqero;
+- complex entitlement variants without a real requirement;
 - automated bank payouts;
-- automated crypto payouts;
-- Stripe and large numbers of additional payment providers;
+- large numbers of payment providers;
 - deep machine-learning fraud models;
 - native mobile apps;
-- complex advertiser audience bidding;
-- multi-touch attribution;
-- verified purchase/conversion campaigns;
-- enterprise APIs;
-- managed advertising services;
-- advanced promoter reputation scoring;
-- sophisticated dynamic campaign replacement;
-- many-level referral plans;
-- automatic external payment refunds.
+- enterprise APIs beyond the access-verification contract needed by integrated destinations;
+- sophisticated dynamic referral pages;
+- automatic external refunds unless required;
+- speculative product-specific fields.
 
-The architecture must allow these to be added later without rewriting unrelated modules.
+These may be introduced later as independent capabilities or metadata extensions without changing the core listing/purchase/entitlement model.
 
 ## Suggested build order
 
-1. architectural kernel and conventions;
+1. architectural kernel, module conventions, and root Compose include flow;
 2. identity/account capability;
-3. Money, ledger, wallet, audit, and idempotency;
-4. payment/currency providers;
-5. advertiser profiles/destinations/offers;
-6. public showcase surface;
-7. campaign reservation/state machine;
-8. promoter routes and attribution;
-9. action qualification/fraud baseline;
-10. affiliate/referral graph capability;
-11. commission processor;
+3. Money, ledger, audit, and idempotency foundations;
+4. payment and currency provider contracts;
+5. generic listing capability and public listing surface;
+6. checkout and purchase state machine;
+7. entitlement capability;
+8. secure access handoff and `source` verification API;
+9. referral attribution for listing links;
+10. affiliate/referral graph and distribution calculation;
+11. purchase/commission processor and earnings;
 12. manual withdrawal flow;
-13. administration and operational tooling;
-14. reliability and architecture verification.
+13. administration and moderation;
+14. reliability, authorization, and architecture verification.
 
 ## Release readiness
 
-The platform is not production-ready merely because its happy path works.
+Before launch, prove at minimum:
 
-Before launch, it should prove at minimum:
-
-- duplicate payment callbacks do not duplicate wallet credits;
-- duplicate action events do not duplicate commissions;
-- campaign reservations reconcile with ledger balances;
-- removing optional capabilities causes graceful degradation;
-- provider failures remain isolated;
-- withdrawal history is auditable;
-- offer-specific destinations do not overwrite global advertiser destinations;
-- referral calculations do not write wallet state;
-- all critical financial transitions have audit/correlation IDs;
+- repeated payment callbacks create one financial purchase consequence;
+- one successful purchase creates the intended entitlement exactly once;
+- listing edits never mutate historical purchase snapshots;
+- referral commission cannot be created by a click alone;
+- duplicate commission processing does not duplicate ledger credits;
+- forged raw IDs in `source` are rejected;
+- expired/revoked/wrong-context access tokens are rejected;
+- a valid entitled buyer can access the configured destination;
+- a non-entitled account cannot;
+- optional provider/module failures remain isolated where safe;
+- referral calculations do not write ledger state;
+- all critical financial and authorization transitions are auditable;
 - secret configuration is absent from version control;
-- public and authenticated surfaces enforce correct authorization boundaries.
+- Docker Compose `include` structure remains the composition mechanism rather than collapsing modules into one hard-coupled service.
