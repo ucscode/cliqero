@@ -1,141 +1,126 @@
-# Offers, Profiles, and Public Links
+# Listings, Profiles, and Access Links
 
 [Back to documentation index](./README.md)
 
 ## Public surfaces
 
-Cliqero separates public traffic from authenticated management.
+Cliqero separates public discovery from authenticated management.
 
-The main domain is the application/dashboard. Public distribution uses dedicated subdomains:
+The main domain owns the application/dashboard. Public distribution may use dedicated subdomains or routes, but those surfaces are presentation and attribution concerns rather than separate product architectures.
 
-- `s.<domain>` — advertiser showcase/public offer surface;
-- `a.<domain>` — promoter-attributed public surface;
-- `r.<domain>` — referral attribution surface.
+## Seller public profile
 
-The subdomains are public distribution surfaces, not separate dashboards.
-
-All authenticated management stays on the main domain.
-
-## Advertiser public profile
-
-An advertiser has a public profile such as:
-
-`https://s.example.com/@glamhair`
-
-The profile may show:
+A seller may have a public profile containing:
 
 - display name;
 - logo/avatar;
 - description;
-- currently visible offers;
-- social/contact destinations;
+- visible listings;
 - optional public metadata.
 
-The public profile is useful organically even when the advertiser has no active paid campaign.
+Profiles are conveniences around listings, not owners of product-specific behavior.
 
-## Offers
+## Listings
 
-An Offer is the generic object an advertiser wants people to discover or act on.
+A Listing is the generic object representing something that can be purchased for access.
 
-The term is intentionally broader than Product. An offer may represent:
+Cliqero intentionally does not define separate listing types for ebook, software, course, API, service, template, download, offer, or similar categories.
 
-- a physical product;
-- a service;
-- a song;
-- a property;
-- an event;
-- a restaurant;
-- an app;
-- a course;
-- a creator/channel;
-- any other promotable destination.
+A listing should contain stable fields such as:
 
-A canonical offer URL may look like:
+- identity;
+- owner/seller;
+- title;
+- description;
+- price;
+- media;
+- destination URL;
+- status/visibility;
+- timestamps;
+- extensible metadata.
 
-`https://s.example.com/@glamhair/bone-straight`
+Additional structured fields should be introduced only when actual product requirements establish a domain invariant that metadata cannot safely represent.
 
-Human-readable slugs should be preferred over exposing internal database IDs in public URLs where practical.
+## Destination
 
-## Reusable advertiser destinations
+Every purchasable listing resolves to a destination.
 
-An advertiser should not need to re-enter the same WhatsApp number or Instagram account for every offer.
+The destination may point to:
 
-The account can maintain reusable destinations such as:
+- a private download gateway;
+- Google Drive or another storage surface;
+- Supabase-backed access flow;
+- a SaaS application;
+- a repository or code-delivery service;
+- an offer page;
+- a custom application created by the seller;
+- any future URL-based access surface.
 
-- WhatsApp;
-- phone;
-- website;
-- Instagram;
-- Facebook;
-- TikTok;
-- Telegram;
-- YouTube;
-- other supported destinations.
+Cliqero does not infer product type from the URL and does not need to know what happens after authorized access is handed off.
 
-An offer can then select one or more of these existing destinations as its CTA.
+## Buyer access URL
 
-## Offer-specific destination overrides
+A raw destination should not necessarily be exposed as the only form of access. The buyer should normally open the listing through a Cliqero access route so the platform can validate entitlement and create an auditable handoff.
 
-Saved advertiser destinations are defaults, not restrictions.
+Conceptually:
 
-Any individual offer can define a custom destination when that offer needs to behave differently from the advertiser's shared profile channels.
+`buyer -> Cliqero access endpoint -> entitlement check -> destination?source=<token>`
 
-Examples:
+The `source` token must be opaque or cryptographically protected. It must not rely on a raw account ID, email, purchase ID, or another query value that an attacker can forge.
 
-- the advertiser's main WhatsApp is saved globally, but one offer should open a dedicated campaign WhatsApp line;
-- the advertiser's normal website is saved globally, but a property offer should open a specific property page;
-- the advertiser usually sends users to Instagram, but an event offer should open a ticket page;
-- an offer should use a custom label such as `Book Appointment` with a custom URL.
+## Destination verification
 
-An offer-specific override must not modify the advertiser's saved global channel.
+An integrated destination may call Cliqero's API with the received token to determine whether access is authorized.
 
-## Organic URLs versus promoter URLs
+Conceptual request:
 
-Organic advertiser URLs carry no promoter attribution.
+```http
+POST /api/access/verify
+Content-Type: application/json
 
-Example:
+{"token":"<source-token>"}
+```
 
-`https://s.example.com/@glamhair/bone-straight`
+Conceptual response:
 
-A visitor may browse and click CTAs, but no promoter reward is released because no promoter brought that session.
+```json
+{
+  "authorized": true,
+  "listing_id": "...",
+  "entitlement_id": "...",
+  "expires_at": "...",
+  "metadata": {}
+}
+```
 
-Promoter-attributed URLs use `a.<domain>`.
+The exact public contract can evolve during implementation, but the security property must remain: possession of easily guessed listing or buyer identifiers is not authorization.
 
-Possible structures include:
+A destination that does not integrate with Cliqero may simply ignore the `source` parameter. This must not force every listing into a custom integration.
 
-- `https://a.example.com/<promoter>` — versatile promoter/discovery page;
-- `https://a.example.com/<promoter>/<collection>` — category/topic collection;
-- `https://a.example.com/<promoter>/<advertiser>` — advertiser-focused promotion;
-- `https://a.example.com/<promoter>/<advertiser>/<offer>` — specific offer promotion.
+## Organic versus referral URLs
 
-The exact routing implementation can evolve while preserving the conceptual distinction between organic and attributed traffic.
+Organic listing URLs carry no referral attribution.
 
-## Referral URLs
+Referral/promoter URLs carry enough attribution context for Cliqero to associate a later valid purchase with the referrer according to policy.
 
-Referral links are not promotion links.
+Referral attribution belongs to Cliqero. It should not require the destination system to understand promoter identities or commission logic.
 
-A referral URL such as:
+## Durable public links
 
-`https://r.example.com/<refCode>`
+Human-readable slugs should be preferred where practical, but internal identity must remain stable if a title or slug changes.
 
-attributes a future Cliqero account to the referrer.
-
-The referred account may later become an advertiser, promoter, or both.
+A specific listing link should remain semantically tied to that listing. It must not silently redirect to an unrelated listing simply to keep a referral URL economically active.
 
 ## Dashboard location
 
-The main domain owns authenticated management:
+Authenticated management belongs on the main application surface:
 
 - account settings;
-- advertiser profile editing;
-- offer management;
-- campaign management;
-- wallet funding;
-- promoter marketplace;
-- promoter links/collections;
-- earnings;
-- referrals;
+- seller profile editing;
+- listing management;
+- purchases;
+- buyer entitlements/access history;
+- referral links and earnings;
+- wallet/ledger views where applicable;
 - withdrawals;
 - administration.
-
-The public subdomains should stay focused on distribution, attribution, and public presentation.
