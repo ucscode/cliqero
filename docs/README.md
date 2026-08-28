@@ -17,20 +17,22 @@ The stable product model is:
 - **Entitlement** — the buyer's access right;
 - **Destination** — where authorized access is handed off.
 
-When appropriate, access redirects may append `?source=<token>`. That value must be an opaque or cryptographically protected authorization token, not a raw user or purchase identifier. An integrated destination can verify it through Cliqero's API before granting its own service.
+When appropriate, access redirects append `?source=<token>`. `source` is a cryptographically random opaque bearer token. It is not JWT/JWE and contains no buyer, listing, purchase, entitlement, price, or other business data. Cliqero resolves it server-side to the access grant and related entitlement/purchase/listing/account graph.
 
-This product-model correction does **not** change the previously established architectural strategy. Cliqero remains modular, capability-driven, event-aware, production-grade, and composed through grouped Docker Compose files using `include`.
+Integrated destinations verify the token through Cliqero's authenticated Access API. The destination authenticates separately as an integration/API client; possession of `source` alone must not provide unrestricted access to Cliqero APIs. Server-side access state remains authoritative, which allows revocation and future access-policy changes without changing the public token format.
+
+This product-model correction does **not** change the previously established architectural strategy. Cliqero remains modular, capability-driven, event-aware, API-powered, production-grade, and composed through grouped Docker Compose files using `include`.
 
 ## Documentation map
 
 1. [Product Vision](./01-product-vision.md) — authoritative definition of productless commerce, listings, entitlements, destinations, and referral sales.
 2. [Roles and User Journeys](./02-roles-and-user-journeys.md) — seller, referrer, buyer, visitor, administrator, and access journeys.
-3. [Listings, Profiles, and Access Links](./03-offers-profiles-and-links.md) — generic listing data, destinations, referral URLs, source tokens, and verification.
+3. [Listings, Profiles, and Access Links](./03-offers-profiles-and-links.md) — generic listing data, destinations, referral URLs, opaque source tokens, and authenticated verification.
 4. [Purchase and Entitlement Model](./04-campaign-and-action-model.md) — purchase lifecycle, entitlement creation, access handoff, and commission consequences. The filename is retained for link stability; the former campaign model is superseded.
 5. [Money, Wallets, and Currency](./05-money-wallets-and-currency.md) — canonical accounting, payment verification, sale distribution, ledger rules, reversals, and withdrawals.
 6. [Referrers, Promotion, and Referral Network](./06-promoters-and-referrals.md) — attributed links, sale-based commission, account referral graph behavior, and reward boundaries.
-7. [System Architecture](./07-system-architecture.md) — modularity, capabilities, contracts, processors, events, OOP, Docker Compose includes, Next.js surfaces, and access capability boundaries.
-8. [Configuration and Data Model](./08-configuration-and-data-model.md) — configuration layers, secrets, generic listing schema, metadata/EAV, purchase snapshots, entitlements, and source-token rules.
+7. [System Architecture](./07-system-architecture.md) — modularity, capabilities, contracts, processors, events, API-first access, OOP, Docker Compose includes, and Next.js surfaces.
+8. [Configuration and Data Model](./08-configuration-and-data-model.md) — configuration layers, secrets, generic listing schema, metadata/EAV, purchase snapshots, entitlements, access grants, and source-token rules.
 9. [Reliability, Fraud, and Audit](./09-reliability-fraud-and-audit.md) — idempotency, payment/referral/access threats, token security, immutable records, and failure isolation.
 10. [Investor and Business Overview](./10-investor-business-overview.md) — productless business model, seller/referrer/buyer value, economics, network effects, and expansion principle.
 11. [Initial Production Scope](./11-initial-production-scope.md) — production V1 and build order centered on listing -> checkout -> purchase -> entitlement -> access.
@@ -50,6 +52,14 @@ The core rule for preventing scope drift is:
 > Do not model the thing behind the link unless a real user requirement proves that Cliqero must understand it.
 
 By default, new sellable things require new metadata, not new product architectures.
+
+## Access principle
+
+The external access contract is deliberately simple and stable:
+
+> `source` is an opaque credential, not data. Cliqero resolves the data.
+
+Do not replace this with self-contained JWT/JWE claims unless a future requirement explicitly changes the architecture.
 
 ## Build constraint for Codex
 
