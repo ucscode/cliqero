@@ -4,34 +4,31 @@
 
 ## Reliability standard
 
-Cliqero handles real money and financially meaningful attribution. The first release may have limited scope, but implemented behavior must be reliable enough for production use.
+Cliqero handles real money, referral attribution, and access rights. Implemented behavior must be reliable enough for production use even when the first release is narrow.
 
-The system should be designed for retries, duplicate webhooks, partial failures, unavailable optional modules, and administrative investigation.
+The system should be designed for retries, duplicate webhooks, partial failures, unavailable optional modules, unauthorized access attempts, and administrative investigation.
 
 ## Idempotency
 
-Every financially meaningful operation must be idempotent.
+Every financially or authorization-meaningful operation must be idempotent where repetition can occur.
 
 Examples:
 
 - payment verification;
-- wallet funding;
-- campaign reservation;
-- campaign release;
-- payable action distribution;
-- promoter/referral credits;
+- purchase finalization;
+- entitlement creation;
+- commission distribution;
 - withdrawal state transitions;
-- provider webhook handling.
+- provider webhook handling;
+- source-token verification/consumption where the token model requires one-time behavior.
 
-If a provider or worker delivers the same event repeatedly, the underlying financial consequence must occur once.
+Delivering the same provider event repeatedly must not create duplicate purchases, entitlements, or earnings.
 
-## Outbox and inbox patterns
+## Durable cross-module events
 
-Cross-module events should use durable delivery patterns where appropriate.
+Critical cross-module events should use outbox/inbox or equivalent durable delivery patterns where appropriate.
 
-If a database transaction commits a qualified action, the corresponding event must not be lost because the process crashed one millisecond later.
-
-An outbox/inbox or equivalent durable event pattern should be used for critical asynchronous work.
+If a transaction commits a purchase, entitlement or commission event must not be lost because the process crashes immediately afterward.
 
 ## Failure isolation
 
@@ -40,68 +37,63 @@ A module failure should affect only functionality that requires that capability.
 Examples:
 
 - currency provider down => canonical USD still works;
-- notifications down => funding can still succeed;
-- analytics down => action processing can still succeed;
-- affiliate unavailable => referral distribution cannot be calculated, but unrelated pages remain available;
-- Paystack disabled => other payment providers continue working.
+- notifications down => purchase can still succeed;
+- analytics down => purchase/access processing can continue;
+- Paystack disabled => another payment provider may remain usable;
+- affiliate module unavailable => referral consequence is handled according to safe policy without corrupting purchase state.
 
-The system should return explicit capability-unavailable responses rather than crash during application startup because an optional module is missing.
+Critical payment, purchase, ledger, and entitlement failures must fail safely rather than report success prematurely.
 
 ## Fraud threat model
 
-The promoter model is attractive to abuse because rewards are tied to attributable actions.
+The new model shifts the primary threats away from pay-per-click abuse and toward commerce, referral, and authorization abuse.
 
-A fraudster may attempt to:
+Attackers may attempt to:
 
-- repeatedly activate their own CTA links;
-- automate browser actions;
-- use bot networks;
-- rotate IPs or proxies;
-- coordinate multiple accounts;
-- simulate engagement;
-- drain campaign budgets with low-quality traffic;
-- exploit retries or race conditions to double-credit rewards.
+- forge referral attribution;
+- self-refer or coordinate accounts against policy;
+- replay payment/provider callbacks;
+- duplicate purchase completion;
+- duplicate commission distribution;
+- guess or forge `source` values;
+- share protected access URLs/tokens;
+- replay one-time access tokens;
+- access a listing without an active entitlement;
+- exploit refund/reversal timing;
+- manipulate provider or currency data;
+- abuse withdrawals.
 
-Fraud resistance is therefore a core product requirement, not a later analytics feature.
+Fraud/risk remains an independent capability and must not own money, purchase state, or entitlement state.
 
-## Two-stage interaction
+## Access security
 
-A promoter should not be rewarded merely because the promoter referral URL is opened.
+The destination query parameter is not trusted merely because it is named `source`.
 
-The basic sequence is:
+The source value must be an opaque or cryptographically verifiable token tied to authorization context.
 
-`promoter link -> Cliqero offer/profile -> visitor chooses CTA -> qualification -> reward eligibility`
+Verification should check the properties required by the chosen token model, such as:
 
-This increases the cost of trivial click fraud and aligns the reward with intentional visitor behavior.
+- token validity;
+- entitlement state;
+- listing binding;
+- expiry;
+- revocation;
+- one-time consumption/replay state where applicable;
+- destination/integration binding where appropriate.
 
-## Fraud/risk capability
+Never expose unnecessary buyer personal data in the token or verification response.
 
-Fraud scoring should be an independent capability.
+## Referral risk
 
-It may consider signals such as:
+Referral earnings are based on valid purchases, not clicks.
 
-- duplicate sessions/devices;
-- unusual action velocity;
-- IP/network characteristics;
-- proxy/data-center likelihood;
-- geography anomalies;
-- repeated destination actions;
-- account relationship patterns;
-- promoter-level risk history;
-- campaign-specific patterns.
-
-The fraud capability returns risk/qualification information. It must not own campaign money or wallet credits.
+Risk systems may consider account relationships, repeated buyer/referrer patterns, unusual conversion velocity, payment reversals, device/network signals, and other evidence without making those implementation details part of the public economic contract.
 
 ## Pending earnings
 
-Promoter earnings may remain pending while actions pass qualification and risk review.
+Seller/referral earnings may remain pending according to provider settlement, refund, risk, or platform policy.
 
-The UI should clearly distinguish:
-
-- pending earnings;
-- available/withdrawable earnings;
-- withdrawal-reserved amounts;
-- paid amounts.
+The UI should distinguish pending, available, withdrawal-reserved, paid, reversed, and other meaningful states where supported.
 
 ## Audit trail
 
@@ -110,60 +102,43 @@ Material system changes must be traceable.
 Audit records should make it possible to answer:
 
 - what happened?
-- when did it happen?
+- when?
 - who or what initiated it?
-- what was the previous state?
-- what is the new state?
-- which transaction, action, campaign, user, or provider reference is involved?
+- previous and new state;
+- which listing, purchase, payment, entitlement, referral, withdrawal, or provider reference was involved?
 - which correlation/idempotency key ties related operations together?
 
 ## Financial history
 
-Financial records are append-only in principle.
-
-Incorrect or exceptional outcomes should be corrected through compensating entries rather than deleting or silently modifying history.
-
-This is necessary for disputes, operator investigation, and ledger reconciliation.
+Financial records are append-only in principle. Incorrect outcomes are corrected through compensating entries rather than deleting or silently rewriting history.
 
 ## State machines
 
 Important processes use explicit state transitions.
 
-Suggested examples:
+Examples may include:
 
-Campaign:
+Purchase: `pending -> paid -> completed`
 
-`draft -> funded -> active -> paused -> exhausted -> closed`
+Entitlement: `active -> revoked` with future states only when needed.
 
-Action:
-
-`observed -> pending -> qualified -> distributed`
-
-or
-
-`pending -> rejected`
-
-Withdrawal:
-
-`requested -> under_review -> approved -> sent -> completed`
+Withdrawal: `requested -> under_review -> approved -> sent -> completed`
 
 Invalid transitions must be rejected and logged.
 
 ## Architectural reliability tests
 
-Tests should verify failure behavior in addition to happy paths.
+Tests should include:
 
-Examples:
+- deliver one payment webhook repeatedly => one purchase and one entitlement;
+- retry purchase completion => no duplicate seller/referral credits;
+- change listing metadata after purchase => historical purchase terms remain unchanged;
+- forge a raw user/purchase ID as `source` => access denied;
+- expired/revoked source token => access denied;
+- valid source token for wrong listing => access denied;
+- remove analytics => purchase still completes;
+- disable one payment provider => unrelated providers remain usable;
+- affiliate/referral module returns relationship/distribution data but never writes ledger entries;
+- refund/reversal, where supported, uses compensating ledger and explicit entitlement consequences.
 
-- deliver one payment webhook ten times => wallet credits once;
-- remove currency capability => offer still renders in USD;
-- disable Paystack => USDT remains usable;
-- remove notifications => payment still completes;
-- remove analytics => action can still qualify/distribute;
-- close a campaign => unused reservation returns to wallet;
-- reject action before distribution => reserved value is restored;
-- retry worker after partial failure => no duplicate ledger credits;
-- attempt normal refund after commission distribution => rejected according to policy;
-- affiliate module returns graph data but never writes wallet entries.
-
-These tests validate the architecture itself, not merely individual endpoints.
+These tests validate the architecture itself, not merely endpoint happy paths.
