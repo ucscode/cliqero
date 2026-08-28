@@ -1,150 +1,122 @@
-# Campaign and Action Model
+# Purchase and Entitlement Model
 
 [Back to documentation index](./README.md)
 
-## Campaign purpose
+> This file retains its historical filename to avoid breaking documentation links. The old campaign/pay-per-action model is superseded by the purchase-and-access model described here.
 
-A campaign puts money behind an existing offer.
+## Purchase purpose
 
-An advertiser may have a public profile and offers without paying anything. Payment begins only when the advertiser funds a campaign and chooses the action that should consume campaign budget.
+A purchase records a buyer paying for access to a listing.
 
-## Campaign setup
+The economically meaningful event is a verified purchase, not a page view, CTA click, campaign action, or external destination interaction.
 
-A campaign should define at least:
+Core sequence:
 
-- advertiser;
-- offer;
-- campaign status;
-- allocated budget;
-- payable action type;
-- action value;
-- targeting or eligibility rules where supported;
-- start/end controls where supported.
+`listing -> checkout -> payment verification -> purchase -> entitlement -> access`
 
-The advertiser funds the wallet first. Campaign money is then reserved from wallet balance.
+## Purchase record
 
-## Free visibility, paid action
+A purchase should preserve at least:
 
-A promoted visitor may:
+- buyer identity;
+- seller identity;
+- listing identity;
+- immutable price snapshot;
+- currency and canonical accounting value;
+- payment/provider reference;
+- referral attribution snapshot where applicable;
+- purchase state;
+- entitlement relationship;
+- idempotency/correlation identifiers;
+- timestamps.
 
-1. open a promoter link;
-2. view the offer;
-3. browse other offer details;
-4. leave.
+Changing a listing later must not rewrite the historical terms of an existing purchase.
 
-No campaign charge is created from those steps alone.
+## Purchase lifecycle
 
-The campaign becomes economically relevant when the visitor triggers the configured action.
+Use explicit state rather than unrelated booleans.
 
-Examples:
+A practical lifecycle may include:
 
-- click WhatsApp;
-- click Call Now;
-- open a website;
-- open Instagram;
-- open Telegram;
-- open a custom destination;
-- another future action provider supported by Cliqero.
+`pending -> paid -> completed`
 
-## Action lifecycle
+with alternative states such as:
 
-A payable action should be explicit state rather than a boolean.
+`pending -> failed`
 
-Suggested lifecycle:
+and explicit compensated/refunded/reversed states where supported.
 
-`observed -> pending -> qualified -> distributed`
+The exact names may evolve during implementation, but invalid transitions must be rejected and audited.
 
-Alternative outcomes:
+## Entitlement
 
-`pending -> rejected`
+A successful purchase creates or activates an entitlement owned by the buyer for the listing.
 
-A previously qualified action may require an administrative compensating reversal in exceptional circumstances, but financial history must never be deleted.
+Entitlement is the stable authorization concept. It should be able to represent future requirements such as expiration, revocation, limited access, or consumption without forcing Cliqero to know the product type.
 
-## Qualification
+V1 should not invent those variants unless required. A normal purchase can simply create an active entitlement.
 
-The visitor clicking a CTA does not automatically mean the action must be paid without validation.
+## Access lifecycle
 
-The attribution/fraud layer may consider:
+When the buyer selects `Access`:
 
-- session integrity;
-- duplicate behavior;
-- device/browser signals;
-- IP/rate patterns;
-- data-center/proxy characteristics;
-- campaign targeting;
-- repeated CTA activity;
-- suspicious promoter patterns;
-- other risk signals.
+1. Cliqero authenticates the buyer where required.
+2. Cliqero resolves the relevant entitlement.
+3. Cliqero verifies that access is currently authorized.
+4. Cliqero creates an access handoff/token.
+5. Cliqero redirects to the listing destination with `source=<token>` where applicable.
+6. An integrated destination may verify the token through Cliqero's API.
+7. Access attempts may be recorded for audit/security without becoming financial events.
 
-The precise anti-fraud formula should not be publicly exposed.
+## Source token
 
-## Campaign budget as reserved money
+The `source` value is authorization context, not referral attribution and not merely analytics metadata.
 
-Campaign allocation should be modeled as reserved wallet value rather than money disappearing immediately.
+Security requirements:
 
-Example:
+- do not use raw user IDs, emails, entitlement IDs, or purchase IDs as proof of authorization;
+- use an opaque server-side token or a cryptographically signed/verifiable token;
+- bind the token to the relevant listing/entitlement/access context;
+- support expiry or one-time semantics where the chosen token model requires it;
+- make verification idempotent and safe for retries;
+- avoid leaking unnecessary buyer personal data to the destination.
 
-- wallet available: $100;
-- campaign allocation: $40;
-- wallet available after reservation: $60;
-- campaign reserved: $40.
+## External destination contract
 
-Each qualified payable action consumes from reserved campaign value.
+A destination integration asks Cliqero whether a source token is authorized. Cliqero answers the authorization question and may return the minimum context required by that integration.
 
-If the advertiser pauses or closes the campaign with unused allocation, the unused amount is released back to available wallet balance.
+The destination then decides what to do: serve a file, create a session, expose software, provision an account, reveal an offer, or perform another service-specific action.
 
-That release is not an external payment refund.
+Cliqero must not encode those behaviors into the core purchase model.
 
-## Campaign state machine
+## Referral consequence
 
-A robust campaign should use explicit states such as:
+A valid referral attribution becomes financially relevant when a purchase is successfully verified according to platform policy.
 
-`draft -> funded -> active -> paused -> exhausted -> closed`
+A purchase processor may:
 
-State transitions must be auditable and validated.
+1. finalize the purchase;
+2. create/activate entitlement;
+3. resolve referral attribution;
+4. ask the affiliate/referral capability for applicable recipients/shares;
+5. request ledger entries for seller, referrer, platform, fees, or other configured recipients;
+6. emit purchase/entitlement/commission events.
 
-## What the advertiser is buying
+The referral capability calculates relationship/distribution facts. It does not move money itself.
 
-Cliqero should describe campaign value truthfully.
+## Analytics
 
-A CTA click does not guarantee a sale or completed conversation. Therefore the platform should say:
+Useful analytics may include:
 
-> Pay when someone takes the action you selected.
+- listing views;
+- referral visits;
+- checkout starts;
+- successful purchases;
+- conversion rate;
+- gross sales;
+- referral-attributed sales;
+- commissions;
+- access attempts;
+- successful token verifications where appropriate.
 
-It should not claim:
-
-> Pay only for customers.
-
-unless a future campaign type is actually tied to a verified conversion.
-
-## Future action strengths
-
-The architecture should allow stronger future actions without changing the base model:
-
-- CTA click;
-- verified lead;
-- signup;
-- external conversion callback;
-- app install;
-- purchase confirmation;
-- advertiser-defined webhook conversion.
-
-Each is simply another action capability with its own qualification rules.
-
-## Campaign analytics
-
-Campaign analytics may expose:
-
-- impressions;
-- public page views;
-- attributed sessions;
-- CTA actions;
-- qualified actions;
-- rejected actions;
-- action rate;
-- spend;
-- reserved budget;
-- remaining budget;
-- outbound destination breakdown.
-
-Analytics must observe facts and must not become responsible for financial processing.
+Analytics observes facts and must not become responsible for payment, entitlement, or ledger processing.
