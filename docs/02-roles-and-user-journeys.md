@@ -4,126 +4,108 @@
 
 ## Identity model
 
-Cliqero uses one account identity. Roles are capabilities attached to the same account rather than separate user systems.
+Cliqero uses one account identity. Seller, referrer/promoter, and buyer behavior are capabilities of the same account rather than separate user systems.
 
-A single account may act as:
+A single account may sell listings, refer listings, buy listings, or do any combination of those things.
 
-- advertiser;
-- promoter;
-- referrer;
-- any combination of the above.
+The referral relationship belongs to the account itself and must not require a separate identity model.
 
-The referral relationship belongs to the account itself, not to a role. If Alice refers Bob and Bob later becomes both an advertiser and a promoter, Bob remains Alice's referred account.
+## Seller
 
-## Advertiser
+A seller is an account that creates listings for something people can pay to access.
 
-An advertiser is an account that wants people to discover and act on one or more offers.
+The seller can:
 
-The advertiser can:
+- maintain public profile information where supported;
+- create and manage listings;
+- set listing title, description, price, media, metadata, destination, and visibility/state;
+- configure referral eligibility and commission policy where platform policy permits;
+- view purchases, sales, referral-attributed sales, earnings, and relevant analytics;
+- change a listing destination without changing the meaning of past financial records.
 
-- maintain a public profile;
-- save reusable social/contact channels;
-- create offers;
-- choose which saved destination an offer should use;
-- override a saved destination with an offer-specific custom destination;
-- fund the wallet through supported payment providers;
-- allocate wallet funds to campaigns;
-- choose the payable action and its value;
-- start, pause, resume, and close campaigns;
-- view impressions, visits, attributed sessions, payable actions, spend, and remaining campaign budget.
+The seller is not required to upload the underlying product to Cliqero. The destination may point to any supported external or internal access surface.
 
-The advertiser does not pay Cliqero for a visitor merely seeing an offer.
+## Referrer / promoter
 
-## Promoter
+A referrer distributes attributed Cliqero listing links.
 
-A promoter is an account that distributes advertiser offers through attributed Cliqero links.
+The referrer can:
 
-The promoter can:
+- browse eligible listings;
+- generate or obtain attributed listing links;
+- share those links through social media, communities, messaging platforms, websites, video descriptions, or other channels;
+- view attributed visits and purchases where exposed;
+- view pending and available referral earnings;
+- request withdrawal when eligible.
 
-- browse eligible campaigns;
-- select individual offers to promote;
-- share links to an advertiser profile or specific offer;
-- maintain a versatile promoter/discovery page;
-- maintain topic-specific collections where supported;
-- view attributed visits and qualified actions;
-- view pending and available earnings;
-- request manual withdrawal when eligible.
+A referrer earns from a valid attributed purchase according to the applicable commission policy. Clicks and page views alone do not create commission.
 
-A promoter does not need to sell the advertiser's product. The promoter earns when a visitor attributed to them completes the campaign's payable action and that action is qualified.
+## Buyer
 
-## Referrer
+A buyer discovers a listing, pays through Cliqero, receives a purchase record and entitlement, and can then access the configured destination.
 
-A referrer introduces another account to Cliqero through a platform referral link.
+A buyer account should be able to view previously purchased listings and re-open access while the entitlement remains valid.
 
-Referral is distinct from promotion.
-
-- Promotion attribution answers: who brought this visitor to this advertiser offer?
-- Referral attribution answers: who introduced this account to Cliqero?
-
-The referral graph can be queried for direct referrals, levels, uplines, and downlines. The affiliate/referral module does not move money itself. It only returns relationship and distribution information that another processor may use.
+The buyer does not need to care whether the destination is a file download, application, course, private gateway, offer, or another kind of service.
 
 ## Visitor
 
-A visitor does not need a Cliqero account to view a public advertiser page or promoted offer.
+A visitor may browse public listings without being entitled to them.
 
-A visitor may:
+A visitor may arrive organically or through a referral link. Referral attribution can be preserved through checkout according to platform policy.
 
-- land on an advertiser's public profile;
-- land on a specific offer;
-- arrive through an attributed promoter link;
-- view one or several offers;
-- activate a CTA such as WhatsApp, Call, Website, Instagram, Telegram, or a custom destination.
-
-When the visit is attributed to a promoter, a qualified CTA action can release campaign value according to the configured distribution rules.
+A visitor becomes a buyer when a purchase is successfully completed and the corresponding entitlement is created.
 
 ## Administrator/operator
 
-An administrator operates the platform rather than participating in campaign economics.
-
 Administrative responsibilities include:
 
-- moderating prohibited or abusive offers;
-- reviewing suspicious actions;
-- enabling or disabling providers and runtime features;
+- moderating prohibited or abusive listings;
+- reviewing suspicious purchases/referrals;
+- enabling or disabling providers and runtime capabilities;
 - reviewing withdrawal requests;
-- manually sending approved withdrawals in the initial release;
-- recording payout references and completion state;
-- inspecting audit trails and ledger entries;
-- resolving exceptional operational disputes without deleting financial history.
+- recording manual payout completion where applicable;
+- inspecting audit trails, payment records, entitlements, and ledger entries;
+- revoking or compensating access/financial state through explicit auditable operations rather than deleting history.
 
-## Typical advertiser journey
-
-1. Register or sign in.
-2. Complete advertiser profile.
-3. Add reusable contact/social channels.
-4. Create an offer.
-5. Choose a saved destination or define an offer-specific custom destination.
-6. Fund the Cliqero wallet.
-7. Create a campaign for the offer.
-8. Reserve part of wallet balance for the campaign.
-9. Promoters distribute the campaign.
-10. Visitors view the offer freely.
-11. Qualified CTA actions consume campaign budget.
-12. The advertiser reviews performance and may pause, replenish, or close the campaign.
-
-## Typical promoter journey
+## Typical seller journey
 
 1. Register or sign in.
-2. Activate promoter capability.
-3. Browse active campaigns.
-4. Choose campaigns relevant to the promoter's audience.
-5. Generate or use the promoter's attributed links.
-6. Share them through social media, video descriptions, messaging platforms, blogs, communities, or other channels.
-7. Visitors click through and inspect offers.
-8. Qualified CTA actions are attributed to the promoter.
-9. Earnings move from pending to available according to platform rules.
-10. The promoter requests withdrawal when eligible.
+2. Create a listing.
+3. Add the metadata necessary to explain what the buyer receives.
+4. Set the price.
+5. Configure the destination URL.
+6. Publish the listing.
+7. Optionally allow referral promotion according to platform policy.
+8. Buyers discover and purchase the listing.
+9. Successful purchases create entitlements.
+10. The seller reviews sales and earnings.
 
-## Typical referral journey
+## Typical referrer journey
 
-1. Existing account shares `r.<domain>/<refCode>`.
-2. New visitor registers through the referral route.
-3. The referral relationship is stored against the new account.
-4. The new account may later become an advertiser, promoter, or both.
-5. When a commission processor needs referral distribution, it asks the affiliate/referral capability for the applicable uplines and levels.
-6. The affiliate/referral capability returns data only; it does not credit wallets.
+1. Register or sign in.
+2. Browse listings eligible for referral.
+3. Obtain an attributed listing link.
+4. Share it.
+5. A visitor follows the link and completes a valid purchase.
+6. The purchase retains valid referral attribution.
+7. Commission is calculated and recorded through the financial processor/ledger.
+8. Earnings become withdrawable according to policy.
+
+## Typical buyer journey
+
+1. Discover a listing organically or through a referral link.
+2. Review listing metadata and price.
+3. Sign in or register when required for purchase/entitlement ownership.
+4. Pay through a supported payment provider.
+5. Cliqero verifies the payment idempotently.
+6. Cliqero records the purchase and creates the entitlement.
+7. The buyer chooses `Access`.
+8. Cliqero creates an access handoff and redirects to the listing destination, optionally appending `?source=<token>`.
+9. An integrated destination may verify the token with Cliqero before granting its own access.
+
+## Access is a platform concept; fulfillment is not
+
+Cliqero determines whether the buyer is entitled to access a listing. It does not need to implement the destination's internal fulfillment.
+
+The same buyer journey must remain valid whether the destination returns a download, opens software, provides an offer, provisions a service, or does something else entirely.
