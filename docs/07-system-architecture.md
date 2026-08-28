@@ -118,11 +118,31 @@ The access capability answers whether a buyer is entitled to a listing and creat
 
 A destination link may receive:
 
-`?source=<token>`
+`?source=<opaque-token>`
 
-The token must be opaque or cryptographically protected and bound to the relevant authorization context. External destinations may verify it through a public Cliqero API.
+`source` is a cryptographically random opaque bearer credential. It is not a JWT/JWE claims container and contains no buyer, listing, purchase, entitlement, or pricing data.
+
+The access capability owns the server-side mapping from the token to an access grant and from that grant to the relevant entitlement/purchase/listing/account relationships.
+
+Where practical, persisted token material should be a secure hash rather than the raw bearer credential.
+
+External destinations verify access through Cliqero's Access API. They must authenticate independently as integrations/API clients; the `source` bearer token is not an API-client credential.
+
+The API returns only the minimum authorized context needed by that integration and treats current server-side entitlement/access state as authoritative.
 
 The access capability must not know whether the destination serves a file, opens software, provisions an account, reveals an offer, or performs another product-specific action.
+
+## API-first architecture
+
+Cliqero should expose domain capabilities through stable APIs where external systems reasonably need them.
+
+The access flow is explicitly API-first:
+
+`destination -> authenticated Access API -> access capability -> entitlement truth`
+
+Cliqero's own web surfaces should call the same underlying capability contracts rather than duplicating access rules in UI routes.
+
+Future SDKs or libraries may wrap these APIs for supported languages/frameworks, but an SDK is a convenience client, not a second authorization engine.
 
 ## Graceful degradation
 
@@ -136,7 +156,7 @@ Examples:
 - analytics unavailable => purchase/access processing continues;
 - Paystack disabled => other payment providers remain usable.
 
-Critical dependencies such as payment verification, purchase finalization, ledger integrity, and entitlement creation must fail safely rather than pretending success.
+Critical dependencies such as payment verification, purchase finalization, ledger integrity, entitlement creation, and access authorization must fail safely rather than pretending success.
 
 ## OOP-first implementation
 
@@ -148,7 +168,7 @@ Examples:
 - `Listing`;
 - `Purchase`;
 - `Entitlement`;
-- `AccessToken` / `AccessGrant`;
+- `AccessGrant`;
 - `Wallet`;
 - `Money`;
 - `AffiliateGraph`;
@@ -233,7 +253,7 @@ Examples:
 
 `Paystack webhook -> PaystackProvider.verify() -> payment.verified -> PurchaseCompletionProcessor`
 
-`Destination verify request -> Access API -> Entitlement/Access capability -> authorization result`
+`Destination verify request -> authenticated Access API -> Entitlement/Access capability -> authorization result`
 
 Another payment provider can produce the same domain fact without purchase logic knowing the provider source.
 
