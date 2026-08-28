@@ -4,183 +4,142 @@
 
 ## Executive summary
 
-Cliqero is an action-driven promotion network that helps advertisers get discovered through human distribution while allowing promoters to earn from qualified actions they generate.
+Cliqero is a productless commerce and referral platform.
 
-The commercial model aligns two existing desires:
+Sellers list access to something using metadata, a price, and a destination. Referrers share attributed listing links. Buyers pay through Cliqero and receive entitlement to access the destination. The underlying thing may be a download, software, a private service, an offer, a course, a repository, a gateway, or another experience that Cliqero does not need to model as a separate product type.
 
-- advertisers want more people to discover and act on what they offer;
-- individuals want legitimate ways to earn by using their reach, audience, communities, or distribution ability.
+The commercial loop is simple:
 
-Advertisers fund campaigns. Promoters distribute attributed links. Visitors can view offers freely. Campaign value is released only when visitors take advertiser-defined actions such as opening WhatsApp, calling, visiting a website, opening a social profile, or another supported destination.
+> List -> Refer -> Buy -> Access
 
-Cliqero does not need to process the underlying sale between advertiser and customer.
+Cliqero owns the transaction, entitlement, referral economics, and access authorization boundary. The seller or destination system owns the specialized fulfillment experience behind the link.
 
 ## Market position
 
-Cliqero sits between several familiar categories without being identical to any one of them:
+Cliqero sits between several familiar categories:
 
-- performance advertising;
-- affiliate distribution;
-- creator promotion;
-- referral networks;
-- micro-influencer marketing;
-- lightweight business showcase pages.
+- digital commerce;
+- affiliate/referral marketplaces;
+- creator monetization;
+- link-based product discovery;
+- access/payment gateways;
+- lightweight seller storefronts.
 
-Traditional ad platforms optimize machine-selected distribution. Cliqero adds a human distribution layer in which promoters choose what they believe their audiences will care about.
+Its distinction is not a new product taxonomy. Its distinction is that commerce remains stable regardless of what the destination represents.
 
-## Value proposition for advertisers
+## Value proposition for sellers
 
-Advertisers receive:
+Sellers can:
 
-- a public profile and offer pages;
-- reusable social/contact destinations;
-- campaign-based distribution through promoters;
-- no campaign charge for mere passive views;
-- payment tied to configured actions;
-- clear campaign budget and action-cost controls;
-- analytics showing exposure, attributed sessions, actions, spend, and destination activity.
+- list something without waiting for Cliqero to support its product category;
+- provide metadata, price, media, and a destination;
+- sell through Cliqero checkout;
+- let others refer the listing for commission;
+- receive sales earnings;
+- use an external destination they already control;
+- optionally integrate the destination with Cliqero's entitlement-verification API.
 
-The proposition is intentionally simpler than conventional advertising terminology:
+A seller who creates a new private tool, download gateway, SaaS feature, course, or offer elsewhere can monetize it through the same listing model.
 
-> Put your offer in front of more people. Pay when someone takes the action you selected.
+## Value proposition for referrers
 
-## Value proposition for promoters
+Referrers receive:
 
-Promoters receive:
+- a marketplace of listings to recommend;
+- attributed links;
+- earnings tied to valid purchases;
+- visibility into attributable sales/earnings where supported;
+- withdrawal of eligible earnings.
 
-- a marketplace of things to promote;
-- specific offer links;
-- advertiser-focused links;
-- reusable collections;
-- a versatile public promoter page;
-- attribution and action analytics;
-- earnings based on qualified actions rather than merely posting content;
-- a path to withdrawal after review.
+The referrer does not need to host the product or complete fulfillment.
 
-Promoters can specialize by audience or topic. A beauty-focused promoter may choose beauty campaigns, while a technology creator may choose software and technology campaigns.
+## Value proposition for buyers
+
+Buyers receive:
+
+- one place to discover and purchase listings;
+- a durable purchase record;
+- entitlement owned by their Cliqero account;
+- a consistent `Access` experience regardless of what exists behind the destination.
+
+For integrated services, Cliqero can also provide authorization context through a secure `source` token that the destination verifies by API.
+
+## Productless economics
+
+The product model deliberately avoids separate ebook/software/course/service architectures.
+
+This reduces both engineering drag and strategic drift. Cliqero only adds structured product-specific data when actual users demonstrate a requirement that generic listing metadata cannot safely represent.
 
 ## Referral economics
 
-Cliqero may reward accounts that refer productive participants, but referral rewards are funded from real campaign economics rather than registration fees.
+Referral rewards originate from valid purchases, not page views, CTA clicks, registration fees, or the right to participate.
 
-The platform should remain commercially valuable even if referral rewards are disabled.
+A sale may be distributed among:
 
-This is an important distinction from recruitment-driven schemes: the economic source is advertiser demand for measurable promotional activity.
+- seller;
+- direct referrer/promoter;
+- configured account-referral/upline recipients where enabled;
+- Cliqero/platform;
+- relevant fees according to accounting policy.
+
+The platform remains commercially useful if multi-level referral rewards are disabled.
 
 ## Revenue model
 
-A payable campaign action has a defined value. That value is distributed according to configurable policy among:
+Cliqero's base revenue can come from a configurable platform share/fee on successful commerce.
 
-- promoter reward;
-- referral reward pool;
-- Cliqero/platform share.
+Potential future revenue may include:
 
-The platform therefore earns when campaigns produce qualified actions.
-
-Additional future revenue opportunities may include:
-
-- advertiser subscription tools;
+- premium seller tools;
 - advanced analytics;
-- premium promoter/distribution tools;
-- campaign optimization;
-- verified lead/conversion action tiers;
+- premium referral/distribution tools;
 - business API access;
-- enterprise campaign controls;
-- optional managed campaign services.
+- advanced entitlement/integration features;
+- managed services;
+- optional subscriptions.
 
-These are extensions, not dependencies of the base model.
+These are extensions, not prerequisites for the core flow.
 
 ## Network effects
 
-Cliqero has potential multi-sided network effects.
+More useful listings create more inventory for referrers and more reasons for buyers to visit.
 
-More advertisers create more campaign inventory for promoters.
+More capable referrers increase seller distribution.
 
-More capable promoters increase the attractiveness of the platform to advertisers.
+More buyers make listing creation more attractive.
 
-Promoters sharing Cliqero links create external visibility for advertiser offers and for Cliqero itself.
-
-Some promoters will also own businesses and become advertisers. Some advertiser visitors may later become promoters or advertisers themselves.
-
-The wallet model can further reinforce the loop because a user may earn as a promoter and later use wallet value to fund their own campaign, subject to applicable balance/policy rules.
+Some buyers will become sellers or referrers; some referrers will become sellers. The single-account capability model supports these transitions naturally.
 
 ## Initial market
 
-The initial market is Nigeria.
+The initial market can begin in Nigeria while the accounting/provider architecture remains globally extensible.
 
-Reasons include:
-
-- large numbers of small businesses selling through WhatsApp and social platforms;
-- strong informal and social commerce behavior;
-- widespread desire for affordable customer acquisition;
-- large population interested in supplementary online income;
-- an existing cultural familiarity with referral and network-driven distribution.
-
-The platform should nevertheless be built globally from the accounting and provider architecture level.
-
-USD is canonical internally while users may see convenient local-currency representations.
-
-## Initial adoption strategy
-
-The system should allow relatively low advertiser entry amounts so skeptical users can test campaigns without large commitments.
-
-An initial funding point around NGN 5,000 is deliberately accessible compared with requiring a substantial advertising commitment.
-
-Promoters should be able to join without buying a product or paying for the right to earn.
-
-## Why action-based charging matters
-
-A seller may distrust paying simply for impressions or page loads.
-
-Cliqero's model is easier to reason about:
-
-- a visitor sees the offer: no charge;
-- a visitor browses: no charge;
-- a visitor deliberately activates the advertiser CTA: action becomes eligible for qualification and payment.
-
-This creates a clearer perceived connection between spend and intent.
+Important local advantages include strong social commerce behavior, widespread link-based selling, creator/referral distribution, and demand for simpler ways to monetize digital or externally hosted value.
 
 ## Defensibility
 
-The long-term defensibility is not merely the software UI.
+Long-term defensibility can emerge from:
 
-Potential defensibility comes from:
-
-- promoter network density;
-- advertiser inventory;
-- historical attribution quality;
-- fraud/risk intelligence;
-- campaign performance data;
-- promoter specialization and reputation;
-- trusted financial operations;
-- reusable distribution links and collections;
-- APIs and integrations.
+- buyer trust and purchase history;
+- seller inventory;
+- referral network density;
+- payment reliability;
+- entitlement/access integrations;
+- historical conversion and risk intelligence;
+- reusable distribution links;
+- APIs and integrations;
+- trusted financial operations.
 
 ## Expansion
 
-Cliqero is not limited to retail goods.
+Cliqero does not need a vertical-by-vertical expansion plan at the architecture level.
 
-Potential verticals include:
-
-- fashion and beauty;
-- restaurants and local services;
-- property;
-- events;
-- music and entertainment;
-- apps and SaaS;
-- creators;
-- courses and education;
-- hospitality;
-- professional services.
-
-Any offer with a meaningful outbound action can participate.
+If users begin selling a new kind of thing, the default response is to represent it with listing metadata and a destination. Only a demonstrated missing invariant justifies a new domain capability.
 
 ## Core business test
 
-The strongest test of Cliqero's legitimacy is simple:
+The strongest test is simple:
 
-> Would an advertiser still pay for Cliqero campaigns if there were no referral program?
+> Can a seller put something behind a destination, list it, get paid, let someone refer it, and let a buyer gain authorized access without Cliqero needing to know the product type?
 
 The intended answer is yes.
-
-The referral system is a distribution accelerator. It is not the product being sold.
