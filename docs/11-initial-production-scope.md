@@ -44,9 +44,12 @@ The first release should be deliberately narrow, but every included capability m
 - buyer purchase/access library;
 - access endpoint that validates entitlement before redirect;
 - destination redirect with `source=<token>` where applicable;
-- secure opaque or cryptographically protected source token;
-- API for an integrated destination to verify authorization;
-- access audit/history sufficient for security and investigation.
+- cryptographically random opaque bearer source credential containing no business data;
+- server-side access-grant resolution from source credential to entitlement/purchase/listing context;
+- secure hash persistence of bearer credentials where practical;
+- independently authenticated API for an integrated destination to verify authorization within its permitted scope;
+- access audit/history sufficient for security and investigation;
+- no JWT/JWE/self-contained access-token model in V1.
 
 ### Referrals / promotion
 
@@ -81,8 +84,9 @@ The first release should be deliberately narrow, but every included capability m
 
 - referral attribution integrity;
 - duplicate payment/purchase protection;
-- access-token forgery/replay protection appropriate to token design;
+- opaque access-credential guessing/theft/replay protection appropriate to current server-side access policy;
 - entitlement authorization checks;
+- integration authentication and access-grant scoping;
 - basic payment/referral/account risk signals;
 - audit/correlation IDs for critical operations.
 
@@ -137,7 +141,7 @@ These may be introduced later as independent capabilities or metadata extensions
 5. generic listing capability and public listing surface;
 6. checkout and purchase state machine;
 7. entitlement capability;
-8. secure access handoff and `source` verification API;
+8. opaque access handoff and authenticated `source` verification API;
 9. referral attribution for listing links;
 10. affiliate/referral graph and distribution calculation;
 11. purchase/commission processor and earnings;
@@ -155,7 +159,9 @@ Before launch, prove at minimum:
 - referral commission cannot be created by a click alone;
 - duplicate commission processing does not duplicate ledger credits;
 - forged raw IDs in `source` are rejected;
-- expired/revoked/wrong-context access tokens are rejected;
+- malformed/unknown/revoked source credentials are rejected;
+- an authenticated integration cannot introspect access grants outside its permitted scope;
+- raw bearer credentials are not recoverably stored where hashing is intended;
 - a valid entitled buyer can access the configured destination;
 - a non-entitled account cannot;
 - optional provider/module failures remain isolated where safe;
