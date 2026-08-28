@@ -4,110 +4,121 @@
 
 ## What Cliqero is
 
-Cliqero is a performance-promotion marketplace.
+Cliqero is a productless commerce and referral platform.
 
-Advertisers have something they want more people to discover: a product, service, song, property, event, app, restaurant, course, channel, business, or any other offer. Promoters have access to people through social media, communities, blogs, messaging platforms, video channels, or other forms of distribution.
+A seller lists something people can pay to access. Another user may refer that listing and earn from a successful purchase. A buyer pays through Cliqero and gains access to the listing's configured destination.
 
-Cliqero connects those two sides.
+The core flow is deliberately small:
 
-The advertiser funds a campaign. A promoter shares an attributed Cliqero link. People may view the offer freely. The advertiser is charged only when a visitor performs a configured action such as:
+> List -> Refer -> Buy -> Access
 
-- opening WhatsApp;
-- clicking Call Now;
-- visiting a website;
-- opening Instagram, TikTok, Facebook, Telegram, YouTube, or another saved channel;
-- opening a custom destination configured specifically for that offer.
+Cliqero does not need to understand what the destination contains. It may lead to an ebook download, software, a SaaS application, a private page, an offer, a course, a repository, a download gateway, a custom service, or something not yet invented.
 
-The promoter earns when a qualified action is attributed to the promoter.
+## The productless principle
 
-Cliqero does not need to handle the sale between the advertiser and customer. Its responsibility ends at visibility, attribution, action qualification, campaign charging, reward distribution, and reporting.
+Cliqero must not create separate domain models for ebook, software, course, template, API, download, service, or similar product types merely because those things can be sold.
 
-## The core problem
+The platform models three stable primitives:
 
-Small businesses and individual sellers frequently have a simple problem:
+1. **Listing** — metadata describing something that can be purchased.
+2. **Entitlement** — evidence that an account has the right to access a purchased listing.
+3. **Destination** — the external or internal location through which that entitlement is used.
 
-> I have something people may want, but not enough people see it.
+The thing behind the destination belongs to the seller or destination system, not to Cliqero's core domain.
 
-Traditional advertising can be intimidating or opaque. Sellers are often asked to understand impressions, CPM, CPC, pixels, ad groups, audience bidding, attribution windows, and complex dashboards before they can reliably answer a basic question: did anybody actually try to contact me?
+Product-specific information should be added only when real user requirements prove that additional structured data is needed. Peripheral information should prefer metadata/extensible structures over speculative schema.
 
-Cliqero reduces the proposition to something understandable:
+## What Cliqero owns
 
-> Show your offer to people. Pay when someone takes the action you selected.
+Cliqero owns the commerce and access relationship:
 
-The promoter has an equally simple desire:
+- account identity;
+- listings and listing metadata;
+- public discovery/presentation;
+- referral attribution;
+- checkout and payment verification;
+- purchase records;
+- entitlements;
+- access handoff;
+- referral commission calculation;
+- ledger/wallet accounting;
+- withdrawals;
+- audit and administration.
 
-> I can reach people. Let me earn when I bring interested people to useful offers.
+Cliqero does not need to host or implement the thing being sold.
 
-One side's demand for attention funds the other side's desire for income.
+## Access handoff
 
-## Why the action model matters
+After a purchase is authorized, the buyer can open the listing destination through Cliqero.
 
-Cliqero deliberately does not pay promoters for merely loading an advertiser page.
+Where useful, Cliqero appends a `source` value to the destination URL:
 
-A promoted visitor may:
+`https://destination.example/access?source=<token>`
 
-1. click a promoter link;
-2. view the offer;
-3. browse the advertiser profile;
-4. leave without taking action.
+The `source` value must not be a forgeable user ID, email address, raw purchase ID, or other trust-by-query-string mechanism. It should be an opaque or cryptographically verifiable access token representing the entitlement/access attempt.
 
-Nothing is charged for that sequence.
+An integrated destination may validate that token through a Cliqero access-verification API before granting its own service.
 
-Payment becomes eligible only when the visitor deliberately activates a campaign CTA or another configured payable action.
+This makes Cliqero responsible for answering the stable question:
 
-This aligns incentives better than pay-per-view systems. Promoters benefit from showing offers to people who may genuinely care rather than blindly producing page loads.
+> Is this access request currently entitled to this listing?
+
+The destination remains responsible for deciding what authorized access means.
+
+## Why this model exists
+
+The platform should not keep changing architecture because a different kind of sellable thing is discovered.
+
+A seller should be able to create something elsewhere, add its metadata and destination to Cliqero, set a price, and sell access without Cliqero learning a new product category.
+
+The architecture evolves from observed requirements, not imagined product taxonomies.
+
+## Referral model
+
+A user can share an attributed listing link. If an attributed buyer completes a valid purchase, the applicable referral commission can be credited according to platform policy.
+
+Referral rewards originate from real sales activity. Registration alone does not create earnings.
 
 ## What Cliqero is not
 
-Cliqero is not:
+Cliqero is not inherently:
 
-- an ecommerce checkout platform;
-- a marketplace that takes ownership of an advertiser's stock;
-- a payment processor for the advertiser's customer sale;
-- a pay-to-join income scheme;
-- a system whose economics rely on recruitment fees;
-- a traditional paid-to-click website;
-- a social network whose primary product is content consumption.
+- an ebook host;
+- a software distribution server;
+- a course platform;
+- a file-storage service;
+- a streaming platform;
+- a license manager;
+- a SaaS provisioning system;
+- an inventory-management system;
+- a recruitment-fee scheme.
 
-Referral rewards may exist, but the economic source of rewards is real advertiser campaign activity.
+Those capabilities may integrate with Cliqero when needed, but none defines the core product.
 
 ## Product philosophy
 
-Cliqero follows several product principles:
+### 1. Model access, not product categories
 
-### 1. Pay for action, not passive exposure
+A listing sells entitlement to a destination. Do not branch the architecture by product type without a proven requirement.
 
-Impressions and page views can be useful analytics, but they do not release promoter rewards by themselves.
+### 2. Keep the base object small
 
-### 2. Advertisers control the desired action
+Stable invariant data remains explicit. Optional and evolving listing data belongs in metadata where appropriate.
 
-The advertiser decides what counts as the call to action for an offer. Saved social/contact channels can be reused, while an individual offer may override them with a custom destination.
+### 3. Let destinations specialize
 
-### 3. Promoters are distributors, not salespeople
+A private download gateway, SaaS app, API, course system, or custom service can interpret Cliqero authorization in its own way.
 
-A promoter does not need to complete a sale. The promoter's job is to bring interested people who take the advertiser's selected action.
+### 4. Referrals follow successful commerce
 
-### 4. The platform should be easy to try
+Referral earnings are consequences of valid purchases, not page views, clicks, or account recruitment.
 
-The initial Nigerian market should allow relatively small campaign funding so skeptical advertisers can validate the concept before committing larger amounts.
+### 5. Reduce scope, never integrity
 
-### 5. Financial integrity is more important than shortcut development
-
-Cliqero is intended to handle real money. The first production release may have limited scope, but the implemented scope must be reliable, auditable, modular, and idempotent.
+Cliqero handles real money and access rights. The first release can be narrow, but payment, ledger, entitlement, attribution, authorization, and audit behavior must be production-grade.
 
 ## Long-term opportunity
 
-The product begins with individual advertisers and promoters, but the model is broader than retail products.
+The strength of the model is that new sellable experiences do not require a new commerce architecture.
 
-Any entity with a destination and a measurable action can potentially create an offer:
-
-- a hair vendor wants WhatsApp inquiries;
-- a realtor wants people to open a property contact page;
-- a musician wants people to open a listening destination;
-- a SaaS company wants product-page visits or trial starts;
-- a restaurant wants menu or WhatsApp actions;
-- an event organizer wants ticket-page clicks;
-- a creator wants channel or content engagement;
-- a service provider wants calls or booking-page visits.
-
-The underlying product is therefore not a store builder. It is an action-driven human distribution network.
+If a future requirement cannot be represented by listing metadata, entitlement, and destination, Cliqero may introduce a new capability. Until then, it should not speculate.
