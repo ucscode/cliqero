@@ -4,31 +4,45 @@
 
 ## Architectural goal
 
-Cliqero must be modular by default.
+Cliqero must remain modular by default.
 
 No capability should know another capability's internal implementation. A module may depend on a public contract, API, or event, but it must not reach into another module's database tables, classes, or provider-specific code.
 
 The architecture should allow a capability to be removed, replaced, or moved into another container without forcing unrelated systems to be rewritten.
 
+The product-model correction does not alter this architecture.
+
 ## Core law
 
 > Modules determine facts; processors coordinate consequences; the ledger records money; events communicate what happened.
 
+## Core commerce primitives
+
+The stable commercial primitives are:
+
+- **Listing** — metadata describing something that can be purchased;
+- **Purchase** — the commercial fact that a buyer paid under specific terms;
+- **Entitlement** — the buyer's right to access the listing;
+- **Destination** — where authorized access is handed off.
+
+The architecture must not create product-type modules such as ebook, software, course, template, or download unless a proven future requirement genuinely requires such a capability.
+
 ## Capability model
 
-Important domains are expressed as capabilities, for example:
+Important domains may be expressed as capabilities, for example:
 
 - identity;
-- advertiser;
-- offers;
-- campaign;
+- seller/profile;
+- listing;
+- checkout/purchase;
+- entitlement/access;
 - attribution;
 - affiliate/referral;
 - payment;
 - payout;
 - wallet/ledger;
 - currency;
-- fraud;
+- fraud/risk;
 - moderation;
 - notifications;
 - analytics.
@@ -54,42 +68,31 @@ A module must not access another module's internal storage.
 
 Capabilities may have multiple providers.
 
-Example:
+Examples:
 
-Payment capability:
+Payment capability may have Paystack, USDT TRC-20, and future providers.
 
-- Paystack provider;
-- USDT TRC-20 provider;
-- future providers.
+Payout capability may begin with a manual provider and later gain automated bank/crypto providers.
 
-Payout capability:
-
-- manual payout provider;
-- future automated bank/crypto providers.
-
-Currency capability:
-
-- one or more exchange-rate providers.
+Currency capability may have one or more exchange-rate providers.
 
 Adding or disabling a provider should be registry/configuration work rather than rewriting consumers.
 
-Providers should describe their capabilities, such as supported currencies or operations, so the platform can choose compatible implementations.
-
 ## Processors
 
-Processors orchestrate cross-module effects.
+Processors orchestrate cross-module consequences.
 
-Example: commission distribution processor
+Example: purchase completion processor
 
-1. receive a qualified-action event;
-2. obtain campaign/action value;
-3. obtain promoter attribution;
-4. ask affiliate/referral capability for applicable uplines;
-5. calculate configured shares;
+1. receive verified payment/purchase intent;
+2. finalize purchase idempotently;
+3. request entitlement creation/activation;
+4. resolve valid referral attribution;
+5. ask affiliate/referral capability for applicable distribution facts;
 6. request ledger movements;
-7. emit distribution-completed event.
+7. emit purchase-completed / entitlement-created / commission-distributed facts.
 
-The affiliate module does not become a commission processor. The campaign module does not become a wallet. The wallet does not decide referral structure.
+The listing module does not become a payment processor. The affiliate module does not become a wallet. The entitlement module does not calculate referral commission.
 
 ## Event-driven boundaries
 
@@ -98,17 +101,28 @@ Events represent facts that have occurred.
 Examples:
 
 - `payment.verified`;
-- `wallet.funded`;
-- `campaign.activated`;
-- `action.observed`;
-- `action.qualified`;
+- `purchase.completed`;
+- `entitlement.created`;
+- `entitlement.revoked`;
+- `access.requested`;
+- `access.authorized`;
 - `commission.distributed`;
 - `withdrawal.requested`;
 - `withdrawal.completed`.
 
 Consumers may react independently.
 
-Tracking should not need to know whether analytics, notifications, affiliate rewards, or another future subscriber exists.
+## Access capability
+
+The access capability answers whether a buyer is entitled to a listing and creates/verifies access handoffs.
+
+A destination link may receive:
+
+`?source=<token>`
+
+The token must be opaque or cryptographically protected and bound to the relevant authorization context. External destinations may verify it through a public Cliqero API.
+
+The access capability must not know whether the destination serves a file, opens software, provisions an account, reveals an offer, or performs another product-specific action.
 
 ## Graceful degradation
 
@@ -117,12 +131,12 @@ Optional module failure must not crash unrelated functionality.
 Examples:
 
 - currency unavailable => show canonical USD;
-- affiliate module unavailable => referral distribution unavailable, but unrelated offers/payments continue;
-- notification module unavailable => transaction succeeds without notification;
-- analytics unavailable => action processing continues;
+- affiliate unavailable => referral distribution is unavailable/queued according to policy, but unrelated listing access remains isolated;
+- notifications unavailable => a purchase can still complete;
+- analytics unavailable => purchase/access processing continues;
 - Paystack disabled => other payment providers remain usable.
 
-Internal errors should be expressed through standard capability results/errors rather than leaking implementation exceptions across boundaries.
+Critical dependencies such as payment verification, purchase finalization, ledger integrity, and entitlement creation must fail safely rather than pretending success.
 
 ## OOP-first implementation
 
@@ -131,29 +145,30 @@ Cliqero should strongly prefer cohesive domain objects and services over procedu
 Examples:
 
 - `User` / `Account`;
+- `Listing`;
+- `Purchase`;
+- `Entitlement`;
+- `AccessToken` / `AccessGrant`;
 - `Wallet`;
 - `Money`;
-- `Campaign`;
-- `Offer`;
-- `CurrencyQuote`;
 - `AffiliateGraph`;
 - `PaymentProvider`;
-- `CampaignFundingService`;
+- `PurchaseCompletionService`;
 - `CommissionDistribution`.
 
-The goal is not to turn every data object into a class mechanically. The goal is to keep behavior with coherent domain concepts instead of exporting large collections of unrelated functions.
+The goal is coherent behavior and domain boundaries, not mechanically turning every data object into a class.
 
 ## Application technology
 
 The current web application technology is Next.js with TypeScript.
 
-Next.js is an implementation choice for web surfaces, not the architecture of the entire system. Future capabilities may use other technologies where justified while still honoring the same contracts and integration boundaries.
+Next.js is an implementation choice for web surfaces, not the architecture of the entire system. Future capabilities may use other technologies where justified while honoring the same contracts.
 
 ## Docker Compose composition model
 
-Cliqero is designed around Docker Compose `include`.
+Cliqero remains designed around Docker Compose `include`.
 
-The root Compose file acts primarily as composition. Feature/application directories can own their own Compose files and overrides.
+The root Compose file acts primarily as composition. Feature/application directories own their own Compose files and overrides.
 
 Conceptual structure:
 
@@ -189,54 +204,43 @@ Existing modules should not require rewriting just because a new container appea
 
 Logical modularity comes first. A module does not need its own container to be modular.
 
-A capability may initially run in the same Node.js process as other capabilities and later be extracted into a dedicated service/container.
+A capability may initially run in the same Node.js process as others and later be extracted into a dedicated service/container. Consumers continue to use the same conceptual contract through a local or remote adapter.
 
-Consumers should continue talking to the same conceptual contract through a local or remote adapter.
-
-This avoids premature microservices while preserving future extraction.
-
-## Public web surfaces
-
-The expected public host separation is:
-
-- main domain: authenticated platform/dashboard;
-- `s.`: advertiser showcase and offer pages;
-- `a.`: promoter-attributed pages and discovery routes;
-- `r.`: referral attribution.
-
-These surfaces may initially share application technology while remaining logically separated.
+This avoids premature microservices while preserving extraction.
 
 ## Cross-module data ownership
 
 Each module owns its persistence.
 
-Other modules may retain stable IDs/references, but they must ask the owner for domain information rather than querying its tables directly.
+Other modules may retain stable IDs/references, but they ask the owner for domain information rather than querying its tables directly.
 
-This rule is especially strict for:
+This is especially strict for:
 
+- identity;
+- listing;
+- purchase;
+- entitlement/access;
 - wallet/ledger;
 - affiliate graph;
-- campaign;
-- identity;
 - payment transactions;
-- attribution/action records.
+- attribution records.
 
 ## APIs, webhooks, and events
 
-External webhooks and APIs should translate into domain operations rather than contain business logic directly.
+External webhooks and APIs translate into domain operations rather than contain business logic directly.
 
-Example:
+Examples:
 
-`Paystack webhook -> PaystackProvider.verify() -> payment.verified -> WalletFundingProcessor`
+`Paystack webhook -> PaystackProvider.verify() -> payment.verified -> PurchaseCompletionProcessor`
 
-Another provider can produce the same domain event without the wallet funding logic knowing the provider source.
+`Destination verify request -> Access API -> Entitlement/Access capability -> authorization result`
+
+Another payment provider can produce the same domain fact without purchase logic knowing the provider source.
 
 ## Production philosophy
 
 Cliqero is not a disposable MVP.
 
 The first release is intentionally limited in scope, but implemented features must be production-grade: modular, tested, auditable, idempotent, and recoverable.
-
-The guiding rule is:
 
 > Reduce scope, never reduce integrity.
