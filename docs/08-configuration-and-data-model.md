@@ -107,7 +107,7 @@ Examples include:
 - canonical price at purchase time;
 - purchase buyer/listing/payment relationship;
 - entitlement owner/listing/state;
-- access-token identity/hash/state where server-side tokens are used;
+- access-grant identity and token hash;
 - ledger amount/currency/type;
 - payment provider reference/status;
 - wallet ownership;
@@ -147,13 +147,51 @@ Minimum V1 concept:
 
 Future properties such as expiration, consumption count, or scope may be added only when actual requirements need them.
 
-## Destination and source token
+## Access grant and source token
 
 The listing destination is data. Authorization is not.
 
-Do not treat possession of a destination URL, listing ID, buyer ID, entitlement ID, or purchase ID as sufficient proof of access.
+Do not treat possession of a destination URL, listing ID, buyer ID, entitlement ID, purchase ID, email, or other business identifier as sufficient proof of access.
 
-`source` must represent an access authorization handoff using an opaque server-side token or cryptographically protected token. Token verification belongs to the access capability and should expose only the minimum context required by the destination integration.
+`source` is a cryptographically random opaque bearer token. It is not JWT, JWE, or another self-contained claims document. It carries no authoritative product, buyer, purchase, entitlement, or pricing data.
+
+The token maps to server-side access state owned by Cliqero.
+
+A minimal access-grant record should conceptually contain:
+
+- access-grant ID;
+- entitlement reference;
+- secure hash of the bearer token;
+- state;
+- created timestamp;
+- optional last-used timestamp;
+- optional expiry/revocation/consumption policy only when required.
+
+Prefer storing a secure one-way hash of the token rather than the raw credential. The plaintext token should be returned only when issued and then presented by the buyer/destination as a bearer credential.
+
+Use a cryptographically secure random generator with sufficient entropy. Do not generate source tokens from sequential IDs, deterministic hashes of known records, timestamps, emails, or ordinary non-security random functions.
+
+## Server-side resolution
+
+Cliqero resolves the source token internally, for example:
+
+`source token -> access grant -> entitlement -> purchase -> listing -> buyer/seller`
+
+The token itself does not encode those relationships.
+
+This makes the server-side state authoritative and allows revocation, refund consequences, entitlement changes, access-policy changes, or future consumption rules to take effect without changing or decoding token claims.
+
+## Access API and integration credentials
+
+External destinations verify `source` through the Access API.
+
+The destination/integration must authenticate independently to Cliqero. A source bearer token authorizes the access handoff; it is not also an API client credential.
+
+Integration credentials, API keys, OAuth-style client credentials, signatures, or another provider mechanism may be used according to the eventual integration capability. The important boundary is that the verification API must know which integration is asking and enforce what information that integration may receive.
+
+API responses should expose only the minimum context required by the caller.
+
+Cliqero's own web application should use the same access capability contracts as external integrations. Future SDKs/libraries may wrap the API but must not duplicate authorization truth client-side.
 
 ## State over booleans
 
@@ -165,7 +203,7 @@ Examples:
 - purchase state;
 - payment verification state;
 - entitlement state;
-- access-token/grant state where applicable;
+- access-grant state;
 - earning state;
 - withdrawal state.
 
@@ -173,6 +211,6 @@ Explicit states improve auditability and prevent contradictory combinations.
 
 ## Configuration audit
 
-Material runtime configuration changes should be auditable, including provider state, referral percentages, minimum withdrawal, listing policies, entitlement/access policy, and moderation rules.
+Material runtime configuration changes should be auditable, including provider state, referral percentages, minimum withdrawal, listing policies, entitlement/access policy, integration credentials/policy, and moderation rules.
 
 Audit information should include actor, previous value, new value, timestamp, and correlation/reference information where applicable.
