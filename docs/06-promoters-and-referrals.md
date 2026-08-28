@@ -1,171 +1,119 @@
-# Promoters and Referral Network
+# Referrers, Promotion, and Referral Network
 
 [Back to documentation index](./README.md)
 
-## Promoter purpose
+## Referrer purpose
 
-Promoters distribute attributed Cliqero links and earn when visitors they bring complete qualified campaign actions.
+Referrers distribute attributed Cliqero listing links and earn when buyers they bring complete valid purchases.
 
-They are not required to complete sales, handle advertiser inventory, or process customer payments.
+Their economic role is distribution. They do not need to host the product, process the payment, or implement the destination.
 
-Their economic role is distribution.
+## Referrer identity
 
-## Promoter identity
+Referrer/promoter behavior is a capability of a normal Cliqero account.
 
-A promoter is a capability attached to a normal Cliqero account.
+The same account may also be a seller and buyer.
 
-The same account may also be an advertiser and referrer.
+Referrer identity should remain stable even if individual listings, links, collections, or public handles change.
 
-Promoter identity should be stable even if campaigns, collections, or links change.
+## Promotion links
 
-## Promotion link types
+Cliqero may support specific listing links, seller-focused links, collections, or versatile public referral pages where useful.
 
-Cliqero should support multiple promotion depths because different marketing contexts require different links.
+A specific listing referral link is the most important primitive because it can unambiguously preserve attribution to a purchasable listing.
 
-### Specific offer link
-
-Best when the promoter is discussing one particular offer.
-
-Example:
-
-`a.example.com/uche/glamhair/bone-straight`
-
-The visitor lands directly on that offer while promoter attribution is preserved.
-
-### Advertiser-focused link
-
-Best when the promoter recommends a business or advertiser generally.
-
-Example:
-
-`a.example.com/uche/glamhair`
-
-Any eligible CTA action during the attributed session may be credited according to campaign rules.
-
-### Collection link
-
-A promoter may maintain a category or topic collection such as:
-
-`a.example.com/uche/beauty`
-
-Collections can contain selected campaigns or future dynamically eligible campaigns.
-
-### Versatile promoter page
-
-A permanent promoter page such as:
-
-`a.example.com/uche`
-
-can act as a discovery page containing the promoter's chosen recommendations or categories.
-
-This is useful in TikTok, Instagram, YouTube, Telegram, blog bios, and other places where changing links frequently is inconvenient.
-
-## Durable links
-
-A major design goal is to avoid dead promotional links when campaigns end.
-
-Where appropriate, a promoter collection or versatile page may replace exhausted campaigns with currently eligible alternatives while preserving the permanent public URL.
-
-Specific offer links should remain semantically tied to the original offer and must not silently become unrelated offers.
+The exact route shape can evolve without changing the attribution model.
 
 ## Attribution
 
-Promotion attribution should be owned by a dedicated capability rather than the promoter module itself.
+Referral/promotion attribution should be owned by a dedicated capability.
 
-The attribution layer determines facts such as:
+It determines facts such as:
 
-- promoter identity;
+- referring account;
 - originating link;
-- advertiser/offer/campaign context;
-- session identity;
-- action triggered;
-- qualification state;
+- listing/seller context;
+- session/click identity;
 - attribution window;
+- purchase attribution eligibility;
 - uniqueness/risk signals.
 
-It returns attribution facts for processors to consume.
+The attribution layer does not move money and does not grant product access.
 
-## Referral is not promotion
+## Commission trigger
 
-Referral and promotion must remain distinct concepts.
+The economic trigger is a valid purchase.
 
-Promotion:
+Conceptually:
 
-`Promoter -> Visitor -> Advertiser offer/action`
+`referrer -> visitor -> listing -> purchase -> commission`
 
-Referral:
+A page view, click, checkout start, registration, or destination access does not by itself create commission.
 
-`Existing account -> New Cliqero account`
+## Account referral graph
 
-The referral graph should not be inferred from campaign activity.
+Cliqero may also maintain an account-to-account referral graph where an existing user introduced a new Cliqero account.
 
-## Referral link
+That relationship is distinct from a listing purchase attribution, even if both can participate in commission policy.
 
-A platform referral link may look like:
-
-`r.example.com/H7K29`
-
-It attributes a new account to the referrer.
-
-The referred account may later act as advertiser, promoter, or both.
-
-## Affiliate/referral capability responsibilities
-
-The affiliate/referral module owns relationship facts.
-
-It should be able to answer questions such as:
+The graph should be able to answer:
 
 - who directly referred this account?
 - list direct referrals;
-- list downlines by level;
-- list uplines;
+- list uplines/downlines by supported level;
 - what level is account A relative to account B?
-- calculate applicable referral recipients for a given distribution policy;
-- calculate totals or graph summaries where useful.
+- which configured recipients apply to a sale distribution?
 
-It must not:
+## Affiliate/referral capability responsibilities
 
-- credit wallets;
-- debit campaigns;
-- process withdrawals;
-- send payments;
-- decide whether an action is valid;
-- own payment-provider integrations.
+The affiliate/referral module owns relationship and distribution facts.
 
-A processor may ask the module for a distribution result and then loop over that result to perform financial consequences through the wallet/ledger capability.
-
-## Reward source
-
-Referral rewards must originate from real platform economic activity, not from account registration fees.
-
-The referral system should remain secondary to the product's genuine advertiser/promoter value proposition.
-
-The platform should remain useful if referral rewards are disabled.
-
-## Distribution rules
-
-Referral levels and reward percentages should be policy/configuration rather than hard-coded business logic.
-
-A distribution request might conceptually return:
+It may calculate a distribution description such as:
 
 ```json
 {
-  "source_user": "promoter-123",
+  "source_user": "referrer-123",
   "recipients": [
-    {"user_id": "account-78", "level": 1, "share": "..."},
-    {"user_id": "account-21", "level": 2, "share": "..."}
+    {"user_id": "account-78", "level": 1, "share": "..."}
   ]
 }
 ```
 
-The affiliate module returns facts. The commission processor performs money movement.
+It must not:
 
-## Promoter earnings lifecycle
+- credit or debit wallets;
+- finalize purchases;
+- verify payments;
+- grant or revoke entitlements;
+- process withdrawals;
+- own payment-provider integrations.
 
-Promoter earnings should use explicit states, for example:
+A purchase/commission processor consumes its result and requests money movement through the ledger capability.
+
+## Reward source
+
+Referral rewards must originate from genuine platform commerce, not registration fees or the right to participate.
+
+Cliqero must remain useful as a listing, purchase, and access platform even if multi-level account referral rewards are disabled.
+
+## Distribution policy
+
+Commission percentages, referral eligibility, levels, maximum depth, pending periods, and other economic rules should be policy/configuration rather than hard-coded into the relationship graph.
+
+The base architecture should support simple direct refer-and-earn without requiring a complex network plan.
+
+## Earnings lifecycle
+
+Referral earnings should use explicit state, for example:
 
 `pending -> available -> withdrawal_reserved -> paid`
 
-Rejected or compensating states may exist as required.
+with rejected/reversed/compensated states where necessary.
 
-A promoter should be able to distinguish pending earnings from withdrawable balance.
+The UI should distinguish pending earnings from withdrawable balance.
+
+## Productless boundary
+
+Referral logic must never branch on whether a listing represents an ebook, software, course, service, offer, or another product category.
+
+It cares about listing identity, attribution, purchase validity, and configured commission policy. Nothing more.
