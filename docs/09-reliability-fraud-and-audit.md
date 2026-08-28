@@ -20,7 +20,7 @@ Examples:
 - commission distribution;
 - withdrawal state transitions;
 - provider webhook handling;
-- source-token verification/consumption where the token model requires one-time behavior.
+- source-token verification/consumption where future access policy requires one-time behavior.
 
 Delivering the same provider event repeatedly must not create duplicate purchases, entitlements, or earnings.
 
@@ -55,9 +55,9 @@ Attackers may attempt to:
 - replay payment/provider callbacks;
 - duplicate purchase completion;
 - duplicate commission distribution;
-- guess or forge `source` values;
+- guess or steal `source` credentials;
 - share protected access URLs/tokens;
-- replay one-time access tokens;
+- replay credentials if a future access policy makes them one-time;
 - access a listing without an active entitlement;
 - exploit refund/reversal timing;
 - manipulate provider or currency data;
@@ -69,19 +69,24 @@ Fraud/risk remains an independent capability and must not own money, purchase st
 
 The destination query parameter is not trusted merely because it is named `source`.
 
-The source value must be an opaque or cryptographically verifiable token tied to authorization context.
+`source` is a cryptographically random opaque bearer credential/reference containing no business data. It is resolved server-side by Cliqero to an access grant and its related authorization context.
 
-Verification should check the properties required by the chosen token model, such as:
+It is not JWT, JWE, a signed/self-contained token, an encoded payload, or a raw user/purchase/listing/entitlement identifier.
 
-- token validity;
+Verification should check the server-side properties applicable to the access grant, including:
+
+- credential hash match/validity;
 - entitlement state;
-- listing binding;
-- expiry;
-- revocation;
-- one-time consumption/replay state where applicable;
-- destination/integration binding where appropriate.
+- listing/destination binding;
+- integration scope;
+- revocation state where supported;
+- future expiry or one-time consumption state only when such policy is actually introduced.
 
-Never expose unnecessary buyer personal data in the token or verification response.
+Where practical, persist only a secure hash of the raw credential. The raw bearer value should exist only where required for issuance/handoff.
+
+Possession of `source` does not authenticate a destination integration. The verification API must independently authenticate the integration and restrict what access grants it may introspect.
+
+Never expose unnecessary buyer personal data in verification responses.
 
 ## Referral risk
 
@@ -134,8 +139,9 @@ Tests should include:
 - retry purchase completion => no duplicate seller/referral credits;
 - change listing metadata after purchase => historical purchase terms remain unchanged;
 - forge a raw user/purchase ID as `source` => access denied;
-- expired/revoked source token => access denied;
-- valid source token for wrong listing => access denied;
+- malformed/unknown/revoked source credential => access denied;
+- valid source credential outside the authenticated integration's scope => access denied;
+- raw source credential is not recoverably persisted where hashing is intended;
 - remove analytics => purchase still completes;
 - disable one payment provider => unrelated providers remain usable;
 - affiliate/referral module returns relationship/distribution data but never writes ledger entries;
