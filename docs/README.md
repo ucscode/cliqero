@@ -59,7 +59,7 @@ The external access contract is deliberately simple and stable:
 
 > `source` is an opaque credential, not data. Cliqero resolves the data.
 
-Do not replace this with self-contained JWT/JWE claims unless a future requirement explicitly changes the architecture.
+Do not replace this with self-contained JWT/JWE claims.
 
 ## Build constraint for Codex
 

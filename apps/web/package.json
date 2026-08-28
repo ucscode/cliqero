@@ -1,0 +1,32 @@
+{
+  "name": "@cliqero/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "worker:outbox": "node --import tsx src/workers/outbox/main.ts",
+    "test": "vitest run",
+    "test:integration": "vitest run src/integration",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^16.3.3",
+    "pg": "8.16.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "tsx": "^4.23.12",
+    "yaml": "^2.9.0",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,7 @@
+:root { color-scheme: light; font-family: Arial, sans-serif; background: #f6f4ee; color: #172019; }
+body { margin: 0; }
+main { max-width: 760px; margin: 18vh auto; padding: 2rem; }
+h1 { font-size: clamp(2.5rem, 7vw, 5.5rem); line-height: .95; letter-spacing: -.06em; margin: .35em 0; }
+p { font-size: 1.1rem; line-height: 1.6; }
+.eyebrow { color: #176b45; font-weight: 700; text-transform: uppercase; letter-spacing: .16em; }
+

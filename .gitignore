@@ -1,0 +1,10 @@
+node_modules/
+.next/
+coverage/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+config/secrets/**/*.yaml
+!config/secrets/**/*.example.yaml

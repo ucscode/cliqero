@@ -55,7 +55,7 @@ Where useful, Cliqero appends a `source` value to the destination URL:
 
 `https://destination.example/access?source=<token>`
 
-The `source` value must not be a forgeable user ID, email address, raw purchase ID, or other trust-by-query-string mechanism. It should be an opaque or cryptographically verifiable access token representing the entitlement/access attempt.
+The `source` value must not be a forgeable user ID, email address, raw purchase ID, or other trust-by-query-string mechanism. It is a cryptographically random opaque bearer credential/reference containing no business data. Cliqero resolves it server-side to the relevant access grant and authorization context.
 
 An integrated destination may validate that token through a Cliqero access-verification API before granting its own service.
 

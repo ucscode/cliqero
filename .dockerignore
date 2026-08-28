@@ -1,0 +1,9 @@
+.git
+.next
+node_modules
+coverage
+*.log
+*.tsbuildinfo
+config/secrets/**/*.yaml
+!config/secrets/**/*.example.yaml
+

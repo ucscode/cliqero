@@ -1,0 +1,12 @@
+services:
+  main:
+    build:
+      target: development
+    command: npm run dev --workspace @cliqero/web -- --hostname 0.0.0.0
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ../../apps/web:/workspace/apps/web
+      - /workspace/node_modules
+      - /workspace/apps/web/node_modules
+

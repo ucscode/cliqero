@@ -1,0 +1,16 @@
+services:
+  main:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cliqero}:${POSTGRES_PASSWORD:-cliqero-local}@postgres:5432/${POSTGRES_DB:-cliqero}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      PAYSTACK_CONFIG_PATH: /workspace/config/modules/payment/paystack.yaml
+      PAYSTACK_SECRETS_PATH: /workspace/config/secrets/payment/paystack.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"

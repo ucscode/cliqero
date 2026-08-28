@@ -1,0 +1,4 @@
+include:
+  - path: ./services/postgres/compose.yaml
+  - path: ./services/main/compose.yaml
+  - path: ./services/outbox-worker/compose.yaml

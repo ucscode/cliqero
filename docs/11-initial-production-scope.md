@@ -49,7 +49,7 @@ The first release should be deliberately narrow, but every included capability m
 - secure hash persistence of bearer credentials where practical;
 - independently authenticated API for an integrated destination to verify authorization within its permitted scope;
 - access audit/history sufficient for security and investigation;
-- no JWT/JWE/self-contained access-token model in V1.
+- no JWT/JWE/self-contained access-token model.
 
 ### Referrals / promotion
 

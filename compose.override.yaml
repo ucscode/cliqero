@@ -1,0 +1,4 @@
+include:
+  - path: ./services/postgres/compose.override.yaml
+  - path: ./services/main/compose.override.yaml
+  - path: ./services/outbox-worker/compose.override.yaml

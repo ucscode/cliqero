@@ -1,0 +1,15 @@
+{
+  "name": "cliqero",
+  "private": true,
+  "packageManager": "npm@11.5.2",
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "npm run dev --workspace @cliqero/web",
+    "build": "npm run build --workspace @cliqero/web",
+    "start": "npm run start --workspace @cliqero/web",
+    "worker:outbox": "npm run worker:outbox --workspace @cliqero/web",
+    "test": "npm run test --workspace @cliqero/web",
+    "typecheck": "npm run typecheck --workspace @cliqero/web"
+  },
+  "engines": { "node": ">=22.0.0" }
+}
