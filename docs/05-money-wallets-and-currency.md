@@ -6,200 +6,144 @@
 
 USD is Cliqero's canonical accounting currency.
 
-All financially meaningful internal values should ultimately resolve to USD. Other currencies are presentation conveniences or transaction-entry currencies.
+Listings may be displayed or paid in convenient supported currencies, but financially meaningful internal values must preserve a canonical accounting value and the original transaction context.
 
-If an offer is canonically priced at `$10`, a Nigerian user may see approximately `₦30,000` today and `₦27,000` tomorrow because the exchange rate changed. The underlying offer price did not change.
-
-If the canonical price changes from `$10` to `$9`, that is a business event that must be deliberate and auditable.
-
-## Display conversion
-
-Currency conversion must not mutate canonical values.
-
-A conversion response should preserve information such as:
-
-- source amount;
-- source currency;
-- display amount;
-- display currency;
-- exchange rate;
-- rate source;
-- quote timestamp;
-- quote expiry where relevant.
-
-If the currency capability is unavailable, the system should continue to display canonical USD values rather than fail unrelated pages.
+Currency conversion must never silently mutate historical listing purchases or ledger entries.
 
 ## Money representation
 
 Financial amounts must never use floating-point arithmetic.
 
-Use integer minor units plus currency identity, or an equivalent precise money value object.
+Use integer minor units plus currency identity, or an equivalent precise Money value object.
 
 Examples:
 
 - USD 10.00 => amount `1000`, currency `USD`;
 - NGN 5,000.00 => amount `500000`, currency `NGN`.
 
-Currency precision must come from the money/currency domain rather than arbitrary assumptions in UI code.
+## Purchase-first money flow
 
-## Wallet-first rule
+The old campaign-reservation model is superseded.
 
-External payments never fund a campaign directly in the domain model.
+The core financial flow is:
 
-The universal flow is:
+`Buyer payment -> provider verification -> purchase -> ledger distribution -> entitlement`
 
-`External payment -> verified funding transaction -> canonical USD value -> wallet ledger -> campaign reservation`
+The payment provider verifies external money. The purchase domain determines the commercial fact. The ledger records the financial consequences. The entitlement domain records the buyer's access right.
 
-Even if the user interface offers a shortcut such as `Fund this campaign`, the internal process still credits the wallet first and then allocates from wallet balance.
-
-This keeps campaigns independent from payment providers.
+No module should bypass these boundaries by directly changing balances.
 
 ## Ledger
 
 The ledger is the financial source of truth.
 
-Balances must not be maintained through arbitrary direct updates such as `UPDATE wallet SET balance = ...`.
+Balances must not be maintained through arbitrary direct balance updates.
 
-Every financial change creates immutable ledger entries.
+Every financial consequence creates immutable ledger entries, for example:
 
-Examples:
-
-- wallet funding;
-- campaign reservation;
-- reservation release;
-- qualified action distribution;
-- promoter earning;
-- referral earning;
+- buyer payment settlement/accounting entry;
+- seller earning;
+- referrer/promoter commission;
+- referral/upline commission where enabled;
 - platform earning;
+- provider fee;
 - manual adjustment;
 - withdrawal reservation;
 - payout completion;
-- reversal.
+- refund/reversal/compensating entry.
 
-A visible wallet balance is derived from ledger state.
+Visible balances are derived from ledger state.
 
 ## External payment record
 
-When a user funds through a provider, preserve both the provider transaction and canonical accounting value.
-
-A transaction may contain:
+A payment record should preserve enough information to reconstruct what happened:
 
 - provider name;
 - provider reference;
 - provider amount;
 - provider currency;
 - canonical USD amount;
-- exchange rate used;
-- exchange-rate source;
-- rate timestamp;
+- exchange rate used where applicable;
+- exchange-rate source/timestamp where applicable;
 - verification state;
+- purchase reference;
 - idempotency key;
 - audit/correlation IDs.
 
-This ensures later investigation can explain exactly how a local-currency payment became a USD wallet credit.
+Provider retries must not create duplicate purchases, entitlements, commissions, or credits.
 
 ## Initial payment providers
 
-The first production target is Nigeria.
+The first production target may include Paystack and USDT TRC-20.
 
-Initial funding capability is expected to include:
-
-- Paystack;
-- USDT TRC-20.
-
-Providers are implementations of a generic payment capability. Campaign, wallet, offer, and affiliate code must not import Paystack- or TRON-specific logic.
+Providers implement a generic payment capability. Listing, purchase, entitlement, referral, and ledger code must not import Paystack- or TRON-specific logic.
 
 Additional providers should be addable through provider registration rather than core rewrites.
 
-## Minimum entry amount
+## Sale distribution
 
-Cliqero should allow advertisers to experiment with relatively small funding amounts. An initial Nigerian target is around NGN 5,000.
+A successful purchase has a gross sale value. Distribution policy determines how that value is allocated.
 
-If a user deposits exactly NGN 5,000, the payment transaction records that amount and the wallet receives the canonical USD equivalent calculated for that transaction.
+Possible recipients include:
 
-The user does not need to think in USD even though internal accounting does.
+- seller;
+- direct referrer/promoter;
+- applicable referral/upline recipients;
+- Cliqero/platform;
+- payment/provider fees where represented internally.
 
-## Campaign reservation
+The affiliate/referral capability determines relationship/distribution facts but never writes ledger entries itself.
 
-Allocating money to a campaign reserves wallet value.
+A commission/sale processor coordinates the consequence through the ledger capability.
 
-Example:
+## Seller earnings
 
-- available wallet: $50;
-- campaign reserve: $20;
-- available balance: $30;
-- campaign reserved balance: $20.
+Seller earnings should be explicitly distinguishable from buyer payments and referral earnings.
 
-Qualified actions consume the campaign reserve.
+Policy may define pending/available states before withdrawal, especially where refunds, disputes, or provider settlement delays apply.
 
-Closing or reducing the campaign releases unused reservation back into the dashboard wallet.
+Do not invent complex settlement delays in V1 unless required, but keep the state model capable of representing them safely.
 
-## Commission distribution
+## Referral earnings
 
-A payable action has a defined action value funded from campaign reservation.
+Referral commission exists only because a valid attributed purchase occurred.
 
-That value is split among economic recipients according to active policy. The base model includes:
+Clicks, account registration, destination access, or page views do not directly create referral earnings.
 
-- platform share;
-- promoter share;
-- referral share.
-
-Referral distribution must be calculated by the affiliate/referral capability, but that capability must never move money itself.
-
-A commission processor coordinates the consequence:
-
-1. receive a qualified/distributable action;
-2. obtain the promoter recipient;
-3. ask the affiliate capability for applicable referral distribution;
-4. calculate the platform share;
-5. request ledger credits/debits through the wallet/ledger capability;
-6. emit distribution-completed events.
+Referral percentages and levels should remain runtime policy/configuration rather than hard-coded assumptions.
 
 ## Refunds and reversals
 
-Cliqero distinguishes several concepts.
+Historical financial entries must never be deleted or rewritten.
 
-### Campaign release
+If refunds are supported, they must be modeled as explicit financial/domain operations with compensating ledger consequences.
 
-Unused reserved campaign money returns to available wallet balance. This is not an external refund.
+Entitlement consequences must also be explicit. For example, a successfully refunded purchase may revoke access according to policy rather than silently deleting the entitlement.
 
-### Internal reversal
-
-Before promoter/referral commission has been distributed, a rejected payable action may return its reserved amount to the advertiser's dashboard wallet.
-
-### Post-distribution reversal
-
-Once commission has been shared with a promoter/referral recipients, the normal advertiser refund path is no longer available. Exceptional corrections must be represented as compensating ledger entries rather than deleting or rewriting prior financial history.
-
-### External provider refund
-
-Refunding money back through Paystack or another payment provider is a separate capability from campaign reversal. It is not part of the normal V1 campaign flow.
+Automatic external refunds do not need to be part of V1 unless required.
 
 ## Withdrawals
 
-Payouts are manual in the initial production release.
+Payouts may be manual in the initial production release.
 
-A user can request withdrawal of eligible available earnings. A platform operator reviews the request, sends the money manually, records the transfer/reference, and updates the withdrawal state.
+A user can request withdrawal of eligible available earnings. An operator reviews the request, sends the money manually, records the transfer/reference, and updates the withdrawal state.
 
-Suggested state machine:
+Suggested lifecycle:
 
 `requested -> under_review -> approved -> sent -> completed`
 
-with failure/rejection states as required.
-
-The architecture may later support automated payout providers without changing wallet or withdrawal-domain semantics.
+with rejection/failure states as required.
 
 ## Financial invariants
 
 The following are non-negotiable:
 
 - every financial mutation is represented in the ledger;
-- all financial operations are idempotent;
-- canonical USD value is preserved;
-- exchange-rate display changes do not mutate canonical balances;
-- provider retries must not duplicate funding;
-- webhook retries must not duplicate distribution;
-- historical financial entries are not deleted;
-- campaign modules do not know payment-provider implementations;
-- affiliate modules do not credit wallets;
-- manual administrative corrections are auditable compensating entries.
+- all financially meaningful operations are idempotent;
+- canonical value and original provider transaction context are preserved;
+- provider/webhook retries do not duplicate purchases or distributions;
+- historical financial records are not deleted;
+- payment providers do not own purchase business logic;
+- affiliate/referral modules do not move money;
+- listing changes do not mutate historical purchase snapshots;
+- manual administrative corrections use auditable compensating entries.
