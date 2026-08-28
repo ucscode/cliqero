@@ -60,26 +60,47 @@ Cliqero does not infer product type from the URL and does not need to know what 
 
 ## Buyer access URL
 
-A raw destination should not necessarily be exposed as the only form of access. The buyer should normally open the listing through a Cliqero access route so the platform can validate entitlement and create an auditable handoff.
+A raw destination should not normally be the authorization mechanism. The buyer should open the listing through a Cliqero access route so the platform can validate entitlement and create an auditable handoff.
 
 Conceptually:
 
-`buyer -> Cliqero access endpoint -> entitlement check -> destination?source=<token>`
+`buyer -> Cliqero access endpoint -> entitlement check -> destination?source=<opaque-token>`
 
-The `source` token must be opaque or cryptographically protected. It must not rely on a raw account ID, email, purchase ID, or another query value that an attacker can forge.
+`source` is a cryptographically random opaque bearer token. It is not a JWT/JWE payload and contains no buyer, listing, purchase, entitlement, price, email, or other business data that a recipient can decode.
 
-## Destination verification
+The token exists only as an unguessable reference to server-side access state owned by Cliqero.
 
-An integrated destination may call Cliqero's API with the received token to determine whether access is authorized.
+Cliqero resolves that reference to the relevant relationship graph, for example:
+
+`source token -> access grant -> entitlement -> purchase -> listing -> buyer/seller`
+
+The exact internal relationships may evolve, but the external rule must not: the token itself carries no authoritative business data.
+
+## Token storage and comparison
+
+Access tokens must be generated with a cryptographically secure random generator with sufficient entropy for bearer credentials.
+
+Where practical, persist only a secure hash of the token rather than the raw bearer value. Verification hashes the presented token and compares it to the stored token record. A database disclosure should therefore not automatically expose usable access credentials.
+
+Token records may contain explicit state and policy information such as active/revoked state, creation time, last-used time, expiration, consumption limits, or rotation ancestry when those requirements exist.
+
+Do not introduce expiry, one-time consumption, or similar policies until the product requires them, but the access model must allow them without changing the public `source` contract.
+
+## Destination verification API
+
+An integrated destination may send the received `source` value to Cliqero's Access API to determine whether access is currently authorized.
 
 Conceptual request:
 
 ```http
 POST /api/access/verify
+Authorization: Bearer <integration-credential>
 Content-Type: application/json
 
-{"token":"<source-token>"}
+{"source":"<opaque-source-token>"}
 ```
+
+The verification endpoint itself must authenticate and authorize the destination/integration. Possession of a `source` token must not grant arbitrary access to Cliqero's verification or data APIs.
 
 Conceptual response:
 
@@ -88,14 +109,23 @@ Conceptual response:
   "authorized": true,
   "listing_id": "...",
   "entitlement_id": "...",
-  "expires_at": "...",
   "metadata": {}
 }
 ```
 
-The exact public contract can evolve during implementation, but the security property must remain: possession of easily guessed listing or buyer identifiers is not authorization.
+The API should expose only the minimum information that the authenticated integration needs. It may resolve richer internal relationships without returning them.
 
-A destination that does not integrate with Cliqero may simply ignore the `source` parameter. This must not force every listing into a custom integration.
+The API response is authoritative at verification time. Because `source` contains no self-contained claims, revocation, entitlement changes, refunds, and future access policy changes can take effect centrally without invalidating a token format.
+
+A destination that does not integrate with Cliqero may simply ignore the `source` parameter when its own access model does not require verification. This must not force every listing into a custom integration.
+
+## API-first access capability
+
+The access model should be API-powered even when Cliqero's own web application is the first consumer.
+
+The web UI, external destinations, and future SDK/library integrations should depend on the same access capability contract rather than duplicating entitlement logic.
+
+A future official SDK may wrap token verification and API calls for external applications, but it must remain a client of the Access API rather than becoming a second source of authorization truth.
 
 ## Organic versus referral URLs
 
