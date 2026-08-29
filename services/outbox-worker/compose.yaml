@@ -14,3 +14,5 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    volumes:
+      - ../../config:/workspace/config:ro

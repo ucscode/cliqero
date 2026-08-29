@@ -1,6 +1,8 @@
 services:
   main:
     build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
       target: development
     command: npm run dev --workspace @cliqero/web -- --hostname 0.0.0.0
     environment:
@@ -9,4 +11,3 @@ services:
       - ../../apps/web:/workspace/apps/web
       - /workspace/node_modules
       - /workspace/apps/web/node_modules
-

@@ -1,2 +1,6 @@
+# Paystack payout capability for Nigerian bank transfers. Copy to paystack.yaml locally.
+# The entire real file is private and ignored by config/.gitignore.
+# Payouts are disabled unless enabled is true and the secret key is valid.
 enabled: false
+# Sensitive Paystack secret key used for recipient and transfer API calls.
 secret_key: sk_test_example

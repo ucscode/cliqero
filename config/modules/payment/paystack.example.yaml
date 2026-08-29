@@ -1,4 +1,10 @@
+# Paystack payment capability configuration. Copy this file to paystack.yaml locally.
+# Real provider YAML is private and ignored by config/.gitignore.
+# Set enabled to true only when the required credentials below are configured.
 enabled: false
+# Public Paystack key (pk_test_* for sandbox or pk_live_* for production).
 public_key: pk_test_example
+# Sensitive secret key; never commit the real value.
 secret_key: sk_test_example
+# Optional browser return URL. %env(NAME)% explicitly substitutes a shared environment value.
 # callback_url: "%env(APP_URL)%/payments/paystack/callback"

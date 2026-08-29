@@ -38,6 +38,15 @@ callback_url: "%env(APP_URL)%/payments/paystack/callback"
 Use `%%env(NAME)%%` when the literal placeholder text is required. `APP_URL` is the canonical application URL for shared
 URL composition; provider-specific settings and credentials remain in their capability YAML files.
 
+### Configuration hierarchy
+
+1. Platform-wide deployment values belong in `.env` (for example `APP_URL` and PostgreSQL settings).
+2. Provider-specific values belong in `config/modules/<capability>/<provider>.yaml`.
+3. Tracked `*.example.yaml` files are safe templates; real provider YAML files are local and ignored by
+   `config/.gitignore`.
+4. YAML may explicitly reference shared environment values with `%env(NAME)%`; environment variables never implicitly
+   override YAML values.
+
 The outbox dispatcher runs as the independently scalable `outbox-worker` Compose service. Paystack payment capability is
 enabled only when `config/modules/payment/paystack.yaml` exists with `enabled: true` and valid credentials. Real provider
 configuration files are ignored and excluded from Docker images.

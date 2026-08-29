@@ -1,5 +1,0 @@
-services:
-  outbox-worker:
-    volumes:
-      - ../../config/modules/payment/paystack.yaml:/workspace/config/modules/payment/paystack.yaml:ro
-      - ../../config/modules/payout/paystack.yaml:/workspace/config/modules/payout/paystack.yaml:ro
