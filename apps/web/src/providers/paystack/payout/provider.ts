@@ -1,7 +1,7 @@
 import {createHash,createHmac,timingSafeEqual} from "node:crypto";
 import {Money} from "@/modules/money/money";
-import type {Withdrawal} from "./withdrawal";
-import type {PayoutProvider,PayoutResult,PayoutProviderCapabilities} from "./provider";
+import type {Withdrawal} from "@/modules/withdrawal/withdrawal";
+import type {PayoutProvider,PayoutResult,PayoutProviderCapabilities} from "@/modules/withdrawal/provider";
 
 export interface PaystackPayoutConfiguration {secretKey:string;apiBaseUrl:string;enabled:boolean;}
 export type PaystackPayoutHttpClient=(input:string|URL,init?:RequestInit)=>Promise<Response>;

@@ -1,10 +1,47 @@
-# Paystack payment capability configuration. Copy this file to paystack.yaml locally.
-# Real provider YAML is private and ignored by config/.gitignore.
-# Set enabled to true only when the required credentials below are configured.
+# Paystack payment capability configuration.
+# Copy this tracked template to config/modules/payment/paystack.yaml locally.
+# Real provider YAML may contain credentials and is ignored by config/.gitignore.
+# The file path identifies the provider; do not add a provider field.
+#
+# When false, Paystack is not registered and provider-specific values are not
+# resolved or required. When true, all required values under config are validated.
 enabled: false
-# Public Paystack key (pk_test_* for sandbox or pk_live_* for production).
-public_key: pk_test_example
-# Sensitive secret key; never commit the real value.
-secret_key: sk_test_example
-# Optional browser return URL. %env(NAME)% explicitly substitutes a shared environment value.
-# callback_url: "%env(APP_URL)%/payments/paystack/callback"
+
+# Provider-specific settings passed to the Paystack payment adapter.
+config:
+  # Required when enabled=true. Use pk_test_* for test mode or pk_live_* for
+  # production. This public key may be used by browser checkout code, but keep
+  # the complete real YAML file private.
+  public_key: pk_test_example
+
+  # Required when enabled=true. Use sk_test_* for test mode or sk_live_* for
+  # production. Server-side secret; never expose it to clients or commit it.
+  secret_key: sk_test_example
+
+  # Required when enabled=true. Absolute HTTP(S) browser return URL for the
+  # completed or abandoned checkout. %env(NAME)% explicitly substitutes a
+  # shared process environment variable; it does not make environment values
+  # override YAML. APP_URL should be the public origin, not APP_PORT.
+  callback_url: "%env(APP_URL)%/payments/paystack/callback"
+
+# Platform-level eligibility restrictions evaluated before checkout. These
+# filters do not replace Paystack's own technical validation.
+filters:
+  # null means no country restriction. Otherwise use a YAML list of uppercase
+  # ISO 3166-1 alpha-2 codes, one per item, for example:
+  # countries:
+  #   - NG  # Nigeria
+  #   - GH  # Ghana
+  # Do not use names (Nigeria), alpha-3 codes (NGA), or "NG,GH" strings.
+  countries:
+    - NG
+
+  # null means no additional configured collection-currency restriction.
+  # Otherwise use a YAML list of uppercase ISO 4217 three-letter codes, e.g.:
+  # currencies:
+  #   - NGN  # Nigerian naira
+  #   - USD  # United States dollar
+  # These are provider collection currencies, not the listing's canonical
+  # currency; Cliqero accounting remains canonical USD.
+  currencies:
+    - NGN

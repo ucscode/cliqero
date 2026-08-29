@@ -148,3 +148,10 @@ Tests should include:
 - refund/reversal, where supported, uses compensating ledger and explicit entitlement consequences.
 
 These tests validate the architecture itself, not merely endpoint happy paths.
+# Durable workflow execution
+
+The database is the workflow. HTTP requests, callbacks, webhooks, and provider responses persist facts and enable transitions; workers advance durable domain state. Provider-operation records are append-only historical evidence of provider attempts, not the workflow authority.
+
+Payment initialization, verification, purchase completion, entitlement issuance, and financial distribution are independently restartable. A downstream failure never rolls back an already-established upstream fact.
+
+The payment progression is persisted as `initialization_pending → initializing → awaiting_payment → verified`; ambiguous provider writes enter reconciliation before retry. Workers discover pending rows directly (with the outbox providing durable notifications), claim bounded batches, and recover stale claims. Provider-operation records remain append-only evidence rather than a work queue.

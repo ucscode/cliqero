@@ -1,11 +1,14 @@
 import {newId} from "@/kernel/ids";
-import type {SqlExecutor} from "./database";
+import type {SqlExecutor} from "@/infrastructure/postgres/database";
 
 export type ReconciliationState="started"|"completed"|"skipped"|"mismatch"|"failed";
 export interface ReconciliationAttempt {id:string;paymentId:string;idempotencyKey:string;state:ReconciliationState;result:unknown;lastError:string|null;actorId:string;correlationId:string;}
 interface AttemptRow{id:string;payment_id:string;idempotency_key:string;state:ReconciliationState;result:unknown;last_error:string|null;actor_id:string;correlation_id:string;}
 export class PostgresPaymentOperationsRepository {
   constructor(private readonly sql:SqlExecutor){}
+  async recordProviderFailure(input:{paymentId:string;provider:string;operation:string;error:{httpStatus?:number;providerStatus?:boolean;providerMessage:string;providerCode?:string;kind:string}}):Promise<void>{
+    await this.sql.query(`insert into payment_capability.provider_operations(id,payment_id,provider,operation,outcome,http_status,provider_status,provider_message,provider_code,failure_kind) values($1,$2,$3,$4,'failed',$5,$6,$7,$8,$9)`,[newId(),input.paymentId,input.provider,input.operation,input.error.httpStatus??null,input.error.providerStatus??null,input.error.providerMessage.slice(0,1000),input.error.providerCode??null,input.error.kind]);
+  }
   async begin(input:{paymentId:string;idempotencyKey:string;actorId:string;correlationId:string}):Promise<{attempt:ReconciliationAttempt;created:boolean}>{
     const result=await this.sql.query<AttemptRow>(`insert into payment_capability.reconciliation_attempts(id,payment_id,idempotency_key,state,actor_id,correlation_id)
       values($1,$2,$3,'started',$4,$5) on conflict(payment_id,idempotency_key) do nothing

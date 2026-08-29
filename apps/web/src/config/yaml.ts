@@ -1,9 +1,24 @@
 import {existsSync,readFileSync} from "node:fs";
+import {dirname,join,resolve} from "node:path";
 import {parse} from "yaml";
 
 export function parseYamlConfiguration(path:string):unknown {
-  if(!existsSync(/* turbopackIgnore: true */ path)) return null;
-  return parse(readFileSync(/* turbopackIgnore: true */ path,"utf8"));
+  const resolved=resolveConfigurationPath(path);
+  if(!resolved)return null;
+  return parse(readFileSync(/* turbopackIgnore: true */ resolved,"utf8"));
+}
+
+function resolveConfigurationPath(path:string):string|null {
+  if(!path.startsWith(".")&&!path.startsWith("/")) {
+    let directory=process.cwd();
+    for(let i=0;i<6;i++) {
+      const candidate=resolve(directory,path);
+      if(existsSync(/* turbopackIgnore: true */ candidate))return candidate;
+      const parent=dirname(directory); if(parent===directory)break; directory=parent;
+    }
+    return null;
+  }
+  return existsSync(/* turbopackIgnore: true */ path)?resolve(path):null;
 }
 
 export function resolveEnvironmentPlaceholders(value:unknown, environment:Record<string,string|undefined>=process.env, sourcePath="configuration"):unknown {

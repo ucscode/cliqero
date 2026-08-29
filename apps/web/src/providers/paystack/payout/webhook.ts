@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import {newId} from "@/kernel/ids";
-import type {PaystackPayoutProvider} from "@/modules/withdrawal/paystack-payout";
-import type {PostgresPaystackPayoutEventRepository} from "@/infrastructure/postgres/paystack-payout-events";
+import type {PaystackPayoutProvider} from "./provider";
+import type {PostgresPaystackPayoutEventRepository} from "../persistence/payout-events";
 import type {PostgresPayoutRepository} from "@/infrastructure/postgres/payouts";
 import type {PayoutExecutionProcessor} from "@/processors/payout-execution";
 import type {UnitOfWork} from "@/kernel/unit-of-work";

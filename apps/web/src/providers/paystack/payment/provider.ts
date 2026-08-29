@@ -1,7 +1,8 @@
 import { createHmac,timingSafeEqual } from "node:crypto";
 import type { Id } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
-import type { PaymentInitialization,PaymentProvider,PaymentVerification } from "./payment";
+import type { PaymentInitialization,PaymentProvider,PaymentVerification } from "@/modules/payment/payment";
+import {ProviderOperationError} from "@/kernel/provider-error";
 
 export interface PaystackConfiguration {publicKey?:string;secretKey:string;apiBaseUrl:string;callbackUrl?:string;}
 export type PaystackHttpClient=(input:string|URL,init?:RequestInit)=>Promise<Response>;
@@ -12,11 +13,13 @@ interface TransactionData{id:number;status:string;reference:string;amount:number
 
 export class PaystackProvider implements PaymentProvider {
   readonly name="paystack";
-  constructor(private readonly config:PaystackConfiguration,private readonly http:PaystackHttpClient=fetch) {}
+  readonly collectionCurrencies:readonly string[];
+  referenceFor(input:{paymentId:Id;idempotencyKey:string}) { return `pay-${input.paymentId}`; }
+  constructor(private readonly config:PaystackConfiguration,private readonly http:PaystackHttpClient=fetch,collectionCurrencies:readonly string[]=["NGN"]) { this.collectionCurrencies=collectionCurrencies; }
 
   async initiate(input:{paymentId:Id;amount:Money;idempotencyKey:string;buyerEmail:string}):Promise<PaymentInitialization> {
     if(input.amount.minorAmount<=0n)throw new Error("Paystack amount must be positive");
-    const reference=`cliqero-${input.paymentId}`;
+    const reference=`pay-${input.paymentId}`;
     const body:Record<string,string>={email:input.buyerEmail,amount:toPaystackSubunit(input.amount),currency:input.amount.currency,reference};
     if(this.config.callbackUrl)body.callback_url=this.config.callbackUrl;
     const result=await this.request<InitializeData>("/transaction/initialize",{method:"POST",body:JSON.stringify(body)});
@@ -42,10 +45,12 @@ export class PaystackProvider implements PaymentProvider {
   }
 
   private async request<T>(path:string,init:RequestInit):Promise<T> {
-    const response=await this.http(new URL(path,this.config.apiBaseUrl),{...init,headers:{authorization:`Bearer ${this.config.secretKey}`,"content-type":"application/json"}});
+    let response:Response;
+    try { response=await this.http(new URL(path,this.config.apiBaseUrl),{...init,headers:{authorization:`Bearer ${this.config.secretKey}`,"content-type":"application/json"}}); }
+    catch { throw new ProviderOperationError("paystack",path.includes("initialize")?"transaction.initialize":"transaction.verify",undefined,undefined,"Provider transport failure",undefined,"ambiguous"); }
     let envelope:PaystackEnvelope<T>;
-    try{envelope=await response.json() as PaystackEnvelope<T>;}catch{throw new Error(`Paystack returned invalid JSON (${response.status})`);}
-    if(!response.ok||!envelope.status||!envelope.data)throw new Error(`Paystack request failed (${response.status}): ${envelope.message||"Unknown error"}`);
+    try{envelope=await response.json() as PaystackEnvelope<T>;}catch{throw new ProviderOperationError("paystack",path.includes("initialize")?"transaction.initialize":"transaction.verify",response.status,undefined,"Invalid provider response");}
+    if(!response.ok||!envelope.status||!envelope.data)throw new ProviderOperationError("paystack",path.includes("initialize")?"transaction.initialize":"transaction.verify",response.status,envelope.status,typeof envelope.message==="string"?envelope.message:"Provider rejected request");
     return envelope.data;
   }
 }

@@ -1,5 +1,5 @@
-import type {SqlExecutor} from "./database";
-import type {PaystackRecipientStore} from "@/modules/withdrawal/paystack-payout";
+import type {SqlExecutor} from "@/infrastructure/postgres/database";
+import type {PaystackRecipientStore} from "../payout/provider";
 export class PostgresPaystackRecipientStore implements PaystackRecipientStore {
   constructor(private readonly sql:SqlExecutor){}
   async find(accountId:string,fingerprint:string){const row=(await this.sql.query<{recipient_code:string}>(`select recipient_code from payout_capability.paystack_recipients where account_id=$1 and destination_fingerprint=$2 and active=true`,[accountId,fingerprint])).rows[0];return row?.recipient_code??null;}

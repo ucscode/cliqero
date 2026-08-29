@@ -2,7 +2,7 @@ import {createHash} from "node:crypto";
 import {newId} from "@/kernel/ids";
 import type {UnitOfWork} from "@/kernel/unit-of-work";
 import type {EventOutbox} from "@/kernel/events";
-import type {PaystackProvider} from "@/modules/payment/paystack";
+import type {PaystackProvider} from "./provider";
 import type {PostgresProviderEventRepository} from "@/infrastructure/postgres/provider-events";
 
 interface PaystackChargeSuccess {event:"charge.success";data:{id:number;reference:string;amount:number;currency:string;status:string};}

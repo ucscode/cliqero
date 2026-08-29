@@ -1,7 +1,7 @@
 import {createHmac} from "node:crypto";
 import {describe,expect,it,vi} from "vitest";
 import {Money} from "@/modules/money/money";
-import {PaystackPayoutProvider,parsePaystackBankDestination} from "./paystack-payout";
+import {PaystackPayoutProvider,parsePaystackBankDestination} from "./provider";
 const config={secretKey:"sk_test",apiBaseUrl:"https://api.paystack.co",enabled:true};
 const withdrawal={id:"00000000-0000-4000-8000-000000000001",accountId:"00000000-0000-4000-8000-000000000002",amount:Money.of(12500n,"NGN"),destinationType:"bank" as const,destinationReference:JSON.stringify({bankCode:"058",accountNumber:"0001234567",accountName:"Jane Doe"}),state:"approved" as const,idempotencyKey:"payout_000000000000001",correlationId:"c",createdAt:new Date(),updatedAt:new Date()};
 describe("Paystack payout provider",()=>{

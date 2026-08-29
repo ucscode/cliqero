@@ -51,6 +51,15 @@ The outbox dispatcher runs as the independently scalable `outbox-worker` Compose
 enabled only when `config/modules/payment/paystack.yaml` exists with `enabled: true` and valid credentials. Real provider
 configuration files are ignored and excluded from Docker images.
 
+Provider implementations are grouped under `apps/web/src/providers/<provider>/`; capability modules contain only
+provider-neutral contracts and orchestration. Paystack payment and payout configuration remain separate files, so either
+capability can be disabled independently. The payment registry evaluates `filters` against the provider's collection
+currency, which may differ from the listing's canonical USD currency.
+
+Exchange-rate contracts live with the money capability. Rates are represented as decimal strings and conversion uses
+integer arithmetic with explicit rounding; a future checkout conversion will snapshot the quote alongside the payment's
+canonical and collection amounts rather than repricing an existing payment.
+
 Run the worker outside Docker with `npm run worker:outbox`. It consumes the same `DATABASE_URL` as the web application
 and shuts down cleanly on `SIGTERM` or `SIGINT`.
 

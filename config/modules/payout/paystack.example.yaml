@@ -1,6 +1,19 @@
-# Paystack payout capability for Nigerian bank transfers. Copy to paystack.yaml locally.
-# The entire real file is private and ignored by config/.gitignore.
-# Payouts are disabled unless enabled is true and the secret key is valid.
+# Paystack payout capability for Nigerian NUBAN bank transfers.
+# Copy this tracked template to config/modules/payout/paystack.yaml locally.
+# The complete real file is private and ignored by config/.gitignore.
+# Payout execution is independently configured from Paystack payments.
+#
+# false disables provider registration. true validates the required provider
+# settings below; it does not automatically schedule or execute payouts.
 enabled: false
-# Sensitive Paystack secret key used for recipient and transfer API calls.
-secret_key: sk_test_example
+
+# Provider-specific settings consumed by the Paystack transfer adapter.
+config:
+  # Required when enabled=true. Use an sk_test_* key for sandbox or sk_live_*
+  # for production. This server-side credential authorizes recipient and
+  # transfer requests; never expose it or commit the real value.
+  secret_key: sk_test_example
+
+# Withdrawal policy controls eligibility, amount, and destination validation.
+# This provider currently accepts NGN bank destinations; destination details
+# are captured immutably on each withdrawal, not configured in this file.

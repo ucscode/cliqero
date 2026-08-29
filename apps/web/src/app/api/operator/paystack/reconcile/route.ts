@@ -12,5 +12,5 @@ export async function POST(request:Request){const account=await authenticatedAcc
 export async function GET(request:Request){const account=await authenticatedAccount(request);if(!account)return Response.json({error:"Unauthorized"},{status:401});
   try{const search=new URL(request.url).searchParams;const older=z.coerce.number().int().min(1).max(10080).default(15).parse(search.get("older_than_minutes")??undefined);
     const limit=z.coerce.number().int().min(1).max(100).default(50).parse(search.get("limit")??undefined);
-    const payments=await getContainer().paymentReconciliation.eligible({actorId:account.id,olderThanMinutes:older,limit});return Response.json({payments:payments.map(p=>({id:p.id,reference:p.providerReference,state:p.state,amount_minor:p.amount.minorAmount.toString(),currency:p.amount.currency}))});}
+    const payments=await getContainer().paymentReconciliation.eligible({actorId:account.id,olderThanMinutes:older,limit});return Response.json({payments:payments.map(p=>{const amount=p.collectionAmount??p.amount;return {id:p.id,reference:p.providerReference,state:p.state,amount_minor:amount.minorAmount.toString(),currency:amount.currency};})});}
   catch(error){return apiError(error);}}

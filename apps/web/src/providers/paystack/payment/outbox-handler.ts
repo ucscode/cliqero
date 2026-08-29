@@ -1,14 +1,13 @@
 import {Money} from "@/modules/money/money";
 import type {PaymentRepository} from "@/modules/payment/payment";
-import type {PaymentCompletionService} from "@/application/commerce";
 import type {PostgresProviderEventRepository} from "@/infrastructure/postgres/provider-events";
 import type {ClaimedOutboxEvent} from "@/infrastructure/postgres/outbox";
-import type {OutboxEventHandler} from "./dispatcher";
+import type {OutboxEventHandler} from "@/workers/outbox/dispatcher";
 
 export class PaystackChargeSucceededHandler implements OutboxEventHandler {
   readonly eventNames=["payment.paystack.charge-succeeded"];
   constructor(private readonly providerEvents:PostgresProviderEventRepository,private readonly payments:PaymentRepository,
-    private readonly completion:PaymentCompletionService){}
+    ){}
   async handle(event:ClaimedOutboxEvent):Promise<void>{
     const providerEventId=isPayload(event.payload)?event.payload.providerEventId:null;
     if(!providerEventId)throw new Error("Paystack outbox event payload is invalid");
@@ -20,12 +19,11 @@ export class PaystackChargeSucceededHandler implements OutboxEventHandler {
     const payment=await this.payments.findByProviderReference("paystack",providerEvent.providerReference);
     if(!payment){await this.providerEvents.markRejected(providerEvent.id,"Unknown Paystack payment reference");return;}
     const webhookAmount=Money.of(BigInt(providerEvent.amountMinor),providerEvent.currency);
-    if(!webhookAmount.equals(payment.amount)){
+    if(!webhookAmount.equals(payment.collectionAmount??payment.amount)){
       await this.providerEvents.markRejected(providerEvent.id,"Paystack webhook amount or currency mismatch");return;
     }
-    await this.completion.complete({paymentId:payment.id,correlationId:event.correlationId});
+    payment.state="verification_pending";await this.payments.save(payment);
     await this.providerEvents.markProcessed(providerEvent.id);
   }
 }
 function isPayload(payload:object):payload is {providerEventId:string}{return "providerEventId" in payload&&typeof payload.providerEventId==="string";}
-

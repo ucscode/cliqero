@@ -6,15 +6,15 @@ import { Entitlement, type EntitlementRepository, type EntitlementState } from "
 import { AccessGrant, type AccessGrantRepository, type AccessGrantState } from "@/modules/access/access";
 import type { SqlExecutor } from "./database";
 
-interface AccountRow { id: string; email: string; handle: string; }
+interface AccountRow { id: string; email: string; handle: string; country:string|null; }
 export class PostgresAccountRepository implements AccountReader {
   constructor(private readonly sql: SqlExecutor) {}
   async exists(id: string): Promise<boolean> {
     return (await this.sql.query("select 1 from identity_capability.accounts where id = $1", [id])).rowCount === 1;
   }
   async findById(id: string): Promise<Account | null> {
-    const row = (await this.sql.query<AccountRow>("select id, email, handle from identity_capability.accounts where id = $1", [id])).rows[0];
-    return row ? new Account(row.id, row.email, row.handle) : null;
+    const row = (await this.sql.query<AccountRow>("select id, email, handle, metadata->>'country' as country from identity_capability.accounts where id = $1", [id])).rows[0];
+    return row ? new Account(row.id, row.email, row.handle,row.country) : null;
   }
 }
 

@@ -1,6 +1,6 @@
-import type {PaymentCompletionService} from "./commerce";
+import type {PaymentCompletionService} from "@/application/commerce";
 import type {PostgresPaymentRepository} from "@/infrastructure/postgres/payments";
-import type {PostgresPaymentOperationsRepository,ReconciliationAttempt} from "@/infrastructure/postgres/payment-operations";
+import type {PostgresPaymentOperationsRepository,ReconciliationAttempt} from "../persistence/payment-operations";
 import type {OperatorAuthorizationService} from "@/modules/identity/operator";
 
 export class PaymentReconciliationService {
@@ -17,7 +17,7 @@ export class PaymentReconciliationService {
       await this.operations.finish(begun.attempt.id,mismatch?"mismatch":"failed",{completed:false},message);throw error;}
   }
   async eligible(input:{actorId:string;olderThanMinutes:number;limit:number}){await this.operators.requireOperator(input.actorId);
-    return this.payments.findPendingPaystackOlderThan(new Date(Date.now()-input.olderThanMinutes*60_000),input.limit);}
+    return this.payments.findPendingByProviderOlderThan("paystack",new Date(Date.now()-input.olderThanMinutes*60_000),input.limit);}
 }
 
 export class PaystackOperationsInspectionService {

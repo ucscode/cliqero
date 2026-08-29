@@ -1,11 +1,11 @@
 import {createHmac} from "node:crypto";
 import {afterAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {createContainer} from "@/infrastructure/container";
-import {PaystackProvider} from "@/modules/payment/paystack";
-import {PaystackWebhookIngress} from "@/application/paystack-webhooks";
+import {PaystackProvider} from "@/providers/paystack/payment/provider";
+import {PaystackWebhookIngress} from "@/providers/paystack/payment/webhook";
 import {OutboxDispatcher,OutboxHandlerRegistry,type WorkerLogger} from "@/workers/outbox/dispatcher";
-import {PaystackChargeSucceededHandler} from "@/workers/outbox/paystack-handler";
-import {PaystackRefundProcessedHandler} from "@/workers/outbox/paystack-refund-handler";
+import {PaystackChargeSucceededHandler} from "@/providers/paystack/payment/outbox-handler";
+import {PaystackRefundProcessedHandler} from "@/providers/paystack/payment/refund-handler";
 import {PurchaseReversalEntitlementHandler} from "@/workers/outbox/handlers";
 
 const databaseUrl=process.env.TEST_DATABASE_URL;const suite=databaseUrl?describe:describe.skip;
@@ -20,11 +20,11 @@ suite("Paystack webhook to commerce consequence",()=>{
     return Response.json({status:true,message:"verified",data:{id:123456,status:verification.status,reference:verification.reference,
       amount:verification.amount,currency:verification.currency}});
   });
-  const provider=new PaystackProvider({secretKey:secret,apiBaseUrl:"https://api.paystack.co"},http);
+  const provider=new PaystackProvider({secretKey:secret,apiBaseUrl:"https://api.paystack.co"},http,["USD"]);
   app.providers.register(provider);
   const ingress=new PaystackWebhookIngress(provider,app.providerEvents,app.outbox,app.database);
   const dispatcher=new OutboxDispatcher("paystack-worker",app.outbox,new OutboxHandlerRegistry().register(
-    new PaystackChargeSucceededHandler(app.providerEvents,app.payments,app.paymentCompletion)).register(new PaystackRefundProcessedHandler(app.providerEvents,app.payments,app.purchases,app.purchaseReversal)).register(new PurchaseReversalEntitlementHandler(app.entitlements)),silent,{pollMilliseconds:1,staleAfterMilliseconds:1000});
+    new PaystackChargeSucceededHandler(app.providerEvents,app.payments)).register(new PaystackRefundProcessedHandler(app.providerEvents,app.payments,app.purchases,app.purchaseReversal)).register(new PurchaseReversalEntitlementHandler(app.entitlements)),silent,{pollMilliseconds:1,staleAfterMilliseconds:1000});
 
   beforeEach(async()=>{networkFailure=false;http.mockClear();await app.database.query(`truncate table
     payment_capability.reconciliation_attempts,payment_capability.provider_events,access_capability.integration_listings,access_capability.integrations,access_capability.access_grants,
@@ -102,7 +102,7 @@ suite("Paystack webhook to commerce consequence",()=>{
   });
   it("keeps a payment pending when reconciliation cannot reach Paystack",async()=>{const {buyer,checkout}=await setup();
     await app.database.query(`insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,[buyer.id]);networkFailure=true;
-    await expect(app.paymentReconciliation.reconcile({actorId:buyer.id,paymentId:checkout.paymentId,idempotencyKey:"network",correlationId:checkout.paymentId})).rejects.toThrow("network unavailable");
+    await expect(app.paymentReconciliation.reconcile({actorId:buyer.id,paymentId:checkout.paymentId,idempotencyKey:"network",correlationId:checkout.paymentId})).rejects.toMatchObject({kind:"ambiguous"});
     expect((await app.payments.findById(checkout.paymentId))?.state).toBe("pending");
     expect((await app.database.query<{state:string}>(`select state from payment_capability.reconciliation_attempts`)).rows[0].state).toBe("failed");
   });

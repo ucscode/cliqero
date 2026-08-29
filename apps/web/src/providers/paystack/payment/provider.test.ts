@@ -1,13 +1,13 @@
 import {createHmac} from "node:crypto";
 import {describe,expect,it,vi} from "vitest";
 import {Money} from "@/modules/money/money";
-import {PaystackProvider,toPaystackSubunit} from "./paystack";
+import {PaystackProvider,toPaystackSubunit} from "./provider";
 
 const config={secretKey:"sk_test_secret",apiBaseUrl:"https://api.paystack.co",callbackUrl:"https://cliqero.example/callback"};
 describe("PaystackProvider",()=>{
   it("maps checkout initialization using server-owned subunits, email, currency, and reference",async()=>{
     const http=vi.fn(async(_input:string|URL,_init?:RequestInit)=>Response.json({status:true,message:"Authorization URL created",data:{
-      authorization_url:"https://checkout.paystack.com/access",access_code:"access",reference:"cliqero-00000000-0000-4000-8000-000000000001"}}));
+      authorization_url:"https://checkout.paystack.com/access",access_code:"access",reference:"pay-00000000-0000-4000-8000-000000000001"}}));
     const provider=new PaystackProvider(config,http);
     const result=await provider.initiate({paymentId:"00000000-0000-4000-8000-000000000001",amount:Money.of(250000n,"NGN"),
       idempotencyKey:"checkout-1",buyerEmail:"buyer@example.com"});
@@ -15,7 +15,7 @@ describe("PaystackProvider",()=>{
     expect(String(url)).toBe("https://api.paystack.co/transaction/initialize");
     expect(request?.headers).toMatchObject({authorization:"Bearer sk_test_secret"});
     expect(body).toEqual({email:"buyer@example.com",amount:"250000",currency:"NGN",
-      reference:"cliqero-00000000-0000-4000-8000-000000000001",callback_url:"https://cliqero.example/callback"});
+      reference:"pay-00000000-0000-4000-8000-000000000001",callback_url:"https://cliqero.example/callback"});
     expect(result).toMatchObject({authorizationUrl:"https://checkout.paystack.com/access",accessCode:"access"});
   });
   it("preserves exact minor units without floating point conversion",()=>{
@@ -38,6 +38,11 @@ describe("PaystackProvider",()=>{
   });
   it("does not report success when Paystack is unavailable",async()=>{
     const provider=new PaystackProvider(config,vi.fn(async()=>{throw new Error("network unavailable");}));
-    await expect(provider.verify({reference:"reference-1",expectedAmount:Money.of(100n,"NGN")})).rejects.toThrow("network unavailable");
+    await expect(provider.verify({reference:"reference-1",expectedAmount:Money.of(100n,"NGN")})).rejects.toMatchObject({kind:"ambiguous",provider:"paystack"});
   });
+  it("captures safe structured rejection diagnostics",async()=>{
+    const http=vi.fn(async()=>new Response(JSON.stringify({status:false,message:"Invalid amount"}),{status:400,headers:{"content-type":"application/json"}}));
+    await expect(new PaystackProvider(config,http).initiate({paymentId:"00000000-0000-4000-8000-000000000001",amount:Money.of(1n,"NGN"),idempotencyKey:"x",buyerEmail:"buyer@example.com"})).rejects.toMatchObject({provider:"paystack",operation:"transaction.initialize",httpStatus:400,providerStatus:false,providerMessage:"Invalid amount",kind:"rejection"});
+  });
+  it("classifies transport failures as ambiguous",async()=>{const p=new PaystackProvider(config,async()=>{throw new Error("timeout")});await expect(p.initiate({paymentId:"00000000-0000-4000-8000-000000000001",amount:Money.of(1n,"NGN"),idempotencyKey:"x",buyerEmail:"buyer@example.com"})).rejects.toMatchObject({kind:"ambiguous",operation:"transaction.initialize"});});
 });
