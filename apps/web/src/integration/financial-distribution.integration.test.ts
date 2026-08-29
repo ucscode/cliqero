@@ -19,8 +19,8 @@ suite("purchase financial distribution",()=>{
   async function account(label:string){return app.authentication.register({email:`${label}@example.com`,handle:label,password:"correct-horse-battery"});}
   async function completed(attributionSource?:string){const seller=await account(`seller${newId().slice(0,5)}`),buyer=await account(`buyer${newId().slice(0,5)}`);
     const listing=await app.listingService.create(seller,{title:"Auditable",description:"",priceMinor:"101",currency:"USD",destination:"https://example.test/access"});
-    const checkout=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:newId(),attributionSource});
-    await app.paymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});return {seller,buyer,listing,purchaseId:checkout.purchaseId!};}
+    const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:newId(),attributionSource});
+    await app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});return {seller,buyer,listing,purchaseId:checkout.purchaseId!};}
 
   it("conserves organic gross and distributes exactly once under duplicate/concurrent delivery",async()=>{const value=await completed();const correlationId=newId();
     const results=await Promise.all([app.purchaseDistribution.process({purchaseId:value.purchaseId,correlationId}),app.purchaseDistribution.process({purchaseId:value.purchaseId,correlationId})]);
@@ -34,8 +34,8 @@ suite("purchase financial distribution",()=>{
     await app.referralGraphService.establish(promoter.id,parent.id);const seller=await account(`sell${newId().slice(0,5)}`),buyer=await account(`buy${newId().slice(0,5)}`);
     const listing=await app.listingService.create(seller,{title:"Referral",description:"",priceMinor:"10000",currency:"USD",destination:"https://example.test"});
     const link=await app.referralAttribution.createLink(promoter.id,listing.id);const visit=await app.referralAttribution.visit(link.code);expect(visit).not.toBeNull();
-    const checkout=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:newId(),attributionSource:visit!.source});
-    await app.paymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});const purchase=(await app.purchases.findById(checkout.purchaseId!))!;
+    const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:newId(),attributionSource:visit!.source});
+    await app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});const purchase=(await app.purchases.findById(checkout.purchaseId!))!;
     const before=(await app.database.query(`select count(*)::int count from ledger_capability.entries`)).rows[0].count;
     const facts=await app.commissionDistribution.calculate(purchase,await app.commissionPolicy.getActive());
     expect(facts.map(f=>[f.recipientAccountId,f.level,f.calculatedAmount.minorAmount])).toEqual([[promoter.id,1,500n],[parent.id,2,250n]]);

@@ -12,7 +12,7 @@ export class PurchaseDistributionProcessor {
     private readonly ledger:LedgerRepository,private readonly outbox:EventOutbox,private readonly uow:UnitOfWork){}
   async process(input:{purchaseId:string;correlationId:string}):Promise<PurchaseDistribution>{return this.uow.transaction(async()=>{
     const purchase=await this.purchases.findById(input.purchaseId,{forUpdate:true});if(!purchase)throw new Error("Purchase not found");
-    if(purchase.state!=="completed")throw new Error("Purchase distribution requires a completed purchase");
+    if(!(purchase.state==="paid"||purchase.state==="completed"))throw new Error("Purchase distribution requires a paid purchase");
     const existing=await this.ledger.findDistributionByPurchaseId(purchase.id);if(existing)return existing;
     const gross=Money.of(BigInt(purchase.terms.canonicalPrice.minorAmount),purchase.terms.canonicalPrice.currency);
     const [commissionPolicy,financialPolicy]=await Promise.all([this.commissionPolicy.getActive(),this.financialPolicy.getActive()]);

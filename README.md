@@ -47,18 +47,23 @@ URL composition; provider-specific settings and credentials remain in their capa
 4. YAML may explicitly reference shared environment values with `%env(NAME)%`; environment variables never implicitly
    override YAML values.
 
-The outbox dispatcher runs as the independently scalable `outbox-worker` Compose service. Paystack payment capability is
-enabled only when `config/modules/payment/paystack.yaml` exists with `enabled: true` and valid credentials. Real provider
-configuration files are ignored and excluded from Docker images.
+The outbox dispatcher and commercial state processors run in the `outbox-worker` Compose service. External payment
+providers fund wallets; they never purchase listings. `POST /api/checkout` creates a wallet-paid, single-listing checkout
+and never accepts a provider. See [the wallet-first workflow](docs/wallet-first-commerce.md) and the
+[verified API matrix](docs/public-api-matrix.md).
+
+Paystack payment capability is enabled only when `config/modules/payment/paystack.yaml` exists with `enabled: true` and
+valid credentials. It is an incoming-funding adapter. Real provider configuration files are ignored and excluded from
+Docker images.
 
 Provider implementations are grouped under `apps/web/src/providers/<provider>/`; capability modules contain only
 provider-neutral contracts and orchestration. Paystack payment and payout configuration remain separate files, so either
 capability can be disabled independently. The payment registry evaluates `filters` against the provider's collection
-currency, which may differ from the listing's canonical USD currency.
+currency for wallet funding. Listing commerce and all internal accounting remain canonical USD.
 
 Exchange-rate contracts live with the money capability. Rates are represented as decimal strings and conversion uses
-integer arithmetic with explicit rounding; a future checkout conversion will snapshot the quote alongside the payment's
-canonical and collection amounts rather than repricing an existing payment.
+integer arithmetic with explicit rounding. Funding snapshots its canonical USD and provider collection facts once; wallet
+checkout never performs FX.
 
 Run the worker outside Docker with `npm run worker:outbox`. It consumes the same `DATABASE_URL` as the web application
 and shuts down cleanly on `SIGTERM` or `SIGINT`.

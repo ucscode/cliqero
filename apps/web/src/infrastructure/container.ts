@@ -46,6 +46,9 @@ import {PostgresExchangeRateCache} from "./postgres/exchange-rates";
 import {PaymentInitializationProcessor} from "@/processors/payment-initialization";
 import {PaymentInitializationWorker} from "@/workers/payment-initialization/worker";
 import {PaymentVerificationProcessor} from "@/processors/payment-verification";
+import {PostgresFundingRepository,PostgresWalletRepository,PostgresCheckoutRepository} from "./postgres/wallet-commerce";
+import {FundingService,FundingInitializationProcessor,FundingVerificationProcessor,WalletService,WalletCheckoutService} from "@/application/wallet-commerce";
+import {WalletCreditProcessor,WalletAvailabilityProcessor,CheckoutPaymentProcessor,EntitlementIssuanceProcessor} from "@/processors/wallet-commerce";
 
 export function createContainer(databaseUrl:string) {
   const database=PostgresDatabase.connect(databaseUrl);
@@ -56,6 +59,7 @@ export function createContainer(databaseUrl:string) {
   const paymentOperations=new PostgresPaymentOperationsRepository(database);
   const outbox=new PostgresOutbox(database); const idempotency=new PostgresIdempotencyRepository(database);
   const providerEvents=new PostgresProviderEventRepository(database);
+  const funding=new PostgresFundingRepository(database);const walletRepository=new PostgresWalletRepository(database);const checkoutRepository=new PostgresCheckoutRepository(database);
   const referralGraph=new PostgresReferralGraphRepository(database);
   const commissionPolicy=new PostgresCommissionPolicyRepository(database);
   const referralAttributionRepository=new PostgresReferralAttributionRepository(database);
@@ -82,21 +86,29 @@ export function createContainer(databaseUrl:string) {
   const paymentCompletion=new PaymentCompletionService(payments,purchases,entitlements,providers,idempotency,outbox,database);
   const commissionDistribution=new CommissionDistributionService(referralGraph);
   const purchaseDistribution=new PurchaseDistributionProcessor(purchases,commissionDistribution,commissionPolicy,financialDistributionPolicy,ledger,outbox,database);
+  const fundingService=new FundingService(funding,providers,exchangeRates,accounts,database);
+  const fundingInitialization=new FundingInitializationProcessor(funding,providers,accounts,database,paymentOperations);
+  const fundingVerification=new FundingVerificationProcessor(funding,providers,database,paymentOperations);
+  const wallet=new WalletService(walletRepository);const walletCredit=new WalletCreditProcessor(funding,walletRepository,database);
+  const walletAvailability=new WalletAvailabilityProcessor(walletRepository,database);const checkoutPayment=new CheckoutPaymentProcessor(checkoutRepository,walletRepository,purchases,database);
+  const entitlementIssuance=new EntitlementIssuanceProcessor(purchases,entitlements,database);
   const operators=new OperatorAuthorizationService(database);
   return {database,accounts,listings,purchases,entitlements,grants,payments,providerEvents,outbox,idempotency,providers,paystack,
     referralGraph,commissionPolicy,referralAttributionRepository,referralAttribution,
     authentication:new AuthenticationService(database),authorization:new AuthorizationPolicy(),integrations:new IntegrationService(database),
     listingService:new ListingService(listings,new AuthorizationPolicy()),
-    checkout:new CheckoutService(listings,payments,purchases,providers,idempotency,referralAttribution,database,accounts,exchangeRates),
+    legacyProviderCheckout:new CheckoutService(listings,payments,purchases,providers,idempotency,referralAttribution,database,accounts,exchangeRates),
+    walletCheckout:new WalletCheckoutService(listings,checkoutRepository,purchases,referralAttribution,database),checkoutRepository,
+    funding,fundingService,fundingInitialization,fundingVerification,wallet,walletRepository,walletCredit,walletAvailability,checkoutPayment,entitlementIssuance,
     referralGraphService:new ReferralGraphService(accounts,referralGraph,database),
     commissionDistribution,ledger,financialDistributionPolicy,purchaseDistribution,
-    paymentCompletion,paystackWebhook:paystack?new PaystackWebhookIngress(paystack,providerEvents,outbox,database):null,
+    legacyPaymentCompletion:paymentCompletion,paystackWebhook:paystack?new PaystackWebhookIngress(paystack,providerEvents,outbox,database):null,
     paystackPayoutWebhook:paystackPayout?new PaystackPayoutWebhookIngress(paystackPayout,paystackPayoutEvents,payoutRepository,payoutExecution,database):null,
-    operators,paymentOperations,paymentInitialization,paymentInitializationWorker,paymentVerification,paymentReconciliation:new PaymentReconciliationService(payments,paymentCompletion,paymentOperations,operators),
+    operators,paymentOperations,paymentInitialization,paymentInitializationWorker,paymentVerification,paymentReconciliation:new PaymentReconciliationService(payments,paymentVerification,paymentOperations,operators),
     paystackInspection:new PaystackOperationsInspectionService(paymentOperations,operators),
     settlementPolicy,settlement,reversals,purchaseReversal:new PurchaseReversalProcessor(purchases,ledger,reversals,outbox,database),
     withdrawalRepository,withdrawalPolicy,fundsReservation,withdrawals,payoutProviders,payoutRepository,payoutExecution,paystackPayout,exchangeRates,
-    buyerAccess:new BuyerAccessService(access,listings,database),access};
+    buyerAccess:new BuyerAccessService(access,listings,database,purchases,entitlements),access};
 }
 export type ApplicationContainer=ReturnType<typeof createContainer>;
 

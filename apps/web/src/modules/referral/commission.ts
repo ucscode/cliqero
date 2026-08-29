@@ -14,7 +14,7 @@ export interface CommissionPolicyRepository {getActive():Promise<CommissionPolic
 export class CommissionDistributionService {
   constructor(private readonly graph:ReferralGraphRepository){}
   async calculate(purchase:Purchase,policy:CommissionPolicy):Promise<readonly CommissionDistributionFact[]>{
-    if(purchase.state!=="completed")throw new Error("Commission distribution requires a completed purchase");
+    if(!(purchase.state==="paid"||purchase.state==="completed"))throw new Error("Commission distribution requires a paid purchase");
     const source=purchase.terms.referralReferrerAccountId;if(!source||policy.maximumRewardedDepth===0)return [];
     const recipients=[{accountId:source,depth:1}];
     if(policy.maximumRewardedDepth>1){const uplines=await this.graph.getUplines(source,policy.maximumRewardedDepth-1);

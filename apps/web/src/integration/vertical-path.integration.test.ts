@@ -28,7 +28,7 @@ suite("persisted commerce and access vertical path",()=>{
     const {seller,buyer,listing}=await setup();
     const persisted=await app.listings.findById(listing.id);
     expect(persisted).toMatchObject({title:"Private destination",sellerId:seller.id});
-    const checkout=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"checkout-snapshot"});
+    const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"checkout-snapshot"});
     await app.listingService.update(seller,listing.id,{title:"Changed title",description:"Changed",priceMinor:"9999",currency:"USD",
       destination:"https://destination.example/new",metadata:{changed:true}});
     const purchase=await app.purchases.findById(checkout.purchaseId!);
@@ -37,11 +37,11 @@ suite("persisted commerce and access vertical path",()=>{
 
   it("completes payment concurrently exactly once with entitlement and transactional outbox",async()=>{
     const {buyer,listing}=await setup();
-    const checkout=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"checkout-concurrent"});
+    const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"checkout-concurrent"});
     const correlationId=newId();
     const [first,second]=await Promise.all([
-      app.paymentCompletion.complete({paymentId:checkout.paymentId,correlationId}),
-      app.paymentCompletion.complete({paymentId:checkout.paymentId,correlationId}),
+      app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId}),
+      app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId}),
     ]);
     expect(second.id).toBe(first.id);
     expect((await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount).toBe(1);
@@ -61,8 +61,8 @@ suite("persisted commerce and access vertical path",()=>{
 
   it("hands an entitled buyer an opaque source while persisting only its hash",async()=>{
     const {buyer,listing}=await setup();
-    const checkout=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"checkout-access"});
-    await app.paymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});
+    const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"checkout-access"});
+    await app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});
     const destination=await app.buyerAccess.handoff(buyer,listing.id,"access-once");
     expect(destination.searchParams.get("existing")).toBe("yes");
     const source=destination.searchParams.get("source")!;
@@ -73,8 +73,8 @@ suite("persisted commerce and access vertical path",()=>{
 
   it("requires an active entitlement and independently authenticated, listing-scoped integration",async()=>{
     const {seller,buyer,listing}=await setup();
-    const checkout=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"checkout-verify"});
-    const entitlement=await app.paymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});
+    const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"checkout-verify"});
+    const entitlement=await app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});
     const destination=await app.buyerAccess.handoff(buyer,listing.id); const source=destination.searchParams.get("source")!;
     const validCredential=await app.database.transaction(()=>app.integrations.create(seller.id,"destination",listing.id));
     const validIntegration=await app.integrations.authenticate(validCredential.credential);

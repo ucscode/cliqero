@@ -19,9 +19,10 @@ export class Purchase {
   constructor(
     readonly id: Id,
     readonly buyerId: Id,
-    readonly paymentId: Id,
+    readonly paymentId: Id | null,
     readonly terms: PurchaseTerms,
     readonly idempotencyKey: string,
+    readonly checkoutId: Id | null = null,
   ) {
     if (!idempotencyKey.trim()) throw new DomainInvariantError("Purchase idempotency key is required");
     Object.freeze(terms.price);
@@ -30,9 +31,9 @@ export class Purchase {
   }
 
   static restore(input: {
-    id: Id; buyerId: Id; paymentId: Id; terms: PurchaseTerms; idempotencyKey: string; state: PurchaseState;
+    id: Id; buyerId: Id; paymentId: Id|null; checkoutId?:Id|null; terms: PurchaseTerms; idempotencyKey: string; state: PurchaseState;
   }): Purchase {
-    const purchase = new Purchase(input.id, input.buyerId, input.paymentId, input.terms, input.idempotencyKey);
+    const purchase = new Purchase(input.id, input.buyerId, input.paymentId, input.terms, input.idempotencyKey,input.checkoutId??null);
     purchase.stateValue = input.state;
     return purchase;
   }
@@ -53,5 +54,7 @@ export class Purchase {
 export interface PurchaseRepository {
   findById(id: Id, options?: { forUpdate?: boolean }): Promise<Purchase | null>;
   findByIdempotencyKey(key: string): Promise<Purchase | null>;
+  findCompletedWithoutEntitlement?(limit?:number):Promise<readonly Purchase[]>;
+  findCompletedWithoutDistribution?(limit?:number):Promise<readonly Purchase[]>;
   save(purchase: Purchase): Promise<void>;
 }

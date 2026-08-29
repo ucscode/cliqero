@@ -69,9 +69,9 @@ suite("referral graph and trusted purchase attribution",()=>{
     return {seller,buyer,referrer,listing};}
   it("keeps organic purchases unattributed and rejects arbitrary account IDs as attribution",async()=>{
     const {buyer,referrer,listing}=await commerce();
-    const organic=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"organic"});
+    const organic=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"organic"});
     expect((await app.purchases.findById(organic.purchaseId!))?.terms).toMatchObject({referralAttributionId:null,referralLinkId:null,referralReferrerAccountId:null});
-    const forged=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"forged",attributionSource:referrer.id});
+    const forged=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"forged",attributionSource:referrer.id});
     expect((await app.purchases.findById(forged.purchaseId!))?.terms.referralReferrerAccountId).toBeNull();
   });
   it("turns a valid referral visit into an immutable purchase attribution snapshot",async()=>{
@@ -79,7 +79,7 @@ suite("referral graph and trusted purchase attribution",()=>{
     const link=await app.referralAttribution.createLink(referrer.id,listing.id);const visit=await app.referralAttribution.visit(link.code);expect(visit).not.toBeNull();
     const storedToken=(await app.database.query<{token_hash:Buffer}>(`select token_hash from referral_capability.listing_attributions`)).rows[0].token_hash;
     expect(storedToken).toHaveLength(32);expect(storedToken.toString("utf8")).not.toBe(visit!.source);
-    const checkout=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"attributed",attributionSource:visit!.source});
+    const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"attributed",attributionSource:visit!.source});
     const purchase=await app.purchases.findById(checkout.purchaseId!);expect(purchase?.terms).toMatchObject({referralAttributionId:expect.any(String),referralLinkId:link.id,referralReferrerAccountId:referrer.id});
     expect(purchase?.terms.referralReferrerAccountId).not.toBe(accountParent.id);
     await app.database.query(`update referral_capability.listing_referral_links set state='revoked' where id=$1`,[link.id]);
@@ -90,8 +90,8 @@ suite("referral graph and trusted purchase attribution",()=>{
     const {buyer,referrer,listing}=await commerce();const level2=await account("level2"),level3=await account("level3"),level4=await account("level4");
     await app.referralGraphService.establish(referrer.id,level2.id);await app.referralGraphService.establish(level2.id,level3.id);await app.referralGraphService.establish(level3.id,level4.id);
     const link=await app.referralAttribution.createLink(referrer.id,listing.id);const visit=await app.referralAttribution.visit(link.code);
-    const checkout=await app.checkout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"commission",attributionSource:visit!.source});
-    await app.paymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});const purchase=(await app.purchases.findById(checkout.purchaseId!))!;
+    const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:"commission",attributionSource:visit!.source});
+    await app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});const purchase=(await app.purchases.findById(checkout.purchaseId!))!;
     await app.database.query(`update referral_capability.commission_policy set rates_basis_points=array[1000,500,333],updated_at=now() where singleton=true`);
     const facts=await app.commissionDistribution.calculate(purchase,await app.commissionPolicy.getActive());
     expect(facts.map(fact=>({recipient:fact.recipientAccountId,level:fact.level,rate:fact.configuredRateBasisPoints,amount:fact.calculatedAmount.minorAmount})))

@@ -50,7 +50,7 @@ export class PostgresListingRepository implements ListingRepository {
 }
 
 interface PurchaseRow {
-  id: string; buyer_id: string; seller_id: string; listing_id: string; payment_id: string; idempotency_key: string;
+  id: string; buyer_id: string; seller_id: string; listing_id: string; payment_id: string|null; checkout_id:string|null; idempotency_key: string;
   listing_title_snapshot: string; price_minor_snapshot: string; price_currency_snapshot: string;
   canonical_minor_snapshot: string; canonical_currency_snapshot: "USD"; referral_attribution_id: string | null; state: PurchaseState;
   referral_link_id:string|null;referral_referrer_account_id:string|null;
@@ -60,7 +60,7 @@ export class PostgresPurchaseRepository implements PurchaseRepository {
   async findById(id: string, options?: { forUpdate?: boolean }): Promise<Purchase | null> {
     const lock = options?.forUpdate ? " for update" : "";
     const row = (await this.sql.query<PurchaseRow>(
-      `select id,buyer_id,seller_id,listing_id,payment_id,idempotency_key,listing_title_snapshot,
+      `select id,buyer_id,seller_id,listing_id,payment_id,checkout_id,idempotency_key,listing_title_snapshot,
               price_minor_snapshot,price_currency_snapshot,canonical_minor_snapshot,canonical_currency_snapshot,
               referral_attribution_id,referral_link_id,referral_referrer_account_id,state from purchase_capability.purchases where id=$1${lock}`, [id],
     )).rows[0];
@@ -68,28 +68,30 @@ export class PostgresPurchaseRepository implements PurchaseRepository {
   }
   async findByIdempotencyKey(key: string): Promise<Purchase | null> {
     const row = (await this.sql.query<PurchaseRow>(
-      `select id,buyer_id,seller_id,listing_id,payment_id,idempotency_key,listing_title_snapshot,
+      `select id,buyer_id,seller_id,listing_id,payment_id,checkout_id,idempotency_key,listing_title_snapshot,
               price_minor_snapshot,price_currency_snapshot,canonical_minor_snapshot,canonical_currency_snapshot,
               referral_attribution_id,referral_link_id,referral_referrer_account_id,state from purchase_capability.purchases where idempotency_key=$1`, [key],
     )).rows[0];
     return row ? this.restore(row) : null;
   }
+  async findCompletedWithoutEntitlement(limit=50):Promise<readonly Purchase[]>{const rows=(await this.sql.query<{id:string}>(`select p.id from purchase_capability.purchases p left join entitlement_capability.entitlements e on e.purchase_id=p.id where p.state in ('paid','completed') and e.id is null order by p.updated_at,p.id limit $1`,[limit])).rows;return (await Promise.all(rows.map(r=>this.findById(r.id)))).filter((v):v is Purchase=>v!==null);}
+  async findCompletedWithoutDistribution(limit=50):Promise<readonly Purchase[]>{const rows=(await this.sql.query<{id:string}>(`select p.id from purchase_capability.purchases p left join ledger_capability.purchase_distributions d on d.purchase_id=p.id where p.state in ('paid','completed') and d.id is null order by p.updated_at,p.id limit $1`,[limit])).rows;return (await Promise.all(rows.map(r=>this.findById(r.id)))).filter((v):v is Purchase=>v!==null);}
   async save(purchase: Purchase): Promise<void> {
     await this.sql.query(
       `insert into purchase_capability.purchases
-        (id,buyer_id,seller_id,listing_id,payment_id,idempotency_key,listing_title_snapshot,
+        (id,buyer_id,seller_id,listing_id,payment_id,checkout_id,idempotency_key,listing_title_snapshot,
          price_minor_snapshot,price_currency_snapshot,canonical_minor_snapshot,canonical_currency_snapshot,
          referral_attribution_id,referral_link_id,referral_referrer_account_id,state)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        on conflict (id) do update set state=excluded.state, updated_at=now()`,
-      [purchase.id,purchase.buyerId,purchase.terms.sellerId,purchase.terms.listingId,purchase.paymentId,
+      [purchase.id,purchase.buyerId,purchase.terms.sellerId,purchase.terms.listingId,purchase.paymentId,purchase.checkoutId,
        purchase.idempotencyKey,purchase.terms.title,purchase.terms.price.minorAmount,purchase.terms.price.currency,
        purchase.terms.canonicalPrice.minorAmount,purchase.terms.canonicalPrice.currency,
        purchase.terms.referralAttributionId,purchase.terms.referralLinkId,purchase.terms.referralReferrerAccountId,purchase.state],
     );
   }
   private restore(row: PurchaseRow): Purchase {
-    return Purchase.restore({ id:row.id,buyerId:row.buyer_id,paymentId:row.payment_id,idempotencyKey:row.idempotency_key,state:row.state,
+    return Purchase.restore({ id:row.id,buyerId:row.buyer_id,paymentId:row.payment_id,checkoutId:row.checkout_id,idempotencyKey:row.idempotency_key,state:row.state,
       terms:{ listingId:row.listing_id,sellerId:row.seller_id,title:row.listing_title_snapshot,
         price:{minorAmount:row.price_minor_snapshot,currency:row.price_currency_snapshot},
         canonicalPrice:{minorAmount:row.canonical_minor_snapshot,currency:row.canonical_currency_snapshot},
@@ -98,7 +100,7 @@ export class PostgresPurchaseRepository implements PurchaseRepository {
   }
 }
 
-interface EntitlementRow { id:string; buyer_id:string; listing_id:string; purchase_id:string; state:EntitlementState; }
+interface EntitlementRow { id:string; buyer_id:string; listing_id:string; purchase_id:string; state:EntitlementState; expires_at:Date|null; }
 export class PostgresEntitlementRepository implements EntitlementRepository {
   constructor(private readonly sql: SqlExecutor) {}
   async findByPurchaseId(purchaseId:string) { return this.find("purchase_id = $1", [purchaseId]); }
@@ -106,13 +108,13 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
   async findById(id:string) { return this.find("id = $1", [id]); }
   async save(entitlement:Entitlement):Promise<void> {
     await this.sql.query(
-      `insert into entitlement_capability.entitlements (id,buyer_id,listing_id,purchase_id,state)
-       values ($1,$2,$3,$4,$5) on conflict (id) do update set state=excluded.state,updated_at=now()`,
-      [entitlement.id,entitlement.buyerId,entitlement.listingId,entitlement.purchaseId,entitlement.state]);
+      `insert into entitlement_capability.entitlements (id,buyer_id,listing_id,purchase_id,state,expires_at)
+       values ($1,$2,$3,$4,$5,$6) on conflict (id) do update set state=excluded.state,expires_at=excluded.expires_at,updated_at=now()`,
+      [entitlement.id,entitlement.buyerId,entitlement.listingId,entitlement.purchaseId,entitlement.state,entitlement.expiresAt]);
   }
   private async find(where:string, values:readonly unknown[]):Promise<Entitlement|null> {
-    const row=(await this.sql.query<EntitlementRow>(`select id,buyer_id,listing_id,purchase_id,state from entitlement_capability.entitlements where ${where} limit 1`,values)).rows[0];
-    return row ? Entitlement.restore(row.id,row.buyer_id,row.listing_id,row.purchase_id,row.state) : null;
+    const row=(await this.sql.query<EntitlementRow>(`select id,buyer_id,listing_id,purchase_id,state,expires_at from entitlement_capability.entitlements where ${where} limit 1`,values)).rows[0];
+    return row ? Entitlement.restore(row.id,row.buyer_id,row.listing_id,row.purchase_id,row.state,row.expires_at) : null;
   }
 }
 
