@@ -1,0 +1,2 @@
+import {z} from "zod";import {apiError,authenticatedAccount} from "../../../../http";import {getContainer} from "@/infrastructure/container";
+export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){const account=await authenticatedAccount(request);if(!account)return Response.json({error:"Unauthorized"},{status:401});try{const body=z.object({reason:z.string().min(3).max(500)}).parse(await request.json());return Response.json(await getContainer().withdrawals.reject(account.id,(await params).id,body.reason));}catch(error){return apiError(error);}}

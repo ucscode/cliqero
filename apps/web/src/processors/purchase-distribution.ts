@@ -28,7 +28,8 @@ export class PurchaseDistributionProcessor {
     const distributionId=newId();const entries:LedgerEntryDraft[]=[];
     const add=(accountId:string,amountMinor:bigint,role:"seller"|"referral"|"platform",basis:string,suffix:string,level?:number)=>{if(amountMinor===0n)return;entries.push({
       id:newId(),distributionId,accountId,purchaseId:purchase.id,entryType:"purchase-earnings",direction:"credit",amount:Money.of(amountMinor,gross.currency),
-      idempotencyKey:`purchase-distribution:${purchase.id}:${suffix}`,correlationId:input.correlationId,recipientRole:role,basis,referralLevel:level,balanceState:"available"});};
+      idempotencyKey:`purchase-distribution:${purchase.id}:${suffix}`,correlationId:input.correlationId,recipientRole:role,basis,referralLevel:level,
+      balanceState:financialPolicy.initialBalanceState,maturityAt:financialPolicy.initialBalanceState==="pending"?new Date(Date.now()+financialPolicy.settlementDelaySeconds*1000):undefined});};
     add(purchase.terms.sellerId,sellerMinor,"seller","purchase-seller-proceeds","seller");
     for(const fact of referralFacts)add(fact.recipientAccountId,fact.calculatedAmount.minorAmount,"referral",fact.basis,`referral:${fact.level}:${fact.recipientAccountId}`,fact.level);
     add(financialPolicy.platformAccountId,platformMinor,"platform","platform-share","platform");

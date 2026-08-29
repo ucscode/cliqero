@@ -8,7 +8,7 @@ import {OutboxDispatcher,OutboxHandlerRegistry} from "@/workers/outbox/dispatche
 const databaseUrl=process.env.TEST_DATABASE_URL;const suite=databaseUrl?describe:describe.skip;
 suite("purchase financial distribution",()=>{
   const app=createContainer(databaseUrl!);
-  beforeEach(async()=>{await app.database.query(`truncate table ledger_capability.entries,ledger_capability.purchase_distributions,
+  beforeEach(async()=>{await app.database.query(`truncate table ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.reversals,ledger_capability.purchase_distributions,
     payment_capability.reconciliation_attempts,payment_capability.provider_events,referral_capability.listing_attributions,
     referral_capability.listing_referral_links,referral_capability.account_referrals,access_capability.access_grants,
     entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,
@@ -58,5 +58,25 @@ suite("purchase financial distribution",()=>{
     const first=(await app.ledger.findEntriesByPurchaseId(value.purchaseId))[0];await expect(app.database.query(
       `insert into ledger_capability.entries(id,account_id,purchase_id,entry_type,direction,amount_minor,currency,idempotency_key,correlation_id)
        values($1,$2,$3,'purchase-earnings','credit',1,'USD',$4,$5)`,[newId(),value.seller.id,value.purchaseId,first.idempotencyKey,newId()])).rejects.toThrow(/duplicate key/);
+  });
+
+  it("matures pending earnings through an idempotent settlement transition",async()=>{await app.database.query(`update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`);
+    const value=await completed();await app.purchaseDistribution.process({purchaseId:value.purchaseId,correlationId:newId()});
+    expect((await app.ledger.summarizeAccount(value.seller.id))[0]).toMatchObject({balanceState:"pending",amountMinor:91n});
+    expect(await app.settlement.settle({now:new Date()})).toMatchObject({settled:0});
+    expect(await app.settlement.settle({now:new Date(Date.now()+3_601_000),batchSize:10})).toMatchObject({settled:2});
+    expect(await app.settlement.settle({now:new Date(Date.now()+3_601_000),batchSize:10})).toMatchObject({settled:0});
+    expect((await app.ledger.summarizeAccount(value.seller.id))[0]).toMatchObject({balanceState:"available",amountMinor:91n});
+  });
+
+  it("creates historical compensating entries and revokes entitlement through outbox",async()=>{const value=await completed();await app.purchaseDistribution.process({purchaseId:value.purchaseId,correlationId:newId()});
+    const originals=await app.ledger.findEntriesByPurchaseId(value.purchaseId);const reversal=await app.purchaseReversal.process({purchaseId:value.purchaseId,reason:"operator-approved refund",source:"operator",idempotencyKey:"reverse-1",correlationId:newId()});
+    await expect(app.purchaseReversal.process({purchaseId:value.purchaseId,reason:"ignored duplicate",source:"operator",idempotencyKey:"reverse-2",correlationId:newId()})).resolves.toMatchObject({id:reversal.id});
+    const after=await app.ledger.findEntriesByPurchaseId(value.purchaseId);expect(after.filter(e=>e.reversalId===undefined).map(e=>e.amount.minorAmount)).toEqual(originals.map(e=>e.amount.minorAmount));
+    expect(after.filter(e=>e.reversalId).reduce((sum,e)=>sum+e.amount.minorAmount,0n)).toBe(101n);
+    const dispatcher=new OutboxDispatcher("reversal-test",app.outbox,new OutboxHandlerRegistry().register(new AuditedFactHandler())
+      .register(new (await import("@/workers/outbox/handlers")).PurchaseReversalEntitlementHandler(app.entitlements)),{info:()=>undefined,error:()=>undefined},{pollMilliseconds:1,staleAfterMilliseconds:1000});
+    await dispatcher.runOnce();expect((await app.entitlements.findByPurchaseId(value.purchaseId))?.isActive).toBe(false);
+    expect((await app.ledger.summarizeAccount(value.seller.id)).find(s=>s.balanceState==="reversed")?.amountMinor).toBe(0n);
   });
 });

@@ -25,18 +25,42 @@ import {PurchaseDistributionProcessor} from "@/processors/purchase-distribution"
 import {OperatorAuthorizationService} from "@/modules/identity/operator";
 import {PostgresPaymentOperationsRepository} from "./postgres/payment-operations";
 import {PaymentReconciliationService,PaystackOperationsInspectionService} from "@/application/payment-operations";
+import {PostgresReversalRepository} from "./postgres/reversals";
+import {PurchaseReversalProcessor} from "@/processors/purchase-reversal";
+import {PostgresSettlementPolicyRepository,SettlementProcessor} from "@/modules/ledger/settlement";
+import {LedgerFundsReservationService} from "@/modules/ledger/reservations";
+import {PostgresWithdrawalPolicyRepository,PostgresWithdrawalRepository} from "@/infrastructure/postgres/withdrawals";
+import {WithdrawalService} from "@/application/withdrawals";
+import {PayoutProviderRegistry,DevelopmentPayoutProvider} from "@/modules/withdrawal/provider";
+import {PostgresPayoutRepository} from "@/infrastructure/postgres/payouts";
+import {PayoutExecutionProcessor} from "@/processors/payout-execution";
+import {PaystackPayoutProvider} from "@/modules/withdrawal/paystack-payout";
+import {loadPaystackPayoutConfiguration} from "@/config/paystack-payout";
+import {PostgresPaystackRecipientStore} from "./postgres/paystack-payout";
+import {PostgresPaystackPayoutEventRepository} from "./postgres/paystack-payout-events";
+import {PaystackPayoutWebhookIngress} from "@/application/paystack-payout-webhooks";
 
 export function createContainer(databaseUrl:string) {
   const database=PostgresDatabase.connect(databaseUrl);
   const accounts=new PostgresAccountRepository(database); const listings=new PostgresListingRepository(database);
   const purchases=new PostgresPurchaseRepository(database); const entitlements=new PostgresEntitlementRepository(database);
   const grants=new PostgresAccessGrantRepository(database); const payments=new PostgresPaymentRepository(database);
+  const outbox=new PostgresOutbox(database); const idempotency=new PostgresIdempotencyRepository(database);
   const providerEvents=new PostgresProviderEventRepository(database);
   const referralGraph=new PostgresReferralGraphRepository(database);
   const commissionPolicy=new PostgresCommissionPolicyRepository(database);
   const referralAttributionRepository=new PostgresReferralAttributionRepository(database);
   const ledger=new PostgresLedgerRepository(database);const financialDistributionPolicy=new PostgresFinancialDistributionPolicyRepository(database);
-  const outbox=new PostgresOutbox(database); const idempotency=new PostgresIdempotencyRepository(database);
+  const settlementPolicy=new PostgresSettlementPolicyRepository(database);const settlement=new SettlementProcessor(database,database,ledger,settlementPolicy);
+  const reversals=new PostgresReversalRepository(database);
+  const withdrawalRepository=new PostgresWithdrawalRepository(database);const withdrawalPolicy=new PostgresWithdrawalPolicyRepository(database);
+  const fundsReservation=new LedgerFundsReservationService(database);const withdrawals=new WithdrawalService(withdrawalRepository,withdrawalPolicy,fundsReservation,outbox,database,new OperatorAuthorizationService(database));
+  const payoutProviders=new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());const payoutRepository=new PostgresPayoutRepository(database);
+  const paystackPayoutConfiguration=loadPaystackPayoutConfiguration();
+  const paystackPayout=paystackPayoutConfiguration?new PaystackPayoutProvider(paystackPayoutConfiguration,new PostgresPaystackRecipientStore(database)):null;
+  if(paystackPayout)payoutProviders.register(paystackPayout);
+  const paystackPayoutEvents=new PostgresPaystackPayoutEventRepository(database);
+  const payoutExecution=new PayoutExecutionProcessor(withdrawalRepository,payoutRepository,payoutProviders,fundsReservation,outbox,database,paystackPayout?"paystack":"development");
   const providers=new PaymentProviderRegistry().register(new DevelopmentPaymentProvider());
   const paystackConfiguration=loadPaystackConfiguration();
   const paystack=paystackConfiguration?new PaystackProvider(paystackConfiguration):null;
@@ -55,8 +79,11 @@ export function createContainer(databaseUrl:string) {
     referralGraphService:new ReferralGraphService(accounts,referralGraph,database),
     commissionDistribution,ledger,financialDistributionPolicy,purchaseDistribution,
     paymentCompletion,paystackWebhook:paystack?new PaystackWebhookIngress(paystack,providerEvents,outbox,database):null,
+    paystackPayoutWebhook:paystackPayout?new PaystackPayoutWebhookIngress(paystackPayout,paystackPayoutEvents,payoutRepository,payoutExecution,database):null,
     operators,paymentOperations,paymentReconciliation:new PaymentReconciliationService(payments,paymentCompletion,paymentOperations,operators),
     paystackInspection:new PaystackOperationsInspectionService(paymentOperations,operators),
+    settlementPolicy,settlement,reversals,purchaseReversal:new PurchaseReversalProcessor(purchases,ledger,reversals,outbox,database),
+    withdrawalRepository,withdrawalPolicy,fundsReservation,withdrawals,payoutProviders,payoutRepository,payoutExecution,paystackPayout,
     buyerAccess:new BuyerAccessService(access,listings,database),access};
 }
 export type ApplicationContainer=ReturnType<typeof createContainer>;

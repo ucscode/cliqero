@@ -1,5 +1,4 @@
-provider: paystack
-enabled_by_default: false
-secrets_path: config/secrets/payment/paystack.yaml
-api_base_url: https://api.paystack.co
-# callback_url: https://app.example.com/payments/paystack/callback
+enabled: false
+public_key: pk_test_example
+secret_key: sk_test_example
+# callback_url: "%env(APP_URL)%/payments/paystack/callback"

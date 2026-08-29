@@ -5,6 +5,8 @@ import {PaystackProvider} from "@/modules/payment/paystack";
 import {PaystackWebhookIngress} from "@/application/paystack-webhooks";
 import {OutboxDispatcher,OutboxHandlerRegistry,type WorkerLogger} from "@/workers/outbox/dispatcher";
 import {PaystackChargeSucceededHandler} from "@/workers/outbox/paystack-handler";
+import {PaystackRefundProcessedHandler} from "@/workers/outbox/paystack-refund-handler";
+import {PurchaseReversalEntitlementHandler} from "@/workers/outbox/handlers";
 
 const databaseUrl=process.env.TEST_DATABASE_URL;const suite=databaseUrl?describe:describe.skip;
 const secret="sk_test_webhook_secret";const silent:WorkerLogger={info:()=>undefined,error:()=>undefined};
@@ -22,7 +24,7 @@ suite("Paystack webhook to commerce consequence",()=>{
   app.providers.register(provider);
   const ingress=new PaystackWebhookIngress(provider,app.providerEvents,app.outbox,app.database);
   const dispatcher=new OutboxDispatcher("paystack-worker",app.outbox,new OutboxHandlerRegistry().register(
-    new PaystackChargeSucceededHandler(app.providerEvents,app.payments,app.paymentCompletion)),silent,{pollMilliseconds:1,staleAfterMilliseconds:1000});
+    new PaystackChargeSucceededHandler(app.providerEvents,app.payments,app.paymentCompletion)).register(new PaystackRefundProcessedHandler(app.providerEvents,app.payments,app.purchases,app.purchaseReversal)).register(new PurchaseReversalEntitlementHandler(app.entitlements)),silent,{pollMilliseconds:1,staleAfterMilliseconds:1000});
 
   beforeEach(async()=>{networkFailure=false;http.mockClear();await app.database.query(`truncate table
     payment_capability.reconciliation_attempts,payment_capability.provider_events,access_capability.integration_listings,access_capability.integrations,access_capability.access_grants,
@@ -41,6 +43,8 @@ suite("Paystack webhook to commerce consequence",()=>{
     const raw=Buffer.from(JSON.stringify({event:"charge.success",data:{id,status:"success",reference,amount,currency}}));
     return {raw,signature:createHmac("sha512",secret).update(raw).digest("hex")};
   }
+  function refundWebhook(reference:string,amount=2500,currency="USD",id=778){const raw=Buffer.from(JSON.stringify({event:"refund.processed",data:{id,transaction_reference:reference,amount,currency,status:"processed"}}));
+    return {raw,signature:createHmac("sha512",secret).update(raw).digest("hex")};}
 
   it("accepts valid signatures and rejects invalid signatures before persistence",async()=>{
     const {checkout}=await setup();const event=webhook(checkout.providerReference);
@@ -101,6 +105,14 @@ suite("Paystack webhook to commerce consequence",()=>{
     await expect(app.paymentReconciliation.reconcile({actorId:buyer.id,paymentId:checkout.paymentId,idempotencyKey:"network",correlationId:checkout.paymentId})).rejects.toThrow("network unavailable");
     expect((await app.payments.findById(checkout.paymentId))?.state).toBe("pending");
     expect((await app.database.query<{state:string}>(`select state from payment_capability.reconciliation_attempts`)).rows[0].state).toBe("failed");
+  });
+  it("translates an authenticated full Paystack refund into one historical reversal",async()=>{const {buyer,checkout}=await setup();
+    await app.database.query(`insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,[buyer.id]);
+    await app.paymentCompletion.complete({paymentId:checkout.paymentId,correlationId:checkout.paymentId});await app.purchaseDistribution.process({purchaseId:checkout.purchaseId!,correlationId:checkout.paymentId});
+    const event=refundWebhook(checkout.providerReference);await expect(ingress.ingest(event.raw,event.signature)).resolves.toMatchObject({accepted:true});await dispatcher.runOnce();await dispatcher.runOnce();
+    expect((await app.database.query<{state:string}>(`select state from payment_capability.provider_events where event_type='refund.processed'`)).rows[0].state).toBe("processed");
+    expect((await app.database.query(`select 1 from ledger_capability.reversals where purchase_id=$1`,[checkout.purchaseId])).rowCount).toBe(1);
+    expect((await app.entitlements.findByPurchaseId(checkout.purchaseId!))?.isActive).toBe(false);
   });
   it("operator inspection is authorized and sanitized",async()=>{const {buyer}=await setup();
     await expect(app.paystackInspection.listEvents(buyer.id,10)).rejects.toThrow("Forbidden");

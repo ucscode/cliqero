@@ -3,7 +3,7 @@ import type { Id } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
 import type { PaymentInitialization,PaymentProvider,PaymentVerification } from "./payment";
 
-export interface PaystackConfiguration {secretKey:string;apiBaseUrl:string;callbackUrl?:string;}
+export interface PaystackConfiguration {publicKey?:string;secretKey:string;apiBaseUrl:string;callbackUrl?:string;}
 export type PaystackHttpClient=(input:string|URL,init?:RequestInit)=>Promise<Response>;
 
 interface PaystackEnvelope<T>{status:boolean;message:string;data:T;}

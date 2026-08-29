@@ -1,0 +1,5 @@
+# Keep local configuration and credentials out of Git while tracking templates.
+*.yaml
+*.yml
+!*.example.yaml
+!*.example.yml

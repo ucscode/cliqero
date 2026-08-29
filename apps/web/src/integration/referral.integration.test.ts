@@ -9,7 +9,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;const suite=databaseUrl?describe
 suite("referral graph and trusted purchase attribution",()=>{
   const app=createContainer(databaseUrl!);
   beforeEach(()=>app.database.query(`truncate table
-    ledger_capability.entries,ledger_capability.purchase_distributions,payment_capability.reconciliation_attempts,
+    ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.reversals,ledger_capability.purchase_distributions,payment_capability.reconciliation_attempts,
     referral_capability.listing_attributions,referral_capability.listing_referral_links,referral_capability.account_referrals,
     payment_capability.provider_events,access_capability.integration_listings,access_capability.integrations,access_capability.access_grants,
     entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,
