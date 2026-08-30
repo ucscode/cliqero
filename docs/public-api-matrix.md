@@ -63,7 +63,7 @@ The audit intentionally does not call a live payment or payout provider.
 | GET | `/api/me/listings` | owner | owner projection | Paginated owned listing collection |
 | GET/POST | `/api/listings/{id}/media` | owner | CRUD/workflow | Ordered metadata read; durable object upload |
 | GET/PATCH/DELETE | `/api/listings/{id}/media/{mediaId}` | owner | archive/workflow | Metadata read/update; schedules durable deletion |
-| POST/GET | `/api/listings/import`, `/api/listings/export` | owner | batch command/projection | Record-isolated JSON/CSV/YAML transfer |
+| POST/GET | `/api/listings/import`, `/api/listings/export` | owner | batch command/projection | Record-isolated JSON/CSV/YAML transfer; durable listing/retry identity and complete-gallery upsert reconciliation |
 | GET/PATCH | `/api/me/profile` | owner | CRUD | Profile projection/update |
 | GET/POST | `/api/integrations` | owner | CRUD | Safe integration collection/create; secret returned once |
 | GET/PATCH/DELETE | `/api/integrations/{id}` | owner | revoke-managed | Description update or credential revocation |

@@ -1,2 +1,2 @@
-id,external_key,title,description,price_minor,currency,destination,metadata,state,media
-"","course-intro","Introduction course","A productless listing example.","1000","USD","https://content.example/course","{""category"":""course""}","draft","[{""url"":""https://media.example/course.png"",""alt_text"":""Course cover"",""position"":0}]"
+id,retry_identity,external_key,title,description,price_minor,currency,destination,metadata,state,media
+"","","course-intro","Introduction course","A productless listing example.","1000","USD","https://content.example/course","{""category"":""course""}","draft","[{""transfer_identity"":""catalog:course-cover"",""url"":""https://media.example/course.png"",""alt_text"":""Course cover"",""position"":0}]"
