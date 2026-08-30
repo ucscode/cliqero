@@ -11,4 +11,4 @@ export async function POST(request:Request) {
     return Response.json({integration_id:created.id,credential:created.credential},{status:201});
   } catch(error){return apiError(error);}
 }
-
+export async function GET(request:Request){const account=await authenticatedAccount(request);if(!account)return Response.json({error:"Unauthorized"},{status:401});try{return Response.json({items:await getContainer().integrations.list(account.id)});}catch(error){return apiError(error);}}

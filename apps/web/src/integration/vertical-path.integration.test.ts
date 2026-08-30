@@ -19,7 +19,7 @@ suite("persisted commerce and access vertical path",()=>{
   async function setup() {
     const seller=await app.authentication.register({email:"seller@example.com",handle:"seller",password:"correct-horse-battery"});
     const buyer=await app.authentication.register({email:"buyer@example.com",handle:"buyer",password:"correct-horse-staple"});
-    const listing=await app.listingService.create(seller,{title:"Private destination",description:"Access elsewhere",priceMinor:"2500",
+    const listing=await app.listingService.createPublished(seller,{title:"Private destination",description:"Access elsewhere",priceMinor:"2500",
       currency:"USD",destination:"https://destination.example/open?existing=yes",metadata:{format_hint:"external"}});
     return {seller,buyer,listing};
   }
@@ -82,7 +82,7 @@ suite("persisted commerce and access vertical path",()=>{
     await expect(app.access.verify(source,validIntegration!)).resolves.toMatchObject({authorized:true,buyerId:buyer.id,listingId:listing.id});
     await expect(app.integrations.authenticate(validCredential.credential+"bad")).resolves.toBeNull();
 
-    const otherListing=await app.listingService.create(seller,{title:"Other",description:"",priceMinor:"100",currency:"USD",destination:"https://other.example"});
+    const otherListing=await app.listingService.createPublished(seller,{title:"Other",description:"",priceMinor:"100",currency:"USD",destination:"https://other.example"});
     const otherCredential=await app.database.transaction(()=>app.integrations.create(seller.id,"other",otherListing.id));
     const otherIntegration=await app.integrations.authenticate(otherCredential.credential);
     await expect(app.access.verify(source,otherIntegration!)).resolves.toEqual({authorized:false});

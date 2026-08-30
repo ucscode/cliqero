@@ -1,0 +1,4 @@
+import type {Id} from "@/kernel/ids";
+export type ListingMediaState="active"|"deletion_pending"|"deleted";
+export interface ListingMedia {id:Id;listingId:Id;storageProvider:string;storageContainer:string;objectKey:string;mimeType:string;originalFilename:string|null;byteSize:bigint;width:number;height:number;position:number;altText:string;state:ListingMediaState;createdAt:Date;deletionRequestedAt?:Date|null;deletionAttemptedAt?:Date|null;lastDeletionError?:string|null;}
+export interface ListingMediaRepository {findById(id:Id):Promise<ListingMedia|null>;findByStorageIdentity(provider:string,container:string,key:string):Promise<ListingMedia|null>;listByListing(listingId:Id,includeDeleted?:boolean):Promise<readonly ListingMedia[]>;listByListings(listingIds:readonly Id[]):Promise<ReadonlyMap<Id,readonly ListingMedia[]>>;save(media:ListingMedia):Promise<void>;findDeletionWork(limit?:number):Promise<readonly ListingMedia[]>;}

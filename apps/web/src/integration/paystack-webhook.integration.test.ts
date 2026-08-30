@@ -35,7 +35,7 @@ suite("Paystack webhook to commerce consequence",()=>{
   async function setup(){
     const seller=await app.authentication.register({email:"paystack-seller@example.com",handle:"paystack_seller",password:"correct-horse-battery"});
     const buyer=await app.authentication.register({email:"paystack-buyer@example.com",handle:"paystack_buyer",password:"correct-horse-staple"});
-    const listing=await app.listingService.create(seller,{title:"Paystack listing",description:"",priceMinor:"2500",currency:"USD",destination:"https://destination.example"});
+    const listing=await app.listingService.createPublished(seller,{title:"Paystack listing",description:"",priceMinor:"2500",currency:"USD",destination:"https://destination.example"});
     const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"paystack",idempotencyKey:"paystack-checkout"});
     verification={status:"success",reference:checkout.providerReference,amount:2500,currency:"USD"};return {buyer,listing,checkout};
   }

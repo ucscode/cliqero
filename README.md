@@ -52,6 +52,10 @@ providers fund wallets; they never purchase listings. `POST /api/checkout` creat
 and never accepts a provider. See [the wallet-first workflow](docs/wallet-first-commerce.md) and the
 [verified API matrix](docs/public-api-matrix.md).
 
+Listing lifecycle, provider-neutral media storage, and JSON/CSV/YAML transfer formats are documented in
+[listing management and media](docs/listing-management-and-media.md). New listings are drafts; publishing, archival, and
+restoration are explicit commands. Public listing projections never expose private destinations.
+
 Paystack payment capability is enabled only when `config/modules/payment/paystack.yaml` exists with `enabled: true` and
 valid credentials. It is an incoming-funding adapter. Real provider configuration files are ignored and excluded from
 Docker images.

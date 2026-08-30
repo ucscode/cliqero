@@ -12,6 +12,7 @@ export class CommercialWorkflowDispatcher {
     processed+=await this.family("checkout-payment",()=>this.app.checkoutRepository.findAwaitingFunds(),item=>this.app.checkoutPayment.process(item.id));
     processed+=await this.family("entitlement",async()=>await this.app.purchases.findCompletedWithoutEntitlement?.()??[],item=>this.app.entitlementIssuance.process(item.id));
     processed+=await this.family("distribution",async()=>await this.app.purchases.findCompletedWithoutDistribution?.()??[],item=>this.app.purchaseDistribution.process({purchaseId:item.id,correlationId:newId()}));
+    processed+=await this.family("listing-media-deletion",()=>this.app.listingMediaDeletion.findWork(),item=>this.app.listingMediaDeletion.process(item.id));
     return processed;
   }
   private async family<T extends {id:string}>(family:string,discover:()=>Promise<readonly T[]>,process:(item:T)=>Promise<unknown>){let processed=0;let items:readonly T[];try{items=await discover();}catch(error){this.failure(family,undefined,error,"commercial.workflow.discovery.failed");return 0;}for(const item of items){try{await process(item);processed++;}catch(error){this.failure(family,item.id,error,"commercial.workflow.item.failed");}}return processed;}

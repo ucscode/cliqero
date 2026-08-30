@@ -18,7 +18,7 @@ suite("purchase financial distribution",()=>{
   afterAll(()=>app.database.close());
   async function account(label:string){return app.authentication.register({email:`${label}@example.com`,handle:label,password:"correct-horse-battery"});}
   async function completed(attributionSource?:string){const seller=await account(`seller${newId().slice(0,5)}`),buyer=await account(`buyer${newId().slice(0,5)}`);
-    const listing=await app.listingService.create(seller,{title:"Auditable",description:"",priceMinor:"101",currency:"USD",destination:"https://example.test/access"});
+    const listing=await app.listingService.createPublished(seller,{title:"Auditable",description:"",priceMinor:"101",currency:"USD",destination:"https://example.test/access"});
     const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:newId(),attributionSource});
     await app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});return {seller,buyer,listing,purchaseId:checkout.purchaseId!};}
 
@@ -32,7 +32,7 @@ suite("purchase financial distribution",()=>{
 
   it("uses trusted attribution and bounded exact referral commission facts",async()=>{const parent=await account(`parent${newId().slice(0,5)}`),promoter=await account(`promo${newId().slice(0,5)}`);
     await app.referralGraphService.establish(promoter.id,parent.id);const seller=await account(`sell${newId().slice(0,5)}`),buyer=await account(`buy${newId().slice(0,5)}`);
-    const listing=await app.listingService.create(seller,{title:"Referral",description:"",priceMinor:"10000",currency:"USD",destination:"https://example.test"});
+    const listing=await app.listingService.createPublished(seller,{title:"Referral",description:"",priceMinor:"10000",currency:"USD",destination:"https://example.test"});
     const link=await app.referralAttribution.createLink(promoter.id,listing.id);const visit=await app.referralAttribution.visit(link.code);expect(visit).not.toBeNull();
     const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"development",idempotencyKey:newId(),attributionSource:visit!.source});
     await app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId:newId()});const purchase=(await app.purchases.findById(checkout.purchaseId!))!;

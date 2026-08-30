@@ -7,9 +7,9 @@ The development audit is reproducible with `node scripts/audit-http-api.mjs`. It
 | GET | `/api/health` | no | runtime | none | 200 | none | none | n/a | 200 |
 | POST | `/api/accounts` | no | identity | email, handle, password, country? | 201 | account | PostgreSQL | unique identity | 201; invalid 400 |
 | POST | `/api/auth/sessions` | no | identity | email, password | 200 | session | identity | n/a | 200; invalid 401 |
-| POST | `/api/listings` | account | listing | listing snapshot | 201 | published listing | identity | n/a | 201; invalid 400 |
+| POST | `/api/listings` | account | listing | listing snapshot | 201 | draft listing | identity | n/a | 201; invalid 400 |
 | GET | `/api/listings/:id` | no | listing | path id | 200 | none | listing | n/a | 200; missing 404 |
-| PATCH | `/api/listings/:id` | owner | listing | listing snapshot | 200 | updated listing | listing/authorization | n/a | 200; wrong owner 403 |
+| PATCH | `/api/listings/:id` | owner | listing | partial mutable fields | 200 | updated listing | listing/authorization | n/a | 200; wrong owner 403 |
 | POST | `/api/checkout` | account | checkout | `listing_id` only | 201 | checkout + pending purchase | listing, wallet snapshot | required | 201; unauth 401; provider field 400 |
 | GET | `/api/checkout/:id` | buyer | checkout | path id | 200 | none | checkout | n/a | 200; wrong buyer 404 |
 | POST | `/api/wallet/fund` | account | funding | USD amount, provider, collection currency? | 201 | funding transaction | provider registry, FX when needed | required | 201; repeated key 201; invalid 400 |
@@ -52,3 +52,23 @@ These routes were exercised with an authenticated non-operator and rejected (403
 | POST | `/api/operator/withdrawals/:id/payout/reconcile` | payout reconciliation | path id | 200 | reconciliation result | repeat-safe | 403 |
 
 The audit intentionally does not call a live payment or payout provider.
+# Listing and dashboard additions
+
+| Method | Path | Auth | Classification | Durable effect / projection |
+|---|---|---|---|---|
+| GET/POST | `/api/listings` | POST owner | CRUD/public projection | Draft creation; published collection read |
+| GET/PATCH/DELETE | `/api/listings/{id}` | mutation owner | archive-managed | Public/owner projection, partial metadata update, archive command |
+| POST | `/api/listings/{id}/publish` | owner | command | Draft becomes published |
+| POST | `/api/listings/{id}/restore` | owner | command | Archived becomes draft |
+| GET | `/api/me/listings` | owner | owner projection | Paginated owned listing collection |
+| GET/POST | `/api/listings/{id}/media` | owner | CRUD/workflow | Ordered metadata read; durable object upload |
+| GET/PATCH/DELETE | `/api/listings/{id}/media/{mediaId}` | owner | archive/workflow | Metadata read/update; schedules durable deletion |
+| POST/GET | `/api/listings/import`, `/api/listings/export` | owner | batch command/projection | Record-isolated JSON/CSV/YAML transfer |
+| GET/PATCH | `/api/me/profile` | owner | CRUD | Profile projection/update |
+| GET/POST | `/api/integrations` | owner | CRUD | Safe integration collection/create; secret returned once |
+| GET/PATCH/DELETE | `/api/integrations/{id}` | owner | revoke-managed | Description update or credential revocation |
+| POST | `/api/integrations/{id}/rotate` | owner | command | Replaces credential; new plaintext returned once |
+| GET | `/api/referral-links` | owner | archive-managed | Owned stable link collection |
+| GET/DELETE | `/api/referral-links/{id}` | owner | archive-managed | Read or revoke; attribution history retained |
+| GET | `/api/purchases`, `/api/purchases/{id}` | buyer | immutable projection | Purchase history only |
+| GET | `/api/earnings`, `/api/earnings/entries` | account | immutable projection | Earnings summary and append-only entry history |

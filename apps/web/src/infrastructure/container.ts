@@ -49,10 +49,17 @@ import {PaymentVerificationProcessor} from "@/processors/payment-verification";
 import {PostgresFundingRepository,PostgresWalletRepository,PostgresCheckoutRepository} from "./postgres/wallet-commerce";
 import {FundingService,FundingInitializationProcessor,FundingVerificationProcessor,WalletService,WalletCheckoutService} from "@/application/wallet-commerce";
 import {WalletCreditProcessor,WalletAvailabilityProcessor,CheckoutPaymentProcessor,EntitlementIssuanceProcessor} from "@/processors/wallet-commerce";
+import {PostgresListingMediaRepository} from "@/infrastructure/postgres/listing-media";
+import {loadListingMediaStorage} from "@/providers/listing-media/config";
+import {ListingMediaDeletionProcessor,ListingMediaService} from "@/application/listing-media";
+import {ListingTransferService} from "@/application/listing-transfer";
+import {ProfileService} from "@/application/profile";
+import {AccountProjectionService} from "@/application/account-projections";
 
 export function createContainer(databaseUrl:string) {
   const database=PostgresDatabase.connect(databaseUrl);
   const accounts=new PostgresAccountRepository(database); const listings=new PostgresListingRepository(database);
+  const listingMediaRepository=new PostgresListingMediaRepository(database);const objectStorage=loadListingMediaStorage();const listingMedia=new ListingMediaService(listings,listingMediaRepository,objectStorage,database);const listingMediaDeletion=new ListingMediaDeletionProcessor(listingMediaRepository,objectStorage);const listingService=new ListingService(listings,new AuthorizationPolicy());const listingTransfer=new ListingTransferService(listingService,listingMedia,listingMediaRepository);
   const exchangeRates=new ExchangeRateService([new FrankfurterProvider(),new FawazProvider()],new PostgresExchangeRateCache(database));
   const purchases=new PostgresPurchaseRepository(database); const entitlements=new PostgresEntitlementRepository(database);
   const grants=new PostgresAccessGrantRepository(database); const payments=new PostgresPaymentRepository(database);
@@ -93,10 +100,10 @@ export function createContainer(databaseUrl:string) {
   const walletAvailability=new WalletAvailabilityProcessor(walletRepository,database);const checkoutPayment=new CheckoutPaymentProcessor(checkoutRepository,walletRepository,purchases,database);
   const entitlementIssuance=new EntitlementIssuanceProcessor(purchases,entitlements,database);
   const operators=new OperatorAuthorizationService(database);
-  return {database,accounts,listings,purchases,entitlements,grants,payments,providerEvents,outbox,idempotency,providers,paystack,
+  return {database,accounts,listings,listingMediaRepository,objectStorage,listingMedia,listingMediaDeletion,purchases,entitlements,grants,payments,providerEvents,outbox,idempotency,providers,paystack,
     referralGraph,commissionPolicy,referralAttributionRepository,referralAttribution,
-    authentication:new AuthenticationService(database),authorization:new AuthorizationPolicy(),integrations:new IntegrationService(database),
-    listingService:new ListingService(listings,new AuthorizationPolicy()),
+    authentication:new AuthenticationService(database),authorization:new AuthorizationPolicy(),integrations:new IntegrationService(database),profiles:new ProfileService(database),accountProjections:new AccountProjectionService(database),
+    listingService,listingTransfer,
     legacyProviderCheckout:new CheckoutService(listings,payments,purchases,providers,idempotency,referralAttribution,database,accounts,exchangeRates),
     walletCheckout:new WalletCheckoutService(listings,checkoutRepository,purchases,referralAttribution,database),checkoutRepository,
     funding,fundingService,fundingInitialization,fundingVerification,wallet,walletRepository,walletCredit,walletAvailability,checkoutPayment,entitlementIssuance,

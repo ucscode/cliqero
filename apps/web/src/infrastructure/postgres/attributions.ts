@@ -16,6 +16,9 @@ export class PostgresReferralAttributionRepository implements ReferralAttributio
       `select id,code,listing_id,referrer_account_id,state from referral_capability.listing_referral_links where code=$1 and state='active'`,[code])).rows[0];
     return row?mapLink(row):null;
   }
+  async findLinkById(id:string){const row=(await this.sql.query<LinkRow>(`select id,code,listing_id,referrer_account_id,state from referral_capability.listing_referral_links where id=$1`,[id])).rows[0];return row?mapLink(row):null;}
+  async listLinks(referrerAccountId:string){return (await this.sql.query<LinkRow>(`select id,code,listing_id,referrer_account_id,state from referral_capability.listing_referral_links where referrer_account_id=$1 order by created_at desc,id`,[referrerAccountId])).rows.map(mapLink);}
+  async revokeLink(id:string,referrerAccountId:string){const result=await this.sql.query(`update referral_capability.listing_referral_links set state='revoked' where id=$1 and referrer_account_id=$2`,[id,referrerAccountId]);if(result.rowCount!==1)throw new Error("Referral link not found");}
   async createAttribution(input:{id:string;link:ReferralLinkRecord;tokenHash:Buffer;expiresAt:Date}):Promise<void>{
     await this.sql.query(`insert into referral_capability.listing_attributions
       (id,referral_link_id,listing_id,referrer_account_id,token_hash,expires_at) values($1,$2,$3,$4,$5,$6)`,
@@ -29,4 +32,3 @@ export class PostgresReferralAttributionRepository implements ReferralAttributio
   }
 }
 function mapLink(row:LinkRow):ReferralLinkRecord{return {id:row.id,code:row.code,listingId:row.listing_id,referrerAccountId:row.referrer_account_id,state:row.state};}
-

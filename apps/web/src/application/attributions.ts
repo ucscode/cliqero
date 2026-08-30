@@ -18,6 +18,8 @@ export class ReferralAttributionService implements PurchaseAttributionResolver {
     await this.attributions.createAttribution({id:newId(),link,tokenHash:hash(source),expiresAt:new Date(Date.now()+ReferralAttributionService.lifetimeSeconds*1000)});
     return {listingId:link.listingId,source};
   }
+  listLinks(accountId:string){return this.attributions.listLinks(accountId);}
+  async getLink(accountId:string,id:string){const link=await this.attributions.findLinkById(id);if(!link||link.referrerAccountId!==accountId)throw new Error("Referral link not found");return link;}
+  async revokeLink(accountId:string,id:string){await this.getLink(accountId,id);await this.attributions.revokeLink(id,accountId);return this.getLink(accountId,id);}
   resolve(source:string|undefined,listingId:string){if(!source||source.length>200)return Promise.resolve(null);return this.attributions.resolveActive(hash(source),listingId);}
 }
-

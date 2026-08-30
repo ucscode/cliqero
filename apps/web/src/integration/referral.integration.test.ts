@@ -65,7 +65,7 @@ suite("referral graph and trusted purchase attribution",()=>{
     const direct=await graph.getDirectReferrals(root,{limit:100});expect(direct.accounts).toHaveLength(100);expect(executor.count).toBe(2);
   });
   async function commerce(){const seller=await account("seller"),buyer=await account("buyer"),referrer=await account("promoter");
-    const listing=await app.listingService.create(seller,{title:"Referral listing",description:"",priceMinor:"1001",currency:"USD",destination:"https://destination.example"});
+    const listing=await app.listingService.createPublished(seller,{title:"Referral listing",description:"",priceMinor:"1001",currency:"USD",destination:"https://destination.example"});
     return {seller,buyer,referrer,listing};}
   it("keeps organic purchases unattributed and rejects arbitrary account IDs as attribution",async()=>{
     const {buyer,referrer,listing}=await commerce();

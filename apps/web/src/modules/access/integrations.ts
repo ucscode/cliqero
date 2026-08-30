@@ -4,7 +4,7 @@ import type { IntegrationPrincipal } from "./access";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 
 const hashCredential=(salt:Buffer,secret:string)=>createHash("sha256").update(salt).update(secret,"utf8").digest();
-interface IntegrationRow { id:string; owner_id:string; credential_hash:Buffer; credential_salt:Buffer; state:"active"|"revoked"; }
+interface IntegrationRow { id:string; owner_id:string; name:string; credential_hash:Buffer; credential_salt:Buffer; state:"active"|"revoked";created_at:Date; }
 
 export class ScopedIntegration implements IntegrationPrincipal {
   constructor(readonly id:Id,readonly ownerId:Id,private readonly listingIds:ReadonlySet<Id>) {}
@@ -34,5 +34,10 @@ export class IntegrationService {
       `select listing_id from access_capability.integration_listings where integration_id=$1`,[row.id])).rows;
     return new ScopedIntegration(row.id,row.owner_id,new Set(listingRows.map(item=>item.listing_id)));
   }
+  async list(ownerId:Id){return (await this.sql.query<any>(`select i.id,i.name,i.state,i.created_at,coalesce(array_agg(il.listing_id) filter(where il.listing_id is not null),'{}') listing_ids from access_capability.integrations i left join access_capability.integration_listings il on il.integration_id=i.id where i.owner_id=$1 group by i.id order by i.created_at desc,i.id`,[ownerId])).rows.map(view);}
+  async find(ownerId:Id,id:Id){const row=(await this.sql.query<any>(`select i.id,i.name,i.state,i.created_at,coalesce(array_agg(il.listing_id) filter(where il.listing_id is not null),'{}') listing_ids from access_capability.integrations i left join access_capability.integration_listings il on il.integration_id=i.id where i.owner_id=$1 and i.id=$2 group by i.id`,[ownerId,id])).rows[0];if(!row)throw new Error("Integration not found");return view(row);}
+  async update(ownerId:Id,id:Id,name:string){const result=await this.sql.query(`update access_capability.integrations set name=$3,updated_at=now() where owner_id=$1 and id=$2 returning id`,[ownerId,id,name.trim()]);if(result.rowCount!==1)throw new Error("Integration not found");return this.find(ownerId,id);}
+  async revoke(ownerId:Id,id:Id){const result=await this.sql.query(`update access_capability.integrations set state='revoked',updated_at=now() where owner_id=$1 and id=$2 returning id`,[ownerId,id]);if(result.rowCount!==1)throw new Error("Integration not found");return this.find(ownerId,id);}
+  async rotate(ownerId:Id,id:Id){const secret=randomBytes(32).toString("base64url"),salt=randomBytes(16);const result=await this.sql.query(`update access_capability.integrations set credential_hash=$3,credential_salt=$4,state='active',updated_at=now() where owner_id=$1 and id=$2 returning id`,[ownerId,id,hashCredential(salt,secret),salt]);if(result.rowCount!==1)throw new Error("Integration not found");return {id,credential:`cli_int_${id}.${secret}`};}
 }
-
+const view=(row:any)=>({id:row.id,name:row.name,state:row.state,listing_ids:row.listing_ids,created_at:row.created_at});

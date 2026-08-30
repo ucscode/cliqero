@@ -20,33 +20,36 @@ export class PostgresAccountRepository implements AccountReader {
 
 interface ListingRow {
   id: string; seller_id: string; title: string; description: string; price_minor: string;
-  price_currency: string; destination_url: string; metadata: ListingMetadata; state: ListingState;
+  price_currency: string; destination_url: string; metadata: ListingMetadata; state: ListingState; external_key:string|null;
 }
 export class PostgresListingRepository implements ListingRepository {
   constructor(private readonly sql: SqlExecutor) {}
   async findById(id: string): Promise<Listing | null> {
     const row = (await this.sql.query<ListingRow>(
-      `select id, seller_id, title, description, price_minor, price_currency, destination_url, metadata, state
+      `select id, seller_id, title, description, price_minor, price_currency, destination_url, metadata, state, external_key
        from listing_capability.listings where id = $1`, [id],
     )).rows[0];
     return row ? Listing.restore({
       id: row.id, sellerId: row.seller_id, title: row.title, description: row.description,
       price: Money.of(BigInt(row.price_minor), row.price_currency), destination: row.destination_url,
-      metadata: row.metadata, state: row.state,
+      metadata: row.metadata, state: row.state,externalKey:row.external_key,
     }) : null;
   }
+  async findByExternalKey(sellerId:string,key:string){const row=(await this.sql.query<ListingRow>(`select id,seller_id,title,description,price_minor,price_currency,destination_url,metadata,state,external_key from listing_capability.listings where seller_id=$1 and external_key=$2`,[sellerId,key])).rows[0];return row?this.restore(row):null;}
+  async query(input:{sellerId?:string;publicOnly?:boolean;state?:ListingState;search?:string;cursor?:string;limit:number}){const values:unknown[]=[];const where:string[]=[];const add=(value:unknown)=>{values.push(value);return `$${values.length}`;};if(input.sellerId)where.push(`seller_id=${add(input.sellerId)}`);if(input.publicOnly)where.push(`state='published'`);else if(input.state)where.push(`state=${add(input.state)}`);if(input.search)where.push(`to_tsvector('simple',title||' '||description) @@ plainto_tsquery('simple',${add(input.search)})`);if(input.cursor)where.push(`(created_at,id)<(select created_at,id from listing_capability.listings where id=${add(input.cursor)})`);values.push(input.limit+1);const rows=(await this.sql.query<ListingRow>(`select id,seller_id,title,description,price_minor,price_currency,destination_url,metadata,state,external_key from listing_capability.listings ${where.length?`where ${where.join(" and ")}`:""} order by created_at desc,id desc limit $${values.length}`,values)).rows;const visible=rows.slice(0,input.limit);return {items:visible.map(row=>this.restore(row)),nextCursor:rows.length>input.limit?visible.at(-1)!.id:null};}
   async save(listing: Listing): Promise<void> {
     await this.sql.query(
       `insert into listing_capability.listings
-        (id, seller_id, title, description, price_minor, price_currency, destination_url, metadata, state)
-       values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
+        (id, seller_id, title, description, price_minor, price_currency, destination_url, metadata, state, external_key)
+       values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10)
        on conflict (id) do update set title=excluded.title, description=excluded.description,
          price_minor=excluded.price_minor, price_currency=excluded.price_currency,
-         destination_url=excluded.destination_url, metadata=excluded.metadata, state=excluded.state, updated_at=now()`,
+         destination_url=excluded.destination_url, metadata=excluded.metadata, state=excluded.state, external_key=excluded.external_key, updated_at=now()`,
       [listing.id, listing.sellerId, listing.title, listing.description, listing.price.minorAmount.toString(),
-       listing.price.currency, listing.destination, JSON.stringify(listing.metadata), listing.state],
+       listing.price.currency, listing.destination, JSON.stringify(listing.metadata), listing.state,listing.externalKey],
     );
   }
+  private restore(row:ListingRow){return Listing.restore({id:row.id,sellerId:row.seller_id,title:row.title,description:row.description,price:Money.of(BigInt(row.price_minor),row.price_currency),destination:row.destination_url,metadata:row.metadata,state:row.state,externalKey:row.external_key});}
 }
 
 interface PurchaseRow {

@@ -1,0 +1,15 @@
+[
+  {
+    "external_key": "course-intro",
+    "title": "Introduction course",
+    "description": "A productless listing example.",
+    "price_minor": "1000",
+    "currency": "USD",
+    "destination": "https://content.example/course",
+    "metadata": { "category": "course" },
+    "state": "draft",
+    "media": [
+      { "url": "https://media.example/course.png", "alt_text": "Course cover", "position": 0 }
+    ]
+  }
+]
