@@ -7,8 +7,9 @@
 # the platform remainder. A total above 100% is rejected during startup.
 distribution:
   commission:
-    # Omit this mapping (or use {}) to disable referral allocations; the full
-    # purchase gross then remains a platform allocation.
+    # Use {} or null to deliberately disable referral allocations; the full
+    # purchase gross then remains a platform allocation. The levels key itself
+    # is required in runtime configuration.
     levels:
       1: 50
       2: 30

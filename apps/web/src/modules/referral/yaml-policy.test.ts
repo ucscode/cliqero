@@ -5,5 +5,6 @@ describe("YAML commission policy",()=>{
   it("rejects gaps and totals above 100",()=>{expect(()=>commissionPolicyFromYaml({distribution:{commission:{levels:{1:50,3:10}}}})).toThrow();expect(()=>commissionPolicyFromYaml({distribution:{commission:{levels:{1:60,2:41}}}})).toThrow();});
   it("accepts an explicit empty schedule as a deliberate no-commission policy",()=>{const p=commissionPolicyFromYaml({distribution:{commission:{levels:{}}}});expect(p.rates).toEqual([]);expect(p.maximumRewardedDepth).toBe(0);});
   it("requires the runtime policy file instead of falling back to an example",()=>expect(()=>loadYamlCommissionPolicy("config/does-not-exist.yaml")).toThrow("Required configuration file is missing"));
-  it("treats omitted policy as no referral allocation",()=>expect(commissionPolicyFromYaml({}).maximumRewardedDepth).toBe(0));
+  it("normalizes explicit null levels to no referral allocation",()=>expect(commissionPolicyFromYaml({distribution:{commission:{levels:null}}}).maximumRewardedDepth).toBe(0));
+  it("rejects incomplete policy structure",()=>{expect(()=>commissionPolicyFromYaml({})).toThrow(/distribution/);expect(()=>commissionPolicyFromYaml({distribution:{}})).toThrow(/commission/);expect(()=>commissionPolicyFromYaml({distribution:{commission:{}}})).toThrow(/levels/);expect(()=>commissionPolicyFromYaml({distribution:{commission:{level:{1:50}}}})).toThrow(/levels/);});
 });

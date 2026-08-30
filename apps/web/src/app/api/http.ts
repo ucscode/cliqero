@@ -14,6 +14,6 @@ export function referralAttributionSource(request:Request):string|undefined {
 export function apiError(error:unknown):Response {
   const message=error instanceof Error?error.message:"Request failed";
   const status=message==="Forbidden"?403:message.includes("not found")?404:
-    message.includes("credentials")||message.includes("Unauthorized")?401:message.includes("already processing")?409:400;
+    message.includes("credentials")||message.includes("Unauthorized")?401:message.includes("already processing")||message.includes("idempotency key already used")?409:400;
   return Response.json({error:message},{status});
 }
