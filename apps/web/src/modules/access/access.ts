@@ -46,7 +46,7 @@ export class AccessService {
 
   async issue(buyerId: Id, listingId: Id, idempotencyKey?: string): Promise<{ grant: AccessGrant; source: string }> {
     const entitlement = await this.entitlements.findActive(buyerId, listingId);
-    if (!entitlement) throw new Error("Active entitlement not found");
+    if (!entitlement?.isUsableAt(new Date())) throw new Error("Active entitlement not found");
     const issued = AccessGrant.issue(entitlement.id);
     await this.grants.save(issued.grant, idempotencyKey);
     return issued;

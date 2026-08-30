@@ -104,7 +104,7 @@ interface EntitlementRow { id:string; buyer_id:string; listing_id:string; purcha
 export class PostgresEntitlementRepository implements EntitlementRepository {
   constructor(private readonly sql: SqlExecutor) {}
   async findByPurchaseId(purchaseId:string) { return this.find("purchase_id = $1", [purchaseId]); }
-  async findActive(buyerId:string, listingId:string) { return this.find("buyer_id = $1 and listing_id = $2 and state = 'active'", [buyerId,listingId]); }
+  async findActive(buyerId:string, listingId:string) { return this.find("buyer_id = $1 and listing_id = $2 and state = 'active' and (expires_at is null or expires_at > now())", [buyerId,listingId]); }
   async findById(id:string) { return this.find("id = $1", [id]); }
   async save(entitlement:Entitlement):Promise<void> {
     await this.sql.query(
