@@ -43,7 +43,7 @@ export class ListingTransferService {
     const id=record.retry_identity?.slice("listing:".length)??record.id;if(id){try{return await this.listings.getOwner(owner,id);}catch(error){if(mode==="upsert"||record.retry_identity)throw new Error("Import identity does not belong to the authenticated owner or no longer exists");}}
     if(mode==="upsert")throw new Error("Upsert requires external_key, retry_identity, or an owned listing id");return null;
   }
-  private async applyState(owner:Account,id:string,current:ListingState,target:ListingState){if(target===current)return;if(target==="draft"){if(current==="archived")await this.listings.restore(owner,id);else if(current==="published")throw new Error("Published listings must be archived before returning to draft");return;}if(target==="published"){if(current==="archived")await this.listings.restore(owner,id);await this.listings.publish(owner,id);return;}await this.listings.archive(owner,id);}
+  private async applyState(owner:Account,id:string,current:ListingState,target:ListingState){if(target===current)return;if(target==="draft"){if(current==="published"){await this.listings.archive(owner,id);current="archived";}if(current==="archived")await this.listings.restore(owner,id);return;}if(target==="published"){if(current==="archived")await this.listings.restore(owner,id);await this.listings.publish(owner,id);return;}await this.listings.archive(owner,id);}
 }
 
 type ImportRecordResult={index:number;status:"created"|"updated"|"skipped"|"failed";listing_id?:string;retry_identity?:string;code?:string;message?:string;retryable:boolean};
