@@ -8,7 +8,7 @@ import {OutboxDispatcher,OutboxHandlerRegistry} from "@/workers/outbox/dispatche
 const databaseUrl=process.env.TEST_DATABASE_URL;const suite=databaseUrl?describe:describe.skip;
 suite("purchase financial distribution",()=>{
   const app=createContainer(databaseUrl!);
-  beforeEach(async()=>{await app.database.query(`truncate table ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.reversals,ledger_capability.purchase_distributions,
+  beforeEach(async()=>{await app.database.query(`truncate table treasury_capability.entries,ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.reversals,ledger_capability.purchase_distributions,
     payment_capability.reconciliation_attempts,payment_capability.provider_events,referral_capability.listing_attributions,
     referral_capability.listing_referral_links,referral_capability.account_referrals,access_capability.access_grants,
     entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,
@@ -28,6 +28,12 @@ suite("purchase financial distribution",()=>{
     expect(entries.map(e=>[e.recipientRole,e.amount.minorAmount]).sort()).toEqual([["seller",91n],["platform",10n]].sort());
     expect(entries.reduce((sum,e)=>sum+e.amount.minorAmount,0n)).toBe(101n);
     expect((await app.database.query(`select 1 from kernel.outbox_events where event_name='purchase.distribution.completed'`)).rowCount).toBe(1);
+  });
+
+  it("creates one source-linked treasury credit for a completed distribution",async()=>{const value=await completed();const distribution=await app.purchaseDistribution.process({purchaseId:value.purchaseId,correlationId:newId()});const platformAmountMinor=distribution.platformAmountMinor??0n;
+    const results=await Promise.all([app.treasuryProcessor.process(distribution.id),app.treasuryProcessor.process(distribution.id)]);
+    expect(results[0]?.id).toBe(results[1]?.id);const rows=(await app.database.query<any>(`select source_kind,source_id,amount_minor from treasury_capability.entries where source_kind='distribution' and source_id=$1`,[distribution.id])).rows;
+    expect(rows).toHaveLength(platformAmountMinor>0n?1:0);if(rows[0])expect(BigInt(rows[0].amount_minor)).toBe(platformAmountMinor);
   });
 
   it("uses trusted attribution and bounded exact referral commission facts",async()=>{const parent=await account(`parent${newId().slice(0,5)}`),promoter=await account(`promo${newId().slice(0,5)}`);
