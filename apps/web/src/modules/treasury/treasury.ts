@@ -5,5 +5,10 @@ export interface TreasuryRepository {create(entry: TreasuryEntry):Promise<Treasu
 export class TreasuryService {
   constructor(private repo:TreasuryRepository){}
   async expense(input:{amountMinor:bigint;title:string;note?:string|null;actorId:string;idempotencyKey:string}){if(input.amountMinor<=0n)throw new Error("Treasury expense must be positive");if(!input.title.trim())throw new Error("Treasury title is required");const prior=await this.repo.findByIdempotencyKey(input.idempotencyKey);if(prior)return prior;return this.repo.create({id:newId(),direction:"debit",amountMinor:input.amountMinor,title:input.title.trim(),note:input.note?.trim()||null,sourceKind:null,sourceId:null,idempotencyKey:input.idempotencyKey,actorId:input.actorId,createdAt:new Date()});}
-  async reverse(original:TreasuryEntry,input:{actorId:string;idempotencyKey:string}){if(original.direction!=="debit")throw new Error("Only treasury debits can be reversed");const prior=await this.repo.findByIdempotencyKey(input.idempotencyKey);if(prior)return prior;return this.repo.create({id:newId(),direction:"credit",amountMinor:original.amountMinor,title:`Reversal: ${original.title}`,note:original.note,sourceKind:"treasury_reversal",sourceId:original.id,idempotencyKey:input.idempotencyKey,actorId:input.actorId,createdAt:new Date()});}
+  async reverse(original:TreasuryEntry,input:{actorId:string;idempotencyKey:string;reason:string}){
+    const reason=input.reason.trim();if(!reason)throw new Error("Treasury reversal reason is required");
+    const prior=await this.repo.findByIdempotencyKey(input.idempotencyKey);if(prior)return prior;
+    const existing=await this.repo.findBySource("treasury_reversal",original.id);if(existing)return existing;
+    return this.repo.create({id:newId(),direction:original.direction==="credit"?"debit":"credit",amountMinor:original.amountMinor,title:`Reversal: ${original.title}`,note:reason,sourceKind:"treasury_reversal",sourceId:original.id,idempotencyKey:input.idempotencyKey,actorId:input.actorId,createdAt:new Date()});
+  }
 }

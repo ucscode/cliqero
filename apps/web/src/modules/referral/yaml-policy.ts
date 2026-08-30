@@ -12,4 +12,4 @@ export function commissionPolicyFromYaml(value:unknown){
   if(entries.reduce((sum,[,rate])=>sum+rate,0)>100)throw new Error("Commission percentages must not exceed 100% total");
   return new CommissionPolicy(entries.map(([,rate])=>rate),"percentage");
 }
-export function loadYamlCommissionPolicy(path="config/modules/distribution.yaml"){return commissionPolicyFromYaml(loadYamlConfiguration(path));}
+export function loadYamlCommissionPolicy(path="config/modules/distribution.yaml"){return commissionPolicyFromYaml(loadYamlConfiguration(path,process.env,{required:true}));}

@@ -34,7 +34,8 @@ export function resolveEnvironmentPlaceholders(value:unknown, environment:Record
   return value;
 }
 
-export function loadYamlConfiguration(path:string, environment:Record<string,string|undefined>=process.env):unknown {
+export function loadYamlConfiguration(path:string, environment:Record<string,string|undefined>=process.env, options:{required?:boolean}={}):unknown {
   const parsed=parseYamlConfiguration(path);
+  if(parsed===null&&options.required)throw new Error(`Required configuration file is missing: ${path}`);
   return parsed===null?null:resolveEnvironmentPlaceholders(parsed,environment,path);
 }
