@@ -55,6 +55,10 @@ import {ListingMediaDeletionProcessor,ListingMediaService} from "@/application/l
 import {ListingTransferService} from "@/application/listing-transfer";
 import {ProfileService} from "@/application/profile";
 import {AccountProjectionService} from "@/application/account-projections";
+import {loadYamlCommissionPolicy} from "@/modules/referral/yaml-policy";
+import {PostgresTreasuryRepository} from "./postgres/treasury";
+import {TreasuryService} from "@/modules/treasury/treasury";
+import {TreasuryProcessor} from "@/processors/treasury";
 
 export function createContainer(databaseUrl:string) {
   const database=PostgresDatabase.connect(databaseUrl);
@@ -71,6 +75,11 @@ export function createContainer(databaseUrl:string) {
   const commissionPolicy=new PostgresCommissionPolicyRepository(database);
   const referralAttributionRepository=new PostgresReferralAttributionRepository(database);
   const ledger=new PostgresLedgerRepository(database);const financialDistributionPolicy=new PostgresFinancialDistributionPolicyRepository(database);
+  // Validate the deployment policy while composing the application; malformed
+  // commission YAML must fail startup rather than halfway through distribution.
+  const loadedYamlCommissionPolicy=loadYamlCommissionPolicy();
+  const yamlCommissionPolicy={getActive:async()=>loadedYamlCommissionPolicy};
+  const treasuryRepository=new PostgresTreasuryRepository(database);const treasury=new TreasuryService(treasuryRepository);const treasuryProcessor=new TreasuryProcessor(database,treasuryRepository);
   const settlementPolicy=new PostgresSettlementPolicyRepository(database);const settlement=new SettlementProcessor(database,database,ledger,settlementPolicy);
   const reversals=new PostgresReversalRepository(database);
   const withdrawalRepository=new PostgresWithdrawalRepository(database);const withdrawalPolicy=new PostgresWithdrawalPolicyRepository(database);
@@ -92,7 +101,7 @@ export function createContainer(databaseUrl:string) {
   const referralAttribution=new ReferralAttributionService(referralAttributionRepository,listings);
   const paymentCompletion=new PaymentCompletionService(payments,purchases,entitlements,providers,idempotency,outbox,database);
   const commissionDistribution=new CommissionDistributionService(referralGraph);
-  const purchaseDistribution=new PurchaseDistributionProcessor(purchases,commissionDistribution,commissionPolicy,financialDistributionPolicy,ledger,outbox,database);
+  const purchaseDistribution=new PurchaseDistributionProcessor(purchases,commissionDistribution,commissionPolicy,financialDistributionPolicy,ledger,outbox,database,yamlCommissionPolicy);
   const fundingService=new FundingService(funding,providers,exchangeRates,accounts,database);
   const fundingInitialization=new FundingInitializationProcessor(funding,providers,accounts,database,paymentOperations);
   const fundingVerification=new FundingVerificationProcessor(funding,providers,database,paymentOperations);
@@ -108,7 +117,7 @@ export function createContainer(databaseUrl:string) {
     walletCheckout:new WalletCheckoutService(listings,checkoutRepository,purchases,referralAttribution,database),checkoutRepository,
     funding,fundingService,fundingInitialization,fundingVerification,wallet,walletRepository,walletCredit,walletAvailability,checkoutPayment,entitlementIssuance,
     referralGraphService:new ReferralGraphService(accounts,referralGraph,database),
-    commissionDistribution,ledger,financialDistributionPolicy,purchaseDistribution,
+    commissionDistribution,ledger,financialDistributionPolicy,yamlCommissionPolicy,purchaseDistribution,treasuryRepository,treasury,treasuryProcessor,
     legacyPaymentCompletion:paymentCompletion,paystackWebhook:paystack?new PaystackWebhookIngress(paystack,providerEvents,outbox,database):null,
     paystackPayoutWebhook:paystackPayout?new PaystackPayoutWebhookIngress(paystackPayout,paystackPayoutEvents,payoutRepository,payoutExecution,database):null,
     operators,paymentOperations,paymentInitialization,paymentInitializationWorker,paymentVerification,paymentReconciliation:new PaymentReconciliationService(payments,paymentVerification,paymentOperations,operators),

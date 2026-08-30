@@ -5,7 +5,7 @@ export interface LedgerEntryDraft {id:string;distributionId:string;accountId:str
   direction:"credit"|"debit";amount:Money;idempotencyKey:string;correlationId:string;recipientRole:RecipientRole;basis:string;
   referralLevel?:number;balanceState:"pending"|"available";maturityAt?:Date;originalEntryId?:string;reversalId?:string;}
 export interface LedgerEntry extends LedgerEntryDraft {createdAt:Date;}
-export interface PurchaseDistribution {id:string;purchaseId:string;gross:Money;policySnapshot:unknown;correlationId:string;completedAt:Date;}
+export interface PurchaseDistribution {id:string;purchaseId:string;gross:Money;platformAmountMinor?:bigint;policySnapshot:unknown;correlationId:string;completedAt:Date;}
 export interface FinancialDistributionPolicy {platformAccountId:string;platformRateBasisPoints:number;remainderRecipient:"seller"|"platform";initialBalanceState:"pending"|"available";settlementDelaySeconds:number;}
 export interface FinancialDistributionPolicyRepository {getActive():Promise<FinancialDistributionPolicy>;}
 export interface LedgerRepository {

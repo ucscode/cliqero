@@ -77,6 +77,7 @@ export class Listing {
 export interface ListingRepository {
   findById(id: Id): Promise<Listing | null>;
   findByExternalKey(sellerId:Id,key:string):Promise<Listing|null>;
+  findAnyByExternalKey?(key:string):Promise<Listing|null>;
   query(input:{sellerId?:Id;publicOnly?:boolean;state?:ListingState;search?:string;cursor?:string;limit:number}):Promise<{items:readonly Listing[];nextCursor:string|null}>;
   save(listing: Listing): Promise<void>;
 }

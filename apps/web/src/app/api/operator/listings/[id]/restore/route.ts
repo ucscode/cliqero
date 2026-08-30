@@ -1,0 +1,2 @@
+import {apiError,authenticatedAccount} from "../../../../http";import {getContainer} from "@/infrastructure/container";import {ownerListingView} from "@/application/listings";
+export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){const a=await authenticatedAccount(request);if(!a)return Response.json({error:"Unauthorized"},{status:401});try{const c=getContainer();await c.operators.requireCatalogueManager(a.id);return Response.json(ownerListingView(await c.listingService.restoreCatalogue(a,(await params).id)));}catch(e){return apiError(e);}}

@@ -12,6 +12,7 @@ export class CommercialWorkflowDispatcher {
     processed+=await this.family("checkout-payment",()=>this.app.checkoutRepository.findAwaitingFunds(),item=>this.app.checkoutPayment.process(item.id));
     processed+=await this.family("entitlement",async()=>await this.app.purchases.findCompletedWithoutEntitlement?.()??[],item=>this.app.entitlementIssuance.process(item.id));
     processed+=await this.family("distribution",async()=>await this.app.purchases.findCompletedWithoutDistribution?.()??[],item=>this.app.purchaseDistribution.process({purchaseId:item.id,correlationId:newId()}));
+    processed+=await this.family("treasury",()=>this.app.treasuryProcessor.findWork(),item=>this.app.treasuryProcessor.process(item.id));
     processed+=await this.family("listing-media-deletion",()=>this.app.listingMediaDeletion.findWork(),item=>this.app.listingMediaDeletion.process(item.id));
     return processed;
   }

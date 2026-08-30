@@ -14,25 +14,38 @@ export class ListingService {
     await this.listings.save(listing); return listing;
   }
   async createPublished(seller:Account,input:{title:string;description:string;priceMinor:string;currency:string;destination:string;metadata?:ListingMetadata;externalKey?:string|null}){const listing=await this.create(seller,input);return this.publish(seller,listing.id);}
+  /** Catalogue-managed creation. The manager is an audit actor, not a seller/payee. */
+  async createCatalogue(actor:Account,input:Parameters<ListingService["create"]>[1]){return this.create(actor,input);}
   async update(actor:Account,id:Id,input:{title?:string;description?:string;priceMinor?:string;currency?:string;destination?:string;metadata?:ListingMetadata}) {
     const listing=await this.listings.findById(id); if(!listing)throw new Error("Listing not found");
     if(!this.authorization.canModifyListing(actor,listing))throw new Error("Forbidden");
     if(input.currency!==undefined&&input.currency.trim().toUpperCase()!=="USD")throw new Error("Listings must use the canonical USD currency");
     listing.update({title:input.title??listing.title,description:input.description??listing.description,price:Money.of(BigInt(input.priceMinor??listing.price.minorAmount.toString()),input.currency??listing.price.currency),destination:input.destination??listing.destination,metadata:input.metadata??listing.metadata}); await this.listings.save(listing); return listing;
   }
+  async updateCatalogue(_actor:Account,id:Id,input:Parameters<ListingService["update"]>[2]) {
+    const listing=await this.listings.findById(id);if(!listing)throw new Error("Listing not found");
+    if(input.currency!==undefined&&input.currency.trim().toUpperCase()!=="USD")throw new Error("Listings must use the canonical USD currency");
+    listing.update({title:input.title??listing.title,description:input.description??listing.description,price:Money.of(BigInt(input.priceMinor??listing.price.minorAmount.toString()),input.currency??listing.price.currency),destination:input.destination??listing.destination,metadata:input.metadata??listing.metadata});await this.listings.save(listing);return listing;
+  }
   async publish(actor:Account,id:Id){const listing=await this.owned(actor,id);listing.publish();await this.listings.save(listing);return listing;}
   async archive(actor:Account,id:Id){const listing=await this.owned(actor,id);listing.archive();await this.listings.save(listing);return listing;}
   async restore(actor:Account,id:Id){const listing=await this.owned(actor,id);listing.restore();await this.listings.save(listing);return listing;}
+  async publishCatalogue(_actor:Account,id:Id){const listing=await this.listings.findById(id);if(!listing)throw new Error("Listing not found");listing.publish();await this.listings.save(listing);return listing;}
+  async archiveCatalogue(_actor:Account,id:Id){const listing=await this.listings.findById(id);if(!listing)throw new Error("Listing not found");listing.archive();await this.listings.save(listing);return listing;}
+  async restoreCatalogue(_actor:Account,id:Id){const listing=await this.listings.findById(id);if(!listing)throw new Error("Listing not found");listing.restore();await this.listings.save(listing);return listing;}
+  async getCatalogue(id:Id){const listing=await this.listings.findById(id);if(!listing)throw new Error("Listing not found");return listing;}
   async getOwner(actor:Account,id:Id){return this.owned(actor,id);}
   queryPublic(input:{state?:never;search?:string;cursor?:string;limit:number}){return this.listings.query({...input,publicOnly:true});}
   queryOwner(actor:Account,input:{state?:import("@/modules/listing/listing").ListingState;search?:string;cursor?:string;limit:number}){return this.listings.query({...input,sellerId:actor.id});}
+  queryCatalogue(input:{state?:import("@/modules/listing/listing").ListingState;search?:string;cursor?:string;limit:number}){return this.listings.query(input);}
   findByExternalKey(actor:Account,key:string){return this.listings.findByExternalKey(actor.id,key);}
+  findCatalogueByExternalKey(actor:Account,key:string){return this.listings.findAnyByExternalKey?this.listings.findAnyByExternalKey(key):this.listings.findByExternalKey(actor.id,key);}
   async getPublic(id:Id) { const listing=await this.listings.findById(id); return listing?.state==="published"?listing:null; }
   private async owned(actor:Account,id:Id){const listing=await this.listings.findById(id);if(!listing)throw new Error("Listing not found");if(!this.authorization.canModifyListing(actor,listing))throw new Error("Forbidden");return listing;}
 }
 
 export function listingView(listing:Listing) {
-  return {id:listing.id,seller_id:listing.sellerId,title:listing.title,description:listing.description,
+  return {id:listing.id,managed_by:listing.sellerId,title:listing.title,description:listing.description,
     price:{minor_amount:listing.price.minorAmount.toString(),currency:listing.price.currency},metadata:listing.metadata,state:listing.state};
 }
 export function ownerListingView(listing:Listing){return {...listingView(listing),destination:listing.destination,external_key:listing.externalKey};}

@@ -1,5 +1,7 @@
 # Roles and User Journeys
 
+Cliqero is a platform catalogue rather than a multi-seller marketplace. Ordinary accounts are buyers/promoters; catalogue creation and publication require the `catalogue_manager` or `operator` capability. Historical seller fields remain for audit compatibility only and are not payee semantics for new wallet purchases.
+
 [Back to documentation index](./README.md)
 
 ## Identity model

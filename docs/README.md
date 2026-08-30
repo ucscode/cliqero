@@ -1,8 +1,8 @@
 # Cliqero Documentation
 
-Cliqero is a productless commerce and referral platform.
+Cliqero is a productless catalogue, wallet-commerce, and referral platform.
 
-A seller creates a listing with metadata, a price, and a destination. A referrer can share an attributed link and earn from a valid purchase. A buyer pays through Cliqero and receives an entitlement that allows access to the destination.
+Cliqero owns the commercial catalogue: ordinary users browse and buy, while catalogue managers create and publish listings. External providers fund buyer wallets; listings are purchased from the canonical USD wallet. Referrers can share an attributed link and earn from a valid wallet purchase, and buyers receive entitlements that allow access to destinations.
 
 The core flow is:
 
@@ -36,6 +36,7 @@ This product-model correction does **not** change the previously established arc
 9. [Reliability, Fraud, and Audit](./09-reliability-fraud-and-audit.md) — idempotency, payment/referral/access threats, token security, immutable records, and failure isolation.
 10. [Investor and Business Overview](./10-investor-business-overview.md) — productless business model, seller/referrer/buyer value, economics, network effects, and expansion principle.
 11. [Initial Production Scope](./11-initial-production-scope.md) — production V1 and build order centered on listing -> checkout -> purchase -> entitlement -> access.
+12. [Catalogue, Commission, and Treasury](./catalogue-treasury.md) — privileged catalogue ownership, YAML referral policy, platform allocation, and company treasury.
 
 ## Architectural principle
 

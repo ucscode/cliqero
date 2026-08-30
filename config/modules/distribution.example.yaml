@@ -1,0 +1,15 @@
+# Platform referral commission policy for new wallet-paid purchases.
+#
+# This is deployment configuration, not operational database data. Values are
+# whole integer percentages (0..100), not basis points. Level keys must be a
+# contiguous YAML mapping beginning at 1; the highest key is the maximum
+# payable referral depth. Missing uplines are not redistributed and remain in
+# the platform remainder. A total above 100% is rejected during startup.
+distribution:
+  commission:
+    # Omit this mapping (or use {}) to disable referral allocations; the full
+    # purchase gross then remains a platform allocation.
+    levels:
+      1: 50
+      2: 30
+      3: 10

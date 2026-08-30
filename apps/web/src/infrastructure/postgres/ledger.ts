@@ -12,18 +12,18 @@ export class PostgresFinancialDistributionPolicyRepository implements FinancialD
   }
 }
 
-interface DistributionRow{id:string;purchase_id:string;gross_minor:string;currency:string;policy_snapshot:unknown;correlation_id:string;completed_at:Date;}
+interface DistributionRow{id:string;purchase_id:string;gross_minor:string;currency:string;policy_snapshot:unknown;correlation_id:string;completed_at:Date;platform_amount_minor:string;}
 interface EntryRow{id:string;distribution_id:string;account_id:string;purchase_id:string;entry_type:"purchase-earnings"|"purchase-reversal";direction:"credit"|"debit";amount_minor:string;
  currency:string;idempotency_key:string;correlation_id:string;recipient_role:"seller"|"referral"|"platform";basis:string;referral_level:number|null;balance_state:"pending"|"available";maturity_at:Date|null;original_entry_id:string|null;reversal_id:string|null;created_at:Date;}
 export class PostgresLedgerRepository implements LedgerRepository {
   constructor(private readonly sql:SqlExecutor){}
   async findDistributionByPurchaseId(purchaseId:string):Promise<PurchaseDistribution|null>{
-    const row=(await this.sql.query<DistributionRow>(`select id,purchase_id,gross_minor,currency,policy_snapshot,correlation_id,completed_at from ledger_capability.purchase_distributions where purchase_id=$1`,[purchaseId])).rows[0];
-    return row?{id:row.id,purchaseId:row.purchase_id,gross:Money.of(BigInt(row.gross_minor),row.currency),policySnapshot:row.policy_snapshot,correlationId:row.correlation_id,completedAt:row.completed_at}:null;
+    const row=(await this.sql.query<DistributionRow>(`select id,purchase_id,gross_minor,currency,policy_snapshot,correlation_id,completed_at,platform_amount_minor from ledger_capability.purchase_distributions where purchase_id=$1`,[purchaseId])).rows[0];
+    return row?{id:row.id,purchaseId:row.purchase_id,gross:Money.of(BigInt(row.gross_minor),row.currency),platformAmountMinor:BigInt(row.platform_amount_minor),policySnapshot:row.policy_snapshot,correlationId:row.correlation_id,completedAt:row.completed_at}:null;
   }
   async createDistribution(value:Omit<PurchaseDistribution,"completedAt">):Promise<void>{await this.sql.query(
-    `insert into ledger_capability.purchase_distributions(id,purchase_id,gross_minor,currency,policy_snapshot,correlation_id) values($1,$2,$3,$4,$5::jsonb,$6)`,
-    [value.id,value.purchaseId,value.gross.minorAmount.toString(),value.gross.currency,JSON.stringify(value.policySnapshot),value.correlationId]);}
+    `insert into ledger_capability.purchase_distributions(id,purchase_id,gross_minor,currency,policy_snapshot,correlation_id,platform_amount_minor) values($1,$2,$3,$4,$5::jsonb,$6,$7)`,
+    [value.id,value.purchaseId,value.gross.minorAmount.toString(),value.gross.currency,JSON.stringify(value.policySnapshot),value.correlationId,(value.platformAmountMinor??0n).toString()]);}
   async append(entries:readonly LedgerEntryDraft[]):Promise<void>{for(const entry of entries)await this.sql.query(
     `insert into ledger_capability.entries(id,distribution_id,account_id,purchase_id,entry_type,direction,amount_minor,currency,idempotency_key,correlation_id,recipient_role,basis,referral_level,balance_state,maturity_at,original_entry_id,reversal_id)
      values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,[entry.id,entry.distributionId,entry.accountId,entry.purchaseId,entry.entryType,entry.direction,

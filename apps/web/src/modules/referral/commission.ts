@@ -3,12 +3,15 @@ import {Money as PreciseMoney} from "@/modules/money/money";
 import type {Purchase} from "@/modules/purchase/purchase";
 import type {ReferralGraphRepository} from "./referral";
 
-export interface CommissionDistributionFact {recipientAccountId:string;level:number;basis:"listing-referral";configuredRateBasisPoints:number;calculatedAmount:Money;}
+export interface CommissionDistributionFact {recipientAccountId:string;level:number;basis:"listing-referral";configuredRatePercentage:number;configuredRateBasisPoints:number;calculatedAmount:Money;}
 export class CommissionPolicy {
-  constructor(readonly ratesBasisPoints:readonly number[]){
-    if(ratesBasisPoints.length>32||ratesBasisPoints.some(rate=>!Number.isInteger(rate)||rate<0||rate>10000))throw new Error("Commission rates are invalid");
+  readonly ratesBasisPoints:readonly number[];
+  constructor(readonly rates:readonly number[],unit:"basis-points"|"percentage"="basis-points"){
+    if(rates.length>32||rates.some(rate=>!Number.isInteger(rate)||rate<0||rate>(unit==="percentage"?100:10000)))throw new Error("Commission rates are invalid");
+    this.ratesBasisPoints=unit==="percentage"?rates.map(rate=>rate*100):rates;
   }
-  get maximumRewardedDepth(){return this.ratesBasisPoints.length;}
+  get maximumRewardedDepth(){return this.rates.length;}
+  get percentages(){return this.ratesBasisPoints.map(rate=>rate/100);}
 }
 export interface CommissionPolicyRepository {getActive():Promise<CommissionPolicy>;}
 export class CommissionDistributionService {
@@ -21,7 +24,7 @@ export class CommissionDistributionService {
       recipients.push(...uplines.map(item=>({accountId:item.accountId,depth:item.depth+1})));}
     const gross=PreciseMoney.of(BigInt(purchase.terms.canonicalPrice.minorAmount),purchase.terms.canonicalPrice.currency);
     return recipients.map(recipient=>{const rate=policy.ratesBasisPoints[recipient.depth-1]??0;return {recipientAccountId:recipient.accountId,
-      level:recipient.depth,basis:"listing-referral" as const,configuredRateBasisPoints:rate,
+      level:recipient.depth,basis:"listing-referral" as const,configuredRatePercentage:rate/100,configuredRateBasisPoints:rate,
       calculatedAmount:PreciseMoney.of(gross.minorAmount*BigInt(rate)/10000n,gross.currency)};}).filter(fact=>fact.configuredRateBasisPoints>0);
   }
 }

@@ -7,9 +7,9 @@ The development audit is reproducible with `node scripts/audit-http-api.mjs`. It
 | GET | `/api/health` | no | runtime | none | 200 | none | none | n/a | 200 |
 | POST | `/api/accounts` | no | identity | email, handle, password, country? | 201 | account | PostgreSQL | unique identity | 201; invalid 400 |
 | POST | `/api/auth/sessions` | no | identity | email, password | 200 | session | identity | n/a | 200; invalid 401 |
-| POST | `/api/listings` | account | listing | listing snapshot | 201 | draft listing | identity | n/a | 201; invalid 400 |
+| POST | `/api/listings` | catalogue manager/operator | listing | listing snapshot | 201 | draft listing | identity + catalogue capability | n/a | ordinary account 403 |
 | GET | `/api/listings/:id` | no | listing | path id | 200 | none | listing | n/a | 200; missing 404 |
-| PATCH | `/api/listings/:id` | owner | listing | partial mutable fields | 200 | updated listing | listing/authorization | n/a | 200; wrong owner 403 |
+| PATCH | `/api/listings/:id` | catalogue manager/operator | listing | partial mutable fields | 200 | updated listing | listing + catalogue capability | n/a | ordinary account 403 |
 | POST | `/api/checkout` | account | checkout | `listing_id` only | 201 | checkout + pending purchase | listing, wallet snapshot | required | 201; unauth 401; provider field 400 |
 | GET | `/api/checkout/:id` | buyer | checkout | path id | 200 | none | checkout | n/a | 200; wrong buyer 404 |
 | POST | `/api/wallet/fund` | account | funding | USD amount, provider, collection currency? | 201 | funding transaction | provider registry, FX when needed | required | 201; repeated key 201; invalid 400 |
@@ -72,3 +72,5 @@ The audit intentionally does not call a live payment or payout provider.
 | GET/DELETE | `/api/referral-links/{id}` | owner | archive-managed | Read or revoke; attribution history retained |
 | GET | `/api/purchases`, `/api/purchases/{id}` | buyer | immutable projection | Purchase history only |
 | GET | `/api/earnings`, `/api/earnings/entries` | account | immutable projection | Earnings summary and append-only entry history |
+
+Catalogue management is also available under `/api/operator/listings` (including publish, restore, media, import, and export) for accounts with `catalogue_manager` or `operator`. Company treasury is operator-only: `GET /api/operator/treasury`, `GET /api/operator/treasury/entries`, `GET /api/operator/treasury/entries/:id`, `POST /api/operator/treasury/expenses`, and `POST /api/operator/treasury/entries/:id/reverse`. Treasury entries are immutable facts; no update/delete API exists.

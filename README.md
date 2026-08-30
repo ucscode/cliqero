@@ -81,12 +81,13 @@ server-side. Purchases snapshot the resolved attribution, link, and referrer IDs
 
 ## Financial distribution
 
-The outbox worker consumes `purchase.completed` and atomically writes one immutable purchase distribution, its seller,
-referral, and platform ledger credits, and a `purchase.distribution.completed` outbox fact. Active rates live in
-`referral_capability.commission_policy` and `ledger_capability.distribution_policy` as integer basis points. Percentage
-results are floored in minor units and the configured seller/platform remainder recipient receives the residual, so every
-distribution exactly conserves the immutable purchase gross. Paystack-reported fees are retained for audit but remain
-informational in V1 and do not silently change recipient economics.
+The outbox worker consumes `purchase.completed` and atomically writes one immutable purchase distribution with referral
+credits and a platform remainder. New wallet purchases read validated percentage levels from
+`config/modules/distribution.yaml`; missing upline levels remain with the platform and no seller credit is created.
+Amounts are canonical USD bigint cents and every distribution stores the applied policy snapshot. A separate treasury
+processor converts each platform allocation into one append-only treasury credit; operator expenses are append-only
+debits and corrections are compensating entries. Wallet, earnings, and treasury balances are projections over separate
+financial facts.
 
 Operator capability is granted through `identity_capability.account_capabilities`, never through request parameters.
 Authorized operators can inspect sanitized Paystack event/payment/outbox state at `GET /api/operator/paystack/events`, list
