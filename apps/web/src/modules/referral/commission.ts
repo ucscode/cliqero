@@ -7,7 +7,7 @@ export interface CommissionDistributionFact {recipientAccountId:string;level:num
 export class CommissionPolicy {
   readonly ratesBasisPoints:readonly number[];
   constructor(readonly rates:readonly number[],unit:"basis-points"|"percentage"="basis-points"){
-    if(rates.length>32||rates.some(rate=>!Number.isInteger(rate)||rate<0||rate>(unit==="percentage"?100:10000)))throw new Error("Commission rates are invalid");
+    if(rates.some(rate=>!Number.isInteger(rate)||rate<0||rate>(unit==="percentage"?100:10000)))throw new Error("Commission rates are invalid");
     this.ratesBasisPoints=unit==="percentage"?rates.map(rate=>rate*100):rates;
   }
   get maximumRewardedDepth(){return this.rates.length;}

@@ -84,6 +84,7 @@ Catalogue management is also available under `/api/operator/listings` (including
 | GET | `/api/openapi.json` | no | API contract | Generated from Hono/Zod route contracts |
 | GET | `/api/hierarchy/tree` | account or API key (`hierarchy:read`) | hierarchy projection | Configured depth and child window; optional root |
 | GET | `/api/hierarchy/search` | account or API key (`hierarchy:read`) | hierarchy search | SQL-scoped descendant search; operators global |
+| GET | `/api/hierarchy/children/{parentId}` | account or API key (`hierarchy:read`) | hierarchy continuation | Stable UUID cursor; server-controlled child batch size |
 | POST | `/api/operator/api-keys` | operator | API-key command | Secret returned once; scopes are explicit |
 | GET | `/api/operator/api-keys` | operator | API-key projection | Never returns secrets or hashes |
 | POST | `/api/operator/api-keys/{id}/revoke` | operator | API-key command | Revokes without deleting history |

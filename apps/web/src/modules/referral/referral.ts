@@ -11,9 +11,8 @@ export interface ReferralGraphRepository {
   getRelationshipDepth(ancestorId:Id,descendantId:Id,maxDepth:number):Promise<number|null>;
 }
 export function assertTraversalDepth(depth:number):void {
-  if(!Number.isInteger(depth)||depth<1||depth>32)throw new DomainInvariantError("Referral traversal depth must be between 1 and 32");
+  if(!Number.isInteger(depth)||depth<1)throw new DomainInvariantError("Referral traversal depth must be a positive integer");
 }
 export function assertPageLimit(limit:number):void {
   if(!Number.isInteger(limit)||limit<1||limit>100)throw new DomainInvariantError("Referral page limit must be between 1 and 100");
 }
-

@@ -1,3 +1,0 @@
-# Referral graph settings. Graph integrity remains enforced by PostgreSQL.
-referral:
-  max_traversal_depth: 32

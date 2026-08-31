@@ -1,5 +1,6 @@
 import {createHash,randomBytes,timingSafeEqual} from "node:crypto";
 import type {SqlExecutor} from "./database";
+import {assertApiScopes} from "@/modules/identity/api-scopes";
 
 export interface ApiKeyRecord {id:string;accountId:string;name:string;keyPrefix:string;scopes:string[];createdAt:Date;lastUsedAt:Date|null;expiresAt:Date|null;revokedAt:Date|null;}
 export class PostgresApiKeyRepository {
@@ -12,7 +13,7 @@ export class PostgresApiKeyRepository {
 }
 export class ApiKeyService {
   constructor(private readonly repository:PostgresApiKeyRepository,private readonly sql:SqlExecutor){}
-  async create(input:{accountId:string;name:string;scopes:string[];createdBy:string;expiresAt?:Date|null}){const secret=`cliq_live_${randomBytes(32).toString("base64url")}`;const prefix=secret.slice(0,18);const id=await this.repository.insert({accountId:input.accountId,name:input.name.trim(),keyPrefix:prefix,secretHash:hash(secret),scopes:input.scopes,createdBy:input.createdBy,expiresAt:input.expiresAt??null});return {id,secret,name:input.name.trim(),scopes:input.scopes};}
+  async create(input:{accountId:string;name:string;scopes:string[];createdBy:string;expiresAt?:Date|null}){const scopes=[...assertApiScopes(input.scopes)];const secret=`cliq_live_${randomBytes(32).toString("base64url")}`;const prefix=secret.slice(0,18);const id=await this.repository.insert({accountId:input.accountId,name:input.name.trim(),keyPrefix:prefix,secretHash:hash(secret),scopes,createdBy:input.createdBy,expiresAt:input.expiresAt??null});return {id,secret,name:input.name.trim(),scopes};}
   async authenticate(secret:string){if(!secret.startsWith("cliq_live_")||secret.length>200)return null;const prefix=secret.slice(0,18);const row=await this.repository.findActiveByPrefix(prefix);if(!row)return null;const actual=hash(secret);if(actual.length!==row.secret_hash.length||!timingSafeEqual(actual,row.secret_hash))return null;await this.repository.touch(row.id);return {id:row.id,accountId:row.account_id,name:row.name,scopes:row.scopes};}
   list(){return this.repository.list();} revoke(id:string){return this.repository.revoke(id);}
 }
