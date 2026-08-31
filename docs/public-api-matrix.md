@@ -7,6 +7,8 @@ The development audit is reproducible with `node scripts/audit-http-api.mjs`. It
 | GET | `/api/health` | no | runtime | none | 200 | none | none | n/a | 200 |
 | POST | `/api/accounts` | no | identity | email, handle, password, country? | 201 | account | PostgreSQL | unique identity | 201; invalid 400 |
 | POST | `/api/auth/sessions` | no | identity | email, password | 200 | session | identity | n/a | 200; invalid 401 |
+| GET/POST/PATCH/PUT/DELETE | `/api/auth/*` | varies | Better Auth authentication | email/password, Google OAuth, verification, reset, sign-out | provider-defined | Better Auth auth records/session | Better Auth + PostgreSQL | provider-defined | browser/session-safe responses |
+| POST | `/api/me/onboarding` | authenticated Better Auth principal | identity | handle, country? | 201 | Cliqero account mapping | Better Auth identity + identity capability | one mapping | incomplete social identity 201; complete 409 |
 | POST | `/api/listings` | catalogue manager/operator | listing | listing snapshot | 201 | draft listing | identity + catalogue capability | n/a | ordinary account 403 |
 | GET | `/api/listings/:id` | no | listing | path id | 200 | none | listing | n/a | 200; missing 404 |
 | PATCH | `/api/listings/:id` | catalogue manager/operator | listing | partial mutable fields | 200 | updated listing | listing + catalogue capability | n/a | ordinary account 403 |

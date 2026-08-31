@@ -1,11 +1,8 @@
 import type { Account } from "@/modules/identity/account";
-import { bearerCredential } from "@/modules/identity/authentication";
 import { getContainer } from "@/infrastructure/container";
 
 export async function authenticatedAccount(request:Request):Promise<Account|null> {
-  const bearer=bearerCredential(request);
-  const cookie=request.headers.get("cookie")?.split(";").map(part=>part.trim()).find(part=>part.startsWith("cliqero_session="))?.slice(16);
-  const token=bearer??cookie; return token?getContainer().authentication.authenticate(token):null;
+  return getContainer().authentication.authenticateRequest(request);
 }
 export function referralAttributionSource(request:Request):string|undefined {
   return request.headers.get("cookie")?.split(";").map(part=>part.trim())

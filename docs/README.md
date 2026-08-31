@@ -37,6 +37,7 @@ This product-model correction does **not** change the previously established arc
 10. [Investor and Business Overview](./10-investor-business-overview.md) — productless business model, seller/referrer/buyer value, economics, network effects, and expansion principle.
 11. [Initial Production Scope](./11-initial-production-scope.md) — production V1 and build order centered on listing -> checkout -> purchase -> entitlement -> access.
 12. [Catalogue, Commission, and Treasury](./catalogue-treasury.md) — privileged catalogue ownership, YAML referral policy, platform allocation, and company treasury.
+13. [Authentication boundary](./authentication.md) — Better Auth sessions and OAuth mapped to the canonical Cliqero account.
 
 ## Architectural principle
 

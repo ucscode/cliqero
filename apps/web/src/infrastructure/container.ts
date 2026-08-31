@@ -111,7 +111,7 @@ export function createContainer(databaseUrl:string) {
   const operators=new OperatorAuthorizationService(database);
   return {database,accounts,listings,listingMediaRepository,objectStorage,listingMedia,listingMediaDeletion,purchases,entitlements,grants,payments,providerEvents,outbox,idempotency,providers,paystack,
     referralGraph,commissionPolicy,referralAttributionRepository,referralAttribution,
-    authentication:new AuthenticationService(database),authorization:new AuthorizationPolicy(),integrations:new IntegrationService(database),profiles:new ProfileService(database),accountProjections:new AccountProjectionService(database),
+    authentication:new AuthenticationService(database,databaseUrl),authorization:new AuthorizationPolicy(),integrations:new IntegrationService(database),profiles:new ProfileService(database),accountProjections:new AccountProjectionService(database),
     listingService,listingTransfer,
     legacyProviderCheckout:new CheckoutService(listings,payments,purchases,providers,idempotency,referralAttribution,database,accounts,exchangeRates),
     walletCheckout:new WalletCheckoutService(listings,checkoutRepository,purchases,referralAttribution,database),checkoutRepository,
