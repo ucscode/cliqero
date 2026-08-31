@@ -1,4 +1,4 @@
-import { authenticatedSessionAccount, apiError } from "../../api/http";
+import { authenticatedSessionAccount, apiError } from "../../../api/http";
 import { getContainer } from "@/infrastructure/container";
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const a = await authenticatedSessionAccount(request);

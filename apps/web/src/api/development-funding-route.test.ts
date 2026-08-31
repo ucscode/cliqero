@@ -9,7 +9,7 @@ vi.mock("@/infrastructure/container", () => ({
 import {
   POST,
   developmentFundingVerificationEnabled,
-} from "@/app/api/funding/development/verify/route";
+} from "@/api/compat/funding/development/verify/route";
 
 const sessionAccount = { id: "00000000-0000-4000-8000-000000000001" };
 const otherAccount = { id: "00000000-0000-4000-8000-000000000002" };

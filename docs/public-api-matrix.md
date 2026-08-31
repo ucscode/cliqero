@@ -6,7 +6,6 @@ The development audit is reproducible with `node scripts/audit-http-api.mjs`. It
 | ------------------------- | --------------------------------- | ----------------------------------- | -------------------------- | ----------------------------------------------------------- | ---------------: | ------------------------------------------------------------- | ------------------------------------------ | --------------------- | ----------------------------------------------------------- |
 | GET                       | `/api/health`                     | no                                  | runtime                    | none                                                        |              200 | none                                                          | none                                       | n/a                   | 200                                                         |
 | POST                      | `/api/accounts`                   | no                                  | identity                   | email, handle, password, country?                           |              201 | account                                                       | PostgreSQL                                 | unique identity       | 201; invalid 400                                            |
-| POST                      | `/api/auth/sessions`              | no                                  | identity                   | email, password                                             |              200 | session                                                       | identity                                   | n/a                   | 200; invalid 401                                            |
 | GET/POST/PATCH/PUT/DELETE | `/api/auth/*`                     | varies                              | Better Auth authentication | email/password, Google OAuth, verification, reset, sign-out | provider-defined | Better Auth auth records/session                              | Better Auth + PostgreSQL                   | provider-defined      | browser/session-safe responses                              |
 | POST                      | `/api/me/onboarding`              | authenticated Better Auth principal | identity                   | handle, country?                                            |              201 | Cliqero account mapping                                       | Better Auth identity + identity capability | one mapping           | incomplete social identity 201; complete 409                |
 | POST                      | `/api/listings`                   | catalogue manager/operator          | listing                    | listing snapshot                                            |              201 | draft listing                                                 | identity + catalogue capability            | n/a                   | ordinary account 403                                        |
@@ -80,11 +79,13 @@ Catalogue management is also available under `/api/operator/listings` (including
 
 ## Headless Hono surface
 
-Hono is the authoritative router for the Cliqero application API. The legacy
-Next route files listed below are compatibility adapters that share the same
-application handlers; they are not a second business implementation. Better
-Auth protocol endpoints, provider webhook ingress, and browser redirect routes
-(including the legacy listing-access alias) are explicit exceptions.
+Hono is the sole authoritative router for the Cliqero application API. The
+compatibility handler modules under `src/api/compat` share the same application
+handlers but are not public Next.js routes or a second business implementation.
+Better Auth protocol endpoints and provider webhook ingress are explicit
+framework/protocol exceptions. Browser redirect routes such as
+`/access/:purchaseId` remain outside `/api`; the legacy listing-access alias is
+still an Hono-dispatched compatibility operation.
 Compatibility operations that accept API keys apply the route's declared
 capability scope before invoking the existing account/role/ownership checks;
 session-only and integration-credential routes reject API-key principals.
@@ -101,5 +102,5 @@ session-only and integration-credential routes reject API-key principals.
 | POST   | `/api/operator/api-keys/{id}/revoke`         | operator                                         | API-key command        | Revokes without deleting history                               |
 
 These routes use a unified `ApiPrincipal` resolved from Better Auth cookies or
-hashed database API keys. Existing Next handlers remain compatibility routes
-until each capability is migrated without changing its domain service.
+hashed database API keys. Compatibility handlers are invoked only after Hono
+route matching and authorization, without changing their domain services.

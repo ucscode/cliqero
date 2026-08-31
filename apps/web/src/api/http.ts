@@ -16,6 +16,7 @@ export async function authenticatedSessionAccount(request: Request): Promise<Acc
   const principal = await authenticatedPrincipal(request);
   return principal?.kind === "user_session" ? principal.account : null;
 }
+
 export function referralAttributionSource(request: Request): string | undefined {
   return request.headers
     .get("cookie")
@@ -24,6 +25,7 @@ export function referralAttributionSource(request: Request): string | undefined 
     .find((part) => part.startsWith("cliqero_attribution="))
     ?.slice("cliqero_attribution=".length);
 }
+
 export function apiError(error: unknown): Response {
   const message = error instanceof Error ? error.message : "Request failed";
   const status =

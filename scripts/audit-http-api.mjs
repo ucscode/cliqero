@@ -35,6 +35,13 @@ async function callRaw(method, path, { token, body, headers = {} } = {}) {
 }
 const password = "development-password-123";
 await call("GET", "/api/health");
+const headHealth = await call("HEAD", "/api/health");
+if (headHealth.response.status !== 405) throw new Error("HEAD was not delegated to Hono");
+const optionsHealth = await call("OPTIONS", "/api/health");
+if (optionsHealth.response.status !== 405) throw new Error("OPTIONS was not delegated to Hono");
+const removedGateway = await call("GET", "/api/gateway");
+if (removedGateway.response.status !== 404)
+  throw new Error("Removed gateway route is still public");
 const openApi = await call("GET", "/api/openapi.json");
 if (
   !openApi.value?.paths?.["/api/listings"] ||
@@ -53,11 +60,11 @@ const sellerAccount = await call("POST", "/api/accounts", {
 await call("POST", "/api/accounts", {
   body: { email: buyerEmail, handle: `b${suffix}`.slice(0, 31), password, country: "NG" },
 });
-await call("POST", "/api/auth/sessions", { body: { email: buyerEmail, password: "wrong" } });
-const sellerLogin = await call("POST", "/api/auth/sessions", {
+await call("POST", "/api/auth/sign-in/email", { body: { email: buyerEmail, password: "wrong" } });
+const sellerLogin = await call("POST", "/api/auth/sign-in/email", {
   body: { email: sellerEmail, password },
 });
-const buyerLogin = await call("POST", "/api/auth/sessions", {
+const buyerLogin = await call("POST", "/api/auth/sign-in/email", {
   body: { email: buyerEmail, password },
 });
 const seller = sellerLogin.value.token,

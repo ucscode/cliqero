@@ -10,8 +10,8 @@ Better Auth browser sessions and hashed Cliqero API keys both resolve to one
 `ApiPrincipal` containing the canonical Cliqero `accountId`, Cliqero roles, and
 (for keys) explicit scopes. A key cannot elevate its owner's authorization.
 Secrets are returned once at creation and never persisted or logged in
-plaintext. Existing Next route handlers remain compatibility routes while
-capability endpoints migrate incrementally.
+plaintext. Compatibility handler modules are internal adapters and are not
+independently routable Next.js endpoints.
 
 The API-key scope registry is capability-oriented and finite: `hierarchy:read`,
 `hierarchy:admin`, `api_keys:manage`, `catalogue:read`, `catalogue:manage`,
@@ -29,19 +29,20 @@ role.
 
 ## API route ownership
 
-The compatibility route modules under `src/app/api` are invoked by the same
-Hono dispatch registry while clients migrate. They are not alternate business
-implementations. Better Auth's `/api/auth/[...all]` protocol handler remains a
-Next.js exception because it owns its protocol, and Paystack webhook ingress
-remains provider-specific so raw-body/signature verification is preserved.
-Browser navigation routes such as `/access/{purchaseId}` and the legacy
-`/api/listings/{id}/access` redirect alias are also intentionally outside the
-JSON API.
+The compatibility route modules under `src/api/compat` are invoked only by the
+Hono dispatch registry. They are not alternate business implementations or
+independently routable Next.js endpoints. Better Auth's `/api/auth/[...all]`
+protocol handler remains a Next.js exception because it owns its protocol, and
+Paystack webhook ingress remains provider-specific so raw-body/signature
+verification is preserved. Browser navigation routes such as
+`/access/{purchaseId}` remain outside the JSON API; the legacy
+`/api/listings/{id}/access` redirect alias is dispatched through Hono with the
+same session-only guard as the canonical browser route.
 
 All ordinary Cliqero application API paths (catalogue, wallet, checkout,
 purchases, referrals, earnings, withdrawals, treasury, integrations, and
 operator commands) are represented in the generated OpenAPI document and enter
-through Hono before the shared application handlers run.
+through the single Hono catch-all before the shared application handlers run.
 
 ## Hierarchy read model
 

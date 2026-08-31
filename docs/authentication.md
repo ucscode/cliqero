@@ -34,9 +34,9 @@ The canonical browser endpoints are Better Auth's `/api/auth/*` routes,
 including sign-up, sign-in, sign-out, OAuth callbacks, verification and reset
 password. Sessions use Better Auth's HTTP-only `better-auth.session_token`
 cookie with SameSite protection and secure cookies in HTTPS production. The
-legacy `/api/auth/sessions` endpoint remains a compatibility facade and returns
-the Better Auth bearer token for existing API clients; it forwards the Better
-Auth cookie policy rather than creating a second session format.
+The former `/api/auth/sessions` compatibility facade is retired; clients use
+Better Auth's canonical protocol endpoints directly rather than maintaining a
+second login implementation.
 
 Required production settings are:
 

@@ -1,64 +1,64 @@
-import * as accessVerify from "@/app/api/access/verify/route";
-import * as accounts from "@/app/api/accounts/route";
-import * as authSessions from "@/app/api/auth/sessions/route";
-import * as checkout from "@/app/api/checkout/route";
-import * as checkoutById from "@/app/api/checkout/[id]/route";
-import * as earnings from "@/app/api/earnings/route";
-import * as earningsEntries from "@/app/api/earnings/entries/route";
-import * as developmentFundingVerify from "@/app/api/funding/development/verify/route";
-import * as health from "@/app/api/health/route";
-import * as integrations from "@/app/api/integrations/route";
-import * as integrationById from "@/app/api/integrations/[id]/route";
-import * as integrationRotate from "@/app/api/integrations/[id]/rotate/route";
-import * as listings from "@/app/api/listings/route";
-import * as listingById from "@/app/api/listings/[id]/route";
-import * as listingMedia from "@/app/api/listings/[id]/media/route";
-import * as listingMediaById from "@/app/api/listings/[id]/media/[mediaId]/route";
-import * as listingPublish from "@/app/api/listings/[id]/publish/route";
-import * as listingReferralLink from "@/app/api/listings/[id]/referral-link/route";
-import * as listingRestore from "@/app/api/listings/[id]/restore/route";
-import * as listingExport from "@/app/api/listings/export/route";
-import * as listingImport from "@/app/api/listings/import/route";
-import * as myListings from "@/app/api/me/listings/route";
-import * as onboarding from "@/app/api/me/onboarding/route";
-import * as profile from "@/app/api/me/profile/route";
-import * as operatorDistributionPolicy from "@/app/api/operator/distribution-policy/route";
-import * as operatorListings from "@/app/api/operator/listings/route";
-import * as operatorListingById from "@/app/api/operator/listings/[id]/route";
-import * as operatorListingMedia from "@/app/api/operator/listings/[id]/media/route";
-import * as operatorListingMediaById from "@/app/api/operator/listings/[id]/media/[mediaId]/route";
-import * as operatorListingPublish from "@/app/api/operator/listings/[id]/publish/route";
-import * as operatorListingRestore from "@/app/api/operator/listings/[id]/restore/route";
-import * as operatorListingExport from "@/app/api/operator/listings/export/route";
-import * as operatorListingImport from "@/app/api/operator/listings/import/route";
-import * as operatorPaystackEvents from "@/app/api/operator/paystack/events/route";
-import * as operatorPaystackReconcile from "@/app/api/operator/paystack/reconcile/route";
-import * as operatorPurchaseReverse from "@/app/api/operator/purchases/reverse/route";
-import * as operatorSettlement from "@/app/api/operator/settlement/route";
-import * as operatorTreasury from "@/app/api/operator/treasury/route";
-import * as operatorTreasuryEntries from "@/app/api/operator/treasury/entries/route";
-import * as operatorTreasuryEntry from "@/app/api/operator/treasury/entries/[id]/route";
-import * as operatorTreasuryExpenses from "@/app/api/operator/treasury/expenses/route";
-import * as operatorWithdrawals from "@/app/api/operator/withdrawals/route";
-import * as operatorWithdrawal from "@/app/api/operator/withdrawals/[id]/route";
-import * as operatorWithdrawalApprove from "@/app/api/operator/withdrawals/[id]/approve/route";
-import * as operatorWithdrawalComplete from "@/app/api/operator/withdrawals/[id]/complete/route";
-import * as operatorWithdrawalPayout from "@/app/api/operator/withdrawals/[id]/payout/route";
-import * as operatorWithdrawalPayoutReconcile from "@/app/api/operator/withdrawals/[id]/payout/reconcile/route";
-import * as operatorWithdrawalReject from "@/app/api/operator/withdrawals/[id]/reject/route";
-import * as purchases from "@/app/api/purchases/route";
-import * as purchaseById from "@/app/api/purchases/[id]/route";
-import * as referralLinks from "@/app/api/referral-links/route";
-import * as referralLinkById from "@/app/api/referral-links/[id]/route";
-import * as referralDirect from "@/app/api/referrals/direct/route";
-import * as referralDownline from "@/app/api/referrals/downline/route";
-import * as referralParent from "@/app/api/referrals/parent/route";
-import * as referralUplines from "@/app/api/referrals/uplines/route";
-import * as wallet from "@/app/api/wallet/route";
-import * as walletFunding from "@/app/api/wallet/fund/route";
-import * as walletTransactions from "@/app/api/wallet/transactions/route";
-import * as withdrawals from "@/app/api/withdrawals/route";
-import * as withdrawalById from "@/app/api/withdrawals/[id]/route";
+import * as accessVerify from "@/api/compat/access/verify/route";
+import * as accounts from "@/api/compat/accounts/route";
+import * as checkout from "@/api/compat/checkout/route";
+import * as checkoutById from "@/api/compat/checkout/[id]/route";
+import * as earnings from "@/api/compat/earnings/route";
+import * as earningsEntries from "@/api/compat/earnings/entries/route";
+import * as developmentFundingVerify from "@/api/compat/funding/development/verify/route";
+import * as health from "@/api/compat/health/route";
+import * as integrations from "@/api/compat/integrations/route";
+import * as integrationById from "@/api/compat/integrations/[id]/route";
+import * as integrationRotate from "@/api/compat/integrations/[id]/rotate/route";
+import * as listings from "@/api/compat/listings/route";
+import * as listingById from "@/api/compat/listings/[id]/route";
+import * as listingAccess from "@/api/compat/listings/[id]/access/route";
+import * as listingMedia from "@/api/compat/listings/[id]/media/route";
+import * as listingMediaById from "@/api/compat/listings/[id]/media/[mediaId]/route";
+import * as listingPublish from "@/api/compat/listings/[id]/publish/route";
+import * as listingReferralLink from "@/api/compat/listings/[id]/referral-link/route";
+import * as listingRestore from "@/api/compat/listings/[id]/restore/route";
+import * as listingExport from "@/api/compat/listings/export/route";
+import * as listingImport from "@/api/compat/listings/import/route";
+import * as myListings from "@/api/compat/me/listings/route";
+import * as onboarding from "@/api/compat/me/onboarding/route";
+import * as profile from "@/api/compat/me/profile/route";
+import * as operatorDistributionPolicy from "@/api/compat/operator/distribution-policy/route";
+import * as operatorListings from "@/api/compat/operator/listings/route";
+import * as operatorListingById from "@/api/compat/operator/listings/[id]/route";
+import * as operatorListingMedia from "@/api/compat/operator/listings/[id]/media/route";
+import * as operatorListingMediaById from "@/api/compat/operator/listings/[id]/media/[mediaId]/route";
+import * as operatorListingPublish from "@/api/compat/operator/listings/[id]/publish/route";
+import * as operatorListingRestore from "@/api/compat/operator/listings/[id]/restore/route";
+import * as operatorListingExport from "@/api/compat/operator/listings/export/route";
+import * as operatorListingImport from "@/api/compat/operator/listings/import/route";
+import * as operatorPaystackEvents from "@/api/compat/operator/paystack/events/route";
+import * as operatorPaystackReconcile from "@/api/compat/operator/paystack/reconcile/route";
+import * as operatorPurchaseReverse from "@/api/compat/operator/purchases/reverse/route";
+import * as operatorSettlement from "@/api/compat/operator/settlement/route";
+import * as operatorTreasury from "@/api/compat/operator/treasury/route";
+import * as operatorTreasuryEntries from "@/api/compat/operator/treasury/entries/route";
+import * as operatorTreasuryEntry from "@/api/compat/operator/treasury/entries/[id]/route";
+import * as operatorTreasuryExpenses from "@/api/compat/operator/treasury/expenses/route";
+import * as operatorWithdrawals from "@/api/compat/operator/withdrawals/route";
+import * as operatorWithdrawal from "@/api/compat/operator/withdrawals/[id]/route";
+import * as operatorWithdrawalApprove from "@/api/compat/operator/withdrawals/[id]/approve/route";
+import * as operatorWithdrawalComplete from "@/api/compat/operator/withdrawals/[id]/complete/route";
+import * as operatorWithdrawalPayout from "@/api/compat/operator/withdrawals/[id]/payout/route";
+import * as operatorWithdrawalPayoutReconcile from "@/api/compat/operator/withdrawals/[id]/payout/reconcile/route";
+import * as operatorWithdrawalReject from "@/api/compat/operator/withdrawals/[id]/reject/route";
+import * as purchases from "@/api/compat/purchases/route";
+import * as purchaseById from "@/api/compat/purchases/[id]/route";
+import * as referralLinks from "@/api/compat/referral-links/route";
+import * as referralLinkById from "@/api/compat/referral-links/[id]/route";
+import * as referralDirect from "@/api/compat/referrals/direct/route";
+import * as referralDownline from "@/api/compat/referrals/downline/route";
+import * as referralParent from "@/api/compat/referrals/parent/route";
+import * as referralUplines from "@/api/compat/referrals/uplines/route";
+import * as wallet from "@/api/compat/wallet/route";
+import * as walletFunding from "@/api/compat/wallet/fund/route";
+import * as walletTransactions from "@/api/compat/wallet/transactions/route";
+import * as withdrawals from "@/api/compat/withdrawals/route";
+import * as withdrawalById from "@/api/compat/withdrawals/[id]/route";
 import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import type { ApiScope } from "@/modules/identity/api-scopes";
 
@@ -81,7 +81,6 @@ export type LegacyRouteAccess = {
 const routes: LegacyRoute[] = [
   { pattern: "/api/access/verify", module: accessVerify },
   { pattern: "/api/accounts", module: accounts },
-  { pattern: "/api/auth/sessions", module: authSessions },
   { pattern: "/api/checkout/:id", module: checkoutById },
   { pattern: "/api/checkout", module: checkout },
   { pattern: "/api/earnings/entries", module: earningsEntries },
@@ -93,6 +92,7 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/integrations", module: integrations },
   { pattern: "/api/listings/:id/media/:mediaId", module: listingMediaById },
   { pattern: "/api/listings/:id/media", module: listingMedia },
+  { pattern: "/api/listings/:id/access", module: listingAccess },
   { pattern: "/api/listings/:id/publish", module: listingPublish },
   { pattern: "/api/listings/:id/referral-link", module: listingReferralLink },
   { pattern: "/api/listings/:id/restore", module: listingRestore },
@@ -148,8 +148,8 @@ const routes: LegacyRoute[] = [
 const publicMethods = new Set(["GET"]);
 const publicPaths = new Set(["/api/health", "/api/listings", "/api/listings/:id"]);
 const sessionOnlyPaths = new Set([
-  "/api/auth/sessions",
   "/api/funding/development/verify",
+  "/api/listings/:id/access",
   "/api/integrations",
   "/api/integrations/:id",
   "/api/integrations/:id/rotate",
@@ -158,8 +158,7 @@ const sessionOnlyPaths = new Set([
 ]);
 
 function routeAccess(pattern: string, method: string): LegacyRouteAccess {
-  if (pattern === "/api/accounts" || pattern === "/api/auth/sessions")
-    return { mode: "anonymous", apiKey: "reject" };
+  if (pattern === "/api/accounts") return { mode: "anonymous", apiKey: "reject" };
   if (pattern === "/api/access/verify") return { mode: "integration_credential" };
   if (publicPaths.has(pattern) && publicMethods.has(method)) {
     return { mode: "anonymous", apiKey: "allow" };
@@ -274,14 +273,14 @@ export async function dispatchLegacyApi(
     const params = matchRoute(route.pattern, pathname);
     if (!params) continue;
     const access = routeAccess(route.pattern, request.method);
-    const denied = authorizeLegacyRequest(request, principal, access);
-    if (denied) return denied;
     const handler = route.module[request.method] as Handler | undefined;
     if (!handler)
       return Response.json(
         { error: "Method not allowed", code: "method_not_allowed" },
         { status: 405 },
       );
+    const denied = authorizeLegacyRequest(request, principal, access);
+    if (denied) return denied;
     return handler(request, { params: Promise.resolve(params) });
   }
   return null;

@@ -441,9 +441,9 @@ export function createApiApp(container: ApplicationContainer) {
     },
   );
 
-  // Existing Next route handlers are compatibility adapters around the same
-  // application services. This final Hono fallback makes the application API
-  // enter through one router while the route modules are migrated incrementally.
+  // Compatibility handlers are internal adapters around the same application
+  // services. This fallback keeps one authoritative HTTP router while legacy
+  // Request/Response contracts remain available to existing clients.
   app.all("/api/*", async (c) => {
     const response = await dispatchLegacyApi(c.req.raw, c.get("principal"));
     return response ?? c.json({ error: "Not found", code: "not_found" }, 404);

@@ -29,6 +29,15 @@ describe("Hono API foundation", () => {
     expect(paths["/api/listings"]).toBeDefined();
     expect(paths["/api/wallet"]).toBeDefined();
     expect(paths["/api/operator/treasury/entries"]).toBeDefined();
+    expect(paths["/api/gateway"]).toBeUndefined();
+    expect(paths["/api/auth/sessions"]).toBeUndefined();
+    expect(paths["/api/listings"].get).toMatchObject({
+      "x-authentication-mode": "anonymous",
+    });
+    expect(paths["/api/wallet"].get).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "wallet:read",
+    });
   });
   it("returns standardized auth errors and validates requests", async () => {
     const app = appWith();
@@ -65,6 +74,24 @@ describe("Hono API foundation", () => {
     const response = await appWith().fetch(new Request("http://localhost/api/health"));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: "ok", service: "cliqero-main" });
+  });
+  it("returns a canonical not-found response for the removed gateway route", async () => {
+    const response = await appWith().fetch(new Request("http://localhost/api/gateway"));
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Not found", code: "not_found" });
+  });
+  it("lets Hono decide HEAD, OPTIONS, and unsupported method behavior", async () => {
+    const app = appWith();
+    expect(
+      (await app.fetch(new Request("http://localhost/api/health", { method: "HEAD" }))).status,
+    ).toBe(405);
+    expect(
+      (await app.fetch(new Request("http://localhost/api/health", { method: "OPTIONS" }))).status,
+    ).toBe(405);
+    expect(
+      (await app.fetch(new Request("http://localhost/api/not-a-route", { method: "OPTIONS" })))
+        .status,
+    ).toBe(404);
   });
   it("rejects unknown API-key scopes at the HTTP contract", async () => {
     const principal = {
@@ -149,16 +176,6 @@ describe("Hono API foundation", () => {
       mode: "account",
       scope: "withdrawals:manage",
     });
-    expect(
-      authorizeLegacyRequest(
-        new Request("http://localhost/api/auth/sessions", {
-          method: "POST",
-          headers: { authorization: "Bearer cliq_live_test" },
-        }),
-        operatorKey,
-        getLegacyRouteAccess("/api/auth/sessions", "POST")!,
-      )?.status,
-    ).toBe(403);
     const publicDetail = authorizeLegacyRequest(
       new Request("http://localhost/api/listings/00000000-0000-4000-8000-000000000001", {
         method: "GET",

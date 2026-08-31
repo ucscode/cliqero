@@ -6,7 +6,7 @@ vi.mock("@/infrastructure/container", () => ({
   getContainer: () => fixtures.container,
 }));
 
-import { GET } from "@/app/api/listings/[id]/route";
+import { GET } from "@/api/compat/listings/[id]/route";
 
 const listing = {
   id: "00000000-0000-4000-8000-000000000001",

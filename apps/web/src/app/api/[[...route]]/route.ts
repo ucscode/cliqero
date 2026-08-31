@@ -1,14 +1,20 @@
-import { getContainer } from "@/infrastructure/container";
+import { handle } from "hono/vercel";
 import { createApiApp } from "@/api/hono";
+import { getContainer } from "@/infrastructure/container";
+import type { ApplicationContainer } from "@/infrastructure/container";
 
-// The catch-all is the authoritative application API entry point. The more
-// specific route files remain compatibility adapters for existing deployments;
-// their handler modules are registered by the Hono compatibility dispatcher.
 export const runtime = "nodejs";
-async function dispatch(request: Request) {
-  return createApiApp(getContainer()).fetch(request);
-}
-export const GET = dispatch;
-export const POST = dispatch;
-export const PATCH = dispatch;
-export const DELETE = dispatch;
+// Keep container composition request-lazy so Next.js can collect route
+// configuration during builds that do not provide runtime database settings.
+const lazyContainer = new Proxy({} as ApplicationContainer, {
+  get: (_target, property) => Reflect.get(getContainer(), property),
+});
+const app = createApiApp(lazyContainer);
+
+export const GET = handle(app);
+export const HEAD = handle(app);
+export const OPTIONS = handle(app);
+export const POST = handle(app);
+export const PUT = handle(app);
+export const PATCH = handle(app);
+export const DELETE = handle(app);
