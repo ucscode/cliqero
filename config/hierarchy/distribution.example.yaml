@@ -1,0 +1,7 @@
+# Whole-number referral percentages for the platform catalogue.
+distribution:
+  commission:
+    levels:
+      1: 50
+      2: 30
+      3: 10

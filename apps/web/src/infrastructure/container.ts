@@ -59,6 +59,9 @@ import {loadYamlCommissionPolicy} from "@/modules/referral/yaml-policy";
 import {PostgresTreasuryRepository} from "./postgres/treasury";
 import {TreasuryService} from "@/modules/treasury/treasury";
 import {TreasuryProcessor} from "@/processors/treasury";
+import {PostgresApiKeyRepository,ApiKeyService} from "./postgres/api-keys";
+import {ApiPrincipalResolver} from "@/modules/identity/api-principal";
+import {HierarchyService} from "@/application/hierarchy";
 
 export function createContainer(databaseUrl:string) {
   const database=PostgresDatabase.connect(databaseUrl);
@@ -109,9 +112,11 @@ export function createContainer(databaseUrl:string) {
   const walletAvailability=new WalletAvailabilityProcessor(walletRepository,database);const checkoutPayment=new CheckoutPaymentProcessor(checkoutRepository,walletRepository,purchases,database);
   const entitlementIssuance=new EntitlementIssuanceProcessor(purchases,entitlements,database);
   const operators=new OperatorAuthorizationService(database);
+  const authentication=new AuthenticationService(database,databaseUrl);
+  const apiKeyRepository=new PostgresApiKeyRepository(database);const apiKeys=new ApiKeyService(apiKeyRepository,database);const principalResolver=new ApiPrincipalResolver(authentication,apiKeys,database);
   return {database,accounts,listings,listingMediaRepository,objectStorage,listingMedia,listingMediaDeletion,purchases,entitlements,grants,payments,providerEvents,outbox,idempotency,providers,paystack,
     referralGraph,commissionPolicy,referralAttributionRepository,referralAttribution,
-    authentication:new AuthenticationService(database,databaseUrl),authorization:new AuthorizationPolicy(),integrations:new IntegrationService(database),profiles:new ProfileService(database),accountProjections:new AccountProjectionService(database),
+    authentication,apiKeys,principalResolver,authorization:new AuthorizationPolicy(),integrations:new IntegrationService(database),profiles:new ProfileService(database),accountProjections:new AccountProjectionService(database),
     listingService,listingTransfer,
     legacyProviderCheckout:new CheckoutService(listings,payments,purchases,providers,idempotency,referralAttribution,database,accounts,exchangeRates),
     walletCheckout:new WalletCheckoutService(listings,checkoutRepository,purchases,referralAttribution,database),checkoutRepository,
@@ -124,7 +129,7 @@ export function createContainer(databaseUrl:string) {
     paystackInspection:new PaystackOperationsInspectionService(paymentOperations,operators),
     settlementPolicy,settlement,reversals,purchaseReversal:new PurchaseReversalProcessor(purchases,ledger,reversals,outbox,database),
     withdrawalRepository,withdrawalPolicy,fundsReservation,withdrawals,payoutProviders,payoutRepository,payoutExecution,paystackPayout,exchangeRates,
-    buyerAccess:new BuyerAccessService(access,listings,database,purchases,entitlements),access};
+    buyerAccess:new BuyerAccessService(access,listings,database,purchases,entitlements),access,hierarchy:new HierarchyService(database)};
 }
 export type ApplicationContainer=ReturnType<typeof createContainer>;
 

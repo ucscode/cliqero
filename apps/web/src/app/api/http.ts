@@ -1,5 +1,11 @@
 import type { Account } from "@/modules/identity/account";
+import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import { getContainer } from "@/infrastructure/container";
+
+/** Shared authentication boundary for capability routes migrating to Hono. */
+export async function authenticatedPrincipal(request:Request):Promise<ApiPrincipal|null> {
+  return getContainer().principalResolver.resolve(request);
+}
 
 export async function authenticatedAccount(request:Request):Promise<Account|null> {
   return getContainer().authentication.authenticateRequest(request);

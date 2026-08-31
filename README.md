@@ -41,7 +41,7 @@ URL composition; provider-specific settings and credentials remain in their capa
 ### Configuration hierarchy
 
 1. Platform-wide deployment values belong in `.env` (for example `APP_URL` and PostgreSQL settings).
-2. Provider-specific values belong in `config/modules/<capability>/<provider>.yaml`.
+2. Provider-specific values belong in `config/modules/<capability>/<provider>.yaml`; hierarchy policies belong in `config/hierarchy/`.
 3. Tracked `*.example.yaml` files are safe templates; real provider YAML files are local and ignored by
    `config/.gitignore`.
 4. YAML may explicitly reference shared environment values with `%env(NAME)%`; environment variables never implicitly
@@ -83,7 +83,7 @@ server-side. Purchases snapshot the resolved attribution, link, and referrer IDs
 
 The outbox worker consumes `purchase.completed` and atomically writes one immutable purchase distribution with referral
 credits and a platform remainder. New wallet purchases read validated percentage levels from
-`config/modules/distribution.yaml`; missing upline levels remain with the platform and no seller credit is created.
+`config/hierarchy/distribution.yaml`; missing upline levels remain with the platform and no seller credit is created.
 Amounts are canonical USD bigint cents and every distribution stores the applied policy snapshot. A separate treasury
 processor converts each platform allocation into one append-only treasury credit; operator expenses are append-only
 debits and corrections are compensating entries. Wallet, earnings, and treasury balances are projections over separate

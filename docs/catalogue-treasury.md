@@ -8,7 +8,7 @@ Listings transition explicitly through `draft → published → archived`; resto
 
 ## Commission policy
 
-New wallet-paid purchase distributions read `config/modules/distribution.yaml`. The YAML shape is:
+New wallet-paid purchase distributions read `config/hierarchy/distribution.yaml`. The YAML shape is:
 
 ```yaml
 distribution:
@@ -27,4 +27,4 @@ All platform accounting is canonical USD minor units (`$10.00 = 1000`). Referral
 
 Wallet, user earnings, and treasury balances are projections over their own immutable facts. They are separate account classes: wallet deposits are spendable for purchases but are not seller earnings or automatically withdrawable. Treasury processing can fail or restart without invalidating a completed purchase, entitlement, distribution, or referral earnings.
 
-Treasury operator APIs are `GET /api/operator/treasury`, `GET /api/operator/treasury/entries`, `GET /api/operator/treasury/entries/:id`, `POST /api/operator/treasury/entries`, and the compatibility `POST /api/operator/treasury/expenses` debit shortcut. Treasury entries are immutable facts; no update/delete API exists. Manual entries normally have no `source_kind` or `source_id`; those fields remain reserved for deterministic machine-originated relationships such as a distribution's platform allocation. Distribution configuration is mandatory at `config/modules/distribution.yaml`; `levels: {}` and `levels: null` deliberately disable referral commissions, while an incomplete structure is invalid.
+Treasury operator APIs are `GET /api/operator/treasury`, `GET /api/operator/treasury/entries`, `GET /api/operator/treasury/entries/:id`, `POST /api/operator/treasury/entries`, and the compatibility `POST /api/operator/treasury/expenses` debit shortcut. Treasury entries are immutable facts; no update/delete API exists. Manual entries normally have no `source_kind` or `source_id`; those fields remain reserved for deterministic machine-originated relationships such as a distribution's platform allocation. Distribution configuration is mandatory at `config/hierarchy/distribution.yaml`; `levels: {}` and `levels: null` deliberately disable referral commissions, while an incomplete structure is invalid.

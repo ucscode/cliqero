@@ -1,0 +1,5 @@
+# Maximum descendant window returned by the hierarchy read API.
+hierarchy:
+  visualization:
+    depth: 3
+    child_limit: 50

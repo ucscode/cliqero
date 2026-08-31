@@ -76,3 +76,18 @@ The audit intentionally does not call a live payment or payout provider.
 | GET | `/api/earnings`, `/api/earnings/entries` | account | immutable projection | Earnings summary and append-only entry history |
 
 Catalogue management is also available under `/api/operator/listings` (including publish, restore, media, import, and export) for accounts with `catalogue_manager` or `operator`. Company treasury is operator-only: `GET /api/operator/treasury`, `GET /api/operator/treasury/entries`, `GET /api/operator/treasury/entries/:id`, `POST /api/operator/treasury/entries`, and compatibility `POST /api/operator/treasury/expenses`. Treasury entries are immutable facts; corrections are ordinary opposite-direction entries with explanatory titles/notes, and no update/delete API exists.
+
+## Headless Hono surface
+
+| Method | Path | Auth | Capability | Notes |
+|---|---|---|---|---|
+| GET | `/api/openapi.json` | no | API contract | Generated from Hono/Zod route contracts |
+| GET | `/api/hierarchy/tree` | account or API key (`hierarchy:read`) | hierarchy projection | Configured depth and child window; optional root |
+| GET | `/api/hierarchy/search` | account or API key (`hierarchy:read`) | hierarchy search | SQL-scoped descendant search; operators global |
+| POST | `/api/operator/api-keys` | operator | API-key command | Secret returned once; scopes are explicit |
+| GET | `/api/operator/api-keys` | operator | API-key projection | Never returns secrets or hashes |
+| POST | `/api/operator/api-keys/{id}/revoke` | operator | API-key command | Revokes without deleting history |
+
+These routes use a unified `ApiPrincipal` resolved from Better Auth cookies or
+hashed database API keys. Existing Next handlers remain compatibility routes
+until each capability is migrated without changing its domain service.
