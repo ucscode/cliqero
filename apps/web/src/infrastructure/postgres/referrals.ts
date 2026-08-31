@@ -7,6 +7,19 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
   async assignParent(childAccountId:string,parentAccountId:string):Promise<void>{
     await this.sql.query(`insert into referral_capability.account_referrals(child_account_id,parent_account_id) values($1,$2)`,[childAccountId,parentAccountId]);
   }
+  async reassignParent(childAccountId:string,parentAccountId:string):Promise<{changed:boolean;previousParentId:string|null}>{
+    // Serialize the read/no-op/update decision with the database hierarchy guard.
+    await this.sql.query(`select pg_advisory_xact_lock(hashtext('cliqero:referral-graph-mutation'))`);
+    const current=(await this.sql.query<{parent_account_id:string}>(
+      `select parent_account_id from referral_capability.account_referrals where child_account_id=$1 for update`,[childAccountId])).rows[0];
+    if(!current){
+      await this.sql.query(`insert into referral_capability.account_referrals(child_account_id,parent_account_id) values($1,$2)`,[childAccountId,parentAccountId]);
+      return {changed:true,previousParentId:null};
+    }
+    if(current.parent_account_id===parentAccountId)return {changed:false,previousParentId:current.parent_account_id};
+    await this.sql.query(`update referral_capability.account_referrals set parent_account_id=$2 where child_account_id=$1`,[childAccountId,parentAccountId]);
+    return {changed:true,previousParentId:current.parent_account_id};
+  }
   async getUplines(accountId:string,maxDepth:number):Promise<readonly ReferralLevel[]>{
     assertTraversalDepth(maxDepth);
     const result=await this.sql.query<{account_id:string;depth:number}>(

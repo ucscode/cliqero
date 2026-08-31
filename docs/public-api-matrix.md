@@ -23,7 +23,7 @@ The development audit is reproducible with `node scripts/audit-http-api.mjs`. It
 | GET | `/access/:purchaseId` | buyer | access | purchase id | 307 | opaque grant | purchase, entitlement, listing | optional grant key | pending purchase denied 404; success covered in integration |
 | GET | `/api/listings/:id/access` | buyer | access (legacy alias) | listing id | 307 | opaque grant | entitlement/listing | optional grant key | no entitlement 404 |
 | POST | `/api/listings/:id/referral-link` | account | referral | listing id | 201 | referral link | listing/referral | stable link | 201 |
-| POST | `/api/referrals/parent` | account | referral | parent account id | 204 | immutable parent edge | identity/referral | unique child | 204 |
+| POST | `/api/referrals/parent` | account | referral | parent account id | 204 | initial self-parent assignment; reassignment is operator-only | identity/referral | unique child | 204 |
 | GET | `/api/referrals/direct` | account | referral | cursor/limit | 200 | none | referral | n/a | 200 |
 | GET | `/api/referrals/downline` | account | referral | depth/cursor/limit | 200 | none | referral | n/a | 200 |
 | GET | `/api/referrals/uplines` | account | referral | none | 200 | none | referral | n/a | 200 |
@@ -85,6 +85,7 @@ Catalogue management is also available under `/api/operator/listings` (including
 | GET | `/api/hierarchy/tree` | account or API key (`hierarchy:read`) | hierarchy projection | Configured depth and child window; optional root |
 | GET | `/api/hierarchy/search` | account or API key (`hierarchy:read`) | hierarchy search | SQL-scoped descendant search; operators global |
 | GET | `/api/hierarchy/children/{parentId}` | account or API key (`hierarchy:read`) | hierarchy continuation | Stable UUID cursor; server-controlled child batch size |
+| PUT | `/api/operator/hierarchy/{accountId}/parent` | operator or operator API key (`hierarchy:admin`) | hierarchy command | Assign/reassign one parent; PostgreSQL rejects cycles; audited |
 | POST | `/api/operator/api-keys` | operator | API-key command | Secret returned once; scopes are explicit |
 | GET | `/api/operator/api-keys` | operator | API-key projection | Never returns secrets or hashes |
 | POST | `/api/operator/api-keys/{id}/revoke` | operator | API-key command | Revokes without deleting history |

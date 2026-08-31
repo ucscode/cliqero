@@ -5,6 +5,7 @@ export interface ReferralLevel {accountId:Id;depth:number;}
 export interface ReferralPage {accounts:readonly Id[];nextCursor:Id|null;}
 export interface ReferralGraphRepository {
   assignParent(childAccountId:Id,parentAccountId:Id):Promise<void>;
+  reassignParent(childAccountId:Id,parentAccountId:Id):Promise<{changed:boolean;previousParentId:Id|null}>;
   getUplines(accountId:Id,maxDepth:number):Promise<readonly ReferralLevel[]>;
   getDirectReferrals(accountId:Id,page:{after?:Id;limit:number}):Promise<ReferralPage>;
   getDownlineAtDepth(accountId:Id,depth:number,page:{after?:Id;limit:number}):Promise<ReferralPage>;

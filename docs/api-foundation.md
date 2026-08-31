@@ -30,8 +30,18 @@ child limit per batch. Normal users may choose self or any descendant as root;
 operators may choose any account, but both receive the same bounded window. A
 direct upline is context only and cannot become a normal user's traversal root.
 Search is constrained in SQL to the user's entire descendant closure; operators
-may search globally. Re-parenting remains intentionally deferred because parent
-relationships are immutable graph facts.
+may search globally. Parent reassignment is restricted to the operator command
+below; ordinary users cannot mutate graph relationships.
+
+Operator-controlled parent reassignment is now available at
+`PUT /api/operator/hierarchy/{accountId}/parent` with
+`{"parent_account_id":"..."}`. It changes only the selected adjacency-list
+row; descendants are not rewritten and existing financial snapshots are never
+changed. PostgreSQL advisory locking, recursive cycle validation, account
+foreign keys, and an audit record protect the mutation. Deleting referral
+relationships remains blocked; use the command only for valid assignment or
+reassignment. Operator API keys require the `hierarchy:admin` scope in addition
+to the operator role.
 
 The mandatory operational commission file is
 `config/hierarchy/distribution.yaml`; the tracked example is only a template

@@ -22,18 +22,61 @@ suite("referral graph and trusted purchase attribution",()=>{
     await app.referralGraphService.establish(c.id,a.id);await app.referralGraphService.establish(d.id,a.id);await app.referralGraphService.establish(e.id,c.id);
     return {root,a,b,c,d,e};}
 
-  it("enforces one immutable parent and rejects self-referral",async()=>{
+  it("keeps normal parent assignment insert-only while operators can reassign",async()=>{
     const child=await account("child"),parent=await account("parent"),other=await account("other");
     await app.referralGraphService.establish(child.id,parent.id);
     await expect(app.referralGraphService.establish(child.id,other.id)).rejects.toThrow();
     await expect(app.referralGraphService.establish(child.id,parent.id)).rejects.toThrow();
     await expect(app.referralGraphService.establish(child.id,child.id)).rejects.toThrow("Self-referral");
-    await expect(app.database.query(`update referral_capability.account_referrals set parent_account_id=$2 where child_account_id=$1`,[child.id,other.id])).rejects.toThrow("immutable");
+    await app.database.query(`update referral_capability.account_referrals set parent_account_id=$2 where child_account_id=$1`,[child.id,other.id]);
+    expect((await app.database.query<{parent_account_id:string}>(`select parent_account_id from referral_capability.account_referrals where child_account_id=$1`,[child.id])).rows[0].parent_account_id).toBe(other.id);
+    await expect(app.database.query(`delete from referral_capability.account_referrals where child_account_id=$1`,[child.id])).rejects.toThrow("deletion");
   });
   it("rejects indirect cycles inside PostgreSQL",async()=>{
     const a=await account("cycle_a"),b=await account("cycle_b"),c=await account("cycle_c");
     await app.referralGraphService.establish(a.id,b.id);await app.referralGraphService.establish(b.id,c.id);
     await expect(app.referralGraphService.establish(c.id,a.id)).rejects.toThrow("cycle");
+  });
+  it("reassigns one adjacency row, audits it, and treats a repeated target as a no-op",async()=>{
+    const x=await account("x"),y=await account("y"),a=await account("a"),c=await account("c"),d=await account("d"),operator=await account("operator");
+    await app.referralGraphService.establish(a.id,x.id);await app.referralGraphService.establish(c.id,a.id);await app.referralGraphService.establish(d.id,a.id);
+    const changed=await app.referralGraphService.reassignParent(a.id,y.id,operator.id);
+    expect(changed).toMatchObject({childAccountId:a.id,parentAccountId:y.id,previousParentAccountId:x.id,changed:true});
+    expect((await app.referralGraph.getUplines(c.id,10)).map(item=>item.accountId)).toEqual([a.id,y.id]);
+    expect((await app.referralGraph.getUplines(d.id,10)).map(item=>item.accountId)).toEqual([a.id,y.id]);
+    const auditBefore=(await app.database.query(`select id from kernel.audit_records where action='referral.parent_reassigned' and subject_id=$1`,[a.id])).rowCount;
+    const noop=await app.referralGraphService.reassignParent(a.id,y.id,operator.id);
+    expect(noop.changed).toBe(false);
+    expect((await app.database.query(`select id from kernel.audit_records where action='referral.parent_reassigned' and subject_id=$1`,[a.id])).rowCount).toBe(auditBefore);
+    const audit=(await app.database.query<{actor_id:string;previous_state:any;new_state:any}>(`select actor_id,previous_state,new_state from kernel.audit_records where action='referral.parent_reassigned' and subject_id=$1`,[a.id])).rows[0];
+    expect(audit.actor_id).toBe(operator.id);expect(audit.previous_state.parent_account_id).toBe(x.id);expect(audit.new_state.parent_account_id).toBe(y.id);
+  });
+  it("rejects nonexistent accounts and all cycle shapes on reassignment",async()=>{
+    const a=await account("cycle_a"),b=await account("cycle_b"),c=await account("cycle_c");
+    await expect(app.referralGraphService.reassignParent(a.id,b.id,a.id)).resolves.toMatchObject({changed:true});
+    await expect(app.referralGraphService.reassignParent(b.id,a.id,b.id)).rejects.toThrow("cycle");
+    await app.referralGraphService.establish(c.id,a.id);
+    await expect(app.referralGraphService.reassignParent(a.id,c.id,a.id)).rejects.toThrow("cycle");
+    await expect(app.referralGraphService.reassignParent(a.id,a.id,a.id)).rejects.toThrow("Self-referral");
+    const missing=newId();
+    await expect(app.referralGraphService.reassignParent(missing,b.id,a.id)).rejects.toThrow("not found");
+    await expect(app.referralGraphService.reassignParent(a.id,missing,a.id)).rejects.toThrow("not found");
+    await expect(app.database.query(`insert into referral_capability.account_referrals(child_account_id,parent_account_id) values($1,$2)`,[missing,b.id])).rejects.toThrow("foreign key");
+    await expect(app.database.query(`insert into referral_capability.account_referrals(child_account_id,parent_account_id) values($1,$2)`,[newId(),missing])).rejects.toThrow("foreign key");
+  });
+  it("rejects a cycle beyond the old traversal depth",async()=>{
+    const ids=Array.from({length:41},()=>newId());
+    for(let i=0;i<ids.length;i++)await app.database.query(`insert into identity_capability.accounts(id,email,handle) values($1,$2,$3)`,[ids[i],`reassign${i}@example.com`,`reassign${i}`]);
+    for(let i=1;i<ids.length;i++)await app.referralGraphService.establish(ids[i],ids[i-1]);
+    await expect(app.referralGraphService.reassignParent(ids[0],ids[40],ids[0])).rejects.toThrow("cycle");
+  });
+  it("serializes inverse concurrent assignments so a cycle never commits",async()=>{
+    const a=await account("inverse_a"),b=await account("inverse_b");
+    const results=await Promise.allSettled([app.referralGraphService.reassignParent(a.id,b.id,a.id),app.referralGraphService.reassignParent(b.id,a.id,b.id)]);
+    expect(results.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect(results.filter(result=>result.status==="rejected").map(result=>String((result as PromiseRejectedResult).reason))).toEqual([expect.stringContaining("cycle")]);
+    const rows=await app.database.query<{child_account_id:string;parent_account_id:string}>(`select child_account_id,parent_account_id from referral_capability.account_referrals where child_account_id in ($1,$2)`,[a.id,b.id]);
+    expect(rows.rowCount).toBe(1);expect(rows.rows[0].child_account_id).not.toBe(rows.rows[0].parent_account_id);
   });
   it("returns ordered bounded uplines and relationship depth with one recursive query each",async()=>{
     const {root,a,c,e}=await tree();
@@ -54,10 +97,16 @@ suite("referral graph and trusted purchase attribution",()=>{
   });
   it("uses one bounded query for a high-cardinality exact-depth traversal",async()=>{
     const root=newId();
+    const children=Array.from({length:600},()=>newId());const grandchildren=Array.from({length:300},()=>newId());
+    await app.database.query(`insert into identity_capability.accounts(id,email,handle) values($1,'wide-root@example.com','wide_root')`,[root]);
+    await app.database.query(`insert into identity_capability.accounts(id,email,handle)
+      select id,'wide-'||ord||'@example.com','wide_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,[children]);
+    await app.database.query(`insert into referral_capability.account_referrals(child_account_id,parent_account_id) select id,$1 from unnest($2::uuid[]) as item(id)`,[root,children]);
+    await app.database.query(`insert into identity_capability.accounts(id,email,handle)
+      select id,'grand-'||ord||'@example.com','grand_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,[grandchildren]);
     await app.database.query(`insert into referral_capability.account_referrals(child_account_id,parent_account_id)
-      select gen_random_uuid(),$1 from generate_series(1,600)`,[root]);
-    await app.database.query(`insert into referral_capability.account_referrals(child_account_id,parent_account_id)
-      select gen_random_uuid(),child_account_id from referral_capability.account_referrals where parent_account_id=$1 limit 300`,[root]);
+      select child.id,parent.id from unnest($1::uuid[]) with ordinality as child(id,ord)
+      join unnest($2::uuid[]) with ordinality as parent(id,ord) on parent.ord=child.ord`,[grandchildren,children]);
     class CountingExecutor implements SqlExecutor{count=0;query<T extends QueryResultRow=QueryResultRow>(sql:string,values:readonly unknown[]=[]):Promise<QueryResult<T>>{
       this.count++;return app.database.query<T>(sql,values);}}
     const executor=new CountingExecutor();const graph=new PostgresReferralGraphRepository(executor);

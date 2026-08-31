@@ -121,7 +121,7 @@ export function createContainer(databaseUrl:string) {
     legacyProviderCheckout:new CheckoutService(listings,payments,purchases,providers,idempotency,referralAttribution,database,accounts,exchangeRates),
     walletCheckout:new WalletCheckoutService(listings,checkoutRepository,purchases,referralAttribution,database),checkoutRepository,
     funding,fundingService,fundingInitialization,fundingVerification,wallet,walletRepository,walletCredit,walletAvailability,checkoutPayment,entitlementIssuance,
-    referralGraphService:new ReferralGraphService(accounts,referralGraph,database),
+    referralGraphService:new ReferralGraphService(accounts,referralGraph,database,database),
     commissionDistribution,ledger,financialDistributionPolicy,yamlCommissionPolicy,purchaseDistribution,treasuryRepository,treasury,treasuryProcessor,
     legacyPaymentCompletion:paymentCompletion,paystackWebhook:paystack?new PaystackWebhookIngress(paystack,providerEvents,outbox,database):null,
     paystackPayoutWebhook:paystackPayout?new PaystackPayoutWebhookIngress(paystackPayout,paystackPayoutEvents,payoutRepository,payoutExecution,database):null,

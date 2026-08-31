@@ -1,6 +1,7 @@
 import {afterAll,beforeEach,describe,expect,it} from "vitest";
 import {createContainer} from "@/infrastructure/container";
 import {newId} from "@/kernel/ids";
+import {createApiApp} from "@/api/hono";
 
 const databaseUrl=process.env.TEST_DATABASE_URL;const suite=databaseUrl?describe:describe.skip;
 suite("headless API principal and hierarchy read model",()=>{
@@ -44,5 +45,19 @@ suite("headless API principal and hierarchy read model",()=>{
   it("searches only the authorized descendant closure for normal users",async()=>{
     const root=await account("searchroot"),child=await account("searchchild"),other=await account("searchother");await app.referralGraphService.establish(child.id,root.id);
     expect((await app.hierarchy.search(root.id,child.handle,false,20)).map(x=>x.id)).toContain(child.id);expect(await app.hierarchy.search(root.id,other.handle,false,20)).toEqual([]);
+  });
+  it("allows only an operator-scoped principal to reassign a parent through Hono",async()=>{
+    const operator=await account("operator"),child=await account("reassign_child"),oldParent=await account("old_parent"),newParent=await account("new_parent"),normal=await account("normal");
+    await app.database.query(`insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,[operator.id]);
+    await app.referralGraphService.establish(child.id,oldParent.id);
+    const api=createApiApp({...app,principalResolver:{resolve:async()=>({accountId:operator.id,account:operator,kind:"user_session",roles:["operator"],scopes:new Set<string>()})}} as any);
+    const response=await api.fetch(new Request(`http://localhost/api/operator/hierarchy/${child.id}/parent`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({parent_account_id:newParent.id})}));
+    expect(response.status).toBe(200);expect((await response.json()).previousParentAccountId).toBe(oldParent.id);
+    const deniedApi=createApiApp({...app,principalResolver:{resolve:async()=>({accountId:normal.id,account:normal,kind:"user_session",roles:[],scopes:new Set<string>()})}} as any);
+    expect((await deniedApi.fetch(new Request(`http://localhost/api/operator/hierarchy/${child.id}/parent`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({parent_account_id:oldParent.id})}))).status).toBe(403);
+    const keyApi=createApiApp({...app,principalResolver:{resolve:async()=>({accountId:operator.id,account:operator,kind:"api_key",roles:["operator"],scopes:new Set<string>(["hierarchy:admin"])})}} as any);
+    expect((await keyApi.fetch(new Request(`http://localhost/api/operator/hierarchy/${child.id}/parent`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({parent_account_id:oldParent.id})}))).status).toBe(200);
+    const underprivilegedApi=createApiApp({...app,principalResolver:{resolve:async()=>({accountId:operator.id,account:operator,kind:"api_key",roles:["operator"],scopes:new Set<string>(["hierarchy:read"])})}} as any);
+    expect((await underprivilegedApi.fetch(new Request(`http://localhost/api/operator/hierarchy/${child.id}/parent`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({parent_account_id:newParent.id})}))).status).toBe(403);
   });
 });
