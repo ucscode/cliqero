@@ -13,9 +13,19 @@ Secrets are returned once at creation and never persisted or logged in
 plaintext. Existing Next route handlers remain compatibility routes while
 capability endpoints migrate incrementally.
 
-The current scope registry is intentionally small: `hierarchy:read`,
-`hierarchy:admin`, and `api_keys:manage`. Unknown or misspelled scopes are
-rejected at both the HTTP contract and service boundary.
+The API-key scope registry is capability-oriented and finite: `hierarchy:read`,
+`hierarchy:admin`, `api_keys:manage`, `catalogue:read`, `catalogue:manage`,
+`wallet:read`, `wallet:fund`, `checkout:create`, `purchases:read`,
+`referrals:read`, `referrals:manage`, `earnings:read`, `withdrawals:read`,
+`withdrawals:create`, `withdrawals:manage`, `treasury:read`,
+`treasury:manage`, and `operations:manage`. Unknown or misspelled scopes are
+rejected at both the HTTP contract and service boundary. Compatibility routes
+declare whether they are anonymous, session-only, integration-credential-only,
+or account routes requiring one of these scopes. The development funding
+verification compatibility route is session-only and disabled whenever
+`NODE_ENV=production`; production confirmation comes from provider verification
+workers/webhooks instead. A scope never elevates the owning account's Cliqero
+role.
 
 ## API route ownership
 

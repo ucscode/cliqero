@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApiApp } from "./hono";
+import { authorizeLegacyRequest, getLegacyRouteAccess } from "./legacy-dispatch";
 
 function appWith(principal: any = null) {
   return createApiApp({
@@ -81,5 +82,111 @@ describe("Hono API foundation", () => {
       }),
     );
     expect(response.status).toBe(400);
+  });
+  it("enforces role and API-key scope intersection for compatibility routes", async () => {
+    const operatorKey = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "api_key" as const,
+      roles: ["operator"],
+      scopes: new Set<string>(["operations:manage"]),
+    } as any;
+    const operatorScope = getLegacyRouteAccess("/api/operator/settlement", "POST");
+    expect(operatorScope).toEqual({ mode: "account", scope: "operations:manage" });
+    expect(
+      authorizeLegacyRequest(
+        new Request("http://localhost/api/operator/settlement", { method: "POST" }),
+        operatorKey,
+        operatorScope!,
+      ),
+    ).toBeNull();
+    const missingScope = getLegacyRouteAccess("/api/operator/settlement", "POST");
+    const denied = authorizeLegacyRequest(
+      new Request("http://localhost/api/operator/settlement", { method: "POST" }),
+      { ...operatorKey, scopes: new Set<string>() },
+      missingScope!,
+    );
+    expect(denied?.status).toBe(403);
+    const normalKey = authorizeLegacyRequest(
+      new Request("http://localhost/api/operator/settlement", { method: "POST" }),
+      { ...operatorKey, roles: [], scopes: new Set<string>(["operations:manage"]) },
+      operatorScope!,
+    );
+    expect(normalKey).toBeNull();
+    expect(getLegacyRouteAccess("/api/listings", "GET")).toEqual({
+      mode: "anonymous",
+      apiKey: "allow",
+    });
+    expect(
+      getLegacyRouteAccess("/api/listings/00000000-0000-4000-8000-000000000001", "GET"),
+    ).toEqual({
+      mode: "anonymous",
+      apiKey: "allow",
+    });
+    expect(getLegacyRouteAccess("/api/listings/export", "GET")).toEqual({
+      mode: "account",
+      scope: "catalogue:manage",
+    });
+    expect(
+      getLegacyRouteAccess("/api/listings/00000000-0000-4000-8000-000000000001", "PATCH"),
+    ).toEqual({
+      mode: "account",
+      scope: "catalogue:manage",
+    });
+    expect(
+      authorizeLegacyRequest(
+        new Request("http://localhost/api/listings/00000000-0000-4000-8000-000000000001", {
+          method: "PATCH",
+          headers: { authorization: "Bearer cliq_live_test" },
+        }),
+        { ...operatorKey, scopes: new Set<string>() },
+        getLegacyRouteAccess("/api/listings/00000000-0000-4000-8000-000000000001", "PATCH")!,
+      )?.status,
+    ).toBe(403);
+    expect(
+      getLegacyRouteAccess("/api/withdrawals/00000000-0000-4000-8000-000000000001", "DELETE"),
+    ).toEqual({
+      mode: "account",
+      scope: "withdrawals:manage",
+    });
+    expect(
+      authorizeLegacyRequest(
+        new Request("http://localhost/api/auth/sessions", {
+          method: "POST",
+          headers: { authorization: "Bearer cliq_live_test" },
+        }),
+        operatorKey,
+        getLegacyRouteAccess("/api/auth/sessions", "POST")!,
+      )?.status,
+    ).toBe(403);
+    const publicDetail = authorizeLegacyRequest(
+      new Request("http://localhost/api/listings/00000000-0000-4000-8000-000000000001", {
+        method: "GET",
+        headers: { authorization: "Bearer cliq_live_test" },
+      }),
+      operatorKey,
+      getLegacyRouteAccess("/api/listings/00000000-0000-4000-8000-000000000001", "GET")!,
+    );
+    expect(publicDetail).toBeNull();
+  });
+  it("does not let an API-key scope elevate a non-operator account", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "api_key" as const,
+      roles: [],
+      scopes: new Set<string>(["hierarchy:admin"]),
+    } as any;
+    const response = await appWith(principal).fetch(
+      new Request(
+        "http://localhost/api/operator/hierarchy/00000000-0000-4000-8000-000000000002/parent",
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ parent_account_id: "00000000-0000-4000-8000-000000000003" }),
+        },
+      ),
+    );
+    expect(response.status).toBe(403);
   });
 });

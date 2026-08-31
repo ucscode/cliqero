@@ -1,9 +1,21 @@
 import { z } from "zod";
-import { apiError, authenticatedAccount } from "../../../http";
+import { apiError, authenticatedSessionAccount } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
 const bodySchema = z.object({ funding_id: z.uuid() });
+
+export function developmentFundingVerificationEnabled(
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return environment.NODE_ENV === "development" || environment.NODE_ENV === "test";
+}
+
 export async function POST(request: Request) {
-  const account = await authenticatedAccount(request);
+  if (!developmentFundingVerificationEnabled())
+    return Response.json(
+      { error: "Development funding verification is unavailable" },
+      { status: 404 },
+    );
+  const account = await authenticatedSessionAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const body = bodySchema.parse(await request.json());

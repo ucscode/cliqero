@@ -59,6 +59,8 @@ import * as walletFunding from "@/app/api/wallet/fund/route";
 import * as walletTransactions from "@/app/api/wallet/transactions/route";
 import * as withdrawals from "@/app/api/withdrawals/route";
 import * as withdrawalById from "@/app/api/withdrawals/[id]/route";
+import type { ApiPrincipal } from "@/modules/identity/api-principal";
+import type { ApiScope } from "@/modules/identity/api-scopes";
 
 type RouteContext = { params: Promise<Record<string, string>> };
 type Handler = (request: Request, context?: RouteContext) => Response | Promise<Response>;
@@ -67,6 +69,13 @@ type RouteModule = Record<string, unknown>;
 type LegacyRoute = {
   pattern: string;
   module: RouteModule;
+};
+
+export type LegacyAuthMode = "anonymous" | "account" | "session_only" | "integration_credential";
+export type LegacyRouteAccess = {
+  mode: LegacyAuthMode;
+  scope?: ApiScope;
+  apiKey?: "allow" | "reject";
 };
 
 const routes: LegacyRoute[] = [
@@ -87,9 +96,9 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/listings/:id/publish", module: listingPublish },
   { pattern: "/api/listings/:id/referral-link", module: listingReferralLink },
   { pattern: "/api/listings/:id/restore", module: listingRestore },
-  { pattern: "/api/listings/:id", module: listingById },
   { pattern: "/api/listings/export", module: listingExport },
   { pattern: "/api/listings/import", module: listingImport },
+  { pattern: "/api/listings/:id", module: listingById },
   { pattern: "/api/listings", module: listings },
   { pattern: "/api/me/listings", module: myListings },
   { pattern: "/api/me/onboarding", module: onboarding },
@@ -99,9 +108,9 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/operator/listings/:id/media", module: operatorListingMedia },
   { pattern: "/api/operator/listings/:id/publish", module: operatorListingPublish },
   { pattern: "/api/operator/listings/:id/restore", module: operatorListingRestore },
-  { pattern: "/api/operator/listings/:id", module: operatorListingById },
   { pattern: "/api/operator/listings/export", module: operatorListingExport },
   { pattern: "/api/operator/listings/import", module: operatorListingImport },
+  { pattern: "/api/operator/listings/:id", module: operatorListingById },
   { pattern: "/api/operator/listings", module: operatorListings },
   { pattern: "/api/operator/paystack/events", module: operatorPaystackEvents },
   { pattern: "/api/operator/paystack/reconcile", module: operatorPaystackReconcile },
@@ -136,6 +145,60 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/withdrawals", module: withdrawals },
 ];
 
+const publicMethods = new Set(["GET"]);
+const publicPaths = new Set(["/api/health", "/api/listings", "/api/listings/:id"]);
+const sessionOnlyPaths = new Set([
+  "/api/auth/sessions",
+  "/api/funding/development/verify",
+  "/api/integrations",
+  "/api/integrations/:id",
+  "/api/integrations/:id/rotate",
+  "/api/me/onboarding",
+  "/api/me/profile",
+]);
+
+function routeAccess(pattern: string, method: string): LegacyRouteAccess {
+  if (pattern === "/api/accounts" || pattern === "/api/auth/sessions")
+    return { mode: "anonymous", apiKey: "reject" };
+  if (pattern === "/api/access/verify") return { mode: "integration_credential" };
+  if (publicPaths.has(pattern) && publicMethods.has(method)) {
+    return { mode: "anonymous", apiKey: "allow" };
+  }
+  if (sessionOnlyPaths.has(pattern)) return { mode: "session_only" };
+  if (pattern.startsWith("/api/operator/treasury")) {
+    return { mode: "account", scope: method === "GET" ? "treasury:read" : "treasury:manage" };
+  }
+  if (pattern.startsWith("/api/operator/listings"))
+    return { mode: "account", scope: "catalogue:manage" };
+  if (pattern.startsWith("/api/operator/")) return { mode: "account", scope: "operations:manage" };
+  if (pattern === "/api/listings" || pattern === "/api/listings/:id")
+    return { mode: "account", scope: "catalogue:manage" };
+  if (pattern.startsWith("/api/listings/")) return { mode: "account", scope: "catalogue:manage" };
+  if (pattern === "/api/me/listings") return { mode: "account", scope: "catalogue:read" };
+  if (pattern === "/api/wallet") return { mode: "account", scope: "wallet:read" };
+  if (pattern === "/api/wallet/transactions") return { mode: "account", scope: "wallet:read" };
+  if (pattern === "/api/wallet/fund") return { mode: "account", scope: "wallet:fund" };
+  if (pattern === "/api/checkout") return { mode: "account", scope: "checkout:create" };
+  if (pattern === "/api/checkout/:id" || pattern.startsWith("/api/purchases"))
+    return { mode: "account", scope: "purchases:read" };
+  if (pattern.startsWith("/api/referrals/"))
+    return {
+      mode: "account",
+      scope: pattern.endsWith("/parent") ? "referrals:manage" : "referrals:read",
+    };
+  if (pattern.startsWith("/api/referral-links"))
+    return { mode: "account", scope: "referrals:manage" };
+  if (pattern.startsWith("/api/earnings")) return { mode: "account", scope: "earnings:read" };
+  if (pattern === "/api/withdrawals")
+    return { mode: "account", scope: method === "GET" ? "withdrawals:read" : "withdrawals:create" };
+  if (pattern === "/api/withdrawals/:id")
+    return {
+      mode: "account",
+      scope: method === "DELETE" ? "withdrawals:manage" : "withdrawals:read",
+    };
+  return { mode: "account" };
+}
+
 const escapedSegment = (segment: string) =>
   segment.startsWith(":") ? "([^/]+)" : segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -157,16 +220,62 @@ function matchRoute(pattern: string, pathname: string) {
 
 export const legacyApiPaths = routes.map(({ pattern, module }) => ({
   path: pattern.replace(/:([A-Za-z]+)/g, "{$1}"),
-  methods: Object.keys(module).filter((key) =>
-    ["GET", "POST", "PATCH", "PUT", "DELETE"].includes(key),
-  ),
+  methods: Object.keys(module)
+    .filter((key) => ["GET", "POST", "PATCH", "PUT", "DELETE"].includes(key))
+    .map((method) => ({ method, access: routeAccess(pattern, method) })),
 }));
 
-export async function dispatchLegacyApi(request: Request): Promise<Response | null> {
+export function getLegacyRouteAccess(pathname: string, method: string): LegacyRouteAccess | null {
+  for (const route of routes)
+    if (matchRoute(route.pattern, pathname)) return routeAccess(route.pattern, method);
+  return null;
+}
+
+function unauthorized() {
+  return Response.json({ error: "Unauthorized", code: "unauthorized" }, { status: 401 });
+}
+
+function forbidden() {
+  return Response.json({ error: "Forbidden", code: "forbidden" }, { status: 403 });
+}
+
+export function authorizeLegacyRequest(
+  request: Request,
+  principal: ApiPrincipal | null,
+  access: LegacyRouteAccess,
+): Response | null {
+  if (
+    access.mode !== "integration_credential" &&
+    request.headers.has("authorization") &&
+    !principal
+  )
+    return unauthorized();
+  if (access.mode === "session_only" && !principal) return unauthorized();
+  if (access.mode === "session_only" && principal?.kind === "api_key") return forbidden();
+  if (access.mode === "anonymous" && principal?.kind === "api_key" && access.apiKey === "reject")
+    return forbidden();
+  if (access.mode === "account" && !principal) return unauthorized();
+  if (
+    access.mode === "account" &&
+    principal?.kind === "api_key" &&
+    access.scope &&
+    !principal.scopes.has(access.scope)
+  )
+    return forbidden();
+  return null;
+}
+
+export async function dispatchLegacyApi(
+  request: Request,
+  principal: ApiPrincipal | null = null,
+): Promise<Response | null> {
   const pathname = new URL(request.url).pathname;
   for (const route of routes) {
     const params = matchRoute(route.pattern, pathname);
     if (!params) continue;
+    const access = routeAccess(route.pattern, request.method);
+    const denied = authorizeLegacyRequest(request, principal, access);
+    if (denied) return denied;
     const handler = route.module[request.method] as Handler | undefined;
     if (!handler)
       return Response.json(

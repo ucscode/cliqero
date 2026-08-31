@@ -1,8 +1,8 @@
-import { apiError, authenticatedAccount } from "../../../http";
+import { apiError, authenticatedSessionAccount } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const account = await authenticatedAccount(request);
+  const account = await authenticatedSessionAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const destination = await getContainer().buyerAccess.handoff(

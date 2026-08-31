@@ -126,9 +126,13 @@ export function createApiApp(container: ApplicationContainer) {
       };
       for (const route of legacyApiPaths) {
         const path = (document.paths[route.path] ??= {});
-        for (const method of route.methods) {
-          const operation = method.toLowerCase();
+        for (const routeMethod of route.methods) {
+          const operation = routeMethod.method.toLowerCase();
           path[operation] ??= {
+            "x-authentication-mode": routeMethod.access.mode,
+            ...(routeMethod.access.scope
+              ? { "x-required-api-scope": routeMethod.access.scope }
+              : {}),
             responses: {
               "200": response,
               "400": errorResponse,
@@ -441,7 +445,7 @@ export function createApiApp(container: ApplicationContainer) {
   // application services. This final Hono fallback makes the application API
   // enter through one router while the route modules are migrated incrementally.
   app.all("/api/*", async (c) => {
-    const response = await dispatchLegacyApi(c.req.raw);
+    const response = await dispatchLegacyApi(c.req.raw, c.get("principal"));
     return response ?? c.json({ error: "Not found", code: "not_found" }, 404);
   });
   return app;
