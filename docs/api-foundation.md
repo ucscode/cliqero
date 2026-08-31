@@ -1,8 +1,10 @@
 # Headless API foundation
 
-Hono is a thin HTTP boundary mounted by Next.js at `/api/[[...route]]`. It
-provides shared Zod contracts, OpenAPI generation at `/api/openapi.json`, and
-principal/error middleware; existing capability services remain authoritative.
+Hono is the authoritative Cliqero application-API boundary mounted by Next.js
+at `/api/[[...route]]`. It provides shared Zod contracts, OpenAPI generation at
+`/api/openapi.json`, principal/error middleware, and one dispatch path for the
+application capabilities. Existing capability services remain authoritative;
+Hono handlers do not contain business rules.
 
 Better Auth browser sessions and hashed Cliqero API keys both resolve to one
 `ApiPrincipal` containing the canonical Cliqero `accountId`, Cliqero roles, and
@@ -14,6 +16,22 @@ capability endpoints migrate incrementally.
 The current scope registry is intentionally small: `hierarchy:read`,
 `hierarchy:admin`, and `api_keys:manage`. Unknown or misspelled scopes are
 rejected at both the HTTP contract and service boundary.
+
+## API route ownership
+
+The compatibility route modules under `src/app/api` are invoked by the same
+Hono dispatch registry while clients migrate. They are not alternate business
+implementations. Better Auth's `/api/auth/[...all]` protocol handler remains a
+Next.js exception because it owns its protocol, and Paystack webhook ingress
+remains provider-specific so raw-body/signature verification is preserved.
+Browser navigation routes such as `/access/{purchaseId}` and the legacy
+`/api/listings/{id}/access` redirect alias are also intentionally outside the
+JSON API.
+
+All ordinary Cliqero application API paths (catalogue, wallet, checkout,
+purchases, referrals, earnings, withdrawals, treasury, integrations, and
+operator commands) are represented in the generated OpenAPI document and enter
+through Hono before the shared application handlers run.
 
 ## Hierarchy read model
 

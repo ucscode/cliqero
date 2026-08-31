@@ -35,6 +35,15 @@ async function callRaw(method, path, { token, body, headers = {} } = {}) {
 }
 const password = "development-password-123";
 await call("GET", "/api/health");
+const openApi = await call("GET", "/api/openapi.json");
+if (
+  !openApi.value?.paths?.["/api/listings"] ||
+  !openApi.value?.paths?.["/api/wallet"] ||
+  !openApi.value?.paths?.["/api/hierarchy/tree"]
+) {
+  throw new Error("OpenAPI document is missing an authoritative Cliqero route");
+}
+await call("GET", "/api/hierarchy/tree");
 await call("POST", "/api/accounts", { body: {} });
 const sellerEmail = `seller.${suffix}@example.com`,
   buyerEmail = `buyer.${suffix}@example.com`;

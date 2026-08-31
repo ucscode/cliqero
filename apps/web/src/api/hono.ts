@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import { apiScopeSchema } from "@/modules/identity/api-scopes";
+import { dispatchLegacyApi, legacyApiPaths } from "./legacy-dispatch";
 
 type Env = { Variables: { principal: ApiPrincipal | null } };
 const errorSchema = z.object({ error: z.string(), code: z.string().optional() });
@@ -84,6 +85,7 @@ function domainError(c: any, error: unknown) {
 
 export function createApiApp(container: ApplicationContainer) {
   const app = new OpenAPIHono<Env>();
+  app.onError((error, c) => domainError(c, error));
   app.use("/api/*", async (c, next) => {
     const p = await container.principalResolver.resolve(c.req.raw);
     c.set("principal", p);
@@ -100,14 +102,45 @@ export function createApiApp(container: ApplicationContainer) {
         },
       },
     }),
-    (c) =>
-      c.json(
-        app.getOpenAPIDocument({
-          openapi: "3.0.0",
-          info: { title: "Cliqero API", version: "1.0.0" },
-          servers: [{ url: "/" }],
-        }),
-      ),
+    (c) => {
+      const document = app.getOpenAPIDocument({
+        openapi: "3.0.0",
+        info: { title: "Cliqero API", version: "1.0.0" },
+        servers: [{ url: "/" }],
+      }) as any;
+      const response = {
+        description: "Application API response",
+        content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+      };
+      const errorResponse = {
+        description: "Request error",
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: { error: { type: "string" }, code: { type: "string" } },
+              required: ["error"],
+            },
+          },
+        },
+      };
+      for (const route of legacyApiPaths) {
+        const path = (document.paths[route.path] ??= {});
+        for (const method of route.methods) {
+          const operation = method.toLowerCase();
+          path[operation] ??= {
+            responses: {
+              "200": response,
+              "400": errorResponse,
+              "401": errorResponse,
+              "403": errorResponse,
+              "404": errorResponse,
+            },
+          };
+        }
+      }
+      return c.json(document);
+    },
   );
   const queryTree = z.object({ root: z.string().uuid().optional() });
   app.openapi(
@@ -403,5 +436,13 @@ export function createApiApp(container: ApplicationContainer) {
       return c.body(null, 204);
     },
   );
+
+  // Existing Next route handlers are compatibility adapters around the same
+  // application services. This final Hono fallback makes the application API
+  // enter through one router while the route modules are migrated incrementally.
+  app.all("/api/*", async (c) => {
+    const response = await dispatchLegacyApi(c.req.raw);
+    return response ?? c.json({ error: "Not found", code: "not_found" }, 404);
+  });
   return app;
 }

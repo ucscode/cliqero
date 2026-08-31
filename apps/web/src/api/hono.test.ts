@@ -25,6 +25,9 @@ describe("Hono API foundation", () => {
     const paths = (await response.json()).paths;
     expect(paths["/api/hierarchy/tree"]).toBeDefined();
     expect(paths["/api/hierarchy/children/{parentId}"]).toBeDefined();
+    expect(paths["/api/listings"]).toBeDefined();
+    expect(paths["/api/wallet"]).toBeDefined();
+    expect(paths["/api/operator/treasury/entries"]).toBeDefined();
   });
   it("returns standardized auth errors and validates requests", async () => {
     const app = appWith();
@@ -56,6 +59,11 @@ describe("Hono API foundation", () => {
       new Request("http://localhost/api/hierarchy/tree"),
     );
     expect(response.status).toBe(200);
+  });
+  it("dispatches compatibility application routes through the Hono boundary", async () => {
+    const response = await appWith().fetch(new Request("http://localhost/api/health"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "ok", service: "cliqero-main" });
   });
   it("rejects unknown API-key scopes at the HTTP contract", async () => {
     const principal = {

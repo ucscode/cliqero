@@ -80,6 +80,12 @@ Catalogue management is also available under `/api/operator/listings` (including
 
 ## Headless Hono surface
 
+Hono is the authoritative router for the Cliqero application API. The legacy
+Next route files listed below are compatibility adapters that share the same
+application handlers; they are not a second business implementation. Better
+Auth protocol endpoints, provider webhook ingress, and browser redirect routes
+(including the legacy listing-access alias) are explicit exceptions.
+
 | Method | Path                                         | Auth                                             | Capability             | Notes                                                          |
 | ------ | -------------------------------------------- | ------------------------------------------------ | ---------------------- | -------------------------------------------------------------- |
 | GET    | `/api/openapi.json`                          | no                                               | API contract           | Generated from Hono/Zod route contracts                        |

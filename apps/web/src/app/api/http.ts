@@ -8,7 +8,7 @@ export async function authenticatedPrincipal(request: Request): Promise<ApiPrinc
 }
 
 export async function authenticatedAccount(request: Request): Promise<Account | null> {
-  return getContainer().authentication.authenticateRequest(request);
+  return (await getContainer().principalResolver.resolve(request))?.account ?? null;
 }
 export function referralAttributionSource(request: Request): string | undefined {
   return request.headers
