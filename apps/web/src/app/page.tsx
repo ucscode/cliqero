@@ -1,9 +1,13 @@
+import { SiteHeader } from "@/components/site-header";
+import { Storefront } from "@/components/storefront";
+
 export default function Home() {
   return (
-    <main>
-      <p className="eyebrow">Cliqero</p>
-      <h1>List → Refer → Buy → Access</h1>
-      <p>Productless commerce with durable purchases and explicit access rights.</p>
-    </main>
+    <>
+      <SiteHeader />
+      <main className="site-main">
+        <Storefront />
+      </main>
+    </>
   );
 }

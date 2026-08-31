@@ -1,17 +1,12 @@
-import { notFound } from "next/navigation";
-import { getContainer } from "@/infrastructure/container";
+import { SiteHeader } from "@/components/site-header";
+import { ListingDetail } from "@/components/listing-detail";
 
 export default async function PublicListingPage({ params }: { params: Promise<{ id: string }> }) {
-  const listing = await getContainer().listingService.getPublic((await params).id);
-  if (!listing) notFound();
+  const { id } = await params;
   return (
-    <main>
-      <p className="eyebrow">Listing</p>
-      <h1>{listing.title}</h1>
-      <p>{listing.description}</p>
-      <p>
-        {listing.price.currency} {listing.price.minorAmount.toString()} minor units
-      </p>
-    </main>
+    <>
+      <SiteHeader />
+      <ListingDetail id={id} />
+    </>
   );
 }
