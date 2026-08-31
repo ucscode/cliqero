@@ -10,4 +10,3 @@ describe("Money", () => {
     expect(() => Money.of(-1n, "USD")).toThrow("Money cannot be negative");
   });
 });
-

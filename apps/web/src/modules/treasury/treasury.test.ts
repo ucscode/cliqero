@@ -1,6 +1,100 @@
-import {describe,expect,it} from "vitest";import {TreasuryService,type TreasuryEntry,type TreasuryRepository} from "./treasury";
-class Fake implements TreasuryRepository {items:TreasuryEntry[]=[];async create(v:TreasuryEntry){const old=this.items.find(x=>x.idempotencyKey===v.idempotencyKey);if(old)return old;this.items.push(v);return v;}async findById(id:string){return this.items.find(x=>x.id===id)??null;}async findByIdempotencyKey(k:string){return this.items.find(x=>x.idempotencyKey===k)??null;}async list(){return {items:this.items,nextCursor:null};}async summary(){const c=this.items.filter(x=>x.direction==="credit").reduce((n,x)=>n+x.amountMinor,0n),d=this.items.filter(x=>x.direction==="debit").reduce((n,x)=>n+x.amountMinor,0n);return {creditsMinor:c,debitsMinor:d,balanceMinor:c-d};}}
-describe("treasury facts",()=>{
-  it("creates idempotent manual credits and debits",async()=>{const repo=new Fake(),service=new TreasuryService(repo);const credit=await service.createManual({direction:"credit",amountMinor:500n,title:"Wrong payment received",note:"Recorded in error",actorId:"a",idempotencyKey:"manual-1"});expect(credit.direction).toBe("credit");expect(await service.createManual({direction:"credit",amountMinor:500n,title:"Wrong payment received",note:"Recorded in error",actorId:"a",idempotencyKey:"manual-1"})).toBe(credit);const debit=await service.createManual({direction:"debit",amountMinor:500n,title:"Correction for wrong payment received",note:"Cancels the earlier mistaken receipt",actorId:"a",idempotencyKey:"manual-2"});expect(debit.direction).toBe("debit");expect((await repo.summary()).balanceMinor).toBe(0n);});
-  it("rejects mismatched idempotency reuse and invalid entries",async()=>{const repo=new Fake(),service=new TreasuryService(repo);await service.createManual({direction:"debit",amountMinor:200n,title:"Domain renewal",actorId:"a",idempotencyKey:"manual-1"});await expect(service.createManual({direction:"credit",amountMinor:200n,title:"Different meaning",actorId:"a",idempotencyKey:"manual-1"})).rejects.toThrow("idempotency key");await expect(service.createManual({direction:"credit",amountMinor:0n,title:"x",actorId:"a",idempotencyKey:"manual-2"})).rejects.toThrow("positive");await expect(service.createManual({direction:"credit",amountMinor:1n,title:"  ",actorId:"a",idempotencyKey:"manual-3"})).rejects.toThrow("title");});
+import { describe, expect, it } from "vitest";
+import { TreasuryService, type TreasuryEntry, type TreasuryRepository } from "./treasury";
+class Fake implements TreasuryRepository {
+  items: TreasuryEntry[] = [];
+  async create(v: TreasuryEntry) {
+    const old = this.items.find((x) => x.idempotencyKey === v.idempotencyKey);
+    if (old) return old;
+    this.items.push(v);
+    return v;
+  }
+  async findById(id: string) {
+    return this.items.find((x) => x.id === id) ?? null;
+  }
+  async findByIdempotencyKey(k: string) {
+    return this.items.find((x) => x.idempotencyKey === k) ?? null;
+  }
+  async list() {
+    return { items: this.items, nextCursor: null };
+  }
+  async summary() {
+    const c = this.items
+        .filter((x) => x.direction === "credit")
+        .reduce((n, x) => n + x.amountMinor, 0n),
+      d = this.items.filter((x) => x.direction === "debit").reduce((n, x) => n + x.amountMinor, 0n);
+    return { creditsMinor: c, debitsMinor: d, balanceMinor: c - d };
+  }
+}
+describe("treasury facts", () => {
+  it("creates idempotent manual credits and debits", async () => {
+    const repo = new Fake(),
+      service = new TreasuryService(repo);
+    const credit = await service.createManual({
+      direction: "credit",
+      amountMinor: 500n,
+      title: "Wrong payment received",
+      note: "Recorded in error",
+      actorId: "a",
+      idempotencyKey: "manual-1",
+    });
+    expect(credit.direction).toBe("credit");
+    expect(
+      await service.createManual({
+        direction: "credit",
+        amountMinor: 500n,
+        title: "Wrong payment received",
+        note: "Recorded in error",
+        actorId: "a",
+        idempotencyKey: "manual-1",
+      }),
+    ).toBe(credit);
+    const debit = await service.createManual({
+      direction: "debit",
+      amountMinor: 500n,
+      title: "Correction for wrong payment received",
+      note: "Cancels the earlier mistaken receipt",
+      actorId: "a",
+      idempotencyKey: "manual-2",
+    });
+    expect(debit.direction).toBe("debit");
+    expect((await repo.summary()).balanceMinor).toBe(0n);
+  });
+  it("rejects mismatched idempotency reuse and invalid entries", async () => {
+    const repo = new Fake(),
+      service = new TreasuryService(repo);
+    await service.createManual({
+      direction: "debit",
+      amountMinor: 200n,
+      title: "Domain renewal",
+      actorId: "a",
+      idempotencyKey: "manual-1",
+    });
+    await expect(
+      service.createManual({
+        direction: "credit",
+        amountMinor: 200n,
+        title: "Different meaning",
+        actorId: "a",
+        idempotencyKey: "manual-1",
+      }),
+    ).rejects.toThrow("idempotency key");
+    await expect(
+      service.createManual({
+        direction: "credit",
+        amountMinor: 0n,
+        title: "x",
+        actorId: "a",
+        idempotencyKey: "manual-2",
+      }),
+    ).rejects.toThrow("positive");
+    await expect(
+      service.createManual({
+        direction: "credit",
+        amountMinor: 1n,
+        title: "  ",
+        actorId: "a",
+        idempotencyKey: "manual-3",
+      }),
+    ).rejects.toThrow("title");
+  });
 });

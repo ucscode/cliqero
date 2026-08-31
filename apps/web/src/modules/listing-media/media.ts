@@ -1,4 +1,40 @@
-import type {Id} from "@/kernel/ids";
-export type ListingMediaState="active"|"deletion_pending"|"deleted";
-export interface ListingMedia {id:Id;listingId:Id;storageProvider:string;storageContainer:string;objectKey:string;mimeType:string;originalFilename:string|null;byteSize:bigint;width:number;height:number;position:number;altText:string;state:ListingMediaState;createdAt:Date;transferIdentity?:string|null;deletionRequestedAt?:Date|null;deletionAttemptedAt?:Date|null;deletionAttemptCount?:number;deletionNextAttemptAt?:Date|null;deletionClaimedAt?:Date|null;deletionLeaseUntil?:Date|null;lastDeletionError?:string|null;}
-export interface ListingMediaRepository {findById(id:Id):Promise<ListingMedia|null>;findByStorageIdentity(provider:string,container:string,key:string):Promise<ListingMedia|null>;listByListing(listingId:Id,includeDeleted?:boolean):Promise<readonly ListingMedia[]>;listByListings(listingIds:readonly Id[]):Promise<ReadonlyMap<Id,readonly ListingMedia[]>>;save(media:ListingMedia):Promise<void>;lockListing(listingId:Id):Promise<void>;reorderActive(listingId:Id,orderedIds:readonly Id[]):Promise<void>;claimDeletionWork(limit?:number,leaseMs?:number):Promise<readonly ListingMedia[]>;}
+import type { Id } from "@/kernel/ids";
+export type ListingMediaState = "active" | "deletion_pending" | "deleted";
+export interface ListingMedia {
+  id: Id;
+  listingId: Id;
+  storageProvider: string;
+  storageContainer: string;
+  objectKey: string;
+  mimeType: string;
+  originalFilename: string | null;
+  byteSize: bigint;
+  width: number;
+  height: number;
+  position: number;
+  altText: string;
+  state: ListingMediaState;
+  createdAt: Date;
+  transferIdentity?: string | null;
+  deletionRequestedAt?: Date | null;
+  deletionAttemptedAt?: Date | null;
+  deletionAttemptCount?: number;
+  deletionNextAttemptAt?: Date | null;
+  deletionClaimedAt?: Date | null;
+  deletionLeaseUntil?: Date | null;
+  lastDeletionError?: string | null;
+}
+export interface ListingMediaRepository {
+  findById(id: Id): Promise<ListingMedia | null>;
+  findByStorageIdentity(
+    provider: string,
+    container: string,
+    key: string,
+  ): Promise<ListingMedia | null>;
+  listByListing(listingId: Id, includeDeleted?: boolean): Promise<readonly ListingMedia[]>;
+  listByListings(listingIds: readonly Id[]): Promise<ReadonlyMap<Id, readonly ListingMedia[]>>;
+  save(media: ListingMedia): Promise<void>;
+  lockListing(listingId: Id): Promise<void>;
+  reorderActive(listingId: Id, orderedIds: readonly Id[]): Promise<void>;
+  claimDeletionWork(limit?: number, leaseMs?: number): Promise<readonly ListingMedia[]>;
+}

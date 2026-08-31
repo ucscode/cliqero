@@ -1,126 +1,381 @@
-import {createHmac} from "node:crypto";
-import {afterAll,beforeEach,describe,expect,it,vi} from "vitest";
-import {createContainer} from "@/infrastructure/container";
-import {PaystackProvider} from "@/providers/paystack/payment/provider";
-import {PaystackWebhookIngress} from "@/providers/paystack/payment/webhook";
-import {OutboxDispatcher,OutboxHandlerRegistry,type WorkerLogger} from "@/workers/outbox/dispatcher";
-import {PaystackChargeSucceededHandler} from "@/providers/paystack/payment/outbox-handler";
-import {PaystackRefundProcessedHandler} from "@/providers/paystack/payment/refund-handler";
-import {PurchaseReversalEntitlementHandler} from "@/workers/outbox/handlers";
+import { createHmac } from "node:crypto";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createContainer } from "@/infrastructure/container";
+import { PaystackProvider } from "@/providers/paystack/payment/provider";
+import { PaystackWebhookIngress } from "@/providers/paystack/payment/webhook";
+import {
+  OutboxDispatcher,
+  OutboxHandlerRegistry,
+  type WorkerLogger,
+} from "@/workers/outbox/dispatcher";
+import { PaystackChargeSucceededHandler } from "@/providers/paystack/payment/outbox-handler";
+import { PaystackRefundProcessedHandler } from "@/providers/paystack/payment/refund-handler";
+import { PurchaseReversalEntitlementHandler } from "@/workers/outbox/handlers";
 
-const databaseUrl=process.env.TEST_DATABASE_URL;const suite=databaseUrl?describe:describe.skip;
-const secret="sk_test_webhook_secret";const silent:WorkerLogger={info:()=>undefined,error:()=>undefined};
-suite("Paystack webhook to commerce consequence",()=>{
-  const app=createContainer(databaseUrl!);let verification:{status:string;reference:string;amount:number;currency:string};let networkFailure=false;
-  const http=vi.fn(async(input:string|URL,init?:RequestInit)=>{
-    if(networkFailure)throw new Error("Paystack network unavailable");
-    const url=String(input);
-    if(url.includes("/transaction/initialize")){const request=JSON.parse(String(init?.body));return Response.json({status:true,message:"ok",data:{
-      authorization_url:"https://checkout.paystack.com/test",access_code:"access",reference:request.reference}});}
-    return Response.json({status:true,message:"verified",data:{id:123456,status:verification.status,reference:verification.reference,
-      amount:verification.amount,currency:verification.currency}});
+const databaseUrl = process.env.TEST_DATABASE_URL;
+const suite = databaseUrl ? describe : describe.skip;
+const secret = "sk_test_webhook_secret";
+const silent: WorkerLogger = { info: () => undefined, error: () => undefined };
+suite("Paystack webhook to commerce consequence", () => {
+  const app = createContainer(databaseUrl!);
+  let verification: { status: string; reference: string; amount: number; currency: string };
+  let networkFailure = false;
+  const http = vi.fn(async (input: string | URL, init?: RequestInit) => {
+    if (networkFailure) throw new Error("Paystack network unavailable");
+    const url = String(input);
+    if (url.includes("/transaction/initialize")) {
+      const request = JSON.parse(String(init?.body));
+      return Response.json({
+        status: true,
+        message: "ok",
+        data: {
+          authorization_url: "https://checkout.paystack.com/test",
+          access_code: "access",
+          reference: request.reference,
+        },
+      });
+    }
+    return Response.json({
+      status: true,
+      message: "verified",
+      data: {
+        id: 123456,
+        status: verification.status,
+        reference: verification.reference,
+        amount: verification.amount,
+        currency: verification.currency,
+      },
+    });
   });
-  const provider=new PaystackProvider({secretKey:secret,apiBaseUrl:"https://api.paystack.co"},http,["USD"]);
+  const provider = new PaystackProvider(
+    { secretKey: secret, apiBaseUrl: "https://api.paystack.co" },
+    http,
+    ["USD"],
+  );
   app.providers.register(provider);
-  const ingress=new PaystackWebhookIngress(provider,app.providerEvents,app.outbox,app.database);
-  const dispatcher=new OutboxDispatcher("paystack-worker",app.outbox,new OutboxHandlerRegistry().register(
-    new PaystackChargeSucceededHandler(app.providerEvents,app.payments)).register(new PaystackRefundProcessedHandler(app.providerEvents,app.payments,app.purchases,app.purchaseReversal)).register(new PurchaseReversalEntitlementHandler(app.entitlements)),silent,{pollMilliseconds:1,staleAfterMilliseconds:1000});
+  const ingress = new PaystackWebhookIngress(
+    provider,
+    app.providerEvents,
+    app.outbox,
+    app.database,
+  );
+  const dispatcher = new OutboxDispatcher(
+    "paystack-worker",
+    app.outbox,
+    new OutboxHandlerRegistry()
+      .register(new PaystackChargeSucceededHandler(app.providerEvents, app.payments))
+      .register(
+        new PaystackRefundProcessedHandler(
+          app.providerEvents,
+          app.payments,
+          app.purchases,
+          app.purchaseReversal,
+        ),
+      )
+      .register(new PurchaseReversalEntitlementHandler(app.entitlements)),
+    silent,
+    { pollMilliseconds: 1, staleAfterMilliseconds: 1000 },
+  );
 
-  beforeEach(async()=>{networkFailure=false;http.mockClear();await app.database.query(`truncate table
+  beforeEach(async () => {
+    networkFailure = false;
+    http.mockClear();
+    await app.database.query(`truncate table
     payment_capability.reconciliation_attempts,payment_capability.provider_events,access_capability.integration_listings,access_capability.integrations,access_capability.access_grants,
     entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,
-    identity_capability.account_capabilities,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`);});
-  afterAll(()=>app.database.close());
+    identity_capability.account_capabilities,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`);
+  });
+  afterAll(() => app.database.close());
 
-  async function setup(){
-    const seller=await app.authentication.register({email:"paystack-seller@example.com",handle:"paystack_seller",password:"correct-horse-battery"});
-    const buyer=await app.authentication.register({email:"paystack-buyer@example.com",handle:"paystack_buyer",password:"correct-horse-staple"});
-    const listing=await app.listingService.createPublished(seller,{title:"Paystack listing",description:"",priceMinor:"2500",currency:"USD",destination:"https://destination.example"});
-    const checkout=await app.legacyProviderCheckout.initiate({buyerId:buyer.id,buyerEmail:buyer.email,listingId:listing.id,providerName:"paystack",idempotencyKey:"paystack-checkout"});
-    verification={status:"success",reference:checkout.providerReference,amount:2500,currency:"USD"};return {buyer,listing,checkout};
+  async function setup() {
+    const seller = await app.authentication.register({
+      email: "paystack-seller@example.com",
+      handle: "paystack_seller",
+      password: "correct-horse-battery",
+    });
+    const buyer = await app.authentication.register({
+      email: "paystack-buyer@example.com",
+      handle: "paystack_buyer",
+      password: "correct-horse-staple",
+    });
+    const listing = await app.listingService.createPublished(seller, {
+      title: "Paystack listing",
+      description: "",
+      priceMinor: "2500",
+      currency: "USD",
+      destination: "https://destination.example",
+    });
+    const checkout = await app.legacyProviderCheckout.initiate({
+      buyerId: buyer.id,
+      buyerEmail: buyer.email,
+      listingId: listing.id,
+      providerName: "paystack",
+      idempotencyKey: "paystack-checkout",
+    });
+    verification = {
+      status: "success",
+      reference: checkout.providerReference,
+      amount: 2500,
+      currency: "USD",
+    };
+    return { buyer, listing, checkout };
   }
-  function webhook(reference:string,amount=2500,currency="USD",id=777){
-    const raw=Buffer.from(JSON.stringify({event:"charge.success",data:{id,status:"success",reference,amount,currency}}));
-    return {raw,signature:createHmac("sha512",secret).update(raw).digest("hex")};
+  function webhook(reference: string, amount = 2500, currency = "USD", id = 777) {
+    const raw = Buffer.from(
+      JSON.stringify({
+        event: "charge.success",
+        data: { id, status: "success", reference, amount, currency },
+      }),
+    );
+    return { raw, signature: createHmac("sha512", secret).update(raw).digest("hex") };
   }
-  function refundWebhook(reference:string,amount=2500,currency="USD",id=778){const raw=Buffer.from(JSON.stringify({event:"refund.processed",data:{id,transaction_reference:reference,amount,currency,status:"processed"}}));
-    return {raw,signature:createHmac("sha512",secret).update(raw).digest("hex")};}
+  function refundWebhook(reference: string, amount = 2500, currency = "USD", id = 778) {
+    const raw = Buffer.from(
+      JSON.stringify({
+        event: "refund.processed",
+        data: { id, transaction_reference: reference, amount, currency, status: "processed" },
+      }),
+    );
+    return { raw, signature: createHmac("sha512", secret).update(raw).digest("hex") };
+  }
 
-  it("accepts valid signatures and rejects invalid signatures before persistence",async()=>{
-    const {checkout}=await setup();const event=webhook(checkout.providerReference);
-    await expect(ingress.ingest(event.raw,"0".repeat(128))).resolves.toEqual({authenticated:false});
-    expect((await app.database.query(`select id from payment_capability.provider_events`)).rowCount).toBe(0);
-    await expect(ingress.ingest(event.raw,event.signature)).resolves.toMatchObject({authenticated:true,accepted:true});
+  it("accepts valid signatures and rejects invalid signatures before persistence", async () => {
+    const { checkout } = await setup();
+    const event = webhook(checkout.providerReference);
+    await expect(ingress.ingest(event.raw, "0".repeat(128))).resolves.toEqual({
+      authenticated: false,
+    });
+    expect(
+      (await app.database.query(`select id from payment_capability.provider_events`)).rowCount,
+    ).toBe(0);
+    await expect(ingress.ingest(event.raw, event.signature)).resolves.toMatchObject({
+      authenticated: true,
+      accepted: true,
+    });
   });
-  it("records an unknown payment reference as rejected without completing commerce",async()=>{
-    await setup();const event=webhook("cliqero-unknown");await ingress.ingest(event.raw,event.signature);await dispatcher.runOnce();
-    expect((await app.database.query<{state:string;last_error:string}>(`select state,last_error from payment_capability.provider_events`)).rows[0])
-      .toMatchObject({state:"rejected",last_error:"Unknown Paystack payment reference"});
-    expect((await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount).toBe(0);
+  it("records an unknown payment reference as rejected without completing commerce", async () => {
+    await setup();
+    const event = webhook("cliqero-unknown");
+    await ingress.ingest(event.raw, event.signature);
+    await dispatcher.runOnce();
+    expect(
+      (
+        await app.database.query<{ state: string; last_error: string }>(
+          `select state,last_error from payment_capability.provider_events`,
+        )
+      ).rows[0],
+    ).toMatchObject({ state: "rejected", last_error: "Unknown Paystack payment reference" });
+    expect(
+      (await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount,
+    ).toBe(0);
   });
-  it.each([[2600,"USD"],[2500,"NGN"]])("rejects webhook amount/currency mismatch (%s %s)",async(amount,currency)=>{
-    const {checkout}=await setup();const event=webhook(checkout.providerReference,amount,currency);await ingress.ingest(event.raw,event.signature);await dispatcher.runOnce();
-    expect((await app.database.query<{state:string}>(`select state from payment_capability.provider_events`)).rows[0].state).toBe("rejected");
-    expect((await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount).toBe(0);
+  it.each([
+    [2600, "USD"],
+    [2500, "NGN"],
+  ])("rejects webhook amount/currency mismatch (%s %s)", async (amount, currency) => {
+    const { checkout } = await setup();
+    const event = webhook(checkout.providerReference, amount, currency);
+    await ingress.ingest(event.raw, event.signature);
+    await dispatcher.runOnce();
+    expect(
+      (
+        await app.database.query<{ state: string }>(
+          `select state from payment_capability.provider_events`,
+        )
+      ).rows[0].state,
+    ).toBe("rejected");
+    expect(
+      (await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount,
+    ).toBe(0);
   });
-  it("converges duplicate successful webhooks on one durable verification request",async()=>{
-    const {checkout}=await setup();const event=webhook(checkout.providerReference);
-    const first=await ingress.ingest(event.raw,event.signature);const duplicate=await ingress.ingest(event.raw,event.signature);
-    expect(first.duplicate).toBe(false);expect(duplicate.duplicate).toBe(true);await dispatcher.runOnce();
-    expect((await app.database.query(`select id from payment_capability.provider_events`)).rowCount).toBe(1);
-    expect((await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount).toBe(0);
-    const names=(await app.database.query<{event_name:string}>(`select event_name from kernel.outbox_events order by event_name`)).rows.map(row=>row.event_name);
+  it("converges duplicate successful webhooks on one durable verification request", async () => {
+    const { checkout } = await setup();
+    const event = webhook(checkout.providerReference);
+    const first = await ingress.ingest(event.raw, event.signature);
+    const duplicate = await ingress.ingest(event.raw, event.signature);
+    expect(first.duplicate).toBe(false);
+    expect(duplicate.duplicate).toBe(true);
+    await dispatcher.runOnce();
+    expect(
+      (await app.database.query(`select id from payment_capability.provider_events`)).rowCount,
+    ).toBe(1);
+    expect(
+      (await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount,
+    ).toBe(0);
+    const names = (
+      await app.database.query<{ event_name: string }>(
+        `select event_name from kernel.outbox_events order by event_name`,
+      )
+    ).rows.map((row) => row.event_name);
     expect(names).toEqual(["payment.paystack.charge-succeeded"]);
     expect((await app.payments.findById(checkout.paymentId))?.state).toBe("verification_pending");
-    expect(http.mock.calls.filter(([url])=>String(url).includes("/transaction/verify/"))).toHaveLength(0);
+    expect(
+      http.mock.calls.filter(([url]) => String(url).includes("/transaction/verify/")),
+    ).toHaveLength(0);
   });
-  it("ingestion schedules verification without synchronously querying authoritative state",async()=>{
-    const {checkout}=await setup();verification.amount=9999;const event=webhook(checkout.providerReference);
-    await ingress.ingest(event.raw,event.signature);await dispatcher.runOnce();
-    const outbox=(await app.database.query<{state:string;last_error:string}>(`select state,last_error from kernel.outbox_events where event_name='payment.paystack.charge-succeeded'`)).rows[0];
-    expect(outbox.state).toBe("published");expect(outbox.last_error).toBeNull();
+  it("ingestion schedules verification without synchronously querying authoritative state", async () => {
+    const { checkout } = await setup();
+    verification.amount = 9999;
+    const event = webhook(checkout.providerReference);
+    await ingress.ingest(event.raw, event.signature);
+    await dispatcher.runOnce();
+    const outbox = (
+      await app.database.query<{ state: string; last_error: string }>(
+        `select state,last_error from kernel.outbox_events where event_name='payment.paystack.charge-succeeded'`,
+      )
+    ).rows[0];
+    expect(outbox.state).toBe("published");
+    expect(outbox.last_error).toBeNull();
     expect((await app.payments.findById(checkout.paymentId))?.state).toBe("verification_pending");
-    expect((await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount).toBe(0);
+    expect(
+      (await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount,
+    ).toBe(0);
   });
-  it("does not falsely complete payment on provider network failure",async()=>{
-    const {checkout}=await setup();const event=webhook(checkout.providerReference);await ingress.ingest(event.raw,event.signature);networkFailure=true;await dispatcher.runOnce();
-    expect((await app.database.query<{state:string}>(`select state from kernel.outbox_events where event_name='payment.paystack.charge-succeeded'`)).rows[0].state).toBe("published");
+  it("does not falsely complete payment on provider network failure", async () => {
+    const { checkout } = await setup();
+    const event = webhook(checkout.providerReference);
+    await ingress.ingest(event.raw, event.signature);
+    networkFailure = true;
+    await dispatcher.runOnce();
+    expect(
+      (
+        await app.database.query<{ state: string }>(
+          `select state from kernel.outbox_events where event_name='payment.paystack.charge-succeeded'`,
+        )
+      ).rows[0].state,
+    ).toBe("published");
     expect((await app.payments.findById(checkout.paymentId))?.state).toBe("verification_pending");
-    expect((await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount).toBe(0);
+    expect(
+      (await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount,
+    ).toBe(0);
   });
-  it("reconciles an eligible pending payment through authoritative verification and is repeat-safe",async()=>{
-    const {buyer,checkout}=await setup();await app.database.query(`insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,[buyer.id]);
-    const input={actorId:buyer.id,paymentId:checkout.paymentId,idempotencyKey:"manual-reconcile-1",correlationId:checkout.paymentId};
-    await expect(app.paymentReconciliation.reconcile(input)).resolves.toMatchObject({state:"completed"});
-    await expect(app.paymentReconciliation.reconcile(input)).resolves.toMatchObject({state:"completed"});
-    await expect(app.paymentReconciliation.reconcile({...input,idempotencyKey:"manual-reconcile-after-complete"})).resolves.toMatchObject({state:"skipped"});
-    expect((await app.database.query(`select 1 from entitlement_capability.entitlements`)).rowCount).toBe(0);
-    expect((await app.database.query(`select 1 from payment_capability.reconciliation_attempts`)).rowCount).toBe(2);
+  it("reconciles an eligible pending payment through authoritative verification and is repeat-safe", async () => {
+    const { buyer, checkout } = await setup();
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      [buyer.id],
+    );
+    const input = {
+      actorId: buyer.id,
+      paymentId: checkout.paymentId,
+      idempotencyKey: "manual-reconcile-1",
+      correlationId: checkout.paymentId,
+    };
+    await expect(app.paymentReconciliation.reconcile(input)).resolves.toMatchObject({
+      state: "completed",
+    });
+    await expect(app.paymentReconciliation.reconcile(input)).resolves.toMatchObject({
+      state: "completed",
+    });
+    await expect(
+      app.paymentReconciliation.reconcile({
+        ...input,
+        idempotencyKey: "manual-reconcile-after-complete",
+      }),
+    ).resolves.toMatchObject({ state: "skipped" });
+    expect(
+      (await app.database.query(`select 1 from entitlement_capability.entitlements`)).rowCount,
+    ).toBe(0);
+    expect(
+      (await app.database.query(`select 1 from payment_capability.reconciliation_attempts`))
+        .rowCount,
+    ).toBe(2);
   });
-  it("surfaces reconciliation mismatches and network failures without local completion",async()=>{
-    const {buyer,checkout}=await setup();await app.database.query(`insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,[buyer.id]);
-    verification.amount=9999;await expect(app.paymentReconciliation.reconcile({actorId:buyer.id,paymentId:checkout.paymentId,idempotencyKey:"mismatch",correlationId:checkout.paymentId})).rejects.toThrow("mismatch");
-    expect((await app.database.query<{state:string}>(`select state from payment_capability.reconciliation_attempts`)).rows[0].state).toBe("mismatch");
-    expect((await app.database.query(`select 1 from entitlement_capability.entitlements`)).rowCount).toBe(0);
+  it("surfaces reconciliation mismatches and network failures without local completion", async () => {
+    const { buyer, checkout } = await setup();
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      [buyer.id],
+    );
+    verification.amount = 9999;
+    await expect(
+      app.paymentReconciliation.reconcile({
+        actorId: buyer.id,
+        paymentId: checkout.paymentId,
+        idempotencyKey: "mismatch",
+        correlationId: checkout.paymentId,
+      }),
+    ).rejects.toThrow("mismatch");
+    expect(
+      (
+        await app.database.query<{ state: string }>(
+          `select state from payment_capability.reconciliation_attempts`,
+        )
+      ).rows[0].state,
+    ).toBe("mismatch");
+    expect(
+      (await app.database.query(`select 1 from entitlement_capability.entitlements`)).rowCount,
+    ).toBe(0);
   });
-  it("keeps a payment pending when reconciliation cannot reach Paystack",async()=>{const {buyer,checkout}=await setup();
-    await app.database.query(`insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,[buyer.id]);networkFailure=true;
-    await expect(app.paymentReconciliation.reconcile({actorId:buyer.id,paymentId:checkout.paymentId,idempotencyKey:"network",correlationId:checkout.paymentId})).rejects.toThrow("Payment verification mismatch");
+  it("keeps a payment pending when reconciliation cannot reach Paystack", async () => {
+    const { buyer, checkout } = await setup();
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      [buyer.id],
+    );
+    networkFailure = true;
+    await expect(
+      app.paymentReconciliation.reconcile({
+        actorId: buyer.id,
+        paymentId: checkout.paymentId,
+        idempotencyKey: "network",
+        correlationId: checkout.paymentId,
+      }),
+    ).rejects.toThrow("Payment verification mismatch");
     expect((await app.payments.findById(checkout.paymentId))?.state).toBe("verification_pending");
-    expect((await app.database.query<{state:string}>(`select state from payment_capability.reconciliation_attempts`)).rows[0].state).toBe("mismatch");
+    expect(
+      (
+        await app.database.query<{ state: string }>(
+          `select state from payment_capability.reconciliation_attempts`,
+        )
+      ).rows[0].state,
+    ).toBe("mismatch");
   });
-  it("translates an authenticated full Paystack refund into one historical reversal",async()=>{const {buyer,checkout}=await setup();
-    await app.database.query(`insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,[buyer.id]);
-    await app.legacyPaymentCompletion.complete({paymentId:checkout.paymentId,correlationId:checkout.paymentId});await app.purchaseDistribution.process({purchaseId:checkout.purchaseId!,correlationId:checkout.paymentId});
-    const event=refundWebhook(checkout.providerReference);await expect(ingress.ingest(event.raw,event.signature)).resolves.toMatchObject({accepted:true});await dispatcher.runOnce();await dispatcher.runOnce();
-    expect((await app.database.query<{state:string}>(`select state from payment_capability.provider_events where event_type='refund.processed'`)).rows[0].state).toBe("processed");
-    expect((await app.database.query(`select 1 from ledger_capability.reversals where purchase_id=$1`,[checkout.purchaseId])).rowCount).toBe(1);
+  it("translates an authenticated full Paystack refund into one historical reversal", async () => {
+    const { buyer, checkout } = await setup();
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      [buyer.id],
+    );
+    await app.legacyPaymentCompletion.complete({
+      paymentId: checkout.paymentId,
+      correlationId: checkout.paymentId,
+    });
+    await app.purchaseDistribution.process({
+      purchaseId: checkout.purchaseId!,
+      correlationId: checkout.paymentId,
+    });
+    const event = refundWebhook(checkout.providerReference);
+    await expect(ingress.ingest(event.raw, event.signature)).resolves.toMatchObject({
+      accepted: true,
+    });
+    await dispatcher.runOnce();
+    await dispatcher.runOnce();
+    expect(
+      (
+        await app.database.query<{ state: string }>(
+          `select state from payment_capability.provider_events where event_type='refund.processed'`,
+        )
+      ).rows[0].state,
+    ).toBe("processed");
+    expect(
+      (
+        await app.database.query(`select 1 from ledger_capability.reversals where purchase_id=$1`, [
+          checkout.purchaseId,
+        ])
+      ).rowCount,
+    ).toBe(1);
     expect((await app.entitlements.findByPurchaseId(checkout.purchaseId!))?.isActive).toBe(false);
   });
-  it("operator inspection is authorized and sanitized",async()=>{const {buyer}=await setup();
-    await expect(app.paystackInspection.listEvents(buyer.id,10)).rejects.toThrow("Forbidden");
-    await app.database.query(`insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,[buyer.id]);
-    const rows=await app.paystackInspection.listEvents(buyer.id,10);expect(rows).toEqual([]);
+  it("operator inspection is authorized and sanitized", async () => {
+    const { buyer } = await setup();
+    await expect(app.paystackInspection.listEvents(buyer.id, 10)).rejects.toThrow("Forbidden");
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      [buyer.id],
+    );
+    const rows = await app.paystackInspection.listEvents(buyer.id, 10);
+    expect(rows).toEqual([]);
     expect(JSON.stringify(rows)).not.toContain(secret);
   });
 });

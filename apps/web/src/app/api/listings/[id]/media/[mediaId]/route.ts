@@ -1,4 +1,62 @@
-import {z} from "zod";import {authenticatedAccount,apiError} from "../../../../http";import {getContainer} from "@/infrastructure/container";import {mediaView} from "@/application/listing-media";const patch=z.object({alt_text:z.string().max(500).optional(),position:z.number().int().min(0).optional()}).strict();
-export async function GET(request:Request,{params}:{params:Promise<{id:string;mediaId:string}>}){const a=await authenticatedAccount(request);if(!a)return Response.json({error:"Unauthorized"},{status:401});try{const c=getContainer();await c.operators.requireCatalogueManager(a.id);const p=await params,v=await c.listingMedia.getCatalogue(a,p.id,p.mediaId);return Response.json(mediaView(v,c.listingMedia.publicUrl(v)));}catch(e){return apiError(e);}}
-export async function PATCH(request:Request,{params}:{params:Promise<{id:string;mediaId:string}>}){const a=await authenticatedAccount(request);if(!a)return Response.json({error:"Unauthorized"},{status:401});try{const c=getContainer();await c.operators.requireCatalogueManager(a.id);const p=await params,b=patch.parse(await request.json()),v=await c.listingMedia.updateCatalogue(a,p.id,p.mediaId,{altText:b.alt_text,position:b.position});return Response.json(mediaView(v,c.listingMedia.publicUrl(v)));}catch(e){return apiError(e);}}
-export async function DELETE(request:Request,{params}:{params:Promise<{id:string;mediaId:string}>}){const a=await authenticatedAccount(request);if(!a)return Response.json({error:"Unauthorized"},{status:401});try{const c=getContainer();await c.operators.requireCatalogueManager(a.id);const p=await params,v=await c.listingMedia.requestDeletionCatalogue(a,p.id,p.mediaId);return Response.json({id:v.id,state:v.state},{status:202});}catch(e){return apiError(e);}}
+import { z } from "zod";
+import { authenticatedAccount, apiError } from "../../../../http";
+import { getContainer } from "@/infrastructure/container";
+import { mediaView } from "@/application/listing-media";
+const patch = z
+  .object({
+    alt_text: z.string().max(500).optional(),
+    position: z.number().int().min(0).optional(),
+  })
+  .strict();
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string; mediaId: string }> },
+) {
+  const a = await authenticatedAccount(request);
+  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const c = getContainer();
+    await c.operators.requireCatalogueManager(a.id);
+    const p = await params,
+      v = await c.listingMedia.getCatalogue(a, p.id, p.mediaId);
+    return Response.json(mediaView(v, c.listingMedia.publicUrl(v)));
+  } catch (e) {
+    return apiError(e);
+  }
+}
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string; mediaId: string }> },
+) {
+  const a = await authenticatedAccount(request);
+  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const c = getContainer();
+    await c.operators.requireCatalogueManager(a.id);
+    const p = await params,
+      b = patch.parse(await request.json()),
+      v = await c.listingMedia.updateCatalogue(a, p.id, p.mediaId, {
+        altText: b.alt_text,
+        position: b.position,
+      });
+    return Response.json(mediaView(v, c.listingMedia.publicUrl(v)));
+  } catch (e) {
+    return apiError(e);
+  }
+}
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string; mediaId: string }> },
+) {
+  const a = await authenticatedAccount(request);
+  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const c = getContainer();
+    await c.operators.requireCatalogueManager(a.id);
+    const p = await params,
+      v = await c.listingMedia.requestDeletionCatalogue(a, p.id, p.mediaId);
+    return Response.json({ id: v.id, state: v.state }, { status: 202 });
+  } catch (e) {
+    return apiError(e);
+  }
+}

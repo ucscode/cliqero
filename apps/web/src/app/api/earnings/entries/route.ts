@@ -1,1 +1,17 @@
-import {authenticatedAccount,apiError} from "../../http";import {getContainer} from "@/infrastructure/container";export async function GET(request:Request){const a=await authenticatedAccount(request);if(!a)return Response.json({error:"Unauthorized"},{status:401});try{const url=new URL(request.url);return Response.json(await getContainer().accountProjections.earningEntries(a.id,{cursor:url.searchParams.get("cursor")??undefined,limit:Math.min(Number(url.searchParams.get("limit")??20),100)}));}catch(error){return apiError(error);}}
+import { authenticatedAccount, apiError } from "../../http";
+import { getContainer } from "@/infrastructure/container";
+export async function GET(request: Request) {
+  const a = await authenticatedAccount(request);
+  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const url = new URL(request.url);
+    return Response.json(
+      await getContainer().accountProjections.earningEntries(a.id, {
+        cursor: url.searchParams.get("cursor") ?? undefined,
+        limit: Math.min(Number(url.searchParams.get("limit") ?? 20), 100),
+      }),
+    );
+  } catch (error) {
+    return apiError(error);
+  }
+}

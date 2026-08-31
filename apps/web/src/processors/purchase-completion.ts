@@ -22,17 +22,35 @@ export class PurchaseCompletionProcessor {
       }
       purchase.markPaid();
       purchase.complete();
-      const entitlement = new Entitlement(newId(), purchase.buyerId, purchase.terms.listingId, purchase.id);
+      const entitlement = new Entitlement(
+        newId(),
+        purchase.buyerId,
+        purchase.terms.listingId,
+        purchase.id,
+      );
       await this.purchases.save(purchase);
       await this.entitlements.save(entitlement);
       const occurredAt = new Date();
       const events: DomainEvent[] = [
-        { id: newId(), name: "purchase.completed", aggregateId: purchase.id, occurredAt, correlationId, payload: { entitlementId: entitlement.id } },
-        { id: newId(), name: "entitlement.created", aggregateId: entitlement.id, occurredAt, correlationId, payload: { purchaseId: purchase.id } },
+        {
+          id: newId(),
+          name: "purchase.completed",
+          aggregateId: purchase.id,
+          occurredAt,
+          correlationId,
+          payload: { entitlementId: entitlement.id },
+        },
+        {
+          id: newId(),
+          name: "entitlement.created",
+          aggregateId: entitlement.id,
+          occurredAt,
+          correlationId,
+          payload: { purchaseId: purchase.id },
+        },
       ];
       await this.outbox.append(events);
       return entitlement;
     });
   }
 }
-

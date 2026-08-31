@@ -12,4 +12,3 @@ export interface DomainEvent<TPayload extends object = object> {
 export interface EventOutbox {
   append(events: readonly DomainEvent[]): Promise<void>;
 }
-

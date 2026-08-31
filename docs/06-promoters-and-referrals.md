@@ -73,9 +73,7 @@ It may calculate a distribution description such as:
 ```json
 {
   "source_user": "referrer-123",
-  "recipients": [
-    {"user_id": "account-78", "level": 1, "share": "..."}
-  ]
+  "recipients": [{ "user_id": "account-78", "level": 1, "share": "..." }]
 }
 ```
 

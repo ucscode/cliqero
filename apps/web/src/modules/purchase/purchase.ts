@@ -24,37 +24,55 @@ export class Purchase {
     readonly idempotencyKey: string,
     readonly checkoutId: Id | null = null,
   ) {
-    if (!idempotencyKey.trim()) throw new DomainInvariantError("Purchase idempotency key is required");
+    if (!idempotencyKey.trim())
+      throw new DomainInvariantError("Purchase idempotency key is required");
     Object.freeze(terms.price);
     Object.freeze(terms.canonicalPrice);
     Object.freeze(terms);
   }
 
   static restore(input: {
-    id: Id; buyerId: Id; paymentId: Id|null; checkoutId?:Id|null; terms: PurchaseTerms; idempotencyKey: string; state: PurchaseState;
+    id: Id;
+    buyerId: Id;
+    paymentId: Id | null;
+    checkoutId?: Id | null;
+    terms: PurchaseTerms;
+    idempotencyKey: string;
+    state: PurchaseState;
   }): Purchase {
-    const purchase = new Purchase(input.id, input.buyerId, input.paymentId, input.terms, input.idempotencyKey,input.checkoutId??null);
+    const purchase = new Purchase(
+      input.id,
+      input.buyerId,
+      input.paymentId,
+      input.terms,
+      input.idempotencyKey,
+      input.checkoutId ?? null,
+    );
     purchase.stateValue = input.state;
     return purchase;
   }
 
   markPaid(): void {
-    if (this.stateValue !== "pending") throw new DomainInvariantError("Only a pending purchase can be marked paid");
+    if (this.stateValue !== "pending")
+      throw new DomainInvariantError("Only a pending purchase can be marked paid");
     this.stateValue = "paid";
   }
 
   complete(): void {
-    if (this.stateValue !== "paid") throw new DomainInvariantError("Only a paid purchase can be completed");
+    if (this.stateValue !== "paid")
+      throw new DomainInvariantError("Only a paid purchase can be completed");
     this.stateValue = "completed";
   }
 
-  get state() { return this.stateValue; }
+  get state() {
+    return this.stateValue;
+  }
 }
 
 export interface PurchaseRepository {
   findById(id: Id, options?: { forUpdate?: boolean }): Promise<Purchase | null>;
   findByIdempotencyKey(key: string): Promise<Purchase | null>;
-  findCompletedWithoutEntitlement?(limit?:number):Promise<readonly Purchase[]>;
-  findCompletedWithoutDistribution?(limit?:number):Promise<readonly Purchase[]>;
+  findCompletedWithoutEntitlement?(limit?: number): Promise<readonly Purchase[]>;
+  findCompletedWithoutDistribution?(limit?: number): Promise<readonly Purchase[]>;
   save(purchase: Purchase): Promise<void>;
 }

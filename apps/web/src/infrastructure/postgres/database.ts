@@ -3,7 +3,10 @@ import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "pg
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 export interface SqlExecutor {
-  query<TRow extends QueryResultRow = QueryResultRow>(sql: string, values?: readonly unknown[]): Promise<QueryResult<TRow>>;
+  query<TRow extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    values?: readonly unknown[],
+  ): Promise<QueryResult<TRow>>;
 }
 
 const transactionStorage = new AsyncLocalStorage<PoolClient>();
@@ -12,10 +15,20 @@ export class PostgresDatabase implements SqlExecutor, UnitOfWork {
   constructor(private readonly pool: Pool) {}
 
   static connect(connectionString: string): PostgresDatabase {
-    return new PostgresDatabase(new Pool({ connectionString, max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 }));
+    return new PostgresDatabase(
+      new Pool({
+        connectionString,
+        max: 10,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 5_000,
+      }),
+    );
   }
 
-  query<TRow extends QueryResultRow = QueryResultRow>(sql: string, values: readonly unknown[] = []): Promise<QueryResult<TRow>> {
+  query<TRow extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    values: readonly unknown[] = [],
+  ): Promise<QueryResult<TRow>> {
     const executor = transactionStorage.getStore() ?? this.pool;
     return executor.query<TRow>(sql, [...values]);
   }
@@ -37,6 +50,7 @@ export class PostgresDatabase implements SqlExecutor, UnitOfWork {
     }
   }
 
-  async close(): Promise<void> { await this.pool.end(); }
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
 }
-

@@ -9,7 +9,12 @@
     "metadata": { "category": "course" },
     "state": "draft",
     "media": [
-      { "transfer_identity": "catalog:course-cover", "url": "https://media.example/course.png", "alt_text": "Course cover", "position": 0 }
+      {
+        "transfer_identity": "catalog:course-cover",
+        "url": "https://media.example/course.png",
+        "alt_text": "Course cover",
+        "position": 0
+      }
     ]
   }
 ]

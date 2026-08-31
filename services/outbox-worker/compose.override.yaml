@@ -2,4 +2,3 @@ services:
   outbox-worker:
     environment:
       NODE_ENV: development
-

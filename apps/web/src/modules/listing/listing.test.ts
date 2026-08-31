@@ -1,2 +1,29 @@
-import {describe,expect,it} from "vitest";import {Listing} from "./listing";import {Money} from "@/modules/money/money";
-const create=()=>Listing.create({id:"listing",sellerId:"seller",title:"Draft",description:"",price:Money.of(100n,"USD"),destination:"https://example.com"});describe("Listing lifecycle",()=>{it("uses explicit draft, publish, archive, and draft restore transitions",()=>{const listing=create();expect(listing.state).toBe("draft");listing.publish();expect(listing.state).toBe("published");listing.archive();expect(listing.state).toBe("archived");listing.restore();expect(listing.state).toBe("draft");});it("does not permit direct republishing from archived",()=>{const listing=create();listing.archive();expect(()=>listing.publish()).toThrow();});});
+import { describe, expect, it } from "vitest";
+import { Listing } from "./listing";
+import { Money } from "@/modules/money/money";
+const create = () =>
+  Listing.create({
+    id: "listing",
+    sellerId: "seller",
+    title: "Draft",
+    description: "",
+    price: Money.of(100n, "USD"),
+    destination: "https://example.com",
+  });
+describe("Listing lifecycle", () => {
+  it("uses explicit draft, publish, archive, and draft restore transitions", () => {
+    const listing = create();
+    expect(listing.state).toBe("draft");
+    listing.publish();
+    expect(listing.state).toBe("published");
+    listing.archive();
+    expect(listing.state).toBe("archived");
+    listing.restore();
+    expect(listing.state).toBe("draft");
+  });
+  it("does not permit direct republishing from archived", () => {
+    const listing = create();
+    listing.archive();
+    expect(() => listing.publish()).toThrow();
+  });
+});

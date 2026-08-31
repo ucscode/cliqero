@@ -148,6 +148,7 @@ Tests should include:
 - refund/reversal, where supported, uses compensating ledger and explicit entitlement consequences.
 
 These tests validate the architecture itself, not merely endpoint happy paths.
+
 # Durable workflow execution
 
 The database is the workflow. HTTP requests, callbacks, webhooks, and provider responses persist facts and enable transitions; workers advance durable domain state. Provider-operation records are append-only historical evidence of provider attempts, not the workflow authority.

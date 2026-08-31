@@ -1,3 +1,15 @@
-import {getContainer} from "@/infrastructure/container";
-const container=getContainer();const abort=new AbortController();for(const signal of ["SIGTERM","SIGINT"] as const)process.once(signal,()=>abort.abort());
-try{while(!abort.signal.aborted){const initialized=await container.paymentInitializationWorker.runOnce();const verification=await container.payments.findVerificationWork();for(const payment of verification)await container.paymentVerification.process(payment.id);if(initialized===0&&verification.length===0)await new Promise(resolve=>setTimeout(resolve,1000));}}finally{await container.database.close();}
+import { getContainer } from "@/infrastructure/container";
+const container = getContainer();
+const abort = new AbortController();
+for (const signal of ["SIGTERM", "SIGINT"] as const) process.once(signal, () => abort.abort());
+try {
+  while (!abort.signal.aborted) {
+    const initialized = await container.paymentInitializationWorker.runOnce();
+    const verification = await container.payments.findVerificationWork();
+    for (const payment of verification) await container.paymentVerification.process(payment.id);
+    if (initialized === 0 && verification.length === 0)
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+} finally {
+  await container.database.close();
+}

@@ -1,5 +1,73 @@
-import {z} from "zod";import {authenticatedAccount,apiError} from "../../../http";import {getContainer} from "@/infrastructure/container";
-const schema=z.object({direction:z.enum(["credit","debit"]),amount_minor:z.string().regex(/^[1-9]\d*$/),title:z.string().trim().min(1).max(200),note:z.string().trim().max(1000).optional()}).strict();
-export async function POST(request:Request){const a=await authenticatedAccount(request);if(!a)return Response.json({error:"Unauthorized"},{status:401});try{const c=getContainer();await c.operators.requireOperator(a.id);const key=request.headers.get("idempotency-key");if(!key)throw new Error("A valid Idempotency-Key is required");const b=schema.parse(await request.json()),e=await c.treasury.createManual({direction:b.direction,amountMinor:BigInt(b.amount_minor),title:b.title,note:b.note,actorId:a.id,idempotencyKey:key});return Response.json({id:e.id,direction:e.direction,amount_minor:e.amountMinor.toString(),title:e.title,note:e.note},{status:201});}catch(e){return apiError(e);}}
-export async function GET(request:Request){const a=await authenticatedAccount(request);if(!a)return Response.json({error:"Unauthorized"},{status:401});try{const c=getContainer();await c.operators.requireOperator(a.id);const u=new URL(request.url),q=await c.treasuryRepository.list({cursor:u.searchParams.get("cursor")??undefined,limit:Math.min(Number(u.searchParams.get("limit")??20),100),direction:(u.searchParams.get("direction") as any)||undefined});return Response.json({items:q.items.map(serialize),next_cursor:q.nextCursor});}catch(e){return apiError(e);}}
-const serialize=(e:any)=>({...e,amount_minor:e.amountMinor.toString(),source_kind:e.sourceKind,source_id:e.sourceId,actor_id:e.actorId,created_at:e.createdAt.toISOString(),amountMinor:undefined,sourceKind:undefined,sourceId:undefined,actorId:undefined,createdAt:undefined,idempotencyKey:undefined});
+import { z } from "zod";
+import { authenticatedAccount, apiError } from "../../../http";
+import { getContainer } from "@/infrastructure/container";
+const schema = z
+  .object({
+    direction: z.enum(["credit", "debit"]),
+    amount_minor: z.string().regex(/^[1-9]\d*$/),
+    title: z.string().trim().min(1).max(200),
+    note: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+export async function POST(request: Request) {
+  const a = await authenticatedAccount(request);
+  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const c = getContainer();
+    await c.operators.requireOperator(a.id);
+    const key = request.headers.get("idempotency-key");
+    if (!key) throw new Error("A valid Idempotency-Key is required");
+    const b = schema.parse(await request.json()),
+      e = await c.treasury.createManual({
+        direction: b.direction,
+        amountMinor: BigInt(b.amount_minor),
+        title: b.title,
+        note: b.note,
+        actorId: a.id,
+        idempotencyKey: key,
+      });
+    return Response.json(
+      {
+        id: e.id,
+        direction: e.direction,
+        amount_minor: e.amountMinor.toString(),
+        title: e.title,
+        note: e.note,
+      },
+      { status: 201 },
+    );
+  } catch (e) {
+    return apiError(e);
+  }
+}
+export async function GET(request: Request) {
+  const a = await authenticatedAccount(request);
+  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const c = getContainer();
+    await c.operators.requireOperator(a.id);
+    const u = new URL(request.url),
+      q = await c.treasuryRepository.list({
+        cursor: u.searchParams.get("cursor") ?? undefined,
+        limit: Math.min(Number(u.searchParams.get("limit") ?? 20), 100),
+        direction: (u.searchParams.get("direction") as any) || undefined,
+      });
+    return Response.json({ items: q.items.map(serialize), next_cursor: q.nextCursor });
+  } catch (e) {
+    return apiError(e);
+  }
+}
+const serialize = (e: any) => ({
+  ...e,
+  amount_minor: e.amountMinor.toString(),
+  source_kind: e.sourceKind,
+  source_id: e.sourceId,
+  actor_id: e.actorId,
+  created_at: e.createdAt.toISOString(),
+  amountMinor: undefined,
+  sourceKind: undefined,
+  sourceId: undefined,
+  actorId: undefined,
+  createdAt: undefined,
+  idempotencyKey: undefined,
+});

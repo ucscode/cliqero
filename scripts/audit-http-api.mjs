@@ -1,27 +1,253 @@
-const base=process.env.APP_URL??"http://127.0.0.1:3000";const suffix=Date.now().toString(36);const results=[];
-async function call(method,path,{token,body,headers={}}={}){const response=await fetch(base+path,{method,headers:{...(body?{"content-type":"application/json"}:{}),...(token?{authorization:`Bearer ${token}`}:{}) ,...headers},body:body?JSON.stringify(body):undefined,redirect:"manual"});let value=null;try{value=await response.json();}catch{}results.push({method,path,status:response.status});return {response,value};}
-async function callRaw(method,path,{token,body,headers={}}={}){const response=await fetch(base+path,{method,headers:{...(token?{authorization:`Bearer ${token}`}:{}) ,...headers},body,redirect:"manual"});let value=null;try{value=await response.json();}catch{}results.push({method,path,status:response.status});return {response,value};}
-const password="development-password-123";
-await call("GET","/api/health");await call("POST","/api/accounts",{body:{}});
-const sellerEmail=`seller.${suffix}@example.com`,buyerEmail=`buyer.${suffix}@example.com`;
-const sellerAccount=await call("POST","/api/accounts",{body:{email:sellerEmail,handle:`s${suffix}`.slice(0,31),password,country:"NG"}});await call("POST","/api/accounts",{body:{email:buyerEmail,handle:`b${suffix}`.slice(0,31),password,country:"NG"}});
-await call("POST","/api/auth/sessions",{body:{email:buyerEmail,password:"wrong"}});const sellerLogin=await call("POST","/api/auth/sessions",{body:{email:sellerEmail,password}});const buyerLogin=await call("POST","/api/auth/sessions",{body:{email:buyerEmail,password}});const seller=sellerLogin.value.token,buyer=buyerLogin.value.token;
-await call("GET","/api/me/profile",{token:buyer});await call("PATCH","/api/me/profile",{token:buyer,body:{country:"NG"}});
-await call("POST","/api/listings",{body:{},token:seller});const listingResult=await call("POST","/api/listings",{token:seller,body:{title:"HTTP audit item",description:"safe development fixture",price_minor:"100",currency:"USD",destination:"https://example.com/item"}});const listing=listingResult.value.id;
-await call("GET","/api/listings");await call("GET","/api/me/listings?state=draft",{token:seller});await call("GET",`/api/listings/${listing}`);await call("GET","/api/listings/00000000-0000-4000-8000-000000000099");await call("PATCH",`/api/listings/${listing}`,{token:buyer,body:{title:"No"}});await call("PATCH",`/api/listings/${listing}`,{token:seller,body:{description:"safe",metadata:{audit:true}}});await call("POST",`/api/listings/${listing}/publish`,{token:seller});await call("GET",`/api/listings/${listing}`);
-const form=new FormData();form.set("file",new Blob([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nL8AAAAASUVORK5CYII=","base64")],{type:"image/png"}),"audit.png");form.set("alt_text","Audit image");const mediaResult=await callRaw("POST",`/api/listings/${listing}/media`,{token:seller,body:form});const media=mediaResult.value?.id;await call("GET",`/api/listings/${listing}/media`,{token:seller});if(media){await call("GET",`/api/listings/${listing}/media/${media}`,{token:seller});await call("PATCH",`/api/listings/${listing}/media/${media}`,{token:seller,body:{alt_text:"Updated",position:0}});}
-const imported=JSON.stringify([{external_key:`audit-${suffix}`,title:"Imported",description:"",price_minor:"100",currency:"USD",destination:"https://example.com/imported",metadata:{source:"audit"},state:"draft",media:[]},{title:""}]);await callRaw("POST","/api/listings/import?format=json&mode=create",{token:seller,body:imported,headers:{"content-type":"application/json"}});for(const format of ["json","csv","yaml"])await call("GET",`/api/listings/export?format=${format}`,{token:seller});
-await call("POST","/api/checkout",{body:{listing_id:listing}});const checkoutResult=await call("POST","/api/checkout",{token:buyer,headers:{"idempotency-key":`buy-${suffix}`},body:{listing_id:listing}});const checkout=checkoutResult.value.id,purchase=checkoutResult.value.purchase_id;await call("POST","/api/checkout",{token:buyer,headers:{"idempotency-key":`invalid-${suffix}`},body:{listing_id:listing,provider:"development"}});await call("GET",`/api/checkout/${checkout}`,{token:buyer});await call("GET",`/api/checkout/${checkout}`,{token:seller});
-await call("GET","/api/wallet");await call("GET","/api/wallet",{token:buyer});await call("GET","/api/wallet/transactions",{token:buyer});await call("POST","/api/wallet/fund",{token:buyer,headers:{"idempotency-key":`bad-${suffix}`},body:{amount_minor:"0",provider:"development"}});const fundingResult=await call("POST","/api/wallet/fund",{token:buyer,headers:{"idempotency-key":`fund-${suffix}`},body:{amount_minor:"100",provider:"development"}});await call("POST","/api/wallet/fund",{token:buyer,headers:{"idempotency-key":`fund-${suffix}`},body:{amount_minor:"100",provider:"development"}});await call("POST","/api/funding/development/verify",{token:buyer,body:{funding_id:fundingResult.value.id}});
-const integration=await call("POST","/api/integrations",{token:seller,body:{name:"audit destination",listing_id:listing}});await call("POST","/api/integrations",{token:buyer,body:{name:"forbidden",listing_id:listing}});await call("POST","/api/access/verify",{body:{source:"invalid"}});await call("POST","/api/access/verify",{token:integration.value.credential,body:{source:"invalid"}});await call("GET",`/api/listings/${listing}/access`,{token:buyer});await call("GET",`/access/${purchase}`,{token:buyer});
-await call("GET","/api/integrations",{token:seller});await call("GET",`/api/integrations/${integration.value.integration_id}`,{token:seller});await call("PATCH",`/api/integrations/${integration.value.integration_id}`,{token:seller,body:{name:"renamed"}});await call("POST",`/api/integrations/${integration.value.integration_id}/rotate`,{token:seller});
-await call("POST",`/api/listings/${listing}/referral-link`,{token:seller});await call("GET","/api/referrals/direct",{token:buyer});await call("GET","/api/referrals/downline?depth=1",{token:buyer});await call("GET","/api/referrals/uplines",{token:buyer});await call("POST","/api/referrals/parent",{token:buyer,body:{parent_account_id:sellerAccount.value.id}});
-await call("GET","/api/referral-links",{token:seller});await call("GET","/api/purchases",{token:buyer});await call("GET","/api/earnings",{token:seller});await call("GET","/api/earnings/entries",{token:seller});
-await call("GET","/api/withdrawals",{token:buyer});await call("POST","/api/withdrawals",{token:buyer,headers:{"idempotency-key":`withdraw-${suffix}`},body:{amount_minor:"1",currency:"USD",destination_type:"manual",destination_reference:"audit"}});await call("GET","/api/withdrawals/00000000-0000-4000-8000-000000000099",{token:buyer});await call("DELETE","/api/withdrawals/00000000-0000-4000-8000-000000000099",{token:buyer});
-for(const [method,path] of [["GET","/api/operator/paystack/events"],["GET","/api/operator/paystack/reconcile"],["POST","/api/operator/paystack/reconcile"],["POST","/api/operator/purchases/reverse"],["POST","/api/operator/settlement"],["GET","/api/operator/withdrawals"],["GET","/api/operator/withdrawals/00000000-0000-4000-8000-000000000099"],["POST","/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/approve"],["POST","/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/complete"],["GET","/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/payout"],["POST","/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/payout"],["POST","/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/payout/reconcile"],["POST","/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/reject"]])await call(method,path,{token:buyer,body:method==="POST"?{}:undefined});
-await call("POST","/api/webhooks/paystack",{body:{event:"charge.success"},headers:{"x-paystack-signature":"invalid"}});
-if(media)await call("DELETE",`/api/listings/${listing}/media/${media}`,{token:seller});await call("DELETE",`/api/listings/${listing}`,{token:seller});await call("POST",`/api/listings/${listing}/restore`,{token:seller});await call("DELETE",`/api/integrations/${integration.value.integration_id}`,{token:seller});
-const statusCounts=Object.fromEntries([...new Set(results.map((item)=>item.status))].sort().map((status)=>[status,results.filter((item)=>item.status===status).length]));
-const serverErrors=results.filter((item)=>item.status>=500);
-console.log(JSON.stringify({count:results.length,status_counts:statusCounts,server_errors:serverErrors},null,2));
-if(serverErrors.length>0)process.exitCode=1;
+const base = process.env.APP_URL ?? "http://127.0.0.1:3000";
+const suffix = Date.now().toString(36);
+const results = [];
+async function call(method, path, { token, body, headers = {} } = {}) {
+  const response = await fetch(base + path, {
+    method,
+    headers: {
+      ...(body ? { "content-type": "application/json" } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    redirect: "manual",
+  });
+  let value = null;
+  try {
+    value = await response.json();
+  } catch {}
+  results.push({ method, path, status: response.status });
+  return { response, value };
+}
+async function callRaw(method, path, { token, body, headers = {} } = {}) {
+  const response = await fetch(base + path, {
+    method,
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
+    body,
+    redirect: "manual",
+  });
+  let value = null;
+  try {
+    value = await response.json();
+  } catch {}
+  results.push({ method, path, status: response.status });
+  return { response, value };
+}
+const password = "development-password-123";
+await call("GET", "/api/health");
+await call("POST", "/api/accounts", { body: {} });
+const sellerEmail = `seller.${suffix}@example.com`,
+  buyerEmail = `buyer.${suffix}@example.com`;
+const sellerAccount = await call("POST", "/api/accounts", {
+  body: { email: sellerEmail, handle: `s${suffix}`.slice(0, 31), password, country: "NG" },
+});
+await call("POST", "/api/accounts", {
+  body: { email: buyerEmail, handle: `b${suffix}`.slice(0, 31), password, country: "NG" },
+});
+await call("POST", "/api/auth/sessions", { body: { email: buyerEmail, password: "wrong" } });
+const sellerLogin = await call("POST", "/api/auth/sessions", {
+  body: { email: sellerEmail, password },
+});
+const buyerLogin = await call("POST", "/api/auth/sessions", {
+  body: { email: buyerEmail, password },
+});
+const seller = sellerLogin.value.token,
+  buyer = buyerLogin.value.token;
+await call("GET", "/api/me/profile", { token: buyer });
+await call("PATCH", "/api/me/profile", { token: buyer, body: { country: "NG" } });
+await call("POST", "/api/listings", { body: {}, token: seller });
+const listingResult = await call("POST", "/api/listings", {
+  token: seller,
+  body: {
+    title: "HTTP audit item",
+    description: "safe development fixture",
+    price_minor: "100",
+    currency: "USD",
+    destination: "https://example.com/item",
+  },
+});
+const listing = listingResult.value.id;
+await call("GET", "/api/listings");
+await call("GET", "/api/me/listings?state=draft", { token: seller });
+await call("GET", `/api/listings/${listing}`);
+await call("GET", "/api/listings/00000000-0000-4000-8000-000000000099");
+await call("PATCH", `/api/listings/${listing}`, { token: buyer, body: { title: "No" } });
+await call("PATCH", `/api/listings/${listing}`, {
+  token: seller,
+  body: { description: "safe", metadata: { audit: true } },
+});
+await call("POST", `/api/listings/${listing}/publish`, { token: seller });
+await call("GET", `/api/listings/${listing}`);
+const form = new FormData();
+form.set(
+  "file",
+  new Blob(
+    [
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nL8AAAAASUVORK5CYII=",
+        "base64",
+      ),
+    ],
+    { type: "image/png" },
+  ),
+  "audit.png",
+);
+form.set("alt_text", "Audit image");
+const mediaResult = await callRaw("POST", `/api/listings/${listing}/media`, {
+  token: seller,
+  body: form,
+});
+const media = mediaResult.value?.id;
+await call("GET", `/api/listings/${listing}/media`, { token: seller });
+if (media) {
+  await call("GET", `/api/listings/${listing}/media/${media}`, { token: seller });
+  await call("PATCH", `/api/listings/${listing}/media/${media}`, {
+    token: seller,
+    body: { alt_text: "Updated", position: 0 },
+  });
+}
+const imported = JSON.stringify([
+  {
+    external_key: `audit-${suffix}`,
+    title: "Imported",
+    description: "",
+    price_minor: "100",
+    currency: "USD",
+    destination: "https://example.com/imported",
+    metadata: { source: "audit" },
+    state: "draft",
+    media: [],
+  },
+  { title: "" },
+]);
+await callRaw("POST", "/api/listings/import?format=json&mode=create", {
+  token: seller,
+  body: imported,
+  headers: { "content-type": "application/json" },
+});
+for (const format of ["json", "csv", "yaml"])
+  await call("GET", `/api/listings/export?format=${format}`, { token: seller });
+await call("POST", "/api/checkout", { body: { listing_id: listing } });
+const checkoutResult = await call("POST", "/api/checkout", {
+  token: buyer,
+  headers: { "idempotency-key": `buy-${suffix}` },
+  body: { listing_id: listing },
+});
+const checkout = checkoutResult.value.id,
+  purchase = checkoutResult.value.purchase_id;
+await call("POST", "/api/checkout", {
+  token: buyer,
+  headers: { "idempotency-key": `invalid-${suffix}` },
+  body: { listing_id: listing, provider: "development" },
+});
+await call("GET", `/api/checkout/${checkout}`, { token: buyer });
+await call("GET", `/api/checkout/${checkout}`, { token: seller });
+await call("GET", "/api/wallet");
+await call("GET", "/api/wallet", { token: buyer });
+await call("GET", "/api/wallet/transactions", { token: buyer });
+await call("POST", "/api/wallet/fund", {
+  token: buyer,
+  headers: { "idempotency-key": `bad-${suffix}` },
+  body: { amount_minor: "0", provider: "development" },
+});
+const fundingResult = await call("POST", "/api/wallet/fund", {
+  token: buyer,
+  headers: { "idempotency-key": `fund-${suffix}` },
+  body: { amount_minor: "100", provider: "development" },
+});
+await call("POST", "/api/wallet/fund", {
+  token: buyer,
+  headers: { "idempotency-key": `fund-${suffix}` },
+  body: { amount_minor: "100", provider: "development" },
+});
+await call("POST", "/api/funding/development/verify", {
+  token: buyer,
+  body: { funding_id: fundingResult.value.id },
+});
+const integration = await call("POST", "/api/integrations", {
+  token: seller,
+  body: { name: "audit destination", listing_id: listing },
+});
+await call("POST", "/api/integrations", {
+  token: buyer,
+  body: { name: "forbidden", listing_id: listing },
+});
+await call("POST", "/api/access/verify", { body: { source: "invalid" } });
+await call("POST", "/api/access/verify", {
+  token: integration.value.credential,
+  body: { source: "invalid" },
+});
+await call("GET", `/api/listings/${listing}/access`, { token: buyer });
+await call("GET", `/access/${purchase}`, { token: buyer });
+await call("GET", "/api/integrations", { token: seller });
+await call("GET", `/api/integrations/${integration.value.integration_id}`, { token: seller });
+await call("PATCH", `/api/integrations/${integration.value.integration_id}`, {
+  token: seller,
+  body: { name: "renamed" },
+});
+await call("POST", `/api/integrations/${integration.value.integration_id}/rotate`, {
+  token: seller,
+});
+await call("POST", `/api/listings/${listing}/referral-link`, { token: seller });
+await call("GET", "/api/referrals/direct", { token: buyer });
+await call("GET", "/api/referrals/downline?depth=1", { token: buyer });
+await call("GET", "/api/referrals/uplines", { token: buyer });
+await call("POST", "/api/referrals/parent", {
+  token: buyer,
+  body: { parent_account_id: sellerAccount.value.id },
+});
+await call("GET", "/api/referral-links", { token: seller });
+await call("GET", "/api/purchases", { token: buyer });
+await call("GET", "/api/earnings", { token: seller });
+await call("GET", "/api/earnings/entries", { token: seller });
+await call("GET", "/api/withdrawals", { token: buyer });
+await call("POST", "/api/withdrawals", {
+  token: buyer,
+  headers: { "idempotency-key": `withdraw-${suffix}` },
+  body: {
+    amount_minor: "1",
+    currency: "USD",
+    destination_type: "manual",
+    destination_reference: "audit",
+  },
+});
+await call("GET", "/api/withdrawals/00000000-0000-4000-8000-000000000099", { token: buyer });
+await call("DELETE", "/api/withdrawals/00000000-0000-4000-8000-000000000099", { token: buyer });
+for (const [method, path] of [
+  ["GET", "/api/operator/paystack/events"],
+  ["GET", "/api/operator/paystack/reconcile"],
+  ["POST", "/api/operator/paystack/reconcile"],
+  ["POST", "/api/operator/purchases/reverse"],
+  ["POST", "/api/operator/settlement"],
+  ["GET", "/api/operator/withdrawals"],
+  ["GET", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099"],
+  ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/approve"],
+  ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/complete"],
+  ["GET", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/payout"],
+  ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/payout"],
+  ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/payout/reconcile"],
+  ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/reject"],
+])
+  await call(method, path, { token: buyer, body: method === "POST" ? {} : undefined });
+await call("POST", "/api/webhooks/paystack", {
+  body: { event: "charge.success" },
+  headers: { "x-paystack-signature": "invalid" },
+});
+if (media) await call("DELETE", `/api/listings/${listing}/media/${media}`, { token: seller });
+await call("DELETE", `/api/listings/${listing}`, { token: seller });
+await call("POST", `/api/listings/${listing}/restore`, { token: seller });
+await call("DELETE", `/api/integrations/${integration.value.integration_id}`, { token: seller });
+const statusCounts = Object.fromEntries(
+  [...new Set(results.map((item) => item.status))]
+    .sort()
+    .map((status) => [status, results.filter((item) => item.status === status).length]),
+);
+const serverErrors = results.filter((item) => item.status >= 500);
+console.log(
+  JSON.stringify(
+    { count: results.length, status_counts: statusCounts, server_errors: serverErrors },
+    null,
+    2,
+  ),
+);
+if (serverErrors.length > 0) process.exitCode = 1;

@@ -1,0 +1,12 @@
+node_modules/
+.next/
+coverage/
+dist/
+build/
+generated/
+config/modules/payment/*.yaml
+config/modules/payout/*.yaml
+config/modules/storage/*.yaml
+config/modules/distribution.yaml
+config/hierarchy/distribution.yaml
+config/hierarchy/visualization.yaml

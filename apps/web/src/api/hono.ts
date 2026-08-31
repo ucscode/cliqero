@@ -1,33 +1,407 @@
-import {OpenAPIHono,createRoute,z} from "@hono/zod-openapi";
-import type {ApplicationContainer} from "@/infrastructure/container";
-import type {ApiPrincipal} from "@/modules/identity/api-principal";
-import {apiScopeSchema} from "@/modules/identity/api-scopes";
+import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
+import type { ApplicationContainer } from "@/infrastructure/container";
+import type { ApiPrincipal } from "@/modules/identity/api-principal";
+import { apiScopeSchema } from "@/modules/identity/api-scopes";
 
-type Env={Variables:{principal:ApiPrincipal|null}};
-const errorSchema=z.object({error:z.string(),code:z.string().optional()});
-const nodeSchema=z.object({id:z.string(),handle:z.string(),displayName:z.string().nullable(),depth:z.number(),directChildCount:z.number(),hasChildren:z.boolean(),hasMoreChildren:z.boolean()});
-const parentSchema=z.object({id:z.string(),handle:z.string(),displayName:z.string().nullable(),canNavigate:z.boolean()});
-const treeSchema=z.object({root:z.string(),windowDepth:z.number(),childLimit:z.number(),parent:parentSchema.nullable(),nodes:z.array(nodeSchema),edges:z.array(z.object({parent:z.string(),child:z.string()}))});
-const childrenSchema=z.object({parentId:z.string(),items:z.array(nodeSchema),nextCursor:z.string().nullable()});
-const reassignmentSchema=z.object({childAccountId:z.string(),parentAccountId:z.string(),previousParentAccountId:z.string().nullable(),changed:z.boolean()});
-function principal(c:any){return c.get("principal") as ApiPrincipal|null;}
-function requirePrincipal(c:any){const p=principal(c);if(!p){c.header("WWW-Authenticate","Bearer");return c.json({error:"Unauthorized",code:"unauthorized"},401);}return p;}
-function requireScope(c:any,p:ApiPrincipal,scope:string){if(p.kind==="api_key"&&!p.scopes.has(scope)){return c.json({error:"Forbidden",code:"insufficient_scope"},403);}return null;}
-function domainError(c:any,error:unknown){const message=error instanceof Error?error.message:"Request failed";const status=message==="Forbidden"?403:message.toLowerCase().includes("not found")?404:message.toLowerCase().includes("already")?409:400;return c.json({error:message,code:status===403?"forbidden":status===404?"not_found":status===409?"conflict":"invalid_request"},status);}
+type Env = { Variables: { principal: ApiPrincipal | null } };
+const errorSchema = z.object({ error: z.string(), code: z.string().optional() });
+const nodeSchema = z.object({
+  id: z.string(),
+  handle: z.string(),
+  displayName: z.string().nullable(),
+  depth: z.number(),
+  directChildCount: z.number(),
+  hasChildren: z.boolean(),
+  hasMoreChildren: z.boolean(),
+});
+const parentSchema = z.object({
+  id: z.string(),
+  handle: z.string(),
+  displayName: z.string().nullable(),
+  canNavigate: z.boolean(),
+});
+const treeSchema = z.object({
+  root: z.string(),
+  windowDepth: z.number(),
+  childLimit: z.number(),
+  parent: parentSchema.nullable(),
+  nodes: z.array(nodeSchema),
+  edges: z.array(z.object({ parent: z.string(), child: z.string() })),
+});
+const childrenSchema = z.object({
+  parentId: z.string(),
+  items: z.array(nodeSchema),
+  nextCursor: z.string().nullable(),
+});
+const reassignmentSchema = z.object({
+  childAccountId: z.string(),
+  parentAccountId: z.string(),
+  previousParentAccountId: z.string().nullable(),
+  changed: z.boolean(),
+});
+function principal(c: any) {
+  return c.get("principal") as ApiPrincipal | null;
+}
+function requirePrincipal(c: any) {
+  const p = principal(c);
+  if (!p) {
+    c.header("WWW-Authenticate", "Bearer");
+    return c.json({ error: "Unauthorized", code: "unauthorized" }, 401);
+  }
+  return p;
+}
+function requireScope(c: any, p: ApiPrincipal, scope: string) {
+  if (p.kind === "api_key" && !p.scopes.has(scope)) {
+    return c.json({ error: "Forbidden", code: "insufficient_scope" }, 403);
+  }
+  return null;
+}
+function domainError(c: any, error: unknown) {
+  const message = error instanceof Error ? error.message : "Request failed";
+  const status =
+    message === "Forbidden"
+      ? 403
+      : message.toLowerCase().includes("not found")
+        ? 404
+        : message.toLowerCase().includes("already")
+          ? 409
+          : 400;
+  return c.json(
+    {
+      error: message,
+      code:
+        status === 403
+          ? "forbidden"
+          : status === 404
+            ? "not_found"
+            : status === 409
+              ? "conflict"
+              : "invalid_request",
+    },
+    status,
+  );
+}
 
-export function createApiApp(container:ApplicationContainer){
-  const app=new OpenAPIHono<Env>();
-  app.use("/api/*",async(c,next)=>{const p=await container.principalResolver.resolve(c.req.raw);c.set("principal",p);await next();});
-  app.openapi(createRoute({method:"get",path:"/api/openapi.json",responses:{200:{description:"OpenAPI document",content:{"application/json":{schema:z.any()}}}}}),c=>c.json(app.getOpenAPIDocument({openapi:"3.0.0",info:{title:"Cliqero API",version:"1.0.0"},servers:[{url:"/"}]})));
-  const queryTree=z.object({root:z.string().uuid().optional()});
-  app.openapi(createRoute({method:"get",path:"/api/hierarchy/tree",request:{query:queryTree},responses:{200:{description:"Hierarchy window",content:{"application/json":{schema:treeSchema}}},401:{description:"Authentication required",content:{"application/json":{schema:errorSchema}}},403:{description:"Not permitted",content:{"application/json":{schema:errorSchema}}}}}),async c=>{const p=requirePrincipal(c);if(!(p instanceof Object)||!('accountId' in p))return p;const denied=requireScope(c,p,"hierarchy:read");if(denied)return denied;const root=c.req.valid("query").root??p.accountId;const admin=p.roles.includes("operator")&&(p.kind==="user_session"||p.scopes.has("hierarchy:admin"));try{return c.json(await container.hierarchy.tree(p.accountId,root,admin),200);}catch(error){return c.json({error:error instanceof Error?error.message:"Request failed",code:"forbidden"},403);}});
-  const searchQuery=z.object({q:z.string().min(1).max(100),limit:z.coerce.number().int().min(1).max(50).default(25)});
-  app.openapi(createRoute({method:"get",path:"/api/hierarchy/search",request:{query:searchQuery},responses:{200:{description:"Matching accounts",content:{"application/json":{schema:z.object({items:z.array(z.object({id:z.string(),handle:z.string(),displayName:z.string().nullable()}))})}}},401:{description:"Authentication required",content:{"application/json":{schema:errorSchema}}}}}),async c=>{const p=requirePrincipal(c);if(!(p instanceof Object)||!('accountId' in p))return p;const denied=requireScope(c,p,"hierarchy:read");if(denied)return denied;const q=c.req.valid("query");const admin=p.roles.includes("operator")&&(p.kind==="user_session"||p.scopes.has("hierarchy:admin"));const items=await container.hierarchy.search(p.accountId,q.q,admin,q.limit);return c.json({items},200);});
-  app.openapi(createRoute({method:"get",path:"/api/hierarchy/children/{parentId}",request:{params:z.object({parentId:z.string().uuid()}),query:z.object({cursor:z.string().uuid().optional()})},responses:{200:{description:"One child batch",content:{"application/json":{schema:childrenSchema}}},401:{description:"Authentication required",content:{"application/json":{schema:errorSchema}}},403:{description:"Not permitted",content:{"application/json":{schema:errorSchema}}}}}),async c=>{const p=requirePrincipal(c);if(!(p instanceof Object)||!('accountId' in p))return p;const denied=requireScope(c,p,"hierarchy:read");if(denied)return denied;const admin=p.roles.includes("operator")&&(p.kind==="user_session"||p.scopes.has("hierarchy:admin"));try{return c.json(await container.hierarchy.children(p.accountId,c.req.valid("param").parentId,admin,c.req.valid("query").cursor),200);}catch(error){return c.json({error:error instanceof Error?error.message:"Request failed",code:"forbidden"},403);}});
-  app.openapi(createRoute({method:"put",path:"/api/operator/hierarchy/{accountId}/parent",request:{params:z.object({accountId:z.string().uuid()}),body:{content:{"application/json":{schema:z.object({parent_account_id:z.string().uuid()}).strict()}}}},responses:{200:{description:"Parent assignment",content:{"application/json":{schema:reassignmentSchema}}},400:{description:"Invalid or cyclic relationship",content:{"application/json":{schema:errorSchema}}},401:{description:"Authentication required",content:{"application/json":{schema:errorSchema}}},403:{description:"Operator required",content:{"application/json":{schema:errorSchema}}},404:{description:"Account not found",content:{"application/json":{schema:errorSchema}}}}}),async c=>{const p=requirePrincipal(c);if(!(p instanceof Object)||!('accountId' in p))return p;const denied=requireScope(c,p,"hierarchy:admin");if(denied)return denied;if(!p.roles.includes("operator"))return c.json({error:"Forbidden",code:"forbidden"},403);try{const result=await container.referralGraphService.reassignParent(c.req.valid("param").accountId,c.req.valid("json").parent_account_id,p.accountId);return c.json(result,200);}catch(error){return domainError(c,error);}});
-  const keyBody=z.object({name:z.string().min(1).max(100),scopes:z.array(apiScopeSchema).max(20).default([]),expires_at:z.string().datetime().nullable().optional(),account_id:z.string().uuid().optional()}).strict();
-  app.openapi(createRoute({method:"post",path:"/api/operator/api-keys",request:{body:{content:{"application/json":{schema:keyBody}}}},responses:{201:{description:"New key (secret shown once)",content:{"application/json":{schema:z.object({id:z.string(),secret:z.string(),name:z.string(),scopes:z.array(z.string())})}}},401:{description:"Authentication required",content:{"application/json":{schema:errorSchema}}},403:{description:"Operator required",content:{"application/json":{schema:errorSchema}}}}}),async c=>{const p=requirePrincipal(c);if(!(p instanceof Object)||!('accountId' in p))return p;const denied=requireScope(c,p,"api_keys:manage");if(denied)return denied;if(!p.roles.includes("operator"))return c.json({error:"Forbidden",code:"forbidden"},403);const b=c.req.valid("json");const result=await container.apiKeys.create({accountId:b.account_id??p.accountId,name:b.name,scopes:b.scopes,createdBy:p.accountId,expiresAt:b.expires_at?new Date(b.expires_at):null});return c.json(result,201);});
-  app.openapi(createRoute({method:"get",path:"/api/operator/api-keys",responses:{200:{description:"API keys",content:{"application/json":{schema:z.object({items:z.array(z.any())})}}}}}),async c=>{const p=requirePrincipal(c);if(!(p instanceof Object)||!('accountId' in p))return p;const denied=requireScope(c,p,"api_keys:manage");if(denied)return denied;if(!p.roles.includes("operator"))return c.json({error:"Forbidden",code:"forbidden"},403);return c.json({items:await container.apiKeys.list()},200);});
-  app.openapi(createRoute({method:"post",path:"/api/operator/api-keys/{id}/revoke",request:{params:z.object({id:z.string().uuid()})},responses:{204:{description:"Key revoked"},401:{description:"Authentication required",content:{"application/json":{schema:errorSchema}}},403:{description:"Operator required",content:{"application/json":{schema:errorSchema}}}}}),async c=>{const p=requirePrincipal(c);if(!(p instanceof Object)||!('accountId' in p))return p;const denied=requireScope(c,p,"api_keys:manage");if(denied)return denied;if(!p.roles.includes("operator"))return c.json({error:"Forbidden",code:"forbidden"},403);await container.apiKeys.revoke(c.req.valid("param").id);return c.body(null,204);});
+export function createApiApp(container: ApplicationContainer) {
+  const app = new OpenAPIHono<Env>();
+  app.use("/api/*", async (c, next) => {
+    const p = await container.principalResolver.resolve(c.req.raw);
+    c.set("principal", p);
+    await next();
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/openapi.json",
+      responses: {
+        200: {
+          description: "OpenAPI document",
+          content: { "application/json": { schema: z.any() } },
+        },
+      },
+    }),
+    (c) =>
+      c.json(
+        app.getOpenAPIDocument({
+          openapi: "3.0.0",
+          info: { title: "Cliqero API", version: "1.0.0" },
+          servers: [{ url: "/" }],
+        }),
+      ),
+  );
+  const queryTree = z.object({ root: z.string().uuid().optional() });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/hierarchy/tree",
+      request: { query: queryTree },
+      responses: {
+        200: {
+          description: "Hierarchy window",
+          content: { "application/json": { schema: treeSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Not permitted",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireScope(c, p, "hierarchy:read");
+      if (denied) return denied;
+      const root = c.req.valid("query").root ?? p.accountId;
+      const admin =
+        p.roles.includes("operator") &&
+        (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
+      try {
+        return c.json(await container.hierarchy.tree(p.accountId, root, admin), 200);
+      } catch (error) {
+        return c.json(
+          { error: error instanceof Error ? error.message : "Request failed", code: "forbidden" },
+          403,
+        );
+      }
+    },
+  );
+  const searchQuery = z.object({
+    q: z.string().min(1).max(100),
+    limit: z.coerce.number().int().min(1).max(50).default(25),
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/hierarchy/search",
+      request: { query: searchQuery },
+      responses: {
+        200: {
+          description: "Matching accounts",
+          content: {
+            "application/json": {
+              schema: z.object({
+                items: z.array(
+                  z.object({
+                    id: z.string(),
+                    handle: z.string(),
+                    displayName: z.string().nullable(),
+                  }),
+                ),
+              }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireScope(c, p, "hierarchy:read");
+      if (denied) return denied;
+      const q = c.req.valid("query");
+      const admin =
+        p.roles.includes("operator") &&
+        (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
+      const items = await container.hierarchy.search(p.accountId, q.q, admin, q.limit);
+      return c.json({ items }, 200);
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/hierarchy/children/{parentId}",
+      request: {
+        params: z.object({ parentId: z.string().uuid() }),
+        query: z.object({ cursor: z.string().uuid().optional() }),
+      },
+      responses: {
+        200: {
+          description: "One child batch",
+          content: { "application/json": { schema: childrenSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Not permitted",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireScope(c, p, "hierarchy:read");
+      if (denied) return denied;
+      const admin =
+        p.roles.includes("operator") &&
+        (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
+      try {
+        return c.json(
+          await container.hierarchy.children(
+            p.accountId,
+            c.req.valid("param").parentId,
+            admin,
+            c.req.valid("query").cursor,
+          ),
+          200,
+        );
+      } catch (error) {
+        return c.json(
+          { error: error instanceof Error ? error.message : "Request failed", code: "forbidden" },
+          403,
+        );
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "put",
+      path: "/api/operator/hierarchy/{accountId}/parent",
+      request: {
+        params: z.object({ accountId: z.string().uuid() }),
+        body: {
+          content: {
+            "application/json": {
+              schema: z.object({ parent_account_id: z.string().uuid() }).strict(),
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Parent assignment",
+          content: { "application/json": { schema: reassignmentSchema } },
+        },
+        400: {
+          description: "Invalid or cyclic relationship",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Account not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireScope(c, p, "hierarchy:admin");
+      if (denied) return denied;
+      if (!p.roles.includes("operator"))
+        return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+      try {
+        const result = await container.referralGraphService.reassignParent(
+          c.req.valid("param").accountId,
+          c.req.valid("json").parent_account_id,
+          p.accountId,
+        );
+        return c.json(result, 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  const keyBody = z
+    .object({
+      name: z.string().min(1).max(100),
+      scopes: z.array(apiScopeSchema).max(20).default([]),
+      expires_at: z.string().datetime().nullable().optional(),
+      account_id: z.string().uuid().optional(),
+    })
+    .strict();
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/api-keys",
+      request: { body: { content: { "application/json": { schema: keyBody } } } },
+      responses: {
+        201: {
+          description: "New key (secret shown once)",
+          content: {
+            "application/json": {
+              schema: z.object({
+                id: z.string(),
+                secret: z.string(),
+                name: z.string(),
+                scopes: z.array(z.string()),
+              }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireScope(c, p, "api_keys:manage");
+      if (denied) return denied;
+      if (!p.roles.includes("operator"))
+        return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+      const b = c.req.valid("json");
+      const result = await container.apiKeys.create({
+        accountId: b.account_id ?? p.accountId,
+        name: b.name,
+        scopes: b.scopes,
+        createdBy: p.accountId,
+        expiresAt: b.expires_at ? new Date(b.expires_at) : null,
+      });
+      return c.json(result, 201);
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/api-keys",
+      responses: {
+        200: {
+          description: "API keys",
+          content: { "application/json": { schema: z.object({ items: z.array(z.any()) }) } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireScope(c, p, "api_keys:manage");
+      if (denied) return denied;
+      if (!p.roles.includes("operator"))
+        return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+      return c.json({ items: await container.apiKeys.list() }, 200);
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/api-keys/{id}/revoke",
+      request: { params: z.object({ id: z.string().uuid() }) },
+      responses: {
+        204: { description: "Key revoked" },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireScope(c, p, "api_keys:manage");
+      if (denied) return denied;
+      if (!p.roles.includes("operator"))
+        return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+      await container.apiKeys.revoke(c.req.valid("param").id);
+      return c.body(null, 204);
+    },
+  );
   return app;
 }

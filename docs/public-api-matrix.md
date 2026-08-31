@@ -2,93 +2,94 @@
 
 The development audit is reproducible with `node scripts/audit-http-api.mjs`. It uses synthetic accounts and the development funding provider, never Paystack. `Idem.` means the endpoint requires or honors `Idempotency-Key`.
 
-| Method | Path | Auth | Capability | Input | Success | Persisted fact | Dependencies | Idem. | HTTP result |
-|---|---|---|---|---|---:|---|---|---|---|
-| GET | `/api/health` | no | runtime | none | 200 | none | none | n/a | 200 |
-| POST | `/api/accounts` | no | identity | email, handle, password, country? | 201 | account | PostgreSQL | unique identity | 201; invalid 400 |
-| POST | `/api/auth/sessions` | no | identity | email, password | 200 | session | identity | n/a | 200; invalid 401 |
-| GET/POST/PATCH/PUT/DELETE | `/api/auth/*` | varies | Better Auth authentication | email/password, Google OAuth, verification, reset, sign-out | provider-defined | Better Auth auth records/session | Better Auth + PostgreSQL | provider-defined | browser/session-safe responses |
-| POST | `/api/me/onboarding` | authenticated Better Auth principal | identity | handle, country? | 201 | Cliqero account mapping | Better Auth identity + identity capability | one mapping | incomplete social identity 201; complete 409 |
-| POST | `/api/listings` | catalogue manager/operator | listing | listing snapshot | 201 | draft listing | identity + catalogue capability | n/a | ordinary account 403 |
-| GET | `/api/listings/:id` | no | listing | path id | 200 | none | listing | n/a | 200; missing 404 |
-| PATCH | `/api/listings/:id` | catalogue manager/operator | listing | partial mutable fields | 200 | updated listing | listing + catalogue capability | n/a | ordinary account 403 |
-| POST | `/api/checkout` | account | checkout | `listing_id` only | 201 | checkout + pending purchase | listing, wallet snapshot | required | 201; unauth 401; provider field 400 |
-| GET | `/api/checkout/:id` | buyer | checkout | path id | 200 | none | checkout | n/a | 200; wrong buyer 404 |
-| POST | `/api/wallet/fund` | account | funding | USD amount, provider, collection currency? | 201 | funding transaction | provider registry, FX when needed | required | 201; repeated key 201; invalid 400 |
-| POST | `/api/funding/development/verify` | owner | funding | funding id | 200 | confirmation when eligible | development provider | provider reference | 200 |
-| GET | `/api/wallet` | account | wallet | none | 200 | none | wallet ledger | n/a | 200; unauth 401 |
-| GET | `/api/wallet/transactions` | account | wallet | none | 200 | none | wallet ledger | n/a | 200 |
-| POST | `/api/integrations` | listing owner | integration | name, listing id | 201 | scoped credential hash | listing/access | n/a | 201; wrong owner 403 |
-| POST | `/api/access/verify` | integration | access | opaque source | 200 | none | access grant + entitlement | n/a | unauthorized 401; invalid source returns denied 200 |
-| GET | `/access/:purchaseId` | buyer | access | purchase id | 307 | opaque grant | purchase, entitlement, listing | optional grant key | pending purchase denied 404; success covered in integration |
-| GET | `/api/listings/:id/access` | buyer | access (legacy alias) | listing id | 307 | opaque grant | entitlement/listing | optional grant key | no entitlement 404 |
-| POST | `/api/listings/:id/referral-link` | account | referral | listing id | 201 | referral link | listing/referral | stable link | 201 |
-| POST | `/api/referrals/parent` | account | referral | parent account id | 204 | initial self-parent assignment; reassignment is operator-only | identity/referral | unique child | 204 |
-| GET | `/api/referrals/direct` | account | referral | cursor/limit | 200 | none | referral | n/a | 200 |
-| GET | `/api/referrals/downline` | account | referral | depth/cursor/limit | 200 | none | referral | n/a | 200 |
-| GET | `/api/referrals/uplines` | account | referral | none | 200 | none | referral | n/a | 200 |
-| POST | `/api/withdrawals` | account | withdrawal | amount, USD, destination | 201 | requested withdrawal + reservation | withdrawable earnings only | required | insufficient funds 400 |
-| GET | `/api/withdrawals` | account | withdrawal | none | 200 | none | withdrawal | n/a | 200 |
-| GET | `/api/withdrawals/:id` | owner | withdrawal | path id | 200 | none | withdrawal | n/a | missing 404 |
-| DELETE | `/api/withdrawals/:id` | owner | withdrawal | path id | 200 | cancellation/release | withdrawal/reservation | transition-idempotent | missing 404 |
-| POST | `/api/webhooks/paystack` | provider signature | integration ingress | raw provider event | 200 | provider event + verification work | Paystack signature, event store | event identity | invalid signature 401 |
+| Method                    | Path                              | Auth                                | Capability                 | Input                                                       |          Success | Persisted fact                                                | Dependencies                               | Idem.                 | HTTP result                                                 |
+| ------------------------- | --------------------------------- | ----------------------------------- | -------------------------- | ----------------------------------------------------------- | ---------------: | ------------------------------------------------------------- | ------------------------------------------ | --------------------- | ----------------------------------------------------------- |
+| GET                       | `/api/health`                     | no                                  | runtime                    | none                                                        |              200 | none                                                          | none                                       | n/a                   | 200                                                         |
+| POST                      | `/api/accounts`                   | no                                  | identity                   | email, handle, password, country?                           |              201 | account                                                       | PostgreSQL                                 | unique identity       | 201; invalid 400                                            |
+| POST                      | `/api/auth/sessions`              | no                                  | identity                   | email, password                                             |              200 | session                                                       | identity                                   | n/a                   | 200; invalid 401                                            |
+| GET/POST/PATCH/PUT/DELETE | `/api/auth/*`                     | varies                              | Better Auth authentication | email/password, Google OAuth, verification, reset, sign-out | provider-defined | Better Auth auth records/session                              | Better Auth + PostgreSQL                   | provider-defined      | browser/session-safe responses                              |
+| POST                      | `/api/me/onboarding`              | authenticated Better Auth principal | identity                   | handle, country?                                            |              201 | Cliqero account mapping                                       | Better Auth identity + identity capability | one mapping           | incomplete social identity 201; complete 409                |
+| POST                      | `/api/listings`                   | catalogue manager/operator          | listing                    | listing snapshot                                            |              201 | draft listing                                                 | identity + catalogue capability            | n/a                   | ordinary account 403                                        |
+| GET                       | `/api/listings/:id`               | no                                  | listing                    | path id                                                     |              200 | none                                                          | listing                                    | n/a                   | 200; missing 404                                            |
+| PATCH                     | `/api/listings/:id`               | catalogue manager/operator          | listing                    | partial mutable fields                                      |              200 | updated listing                                               | listing + catalogue capability             | n/a                   | ordinary account 403                                        |
+| POST                      | `/api/checkout`                   | account                             | checkout                   | `listing_id` only                                           |              201 | checkout + pending purchase                                   | listing, wallet snapshot                   | required              | 201; unauth 401; provider field 400                         |
+| GET                       | `/api/checkout/:id`               | buyer                               | checkout                   | path id                                                     |              200 | none                                                          | checkout                                   | n/a                   | 200; wrong buyer 404                                        |
+| POST                      | `/api/wallet/fund`                | account                             | funding                    | USD amount, provider, collection currency?                  |              201 | funding transaction                                           | provider registry, FX when needed          | required              | 201; repeated key 201; invalid 400                          |
+| POST                      | `/api/funding/development/verify` | owner                               | funding                    | funding id                                                  |              200 | confirmation when eligible                                    | development provider                       | provider reference    | 200                                                         |
+| GET                       | `/api/wallet`                     | account                             | wallet                     | none                                                        |              200 | none                                                          | wallet ledger                              | n/a                   | 200; unauth 401                                             |
+| GET                       | `/api/wallet/transactions`        | account                             | wallet                     | none                                                        |              200 | none                                                          | wallet ledger                              | n/a                   | 200                                                         |
+| POST                      | `/api/integrations`               | listing owner                       | integration                | name, listing id                                            |              201 | scoped credential hash                                        | listing/access                             | n/a                   | 201; wrong owner 403                                        |
+| POST                      | `/api/access/verify`              | integration                         | access                     | opaque source                                               |              200 | none                                                          | access grant + entitlement                 | n/a                   | unauthorized 401; invalid source returns denied 200         |
+| GET                       | `/access/:purchaseId`             | buyer                               | access                     | purchase id                                                 |              307 | opaque grant                                                  | purchase, entitlement, listing             | optional grant key    | pending purchase denied 404; success covered in integration |
+| GET                       | `/api/listings/:id/access`        | buyer                               | access (legacy alias)      | listing id                                                  |              307 | opaque grant                                                  | entitlement/listing                        | optional grant key    | no entitlement 404                                          |
+| POST                      | `/api/listings/:id/referral-link` | account                             | referral                   | listing id                                                  |              201 | referral link                                                 | listing/referral                           | stable link           | 201                                                         |
+| POST                      | `/api/referrals/parent`           | account                             | referral                   | parent account id                                           |              204 | initial self-parent assignment; reassignment is operator-only | identity/referral                          | unique child          | 204                                                         |
+| GET                       | `/api/referrals/direct`           | account                             | referral                   | cursor/limit                                                |              200 | none                                                          | referral                                   | n/a                   | 200                                                         |
+| GET                       | `/api/referrals/downline`         | account                             | referral                   | depth/cursor/limit                                          |              200 | none                                                          | referral                                   | n/a                   | 200                                                         |
+| GET                       | `/api/referrals/uplines`          | account                             | referral                   | none                                                        |              200 | none                                                          | referral                                   | n/a                   | 200                                                         |
+| POST                      | `/api/withdrawals`                | account                             | withdrawal                 | amount, USD, destination                                    |              201 | requested withdrawal + reservation                            | withdrawable earnings only                 | required              | insufficient funds 400                                      |
+| GET                       | `/api/withdrawals`                | account                             | withdrawal                 | none                                                        |              200 | none                                                          | withdrawal                                 | n/a                   | 200                                                         |
+| GET                       | `/api/withdrawals/:id`            | owner                               | withdrawal                 | path id                                                     |              200 | none                                                          | withdrawal                                 | n/a                   | missing 404                                                 |
+| DELETE                    | `/api/withdrawals/:id`            | owner                               | withdrawal                 | path id                                                     |              200 | cancellation/release                                          | withdrawal/reservation                     | transition-idempotent | missing 404                                                 |
+| POST                      | `/api/webhooks/paystack`          | provider signature                  | integration ingress        | raw provider event                                          |              200 | provider event + verification work                            | Paystack signature, event store            | event identity        | invalid signature 401                                       |
 
 ## Operator/internal surface
 
 These routes were exercised with an authenticated non-operator and rejected (403), proving the public authorization boundary. Their valid domain behavior is covered by PostgreSQL integration tests rather than granting operator authority in the public audit fixture.
 
-| Method | Path | Capability | Input | Success | Persisted fact | Idem. | HTTP auth result |
-|---|---|---|---|---:|---|---|---|
-| GET | `/api/operator/paystack/events` | provider audit | limit | 200 | none | n/a | 403 |
-| GET | `/api/operator/paystack/reconcile` | legacy provider reconciliation | age/limit | 200 | none | n/a | 403 |
-| POST | `/api/operator/paystack/reconcile` | legacy provider reconciliation | payment id | 200 | reconciliation attempt | required | non-operator rejected |
-| POST | `/api/operator/purchases/reverse` | reversal | purchase id, reason | 200 | compensating entries/reversal | required | 403 |
-| POST | `/api/operator/settlement` | earnings settlement | batch size | 200 | settlements | entry uniqueness | 403 |
-| GET | `/api/operator/withdrawals` | withdrawal operations | state? | 200 | none | n/a | 403 |
-| GET | `/api/operator/withdrawals/:id` | withdrawal operations | path id | 200 | none | n/a | 403 |
-| POST | `/api/operator/withdrawals/:id/approve` | withdrawal operations | path id | 200 | approval | state transition | 403 |
-| POST | `/api/operator/withdrawals/:id/reject` | withdrawal operations | reason | 200 | rejection/reservation release | state transition | non-operator rejected before transition |
-| POST | `/api/operator/withdrawals/:id/complete` | payout operations | path id | 200 | manual completion | state transition | 403 |
-| GET | `/api/operator/withdrawals/:id/payout` | payout audit | path id | 200 | none | n/a | 403 |
-| POST | `/api/operator/withdrawals/:id/payout` | payout execution | path id | 200 | payout attempt | stable execution | 403 |
-| POST | `/api/operator/withdrawals/:id/payout/reconcile` | payout reconciliation | path id | 200 | reconciliation result | repeat-safe | 403 |
+| Method | Path                                             | Capability                     | Input               | Success | Persisted fact                | Idem.            | HTTP auth result                        |
+| ------ | ------------------------------------------------ | ------------------------------ | ------------------- | ------: | ----------------------------- | ---------------- | --------------------------------------- |
+| GET    | `/api/operator/paystack/events`                  | provider audit                 | limit               |     200 | none                          | n/a              | 403                                     |
+| GET    | `/api/operator/paystack/reconcile`               | legacy provider reconciliation | age/limit           |     200 | none                          | n/a              | 403                                     |
+| POST   | `/api/operator/paystack/reconcile`               | legacy provider reconciliation | payment id          |     200 | reconciliation attempt        | required         | non-operator rejected                   |
+| POST   | `/api/operator/purchases/reverse`                | reversal                       | purchase id, reason |     200 | compensating entries/reversal | required         | 403                                     |
+| POST   | `/api/operator/settlement`                       | earnings settlement            | batch size          |     200 | settlements                   | entry uniqueness | 403                                     |
+| GET    | `/api/operator/withdrawals`                      | withdrawal operations          | state?              |     200 | none                          | n/a              | 403                                     |
+| GET    | `/api/operator/withdrawals/:id`                  | withdrawal operations          | path id             |     200 | none                          | n/a              | 403                                     |
+| POST   | `/api/operator/withdrawals/:id/approve`          | withdrawal operations          | path id             |     200 | approval                      | state transition | 403                                     |
+| POST   | `/api/operator/withdrawals/:id/reject`           | withdrawal operations          | reason              |     200 | rejection/reservation release | state transition | non-operator rejected before transition |
+| POST   | `/api/operator/withdrawals/:id/complete`         | payout operations              | path id             |     200 | manual completion             | state transition | 403                                     |
+| GET    | `/api/operator/withdrawals/:id/payout`           | payout audit                   | path id             |     200 | none                          | n/a              | 403                                     |
+| POST   | `/api/operator/withdrawals/:id/payout`           | payout execution               | path id             |     200 | payout attempt                | stable execution | 403                                     |
+| POST   | `/api/operator/withdrawals/:id/payout/reconcile` | payout reconciliation          | path id             |     200 | reconciliation result         | repeat-safe      | 403                                     |
 
 The audit intentionally does not call a live payment or payout provider.
+
 # Listing and dashboard additions
 
-| Method | Path | Auth | Classification | Durable effect / projection |
-|---|---|---|---|---|
-| GET/POST | `/api/listings` | POST owner | CRUD/public projection | Draft creation; published collection read |
-| GET/PATCH/DELETE | `/api/listings/{id}` | mutation owner | archive-managed | Public/owner projection, partial metadata update, archive command |
-| POST | `/api/listings/{id}/publish` | owner | command | Draft becomes published |
-| POST | `/api/listings/{id}/restore` | owner | command | Archived becomes draft |
-| GET | `/api/me/listings` | owner | owner projection | Paginated owned listing collection |
-| GET/POST | `/api/listings/{id}/media` | owner | CRUD/workflow | Ordered metadata read; durable object upload |
-| GET/PATCH/DELETE | `/api/listings/{id}/media/{mediaId}` | owner | archive/workflow | Metadata read/update; schedules durable deletion |
-| POST/GET | `/api/listings/import`, `/api/listings/export` | owner | batch command/projection | Record-isolated JSON/CSV/YAML transfer; durable listing/retry identity and complete-gallery upsert reconciliation |
-| GET/PATCH | `/api/me/profile` | owner | CRUD | Profile projection/update |
-| GET/POST | `/api/integrations` | owner | CRUD | Safe integration collection/create; secret returned once |
-| GET/PATCH/DELETE | `/api/integrations/{id}` | owner | revoke-managed | Description update or credential revocation |
-| POST | `/api/integrations/{id}/rotate` | owner | command | Replaces credential; new plaintext returned once |
-| GET | `/api/referral-links` | owner | archive-managed | Owned stable link collection |
-| GET/DELETE | `/api/referral-links/{id}` | owner | archive-managed | Read or revoke; attribution history retained |
-| GET | `/api/purchases`, `/api/purchases/{id}` | buyer | immutable projection | Purchase history only |
-| GET | `/api/earnings`, `/api/earnings/entries` | account | immutable projection | Earnings summary and append-only entry history |
+| Method           | Path                                           | Auth           | Classification           | Durable effect / projection                                                                                       |
+| ---------------- | ---------------------------------------------- | -------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| GET/POST         | `/api/listings`                                | POST owner     | CRUD/public projection   | Draft creation; published collection read                                                                         |
+| GET/PATCH/DELETE | `/api/listings/{id}`                           | mutation owner | archive-managed          | Public/owner projection, partial metadata update, archive command                                                 |
+| POST             | `/api/listings/{id}/publish`                   | owner          | command                  | Draft becomes published                                                                                           |
+| POST             | `/api/listings/{id}/restore`                   | owner          | command                  | Archived becomes draft                                                                                            |
+| GET              | `/api/me/listings`                             | owner          | owner projection         | Paginated owned listing collection                                                                                |
+| GET/POST         | `/api/listings/{id}/media`                     | owner          | CRUD/workflow            | Ordered metadata read; durable object upload                                                                      |
+| GET/PATCH/DELETE | `/api/listings/{id}/media/{mediaId}`           | owner          | archive/workflow         | Metadata read/update; schedules durable deletion                                                                  |
+| POST/GET         | `/api/listings/import`, `/api/listings/export` | owner          | batch command/projection | Record-isolated JSON/CSV/YAML transfer; durable listing/retry identity and complete-gallery upsert reconciliation |
+| GET/PATCH        | `/api/me/profile`                              | owner          | CRUD                     | Profile projection/update                                                                                         |
+| GET/POST         | `/api/integrations`                            | owner          | CRUD                     | Safe integration collection/create; secret returned once                                                          |
+| GET/PATCH/DELETE | `/api/integrations/{id}`                       | owner          | revoke-managed           | Description update or credential revocation                                                                       |
+| POST             | `/api/integrations/{id}/rotate`                | owner          | command                  | Replaces credential; new plaintext returned once                                                                  |
+| GET              | `/api/referral-links`                          | owner          | archive-managed          | Owned stable link collection                                                                                      |
+| GET/DELETE       | `/api/referral-links/{id}`                     | owner          | archive-managed          | Read or revoke; attribution history retained                                                                      |
+| GET              | `/api/purchases`, `/api/purchases/{id}`        | buyer          | immutable projection     | Purchase history only                                                                                             |
+| GET              | `/api/earnings`, `/api/earnings/entries`       | account        | immutable projection     | Earnings summary and append-only entry history                                                                    |
 
 Catalogue management is also available under `/api/operator/listings` (including publish, restore, media, import, and export) for accounts with `catalogue_manager` or `operator`. Company treasury is operator-only: `GET /api/operator/treasury`, `GET /api/operator/treasury/entries`, `GET /api/operator/treasury/entries/:id`, `POST /api/operator/treasury/entries`, and compatibility `POST /api/operator/treasury/expenses`. Treasury entries are immutable facts; corrections are ordinary opposite-direction entries with explanatory titles/notes, and no update/delete API exists.
 
 ## Headless Hono surface
 
-| Method | Path | Auth | Capability | Notes |
-|---|---|---|---|---|
-| GET | `/api/openapi.json` | no | API contract | Generated from Hono/Zod route contracts |
-| GET | `/api/hierarchy/tree` | account or API key (`hierarchy:read`) | hierarchy projection | Configured depth and child window; optional root |
-| GET | `/api/hierarchy/search` | account or API key (`hierarchy:read`) | hierarchy search | SQL-scoped descendant search; operators global |
-| GET | `/api/hierarchy/children/{parentId}` | account or API key (`hierarchy:read`) | hierarchy continuation | Stable UUID cursor; server-controlled child batch size |
-| PUT | `/api/operator/hierarchy/{accountId}/parent` | operator or operator API key (`hierarchy:admin`) | hierarchy command | Assign/reassign one parent; PostgreSQL rejects cycles; audited |
-| POST | `/api/operator/api-keys` | operator | API-key command | Secret returned once; scopes are explicit |
-| GET | `/api/operator/api-keys` | operator | API-key projection | Never returns secrets or hashes |
-| POST | `/api/operator/api-keys/{id}/revoke` | operator | API-key command | Revokes without deleting history |
+| Method | Path                                         | Auth                                             | Capability             | Notes                                                          |
+| ------ | -------------------------------------------- | ------------------------------------------------ | ---------------------- | -------------------------------------------------------------- |
+| GET    | `/api/openapi.json`                          | no                                               | API contract           | Generated from Hono/Zod route contracts                        |
+| GET    | `/api/hierarchy/tree`                        | account or API key (`hierarchy:read`)            | hierarchy projection   | Configured depth and child window; optional root               |
+| GET    | `/api/hierarchy/search`                      | account or API key (`hierarchy:read`)            | hierarchy search       | SQL-scoped descendant search; operators global                 |
+| GET    | `/api/hierarchy/children/{parentId}`         | account or API key (`hierarchy:read`)            | hierarchy continuation | Stable UUID cursor; server-controlled child batch size         |
+| PUT    | `/api/operator/hierarchy/{accountId}/parent` | operator or operator API key (`hierarchy:admin`) | hierarchy command      | Assign/reassign one parent; PostgreSQL rejects cycles; audited |
+| POST   | `/api/operator/api-keys`                     | operator                                         | API-key command        | Secret returned once; scopes are explicit                      |
+| GET    | `/api/operator/api-keys`                     | operator                                         | API-key projection     | Never returns secrets or hashes                                |
+| POST   | `/api/operator/api-keys/{id}/revoke`         | operator                                         | API-key command        | Revokes without deleting history                               |
 
 These routes use a unified `ApiPrincipal` resolved from Better Auth cookies or
 hashed database API keys. Existing Next handlers remain compatibility routes

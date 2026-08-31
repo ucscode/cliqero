@@ -8,6 +8,8 @@ const serverConfiguration = z.object({
 
 export type ServerConfiguration = z.infer<typeof serverConfiguration>;
 
-export function loadServerConfiguration(environment: NodeJS.ProcessEnv = process.env): ServerConfiguration {
+export function loadServerConfiguration(
+  environment: NodeJS.ProcessEnv = process.env,
+): ServerConfiguration {
   return serverConfiguration.parse(environment);
 }

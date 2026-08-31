@@ -1,2 +1,18 @@
-import {authenticatedAccount,apiError} from "../../api/http";import {getContainer} from "@/infrastructure/container";
-export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){const a=await authenticatedAccount(request);if(!a)return new Response("Unauthorized",{status:401});try{return Response.redirect(await getContainer().buyerAccess.handoffPurchase(a,(await params).id,request.headers.get("idempotency-key")??undefined),307);}catch(e){return apiError(e);}}
+import { authenticatedAccount, apiError } from "../../api/http";
+import { getContainer } from "@/infrastructure/container";
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const a = await authenticatedAccount(request);
+  if (!a) return new Response("Unauthorized", { status: 401 });
+  try {
+    return Response.redirect(
+      await getContainer().buyerAccess.handoffPurchase(
+        a,
+        (await params).id,
+        request.headers.get("idempotency-key") ?? undefined,
+      ),
+      307,
+    );
+  } catch (e) {
+    return apiError(e);
+  }
+}

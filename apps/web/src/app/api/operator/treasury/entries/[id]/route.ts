@@ -1,2 +1,24 @@
-import {authenticatedAccount,apiError} from "../../../../http";import {getContainer} from "@/infrastructure/container";
-export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){const a=await authenticatedAccount(request);if(!a)return Response.json({error:"Unauthorized"},{status:401});try{const c=getContainer();await c.operators.requireOperator(a.id);const e=await c.treasuryRepository.findById((await params).id);if(!e)throw new Error("Treasury entry not found");return Response.json({id:e.id,direction:e.direction,amount_minor:e.amountMinor.toString(),title:e.title,note:e.note,source_kind:e.sourceKind,source_id:e.sourceId,created_at:e.createdAt.toISOString()});}catch(e){return apiError(e);}}
+import { authenticatedAccount, apiError } from "../../../../http";
+import { getContainer } from "@/infrastructure/container";
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const a = await authenticatedAccount(request);
+  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const c = getContainer();
+    await c.operators.requireOperator(a.id);
+    const e = await c.treasuryRepository.findById((await params).id);
+    if (!e) throw new Error("Treasury entry not found");
+    return Response.json({
+      id: e.id,
+      direction: e.direction,
+      amount_minor: e.amountMinor.toString(),
+      title: e.title,
+      note: e.note,
+      source_kind: e.sourceKind,
+      source_id: e.sourceId,
+      created_at: e.createdAt.toISOString(),
+    });
+  } catch (e) {
+    return apiError(e);
+  }
+}

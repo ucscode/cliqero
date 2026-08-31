@@ -4,4 +4,3 @@ export class DomainInvariantError extends Error {
     this.name = "DomainInvariantError";
   }
 }
-

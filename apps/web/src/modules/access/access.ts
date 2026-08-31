@@ -7,14 +7,23 @@ export type AccessGrantState = "active" | "revoked";
 
 export class AccessGrant {
   private stateValue: AccessGrantState = "active";
-  private constructor(readonly id: Id, readonly entitlementId: Id, readonly tokenHash: Buffer) {}
+  private constructor(
+    readonly id: Id,
+    readonly entitlementId: Id,
+    readonly tokenHash: Buffer,
+  ) {}
 
   static issue(entitlementId: Id): { grant: AccessGrant; source: string } {
     const source = randomBytes(32).toString("base64url");
     return { grant: new AccessGrant(newId(), entitlementId, AccessGrant.hash(source)), source };
   }
 
-  static restore(id: Id, entitlementId: Id, tokenHash: Buffer, state: AccessGrantState): AccessGrant {
+  static restore(
+    id: Id,
+    entitlementId: Id,
+    tokenHash: Buffer,
+    state: AccessGrantState,
+  ): AccessGrant {
     const grant = new AccessGrant(id, entitlementId, tokenHash);
     grant.stateValue = state;
     return grant;
@@ -25,10 +34,18 @@ export class AccessGrant {
     return candidate.length === this.tokenHash.length && timingSafeEqual(candidate, this.tokenHash);
   }
 
-  revoke(): void { this.stateValue = "revoked"; }
-  get isActive() { return this.stateValue === "active"; }
-  get state() { return this.stateValue; }
-  private static hash(source: string) { return createHash("sha256").update(source, "utf8").digest(); }
+  revoke(): void {
+    this.stateValue = "revoked";
+  }
+  get isActive() {
+    return this.stateValue === "active";
+  }
+  get state() {
+    return this.stateValue;
+  }
+  private static hash(source: string) {
+    return createHash("sha256").update(source, "utf8").digest();
+  }
 }
 
 export interface AccessGrantRepository {
@@ -42,9 +59,16 @@ export interface IntegrationPrincipal {
 }
 
 export class AccessService {
-  constructor(private readonly entitlements: EntitlementRepository, private readonly grants: AccessGrantRepository) {}
+  constructor(
+    private readonly entitlements: EntitlementRepository,
+    private readonly grants: AccessGrantRepository,
+  ) {}
 
-  async issue(buyerId: Id, listingId: Id, idempotencyKey?: string): Promise<{ grant: AccessGrant; source: string }> {
+  async issue(
+    buyerId: Id,
+    listingId: Id,
+    idempotencyKey?: string,
+  ): Promise<{ grant: AccessGrant; source: string }> {
     const entitlement = await this.entitlements.findActive(buyerId, listingId);
     if (!entitlement?.isUsableAt(new Date())) throw new Error("Active entitlement not found");
     const issued = AccessGrant.issue(entitlement.id);
@@ -52,12 +76,21 @@ export class AccessService {
     return issued;
   }
 
-  async verify(source: string, integration: IntegrationPrincipal): Promise<{ authorized: boolean; listingId?: Id; entitlementId?: Id; buyerId?: Id }> {
+  async verify(
+    source: string,
+    integration: IntegrationPrincipal,
+  ): Promise<{ authorized: boolean; listingId?: Id; entitlementId?: Id; buyerId?: Id }> {
     const tokenHash = createHash("sha256").update(source, "utf8").digest();
     const grant = await this.grants.findByTokenHash(tokenHash);
     if (!grant?.isActive || !grant.matches(source)) return { authorized: false };
     const entitlement = await this.entitlements.findById(grant.entitlementId);
-    if (!entitlement?.isActive || !integration.canVerifyListing(entitlement.listingId)) return { authorized: false };
-    return { authorized: true, listingId: entitlement.listingId, entitlementId: entitlement.id, buyerId: entitlement.buyerId };
+    if (!entitlement?.isActive || !integration.canVerifyListing(entitlement.listingId))
+      return { authorized: false };
+    return {
+      authorized: true,
+      listingId: entitlement.listingId,
+      entitlementId: entitlement.id,
+      buyerId: entitlement.buyerId,
+    };
   }
 }

@@ -1,3 +1,20 @@
-import {authenticatedAccount,apiError} from "../../http";
-import {getContainer} from "@/infrastructure/container";
-export async function GET(request:Request,context:{params:Promise<{id:string}>}){const account=await authenticatedAccount(request);if(!account)return Response.json({error:"Unauthorized"},{status:401});try{const c=await getContainer().checkoutRepository.findById((await context.params).id);if(!c||c.buyerId!==account.id)return Response.json({error:"Checkout not found"},{status:404});return Response.json({id:c.id,purchase_id:c.purchaseId,state:c.state,amount_minor:c.amount.minorAmount.toString(),currency:c.amount.currency});}catch(e){return apiError(e);}}
+import { authenticatedAccount, apiError } from "../../http";
+import { getContainer } from "@/infrastructure/container";
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const account = await authenticatedAccount(request);
+  if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const c = await getContainer().checkoutRepository.findById((await context.params).id);
+    if (!c || c.buyerId !== account.id)
+      return Response.json({ error: "Checkout not found" }, { status: 404 });
+    return Response.json({
+      id: c.id,
+      purchase_id: c.purchaseId,
+      state: c.state,
+      amount_minor: c.amount.minorAmount.toString(),
+      currency: c.amount.currency,
+    });
+  } catch (e) {
+    return apiError(e);
+  }
+}
