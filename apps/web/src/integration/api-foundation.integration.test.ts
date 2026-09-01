@@ -79,6 +79,66 @@ suite("headless API principal and hierarchy read model", () => {
       }),
     ).rejects.toThrow("Unknown API key scope");
   });
+  it("manages personal API keys only for the authenticated account", async () => {
+    const owner = await account("personal"),
+      other = await account("otherkey");
+    const api = createApiApp({
+      ...app,
+      principalResolver: {
+        resolve: async () => ({
+          accountId: owner.id,
+          account: owner,
+          kind: "user_session",
+          roles: [],
+          scopes: new Set<string>(),
+        }),
+      },
+    } as any);
+    const createdResponse = await api.fetch(
+      new Request("http://localhost/api/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "personal automation",
+          scopes: ["wallet:read"],
+        }),
+      }),
+    );
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    expect(created.secret).toMatch(/^cliq_live_/);
+    const listed = await api.fetch(new Request("http://localhost/api/api-keys"));
+    expect(listed.status).toBe(200);
+    expect((await listed.json()).items).toHaveLength(1);
+    const foreign = await app.apiKeys.create({
+      accountId: other.id,
+      name: "foreign",
+      scopes: [],
+      createdBy: other.id,
+    });
+    const foreignRevoke = await api.fetch(
+      new Request(`http://localhost/api/api-keys/${foreign.id}/revoke`, { method: "POST" }),
+    );
+    expect(foreignRevoke.status).toBe(404);
+    const revoked = await api.fetch(
+      new Request(`http://localhost/api/api-keys/${created.id}/revoke`, { method: "POST" }),
+    );
+    expect(revoked.status).toBe(204);
+  });
+  it("keeps normalized profile handles unique under concurrent updates", async () => {
+    const first = await account("handlefirst"),
+      second = await account("handlesecond");
+    const results = await Promise.allSettled([
+      app.profiles.update(first.id, { handle: "SharedHandle" }),
+      app.profiles.update(second.id, { handle: "sharedhandle" }),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const rows = await app.database.query<{ count: string }>(
+      `select count(*) count from identity_capability.accounts where handle='sharedhandle'`,
+    );
+    expect(rows.rows[0].count).toBe("1");
+  });
   it("authorizes descendant roots and bounds the visualization window", async () => {
     const upline = await account("upline"),
       root = await account("root"),

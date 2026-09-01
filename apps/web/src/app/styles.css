@@ -256,6 +256,34 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
 .withdrawal-row-end { justify-items: end; align-content: start; }
 .withdrawal-summary-skeleton { min-height: 130px; }
 .withdrawal-form-skeleton { min-height: 300px; }
+.settings-panel,.settings-stack { display: grid; gap: 1rem; }
+.settings-tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .3rem; border-bottom: 1px solid var(--line); }
+.settings-tab { padding: .65rem .8rem; border-bottom: 2px solid transparent; color: var(--muted); font-size: .85rem; }
+.settings-tab:hover,.settings-tab.active { border-color: var(--accent); color: var(--accent-dark); font-weight: 700; }
+.settings-card { min-width: 0; padding: clamp(1.2rem,3vw,1.7rem); }
+.settings-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.settings-card-heading h3 { margin-bottom: .3rem; }
+.settings-form { display: grid; max-width: 620px; gap: .55rem; }
+.settings-form label { margin-top: .35rem; font-size: .82rem; font-weight: 700; }
+.settings-form .button { justify-self: start; margin-top: .65rem; }
+.settings-list { display: grid; gap: .7rem; }
+.settings-list-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: .9rem 0; border-bottom: 1px solid var(--line); }
+.settings-list-row:last-child { border-bottom: 0; }
+.settings-list-main { display: grid; min-width: 0; gap: .3rem; }
+.settings-list-main span,.settings-list-main small { color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; }
+.settings-list-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .45rem; }
+.scope-fieldset { display: grid; gap: .65rem; margin-top: .7rem; padding: .9rem; border: 1px solid var(--line); border-radius: 10px; }
+.scope-fieldset legend { padding: 0 .35rem; font-size: .82rem; font-weight: 700; }
+.scope-group { display: grid; gap: .35rem; }
+.scope-group > strong { color: var(--muted); font-size: .75rem; }
+.scope-option { display: flex; align-items: center; gap: .45rem; margin: 0 !important; color: var(--ink); font-size: .8rem !important; font-weight: 500 !important; }
+.scope-option input { accent-color: var(--accent); }
+.one-time-secret { display: grid; gap: .8rem; border-color: var(--accent); background: #f2faf4; }
+.one-time-secret code { display: block; max-width: 100%; padding: .8rem; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: .8rem; }
+.account-details { display: grid; gap: .7rem; margin: 0 0 1.2rem; }
+.account-details div { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 1rem; padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
+.account-details dt { color: var(--muted); font-size: .8rem; }
+.account-details dd { margin: 0; overflow-wrap: anywhere; font-size: .88rem; }
 .hierarchy-explorer-card { min-width: 0; padding: 1.3rem; }
 .hierarchy-explorer-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .hierarchy-explorer-heading h3 { margin-bottom: .4rem; }
@@ -322,4 +350,7 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
   .purchase-card-meta { justify-items: start; }
   .withdrawal-row { grid-template-columns: 1fr; }
   .withdrawal-row-end { justify-items: start; }
+  .settings-list-row { display: grid; }
+  .settings-list-actions { justify-content: flex-start; }
+  .account-details div { grid-template-columns: 1fr; gap: .2rem; }
 }

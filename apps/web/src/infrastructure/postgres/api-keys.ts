@@ -65,17 +65,19 @@ export class PostgresApiKeyRepository {
       id,
     ]);
   }
-  async list() {
+  async list(accountId?: string) {
     const rows = await this.sql.query<ApiKeyRecord>(
-      `select id,account_id as "accountId",name,key_prefix as "keyPrefix",scopes,created_at as "createdAt",last_used_at as "lastUsedAt",expires_at as "expiresAt",revoked_at as "revokedAt" from identity_capability.api_keys order by created_at desc,id desc`,
+      `select id,account_id as "accountId",name,key_prefix as "keyPrefix",scopes,created_at as "createdAt",last_used_at as "lastUsedAt",expires_at as "expiresAt",revoked_at as "revokedAt" from identity_capability.api_keys where ($1::uuid is null or account_id=$1) order by created_at desc,id desc`,
+      [accountId ?? null],
     );
     return rows.rows;
   }
-  async revoke(id: string) {
-    await this.sql.query(
-      `update identity_capability.api_keys set revoked_at=coalesce(revoked_at,now()) where id=$1`,
-      [id],
+  async revoke(id: string, accountId?: string) {
+    const result = await this.sql.query(
+      `update identity_capability.api_keys set revoked_at=coalesce(revoked_at,now()) where id=$1 and ($2::uuid is null or account_id=$2)`,
+      [id, accountId ?? null],
     );
+    return (result.rowCount ?? 0) > 0;
   }
 }
 export class ApiKeyService {
@@ -115,11 +117,11 @@ export class ApiKeyService {
     await this.repository.touch(row.id);
     return { id: row.id, accountId: row.account_id, name: row.name, scopes: row.scopes };
   }
-  list() {
-    return this.repository.list();
+  list(accountId?: string) {
+    return this.repository.list(accountId);
   }
-  revoke(id: string) {
-    return this.repository.revoke(id);
+  revoke(id: string, accountId?: string) {
+    return this.repository.revoke(id, accountId);
   }
 }
 function hash(secret: string) {

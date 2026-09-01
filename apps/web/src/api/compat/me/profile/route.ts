@@ -3,7 +3,6 @@ import { authenticatedAccount, apiError } from "../../http";
 import { getContainer } from "@/infrastructure/container";
 const schema = z
   .object({
-    email: z.email().optional(),
     handle: z.string().min(3).max(32).optional(),
     country: z
       .string()
@@ -11,7 +10,8 @@ const schema = z
       .nullable()
       .optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one profile field is required");
 const view = (a: { id: string; email: string; handle: string; country: string | null }) => ({
   id: a.id,
   email: a.email,

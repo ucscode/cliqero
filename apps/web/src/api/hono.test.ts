@@ -29,6 +29,8 @@ describe("Hono API foundation", () => {
     expect(paths["/api/listings"]).toBeDefined();
     expect(paths["/api/wallet"]).toBeDefined();
     expect(paths["/api/operator/treasury/entries"]).toBeDefined();
+    expect(paths["/api/api-keys"]).toBeDefined();
+    expect(paths["/api/api-keys/{id}/revoke"]).toBeDefined();
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
     expect(paths["/api/listings"].get).toMatchObject({
@@ -109,6 +111,38 @@ describe("Hono API foundation", () => {
       }),
     );
     expect(response.status).toBe(400);
+  });
+  it("keeps personal API-key management owner-scoped and scope constrained", async () => {
+    const account = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      roles: [],
+      scopes: new Set<string>(),
+    };
+    const list = await appWith(account).fetch(new Request("http://localhost/api/api-keys"));
+    expect(list.status).toBe(200);
+    expect(await list.json()).toEqual({ items: [] });
+    const keyPrincipal = { ...account, kind: "api_key" as const };
+    const denied = await appWith(keyPrincipal).fetch(new Request("http://localhost/api/api-keys"));
+    expect(denied.status).toBe(403);
+  });
+  it("does not let a normal account grant operator API-key scopes", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      roles: [],
+      scopes: new Set<string>(),
+    };
+    const response = await appWith(principal).fetch(
+      new Request("http://localhost/api/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "elevated", scopes: ["treasury:manage"] }),
+      }),
+    );
+    expect(response.status).toBe(403);
   });
   it("enforces role and API-key scope intersection for compatibility routes", async () => {
     const operatorKey = {

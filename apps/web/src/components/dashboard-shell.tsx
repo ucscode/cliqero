@@ -22,6 +22,7 @@ import { PromotePanel } from "./promote-panel";
 import { ReferralsPanel } from "./referrals-panel";
 import { EarningsPanel } from "./earnings-panel";
 import { WithdrawalsPanel } from "./withdrawals-panel";
+import { SettingsPanel } from "./settings-panel";
 
 const navigation = [
   { label: "Overview", href: "/dashboard", section: "overview" },
@@ -32,6 +33,7 @@ const navigation = [
   { label: "Referrals", href: "/dashboard?section=referrals", section: "referrals" },
   { label: "Earnings", href: "/dashboard?section=earnings", section: "earnings" },
   { label: "Withdrawals", href: "/dashboard?section=withdrawals", section: "withdrawals" },
+  { label: "Settings", href: "/dashboard?section=settings", section: "settings" },
 ];
 
 export function DashboardShell() {
@@ -83,7 +85,9 @@ export function DashboardShell() {
       ? "Checkout"
       : section === "withdrawals"
         ? "Withdrawals"
-        : (navigation.find((item) => item.section === section)?.label ?? "Dashboard");
+        : section === "settings"
+          ? "Settings"
+          : (navigation.find((item) => item.section === section)?.label ?? "Dashboard");
   const content =
     section === "wallet" ? (
       <WalletPanel
@@ -99,6 +103,8 @@ export function DashboardShell() {
       <EarningsPanel />
     ) : section === "withdrawals" ? (
       <WithdrawalsPanel />
+    ) : section === "settings" ? (
+      <SettingsPanel />
     ) : buy ? (
       listing ? (
         <CheckoutFlow listing={listing} />
