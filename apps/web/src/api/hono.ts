@@ -41,6 +41,27 @@ const reassignmentSchema = z.object({
   previousParentAccountId: z.string().nullable(),
   changed: z.boolean(),
 });
+const accountAccessSchema = z.object({
+  accountId: z.string().uuid(),
+  roles: z.array(z.string()),
+  canAccessOperator: z.boolean(),
+});
+const operatorOverviewSchema = z.object({
+  role: z.enum(["operator", "catalogue_manager"]),
+  catalogue: z.object({
+    published: z.number().int().nonnegative(),
+    draft: z.number().int().nonnegative(),
+    archived: z.number().int().nonnegative(),
+  }),
+  users: z.object({ total: z.number().int().nonnegative() }).optional(),
+  commerce: z.object({ purchases: z.number().int().nonnegative() }).optional(),
+  withdrawals: z
+    .object({
+      requested: z.number().int().nonnegative(),
+      approved: z.number().int().nonnegative(),
+    })
+    .optional(),
+});
 function principal(c: any) {
   return c.get("principal") as ApiPrincipal | null;
 }
@@ -172,7 +193,80 @@ export function createApiApp(container: ApplicationContainer) {
           };
         }
       }
+      const overview = document.paths["/api/operator/overview"]?.get;
+      if (overview) {
+        overview["x-authentication-mode"] = "account";
+        overview["x-required-api-scope"] =
+          "operations:manage (operator) or catalogue:read (catalogue_manager)";
+      }
+      const access = document.paths["/api/me/access"]?.get;
+      if (access) access["x-authentication-mode"] = "account";
       return c.json(document);
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/me/access",
+      responses: {
+        200: {
+          description: "Current account roles and safe application access flags",
+          content: { "application/json": { schema: accountAccessSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      return c.json(
+        {
+          accountId: p.accountId,
+          roles: [...p.roles],
+          canAccessOperator: p.roles.includes("operator") || p.roles.includes("catalogue_manager"),
+        },
+        200,
+      );
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/overview",
+      responses: {
+        200: {
+          description: "Role-scoped operator overview",
+          content: { "application/json": { schema: operatorOverviewSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const role = p.roles.includes("operator")
+        ? "operator"
+        : p.roles.includes("catalogue_manager")
+          ? "catalogue_manager"
+          : null;
+      if (!role) return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+      const denied = requireScope(
+        c,
+        p,
+        role === "operator" ? "operations:manage" : "catalogue:read",
+      );
+      if (denied) return denied;
+      return c.json(await container.operatorOverview.get(role), 200);
     },
   );
   const queryTree = z.object({ root: z.string().uuid().optional() });

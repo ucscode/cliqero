@@ -10,6 +10,7 @@ import {
   formatMinorUsd,
   safeContinuation,
   type CheckoutStatus,
+  type AccountAccess,
   type EarningsSummary,
   type Listing,
   type PurchasePage,
@@ -44,6 +45,7 @@ export function DashboardShell() {
   const selectedPurchase = params.get("purchase") ?? undefined;
   const returnTo = safeContinuation(params.get("return"), "");
   const [profile, setProfile] = useState<{ handle: string; email: string } | null>(null);
+  const [accountAccess, setAccountAccess] = useState<AccountAccess | null>(null);
   const [listing, setListing] = useState<Listing | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +53,9 @@ export function DashboardShell() {
     if (!session.data?.user) return;
     void apiFetch<{ handle: string; email: string }>("/api/me/profile")
       .then(setProfile)
+      .catch(() => undefined);
+    void apiFetch<AccountAccess>("/api/me/access")
+      .then(setAccountAccess)
       .catch(() => undefined);
   }, [session.data?.user]);
 
@@ -132,6 +137,11 @@ export function DashboardShell() {
               {item.label}
             </Link>
           ))}
+          {accountAccess?.canAccessOperator && (
+            <Link className="dashboard-operator-link" href="/operator">
+              Operator console
+            </Link>
+          )}
         </nav>
         <Link className="sidebar-back" href="/">
           ← Browse catalogue

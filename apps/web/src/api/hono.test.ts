@@ -17,6 +17,19 @@ function appWith(principal: any = null) {
       search: async () => [],
     },
     apiKeys: { create: async () => ({}), list: async () => [], revoke: async () => {} },
+    operatorOverview: {
+      get: async (role: "operator" | "catalogue_manager") => ({
+        role,
+        catalogue: { published: 4, draft: 1, archived: 2 },
+        ...(role === "operator"
+          ? {
+              users: { total: 9 },
+              commerce: { purchases: 6 },
+              withdrawals: { requested: 1, approved: 2 },
+            }
+          : {}),
+      }),
+    },
   } as any);
 }
 describe("Hono API foundation", () => {
@@ -31,6 +44,9 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/treasury/entries"]).toBeDefined();
     expect(paths["/api/api-keys"]).toBeDefined();
     expect(paths["/api/api-keys/{id}/revoke"]).toBeDefined();
+    expect(paths["/api/me/access"]).toBeDefined();
+    expect(paths["/api/operator/overview"]).toBeDefined();
+    expect(paths["/api/operator/overview"].get["x-authentication-mode"]).toBe("account");
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
     expect(paths["/api/listings"].get).toMatchObject({
@@ -58,6 +74,62 @@ describe("Hono API foundation", () => {
         )
       ).status,
     ).toBe(400);
+  });
+  it("exposes safe current roles and protects the operator overview by role and scope", async () => {
+    const ordinary = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      roles: [],
+      scopes: new Set<string>(),
+    };
+    expect((await appWith().fetch(new Request("http://localhost/api/me/access"))).status).toBe(401);
+    const access = await appWith(ordinary).fetch(new Request("http://localhost/api/me/access"));
+    expect(await access.json()).toEqual({
+      accountId: ordinary.accountId,
+      roles: [],
+      canAccessOperator: false,
+    });
+    expect(
+      (await appWith(ordinary).fetch(new Request("http://localhost/api/operator/overview"))).status,
+    ).toBe(403);
+    const catalogueManager = { ...ordinary, roles: ["catalogue_manager"] };
+    const catalogueResponse = await appWith(catalogueManager).fetch(
+      new Request("http://localhost/api/operator/overview"),
+    );
+    expect(catalogueResponse.status).toBe(200);
+    expect((await catalogueResponse.json()).users).toBeUndefined();
+    const operator = { ...ordinary, roles: ["operator"] };
+    expect(
+      (await appWith(operator).fetch(new Request("http://localhost/api/operator/overview"))).status,
+    ).toBe(200);
+    const missingScope = {
+      ...operator,
+      kind: "api_key" as const,
+      scopes: new Set<string>(),
+    };
+    expect(
+      (await appWith(missingScope).fetch(new Request("http://localhost/api/operator/overview")))
+        .status,
+    ).toBe(403);
+    const scopedOperator = {
+      ...operator,
+      kind: "api_key" as const,
+      scopes: new Set<string>(["operations:manage"]),
+    };
+    expect(
+      (await appWith(scopedOperator).fetch(new Request("http://localhost/api/operator/overview")))
+        .status,
+    ).toBe(200);
+    const elevatedOrdinary = {
+      ...ordinary,
+      kind: "api_key" as const,
+      scopes: new Set<string>(["operations:manage"]),
+    };
+    expect(
+      (await appWith(elevatedOrdinary).fetch(new Request("http://localhost/api/operator/overview")))
+        .status,
+    ).toBe(403);
   });
   it("allows a resolved principal through the protected read route", async () => {
     const principal = {

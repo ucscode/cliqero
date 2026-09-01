@@ -125,6 +125,42 @@ suite("headless API principal and hierarchy read model", () => {
     );
     expect(revoked.status).toBe(204);
   });
+  it("returns role-scoped operator overview data through Hono", async () => {
+    const catalogueManager = await account("cataloguemanager"),
+      operator = await account("overviewoperator"),
+      ordinary = await account("overviewordinary");
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'catalogue_manager'),($2,'operator')`,
+      [catalogueManager.id, operator.id],
+    );
+    const forPrincipal = (accountId: string, roles: string[]) =>
+      createApiApp({
+        ...app,
+        principalResolver: {
+          resolve: async () => ({
+            accountId,
+            account: roles.includes("operator") ? operator : catalogueManager,
+            kind: "user_session" as const,
+            roles,
+            scopes: new Set<string>(),
+          }),
+        },
+      } as any);
+    const catalogueResponse = await forPrincipal(catalogueManager.id, ["catalogue_manager"]).fetch(
+      new Request("http://localhost/api/operator/overview"),
+    );
+    expect(catalogueResponse.status).toBe(200);
+    expect((await catalogueResponse.json()).users).toBeUndefined();
+    const operatorResponse = await forPrincipal(operator.id, ["operator"]).fetch(
+      new Request("http://localhost/api/operator/overview"),
+    );
+    expect(operatorResponse.status).toBe(200);
+    expect((await operatorResponse.json()).users).toEqual({ total: 3 });
+    const ordinaryResponse = await forPrincipal(ordinary.id, []).fetch(
+      new Request("http://localhost/api/operator/overview"),
+    );
+    expect(ordinaryResponse.status).toBe(403);
+  });
   it("keeps normalized profile handles unique under concurrent updates", async () => {
     const first = await account("handlefirst"),
       second = await account("handlesecond");

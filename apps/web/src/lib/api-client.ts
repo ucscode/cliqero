@@ -172,6 +172,20 @@ export type Profile = {
   country: string | null;
 };
 
+export type AccountAccess = {
+  accountId: string;
+  roles: string[];
+  canAccessOperator: boolean;
+};
+
+export type OperatorOverview = {
+  role: "operator" | "catalogue_manager";
+  catalogue: { published: number; draft: number; archived: number };
+  users?: { total: number };
+  commerce?: { purchases: number };
+  withdrawals?: { requested: number; approved: number };
+};
+
 export type Integration = {
   id: string;
   name: string;

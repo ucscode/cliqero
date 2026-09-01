@@ -98,6 +98,7 @@ import { TreasuryProcessor } from "@/processors/treasury";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
 import { ApiPrincipalResolver } from "@/modules/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
+import { OperatorOverviewService } from "@/application/operator-overview";
 
 export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
@@ -365,6 +366,7 @@ export function createContainer(databaseUrl: string) {
     buyerAccess: new BuyerAccessService(access, listings, database, purchases, entitlements),
     access,
     hierarchy: new HierarchyService(database),
+    operatorOverview: new OperatorOverviewService(database),
   };
 }
 export type ApplicationContainer = ReturnType<typeof createContainer>;
