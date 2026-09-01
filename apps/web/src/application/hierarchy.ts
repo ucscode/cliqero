@@ -22,6 +22,7 @@ export interface HierarchyNode {
   directChildCount: number;
   hasChildren: boolean;
   hasMoreChildren: boolean;
+  nextChildCursor: string | null;
 }
 export interface HierarchyParent {
   id: string;
@@ -93,7 +94,8 @@ export class HierarchyService {
     select tree.id,tree.parent_id,tree.depth,a.handle,a.display_name,
       (select count(*)::int from referral_capability.account_referrals x where x.parent_account_id=tree.id) direct_child_count,
       exists(select 1 from referral_capability.account_referrals x where x.parent_account_id=tree.id) has_children,
-      (select count(*) from referral_capability.account_referrals x where x.parent_account_id=tree.id) > $2 has_more_children
+      (select count(*) from referral_capability.account_referrals x where x.parent_account_id=tree.id) > $2 has_more_children,
+      (select x.child_account_id from referral_capability.account_referrals x where x.parent_account_id=tree.id order by x.child_account_id offset ($2 - 1) limit 1) next_child_cursor
     from tree join identity_capability.accounts a on a.id=tree.id order by tree.depth,tree.id`,
       [root, this.config.childLimit, this.config.depth],
     );
@@ -117,6 +119,7 @@ export class HierarchyService {
       directChildCount: Number(row.direct_child_count),
       hasChildren: Boolean(row.has_children),
       hasMoreChildren: Boolean(row.has_more_children),
+      nextChildCursor: row.next_child_cursor ?? null,
     }));
     return {
       root,
@@ -140,7 +143,8 @@ export class HierarchyService {
       `select a.id,a.handle,a.display_name,1::int depth,
       (select count(*)::int from referral_capability.account_referrals x where x.parent_account_id=a.id) direct_child_count,
       exists(select 1 from referral_capability.account_referrals x where x.parent_account_id=a.id) has_children,
-      (select count(*) from referral_capability.account_referrals x where x.parent_account_id=a.id) > $3 has_more_children
+      (select count(*) from referral_capability.account_referrals x where x.parent_account_id=a.id) > $3 has_more_children,
+      (select x.child_account_id from referral_capability.account_referrals x where x.parent_account_id=a.id order by x.child_account_id offset ($3 - 1) limit 1) next_child_cursor
       from referral_capability.account_referrals r join identity_capability.accounts a on a.id=r.child_account_id
       where r.parent_account_id=$1 and ($2::uuid is null or r.child_account_id>$2::uuid)
       order by r.child_account_id limit $4`,
@@ -158,6 +162,7 @@ export class HierarchyService {
         directChildCount: Number(row.direct_child_count),
         hasChildren: Boolean(row.has_children),
         hasMoreChildren: Boolean(row.has_more_children),
+        nextChildCursor: row.next_child_cursor ?? null,
       })),
       nextCursor,
     };

@@ -127,6 +127,10 @@ suite("headless API principal and hierarchy read model", () => {
         [children[i], `wide${i}@example.com`, `wide${i}`],
       );
     for (const child of children) await app.referralGraphService.establish(child, wideParent);
+    const boundedTree = await app.hierarchy.tree(ids[0], wideParent, false);
+    expect(boundedTree.nodes.find((node) => node.id === wideParent)?.nextChildCursor).toBe(
+      [...children].sort()[49],
+    );
     const seen: string[] = [];
     let cursor: string | undefined;
     do {

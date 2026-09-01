@@ -115,6 +115,7 @@ export type HierarchyNode = {
   directChildCount: number;
   hasChildren: boolean;
   hasMoreChildren: boolean;
+  nextChildCursor: string | null;
 };
 
 export type HierarchyTree = {
@@ -129,6 +130,12 @@ export type HierarchyTree = {
   } | null;
   nodes: HierarchyNode[];
   edges: { parent: string; child: string }[];
+};
+
+export type HierarchyChildren = {
+  parentId: string;
+  items: HierarchyNode[];
+  nextCursor: string | null;
 };
 
 export type EarningsBalance = {

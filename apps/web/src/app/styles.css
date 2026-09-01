@@ -1,3 +1,5 @@
+@import "@xyflow/react/dist/style.css";
+
 :root {
   color-scheme: light;
   --canvas: #f7f8f4;
@@ -239,6 +241,32 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
 .earning-row > div:first-child span,.earning-context { color: var(--muted); font-size: .75rem; }
 .earning-row-end { display: grid; justify-items: end; align-content: start; gap: .35rem; white-space: nowrap; }
 .earning-context { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.hierarchy-explorer-card { min-width: 0; padding: 1.3rem; }
+.hierarchy-explorer-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.hierarchy-explorer-heading h3 { margin-bottom: .4rem; }
+.hierarchy-explorer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+.hierarchy-parent-context { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem .8rem; margin-bottom: .8rem; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: .78rem; }
+.hierarchy-parent-context strong { color: var(--ink); }
+.hierarchy-parent-context small { flex-basis: 100%; }
+.hierarchy-graph-canvas { width: 100%; height: min(640px, 68vh); min-height: 440px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #f8fbf7; }
+.hierarchy-graph-canvas .react-flow { border-radius: inherit; }
+.hierarchy-node { position: relative; width: 220px; min-height: 112px; padding: .75rem; border: 1px solid #cfdcd1; border-radius: 14px; background: var(--surface); box-shadow: 0 5px 16px rgba(23,32,25,.08); color: var(--ink); }
+.hierarchy-node-root { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), 0 5px 16px rgba(23,32,25,.08); }
+.hierarchy-node-self { background: #f2faf4; }
+.hierarchy-node-heading { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.hierarchy-node-avatar { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent-dark); font-size: .8rem; font-weight: 700; }
+.hierarchy-node-copy { display: grid; min-width: 0; gap: .15rem; }
+.hierarchy-node-copy strong,.hierarchy-node-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hierarchy-node-copy span { color: var(--muted); font-size: .72rem; }
+.hierarchy-node-meta,.hierarchy-node-footer { display: flex; align-items: center; justify-content: space-between; gap: .4rem; margin-top: .55rem; color: var(--muted); font-size: .68rem; }
+.hierarchy-node-footer { margin-top: .4rem; }
+.hierarchy-more { color: var(--accent-dark); font-weight: 700; }
+.hierarchy-node-actions { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .6rem; }
+.hierarchy-node-action { padding: .3rem .45rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--accent-dark); cursor: pointer; font-size: .66rem; font-weight: 700; }
+.hierarchy-node-action:hover:not(:disabled) { border-color: #9cbaa7; background: var(--accent-soft); }
+.hierarchy-node-action:disabled { cursor: wait; opacity: .55; }
+.hierarchy-handle { width: 7px; height: 7px; border: 2px solid var(--surface); background: var(--accent); }
+.hierarchy-graph-note { margin: .7rem 0 0; color: var(--muted); font-size: .76rem; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes pulse { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
 @media (max-width: 800px) {
@@ -269,6 +297,9 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
   .panel-heading { align-items: flex-start; flex-direction: column; }
   .referral-grid,.generation-list,.earnings-summary-grid { grid-template-columns: 1fr; }
   .referral-downline-card { grid-column: auto; }
+  .hierarchy-explorer-heading { flex-direction: column; }
+  .hierarchy-explorer-actions { justify-content: flex-start; }
+  .hierarchy-graph-canvas { min-height: 500px; height: 500px; }
   .auth-panel { border: 0; padding: 1rem; }
   .transaction-row { grid-template-columns: 32px minmax(0,1fr); }
   .transaction-end { grid-column: 2; justify-items: start; grid-template-columns: auto auto; align-items: center; gap: .7rem; }

@@ -14,6 +14,7 @@ const nodeSchema = z.object({
   directChildCount: z.number(),
   hasChildren: z.boolean(),
   hasMoreChildren: z.boolean(),
+  nextChildCursor: z.string().nullable(),
 });
 const parentSchema = z.object({
   id: z.string(),
