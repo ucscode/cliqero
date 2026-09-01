@@ -94,6 +94,76 @@ suite("withdrawal lifecycle", () => {
     ).resolves.toMatchObject({ id: first.id });
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(8000n);
   });
+  it("rejects semantic idempotency-key reuse for a different withdrawal", async () => {
+    const { seller } = await setup();
+    const first = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationType: "manual",
+      destinationReference: "same-key",
+      idempotencyKey: "semantic-key",
+      correlationId: newId(),
+    });
+    await expect(
+      app.withdrawals.request({
+        accountId: seller.id,
+        amountMinor: 2000n,
+        currency: "USD",
+        destinationType: "manual",
+        destinationReference: "same-key",
+        idempotencyKey: "semantic-key",
+        correlationId: newId(),
+      }),
+    ).rejects.toThrow("already used for another request");
+    await expect(
+      app.withdrawals.request({
+        accountId: seller.id,
+        amountMinor: 1000n,
+        currency: "USD",
+        destinationType: "manual",
+        destinationReference: "different-destination",
+        idempotencyKey: "semantic-key",
+        correlationId: newId(),
+      }),
+    ).rejects.toThrow("already used for another request");
+    expect(
+      (await app.withdrawalRepository.listForAccount(seller.id)).filter(
+        (item) => item.id === first.id,
+      ),
+    ).toHaveLength(1);
+  });
+  it("converges concurrent identical requests on one withdrawal", async () => {
+    const { seller } = await setup();
+    const idempotencyKey = "concurrent-same-key";
+    const results = await Promise.all([
+      app.withdrawals.request({
+        accountId: seller.id,
+        amountMinor: 4000n,
+        currency: "USD",
+        destinationType: "manual",
+        destinationReference: "same-destination",
+        idempotencyKey,
+        correlationId: newId(),
+      }),
+      app.withdrawals.request({
+        accountId: seller.id,
+        amountMinor: 4000n,
+        currency: "USD",
+        destinationType: "manual",
+        destinationReference: "same-destination",
+        idempotencyKey,
+        correlationId: newId(),
+      }),
+    ]);
+    expect(results[0].id).toBe(results[1].id);
+    expect(
+      (await app.withdrawalRepository.listForAccount(seller.id)).filter(
+        (item) => item.id === results[0].id,
+      ),
+    ).toHaveLength(1);
+    expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(4000n);
+  });
   it("prevents concurrent overspending and supports reject/release and manual completion", async () => {
     const { seller } = await setup();
     const results = await Promise.allSettled([
@@ -138,6 +208,17 @@ suite("withdrawal lifecycle", () => {
     expect((await app.withdrawalRepository.findById(completed.id))?.state).toBe("completed");
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(0n);
     expect((await app.fundsReservation.summarize(seller.id))[0].completedMinor).toBe(5000n);
+    await expect(
+      app.withdrawals.request({
+        accountId: seller.id,
+        amountMinor: 5001n,
+        currency: "USD",
+        destinationType: "manual",
+        destinationReference: "after-completion",
+        idempotencyKey: "after-completion",
+        correlationId: newId(),
+      }),
+    ).rejects.toThrow("Insufficient available funds");
   });
   it("does not allow cancellation after approval and keeps ownership immutable", async () => {
     const { seller } = await setup();

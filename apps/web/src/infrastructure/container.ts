@@ -161,6 +161,7 @@ export function createContainer(databaseUrl: string) {
     outbox,
     database,
     new OperatorAuthorizationService(database),
+    database,
   );
   const payoutProviders = new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());
   const payoutRepository = new PostgresPayoutRepository(database);

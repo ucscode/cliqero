@@ -163,7 +163,7 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
 .dashboard-summary-grid .card { padding: 1.4rem; }
 .summary-amount { margin: .3rem 0 .8rem; font-size: clamp(1.8rem,4vw,2.8rem); }
 .summary-copy { color: var(--muted); font-size: .9rem; }
-.wallet-panel,.purchases-panel { display: grid; gap: 1rem; }
+.wallet-panel,.purchases-panel,.withdrawals-panel { display: grid; gap: 1rem; }
 .wallet-overview { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(250px,.7fr); gap: 1rem; }
 .wallet-balance-card,.wallet-pending-card { padding: clamp(1.4rem,3vw,2.2rem); }
 .wallet-balance-card { background: #f1f7f2; }
@@ -241,6 +241,21 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
 .earning-row > div:first-child span,.earning-context { color: var(--muted); font-size: .75rem; }
 .earning-row-end { display: grid; justify-items: end; align-content: start; gap: .35rem; white-space: nowrap; }
 .earning-context { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.withdrawal-summary-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 1rem; }
+.withdrawal-summary-card { min-width: 0; padding: 1.3rem; }
+.withdrawal-summary-card h3 { margin: .45rem 0 .8rem; font-size: 1.7rem; }
+.withdrawal-request-card,.withdrawal-history-card { min-width: 0; padding: 1.3rem; }
+.withdrawal-form { display: grid; max-width: 620px; gap: .6rem; }
+.withdrawal-form label { margin-top: .45rem; font-size: .82rem; font-weight: 700; }
+.withdrawal-form .button { justify-self: start; margin-top: .75rem; }
+.withdrawal-list { display: grid; gap: .65rem; }
+.withdrawal-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.withdrawal-row:last-child { border-bottom: 0; }
+.withdrawal-row-main,.withdrawal-row-end { display: grid; min-width: 0; gap: .3rem; }
+.withdrawal-row-main span,.withdrawal-row-main small,.withdrawal-reason { color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; }
+.withdrawal-row-end { justify-items: end; align-content: start; }
+.withdrawal-summary-skeleton { min-height: 130px; }
+.withdrawal-form-skeleton { min-height: 300px; }
 .hierarchy-explorer-card { min-width: 0; padding: 1.3rem; }
 .hierarchy-explorer-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .hierarchy-explorer-heading h3 { margin-bottom: .4rem; }
@@ -289,7 +304,7 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
 @media (max-width: 500px) {
   .hide-mobile { display: none; }
   .listing-grid,.dashboard-grid { grid-template-columns: 1fr; }
-  .dashboard-summary-grid,.wallet-overview { grid-template-columns: 1fr; }
+  .dashboard-summary-grid,.wallet-overview,.withdrawal-summary-grid { grid-template-columns: 1fr; }
   .listing-card p { min-height: 0; }
   .welcome-card { align-items: stretch; flex-direction: column; }
   .welcome-card .button { align-self: flex-start; }
@@ -305,4 +320,6 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
   .transaction-end { grid-column: 2; justify-items: start; grid-template-columns: auto auto; align-items: center; gap: .7rem; }
   .purchase-card-main { display: grid; }
   .purchase-card-meta { justify-items: start; }
+  .withdrawal-row { grid-template-columns: 1fr; }
+  .withdrawal-row-end { justify-items: start; }
 }

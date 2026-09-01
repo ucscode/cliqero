@@ -60,6 +60,7 @@ import * as walletFundingById from "@/api/compat/wallet/fund/[id]/route";
 import * as walletTransactions from "@/api/compat/wallet/transactions/route";
 import * as withdrawals from "@/api/compat/withdrawals/route";
 import * as withdrawalById from "@/api/compat/withdrawals/[id]/route";
+import * as withdrawalPolicy from "@/api/compat/withdrawals/policy/route";
 import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import type { ApiScope } from "@/modules/identity/api-scopes";
 
@@ -144,6 +145,7 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/wallet/fund/:id", module: walletFundingById },
   { pattern: "/api/wallet/transactions", module: walletTransactions },
   { pattern: "/api/wallet", module: wallet },
+  { pattern: "/api/withdrawals/policy", module: withdrawalPolicy },
   { pattern: "/api/withdrawals/:id", module: withdrawalById },
   { pattern: "/api/withdrawals", module: withdrawals },
 ];
@@ -196,6 +198,7 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern.startsWith("/api/referral-links"))
     return { mode: "account", scope: method === "GET" ? "referrals:read" : "referrals:manage" };
   if (pattern.startsWith("/api/earnings")) return { mode: "account", scope: "earnings:read" };
+  if (pattern === "/api/withdrawals/policy") return { mode: "account", scope: "withdrawals:read" };
   if (pattern === "/api/withdrawals")
     return { mode: "account", scope: method === "GET" ? "withdrawals:read" : "withdrawals:create" };
   if (pattern === "/api/withdrawals/:id")

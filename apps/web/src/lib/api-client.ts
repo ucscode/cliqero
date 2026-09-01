@@ -165,6 +165,40 @@ export type EarningsEntryPage = {
   nextCursor: string | null;
 };
 
+export type WithdrawalState =
+  "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
+
+export type Withdrawal = {
+  id: string;
+  amount_minor: string;
+  currency: string;
+  destination_type: "bank" | "manual";
+  destination_summary: string;
+  state: WithdrawalState;
+  reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WithdrawalPolicy = {
+  enabled: boolean;
+  minimum_amount_minor: string;
+  maximum_amount_minor: string | null;
+  currency: string;
+};
+
+export type WithdrawalReservation = {
+  currency: string;
+  reserved_minor: string;
+  completed_minor: string;
+};
+
+export type WithdrawalPage = {
+  withdrawals: Withdrawal[];
+  available_minor: string;
+  reservations: WithdrawalReservation[];
+};
+
 export class ApiClientError extends Error {
   constructor(
     message: string,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ApiClientError,
   apiFetch,
@@ -99,6 +100,17 @@ export function EarningsPanel() {
               </Card>
             )}
           </div>
+          <Card className="earnings-history-card">
+            <div className="card-kicker">
+              <div>
+                <h3>Ready to withdraw?</h3>
+                <p className="panel-note">Only available earnings can be requested for payout.</p>
+              </div>
+              <Link className="button" href="/dashboard?section=withdrawals">
+                Withdraw earnings
+              </Link>
+            </div>
+          </Card>
           <Card className="earnings-history-card">
             <div className="card-kicker">
               <h3>Earnings activity</h3>

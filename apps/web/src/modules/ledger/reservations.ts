@@ -27,7 +27,7 @@ export class LedgerFundsReservationService {
         where entry.account_id=$1 and entry.currency=$2 and entry.entry_type='purchase-earnings'
           and (entry.balance_state='available' or settlement.id is not null)),0)
       - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=$1 and res.currency=$2
-        and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1)='reserved'),0)
+        and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
       )::bigint as minor`,
         [input.accountId, input.amount.currency],
       )
@@ -64,6 +64,22 @@ export class LedgerFundsReservationService {
       accountId: input.accountId,
       amount: input.amount,
     };
+  }
+  async available(accountId: string, currency: string): Promise<bigint> {
+    const row = (
+      await this.sql.query<{ minor: string }>(
+        `select (
+      coalesce((select sum(case when entry.direction='credit' then entry.amount_minor else -entry.amount_minor end)
+        from ledger_capability.entries entry left join ledger_capability.entry_settlements settlement on settlement.original_entry_id=entry.id
+        where entry.account_id=$1 and entry.currency=$2 and entry.entry_type='purchase-earnings'
+          and (entry.balance_state='available' or settlement.id is not null)),0)
+      - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=$1 and res.currency=$2
+        and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
+      )::bigint as minor`,
+        [accountId, currency],
+      )
+    ).rows[0];
+    return BigInt(row?.minor ?? "0");
   }
   async releaseOrComplete(input: {
     withdrawalId: string;
