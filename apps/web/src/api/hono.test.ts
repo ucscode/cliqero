@@ -161,6 +161,19 @@ describe("Hono API foundation", () => {
       scope: "catalogue:manage",
     });
     expect(
+      getLegacyRouteAccess(
+        "/api/listings/00000000-0000-4000-8000-000000000001/referral-link",
+        "POST",
+      ),
+    ).toEqual({
+      mode: "account",
+      scope: "referrals:manage",
+    });
+    expect(getLegacyRouteAccess("/api/referral-links", "GET")).toEqual({
+      mode: "account",
+      scope: "referrals:read",
+    });
+    expect(
       authorizeLegacyRequest(
         new Request("http://localhost/api/listings/00000000-0000-4000-8000-000000000001", {
           method: "PATCH",

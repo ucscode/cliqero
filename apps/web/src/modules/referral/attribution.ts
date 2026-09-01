@@ -6,6 +6,8 @@ export interface ReferralLinkRecord {
   listingId: Id;
   referrerAccountId: Id;
   state: "active" | "revoked";
+  listingTitle?: string | null;
+  createdAt?: Date;
 }
 export interface PurchaseAttribution {
   attributionId: Id;

@@ -80,6 +80,84 @@ export type CheckoutStatus = {
   currency: string;
 };
 
+export type ReferralLink = {
+  id: string;
+  listing_id: string;
+  listing_title: string | null;
+  state: "active" | "revoked";
+  created_at?: string;
+  url: string;
+};
+
+export type ReferralLinkPage = {
+  items: ReferralLink[];
+};
+
+export type ReferralPage = {
+  accounts: string[];
+  nextCursor: string | null;
+};
+
+export type Upline = {
+  accountId: string;
+  depth: number;
+};
+
+export type UplinePage = {
+  uplines: Upline[];
+};
+
+export type HierarchyNode = {
+  id: string;
+  handle: string;
+  displayName: string | null;
+  depth: number;
+  directChildCount: number;
+  hasChildren: boolean;
+  hasMoreChildren: boolean;
+};
+
+export type HierarchyTree = {
+  root: string;
+  windowDepth: number;
+  childLimit: number;
+  parent: {
+    id: string;
+    handle: string;
+    displayName: string | null;
+    canNavigate: boolean;
+  } | null;
+  nodes: HierarchyNode[];
+  edges: { parent: string; child: string }[];
+};
+
+export type EarningsBalance = {
+  currency: string;
+  state: string;
+  amount_minor: string;
+};
+
+export type EarningsSummary = {
+  balances: EarningsBalance[];
+};
+
+export type EarningsEntry = {
+  id: string;
+  purchase_id: string | null;
+  entry_type: string;
+  direction: "credit" | "debit";
+  amount_minor: string;
+  currency: string;
+  recipient_role: string | null;
+  balance_state: string;
+  created_at: string;
+};
+
+export type EarningsEntryPage = {
+  items: EarningsEntry[];
+  nextCursor: string | null;
+};
+
 export class ApiClientError extends Error {
   constructor(
     message: string,

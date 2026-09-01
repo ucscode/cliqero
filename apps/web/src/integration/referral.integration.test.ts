@@ -71,6 +71,41 @@ suite("referral graph and trusted purchase attribution", () => {
       ),
     ).rejects.toThrow("deletion");
   });
+
+  it("projects owner-scoped referral links with listing context in one query", async () => {
+    const promoter = await account("promoter"),
+      other = await account("other");
+    const listing = await app.listingService.create(promoter, {
+      title: "Promotable catalogue item",
+      description: "A listing for referral-link projection",
+      priceMinor: "1000",
+      currency: "USD",
+      destination: "https://example.com/promotable",
+    });
+    await app.listingService.publish(promoter, listing.id);
+    const otherListing = await app.listingService.create(other, {
+      title: "Another catalogue item",
+      description: "Not visible to the first promoter",
+      priceMinor: "1200",
+      currency: "USD",
+      destination: "https://example.com/other",
+    });
+    await app.listingService.publish(other, otherListing.id);
+    await app.referralAttribution.createLink(promoter.id, listing.id);
+    await app.referralAttribution.createLink(other.id, otherListing.id);
+
+    const links = await app.referralAttribution.listLinks(promoter.id);
+
+    expect(links).toHaveLength(1);
+    expect(links[0]).toMatchObject({
+      listingId: listing.id,
+      listingTitle: "Promotable catalogue item",
+    });
+    expect(links).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ listingId: otherListing.id })]),
+    );
+  });
+
   it("rejects indirect cycles inside PostgreSQL", async () => {
     const a = await account("cycle_a"),
       b = await account("cycle_b"),

@@ -175,6 +175,8 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern.startsWith("/api/operator/listings"))
     return { mode: "account", scope: "catalogue:manage" };
   if (pattern.startsWith("/api/operator/")) return { mode: "account", scope: "operations:manage" };
+  if (pattern === "/api/listings/:id/referral-link")
+    return { mode: "account", scope: "referrals:manage" };
   if (pattern === "/api/listings" || pattern === "/api/listings/:id")
     return { mode: "account", scope: "catalogue:manage" };
   if (pattern.startsWith("/api/listings/")) return { mode: "account", scope: "catalogue:manage" };
@@ -192,7 +194,7 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
       scope: pattern.endsWith("/parent") ? "referrals:manage" : "referrals:read",
     };
   if (pattern.startsWith("/api/referral-links"))
-    return { mode: "account", scope: "referrals:manage" };
+    return { mode: "account", scope: method === "GET" ? "referrals:read" : "referrals:manage" };
   if (pattern.startsWith("/api/earnings")) return { mode: "account", scope: "earnings:read" };
   if (pattern === "/api/withdrawals")
     return { mode: "account", scope: method === "GET" ? "withdrawals:read" : "withdrawals:create" };

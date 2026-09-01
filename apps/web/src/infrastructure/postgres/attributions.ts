@@ -11,6 +11,8 @@ interface LinkRow {
   listing_id: string;
   referrer_account_id: string;
   state: "active" | "revoked";
+  listing_title: string | null;
+  created_at: Date;
 }
 export class PostgresReferralAttributionRepository implements ReferralAttributionRepository {
   constructor(private readonly sql: SqlExecutor) {}
@@ -25,7 +27,8 @@ export class PostgresReferralAttributionRepository implements ReferralAttributio
         `insert into referral_capability.listing_referral_links(id,code,listing_id,referrer_account_id)
        values($1,$2,$3,$4)
        on conflict(listing_id,referrer_account_id) do update set listing_id=excluded.listing_id
-       returning id,code,listing_id,referrer_account_id,state`,
+       returning id,code,listing_id,referrer_account_id,state,created_at,
+       (select title from listing_capability.listings where id=listing_referral_links.listing_id) listing_title`,
         [input.id, input.code, input.listingId, input.referrerAccountId],
       )
     ).rows[0];
@@ -34,7 +37,11 @@ export class PostgresReferralAttributionRepository implements ReferralAttributio
   async findActiveLinkByCode(code: string): Promise<ReferralLinkRecord | null> {
     const row = (
       await this.sql.query<LinkRow>(
-        `select id,code,listing_id,referrer_account_id,state from referral_capability.listing_referral_links where code=$1 and state='active'`,
+        `select links.id,links.code,links.listing_id,links.referrer_account_id,links.state,links.created_at,
+          listings.title listing_title
+         from referral_capability.listing_referral_links links
+         left join listing_capability.listings listings on listings.id=links.listing_id
+         where links.code=$1 and links.state='active'`,
         [code],
       )
     ).rows[0];
@@ -43,7 +50,11 @@ export class PostgresReferralAttributionRepository implements ReferralAttributio
   async findLinkById(id: string) {
     const row = (
       await this.sql.query<LinkRow>(
-        `select id,code,listing_id,referrer_account_id,state from referral_capability.listing_referral_links where id=$1`,
+        `select links.id,links.code,links.listing_id,links.referrer_account_id,links.state,links.created_at,
+          listings.title listing_title
+         from referral_capability.listing_referral_links links
+         left join listing_capability.listings listings on listings.id=links.listing_id
+         where links.id=$1`,
         [id],
       )
     ).rows[0];
@@ -52,7 +63,11 @@ export class PostgresReferralAttributionRepository implements ReferralAttributio
   async listLinks(referrerAccountId: string) {
     return (
       await this.sql.query<LinkRow>(
-        `select id,code,listing_id,referrer_account_id,state from referral_capability.listing_referral_links where referrer_account_id=$1 order by created_at desc,id`,
+        `select links.id,links.code,links.listing_id,links.referrer_account_id,links.state,links.created_at,
+          listings.title listing_title
+         from referral_capability.listing_referral_links links
+         left join listing_capability.listings listings on listings.id=links.listing_id
+         where links.referrer_account_id=$1 order by links.created_at desc,links.id`,
         [referrerAccountId],
       )
     ).rows.map(mapLink);
@@ -113,5 +128,7 @@ function mapLink(row: LinkRow): ReferralLinkRecord {
     listingId: row.listing_id,
     referrerAccountId: row.referrer_account_id,
     state: row.state,
+    listingTitle: row.listing_title,
+    createdAt: row.created_at,
   };
 }

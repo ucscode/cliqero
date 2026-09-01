@@ -10,6 +10,7 @@ import {
   formatMinorUsd,
   safeContinuation,
   type CheckoutStatus,
+  type EarningsSummary,
   type Listing,
   type PurchasePage,
   type WalletSummary,
@@ -17,6 +18,9 @@ import {
 import { Badge, Button, Card, EmptyState, Money, Skeleton, Toast } from "./ui";
 import { PurchasesPanel } from "./purchases-panel";
 import { WalletPanel } from "./wallet-panel";
+import { PromotePanel } from "./promote-panel";
+import { ReferralsPanel } from "./referrals-panel";
+import { EarningsPanel } from "./earnings-panel";
 
 const navigation = [
   { label: "Overview", href: "/dashboard", section: "overview" },
@@ -24,7 +28,7 @@ const navigation = [
   { label: "Wallet", href: "/dashboard?section=wallet", section: "wallet" },
   { label: "Purchases", href: "/dashboard?section=purchases", section: "purchases" },
   { label: "Promote", href: "/dashboard?section=promote", section: "promote" },
-  { label: "Referral network", href: "/dashboard?section=network", section: "network" },
+  { label: "Referrals", href: "/dashboard?section=referrals", section: "referrals" },
   { label: "Earnings", href: "/dashboard?section=earnings", section: "earnings" },
 ];
 
@@ -83,6 +87,12 @@ export function DashboardShell() {
       />
     ) : section === "purchases" ? (
       <PurchasesPanel selectedId={selectedPurchase} />
+    ) : section === "promote" ? (
+      <PromotePanel />
+    ) : section === "referrals" ? (
+      <ReferralsPanel />
+    ) : section === "earnings" ? (
+      <EarningsPanel />
     ) : buy ? (
       listing ? (
         <CheckoutFlow listing={listing} />
@@ -138,15 +148,18 @@ export function DashboardShell() {
 function DashboardOverview({ profile }: { profile: { handle: string; email: string } | null }) {
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [purchases, setPurchases] = useState<PurchasePage | null>(null);
+  const [earnings, setEarnings] = useState<EarningsSummary | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
     void Promise.all([
       apiFetch<WalletSummary>("/api/wallet"),
       apiFetch<PurchasePage>("/api/purchases?limit=3"),
+      apiFetch<EarningsSummary>("/api/earnings"),
     ])
-      .then(([walletSummary, purchasePage]) => {
+      .then(([walletSummary, purchasePage, earningsSummary]) => {
         setWallet(walletSummary);
         setPurchases(purchasePage);
+        setEarnings(earningsSummary);
       })
       .catch(() => setError(true));
   }, []);
@@ -161,6 +174,21 @@ function DashboardOverview({ profile }: { profile: { handle: string; email: stri
           </h2>
           <Link className="arrow-link" href="/dashboard?section=wallet">
             View wallet ↗
+          </Link>
+        </Card>
+        <Card>
+          <p className="eyebrow">Available earnings</p>
+          <h2 className="summary-amount">
+            <Money
+              minor={
+                earnings?.balances.find((balance) => balance.state === "available")?.amount_minor ??
+                "0"
+              }
+              currency="USD"
+            />
+          </h2>
+          <Link className="arrow-link" href="/dashboard?section=earnings">
+            View earnings ↗
           </Link>
         </Card>
         <Card>

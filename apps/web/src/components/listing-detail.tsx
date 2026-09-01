@@ -9,6 +9,7 @@ import { authClient } from "@/lib/auth-client";
 import { apiFetch, type Listing, ApiClientError } from "@/lib/api-client";
 import { Badge, Button, Card, EmptyState, Money, Skeleton, Toast } from "./ui";
 import { canShowPromote, postAuthBuyPath } from "./interaction-model";
+import { ReferralShareActions } from "./referral-share-actions";
 
 export function ListingDetail({ id }: { id: string }) {
   const router = useRouter();
@@ -17,6 +18,7 @@ export function ListingDetail({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [promoteMessage, setPromoteMessage] = useState<string | null>(null);
+  const [referralUrl, setReferralUrl] = useState<string | null>(null);
   const [promoting, setPromoting] = useState(false);
   useEffect(() => {
     void apiFetch<Listing>(`/api/listings/${id}`)
@@ -64,12 +66,8 @@ export function ListingDetail({ id }: { id: string }) {
       method: "POST",
     })
       .then(async (result) => {
-        try {
-          await navigator.clipboard.writeText(result.url);
-          setPromoteMessage("Referral link copied. Share it when you’re ready.");
-        } catch {
-          setPromoteMessage(`Your referral link is ready: ${result.url}`);
-        }
+        setReferralUrl(result.url);
+        setPromoteMessage("Your referral link is ready to share.");
       })
       .catch((cause: unknown) => {
         setPromoteMessage(
@@ -122,10 +120,11 @@ export function ListingDetail({ id }: { id: string }) {
             <Button onClick={buy}>Buy now</Button>
             {canShowPromote(Boolean(session.data?.user)) && (
               <Button variant="secondary" onClick={promote} disabled={promoting}>
-                Promote
+                {promoting ? "Preparing link…" : referralUrl ? "Refresh link" : "Promote"}
               </Button>
             )}
             {promoteMessage && <Toast tone="success">{promoteMessage}</Toast>}
+            {referralUrl && <ReferralShareActions url={referralUrl} />}
           </div>
           <p className="secure-note">
             <span aria-hidden="true">◈</span> Secure access through Cliqero
