@@ -56,6 +56,7 @@ import * as referralParent from "@/api/compat/referrals/parent/route";
 import * as referralUplines from "@/api/compat/referrals/uplines/route";
 import * as wallet from "@/api/compat/wallet/route";
 import * as walletFunding from "@/api/compat/wallet/fund/route";
+import * as walletFundingById from "@/api/compat/wallet/fund/[id]/route";
 import * as walletTransactions from "@/api/compat/wallet/transactions/route";
 import * as withdrawals from "@/api/compat/withdrawals/route";
 import * as withdrawalById from "@/api/compat/withdrawals/[id]/route";
@@ -76,6 +77,7 @@ export type LegacyRouteAccess = {
   mode: LegacyAuthMode;
   scope?: ApiScope;
   apiKey?: "allow" | "reject";
+  allowIncompleteSession?: boolean;
 };
 
 const routes: LegacyRoute[] = [
@@ -139,6 +141,7 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/referrals/parent", module: referralParent },
   { pattern: "/api/referrals/uplines", module: referralUplines },
   { pattern: "/api/wallet/fund", module: walletFunding },
+  { pattern: "/api/wallet/fund/:id", module: walletFundingById },
   { pattern: "/api/wallet/transactions", module: walletTransactions },
   { pattern: "/api/wallet", module: wallet },
   { pattern: "/api/withdrawals/:id", module: withdrawalById },
@@ -163,6 +166,8 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (publicPaths.has(pattern) && publicMethods.has(method)) {
     return { mode: "anonymous", apiKey: "allow" };
   }
+  if (pattern === "/api/me/onboarding")
+    return { mode: "session_only", apiKey: "reject", allowIncompleteSession: true };
   if (sessionOnlyPaths.has(pattern)) return { mode: "session_only" };
   if (pattern.startsWith("/api/operator/treasury")) {
     return { mode: "account", scope: method === "GET" ? "treasury:read" : "treasury:manage" };
@@ -176,6 +181,7 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern === "/api/me/listings") return { mode: "account", scope: "catalogue:read" };
   if (pattern === "/api/wallet") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/transactions") return { mode: "account", scope: "wallet:read" };
+  if (pattern === "/api/wallet/fund/:id") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/fund") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/checkout") return { mode: "account", scope: "checkout:create" };
   if (pattern === "/api/checkout/:id" || pattern.startsWith("/api/purchases"))
@@ -249,7 +255,8 @@ export function authorizeLegacyRequest(
     !principal
   )
     return unauthorized();
-  if (access.mode === "session_only" && !principal) return unauthorized();
+  if (access.mode === "session_only" && !principal && !access.allowIncompleteSession)
+    return unauthorized();
   if (access.mode === "session_only" && principal?.kind === "api_key") return forbidden();
   if (access.mode === "anonymous" && principal?.kind === "api_key" && access.apiKey === "reject")
     return forbidden();

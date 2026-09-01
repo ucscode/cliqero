@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMinorUsd, safeContinuation } from "./api-client";
+import { formatMinorUsd, parseUsdMinor, safeContinuation } from "./api-client";
 
 describe("frontend API presentation helpers", () => {
   it("formats canonical USD minor units without floating point arithmetic", () => {
@@ -20,5 +20,16 @@ describe("frontend API presentation helpers", () => {
     );
     expect(safeContinuation(encoded, "/dashboard")).toBe("/dashboard");
     expect(safeContinuation(null, "/dashboard")).toBe("/dashboard");
+  });
+
+  it("parses USD input into exact positive minor units", () => {
+    expect(parseUsdMinor("1")).toBe("100");
+    expect(parseUsdMinor("1.00")).toBe("100");
+    expect(parseUsdMinor("0.01")).toBe("1");
+    expect(parseUsdMinor("$20.5")).toBe("2050");
+    expect(() => parseUsdMinor("0")).toThrow();
+    expect(() => parseUsdMinor("-1")).toThrow();
+    expect(() => parseUsdMinor("1.001")).toThrow();
+    expect(() => parseUsdMinor("one dollar")).toThrow();
   });
 });

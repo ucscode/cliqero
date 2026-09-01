@@ -36,6 +36,13 @@ export function AuthForm({
         return;
       }
       if (mode === "register") {
+        // Better Auth intentionally keeps autoSignIn disabled. Establish the
+        // normal Better Auth session before completing Cliqero onboarding.
+        const signIn = await authClient.signIn.email({ email, password });
+        if (signIn.error) {
+          setError(signIn.error.message || "Sign in to finish setting up your account.");
+          return;
+        }
         const onboarding = await fetch("/api/me/onboarding", {
           method: "POST",
           credentials: "include",

@@ -46,6 +46,12 @@ suite("wallet-first durable commerce", () => {
       idempotencyKey: "buy-1",
     });
     expect(checkout.state).toBe("awaiting_funds");
+    const checkoutRetryBeforeFunding = await app.walletCheckout.initiate({
+      buyerId: buyer.id,
+      listingId: listing.id,
+      idempotencyKey: "buy-1",
+    });
+    expect(checkoutRetryBeforeFunding.id).toBe(checkout.id);
     expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
     const funding = await app.fundingService.create({
       accountId: buyer.id,
@@ -63,14 +69,26 @@ suite("wallet-first durable commerce", () => {
     expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
     await app.walletAvailability.runBatch();
     expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(1000n);
+    const checkoutRetryAfterFunding = await app.walletCheckout.initiate({
+      buyerId: buyer.id,
+      listingId: listing.id,
+      idempotencyKey: "buy-1",
+    });
+    expect(checkoutRetryAfterFunding.id).toBe(checkout.id);
     expect((await app.checkoutRepository.findById(checkout.id))?.state).toBe("awaiting_funds");
     await app.checkoutPayment.process(checkout.id);
     expect((await app.checkoutRepository.findById(checkout.id))?.state).toBe("paid");
     expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
     expect((await app.purchases.findById(checkout.purchaseId))?.state).toBe("paid");
     expect(await app.entitlements.findByPurchaseId(checkout.purchaseId)).toBeNull();
+    expect(
+      (await app.accountProjections.purchase(buyer.id, checkout.purchaseId)).access_available,
+    ).toBe(false);
     const entitlement = await app.entitlementIssuance.process(checkout.purchaseId);
     expect(entitlement?.isActive).toBe(true);
+    expect(
+      (await app.accountProjections.purchase(buyer.id, checkout.purchaseId)).access_available,
+    ).toBe(true);
     expect(await app.ledger.findDistributionByPurchaseId(checkout.purchaseId)).toBeNull();
     const destination = await app.buyerAccess.handoffPurchase(
       buyer,
@@ -85,6 +103,20 @@ suite("wallet-first durable commerce", () => {
       buyerId: buyer.id,
       listingId: listing.id,
     });
+    await app.database.query(
+      `update entitlement_capability.entitlements set expires_at=now()-interval '1 second' where purchase_id=$1`,
+      [checkout.purchaseId],
+    );
+    expect(
+      (await app.accountProjections.purchase(buyer.id, checkout.purchaseId)).access_available,
+    ).toBe(false);
+    await app.database.query(
+      `update entitlement_capability.entitlements set state='revoked',expires_at=null where purchase_id=$1`,
+      [checkout.purchaseId],
+    );
+    expect(
+      (await app.accountProjections.purchase(buyer.id, checkout.purchaseId)).access_available,
+    ).toBe(false);
     await app.purchaseDistribution.process({
       purchaseId: checkout.purchaseId,
       correlationId: newId(),

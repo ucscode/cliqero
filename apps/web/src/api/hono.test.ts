@@ -186,6 +186,42 @@ describe("Hono API foundation", () => {
     );
     expect(publicDetail).toBeNull();
   });
+  it("lets an authenticated but incomplete session reach onboarding only", () => {
+    const access = getLegacyRouteAccess("/api/me/onboarding", "POST");
+    expect(access).toEqual({
+      mode: "session_only",
+      apiKey: "reject",
+      allowIncompleteSession: true,
+    });
+    expect(
+      authorizeLegacyRequest(
+        new Request("http://localhost/api/me/onboarding", { method: "POST" }),
+        null,
+        access!,
+      ),
+    ).toBeNull();
+    const keyDenied = authorizeLegacyRequest(
+      new Request("http://localhost/api/me/onboarding", { method: "POST" }),
+      { accountId: "account", account: {}, kind: "api_key", roles: [], scopes: new Set() } as any,
+      access!,
+    );
+    expect(keyDenied?.status).toBe(403);
+  });
+  it("keeps incomplete sessions out of unrelated account and operator APIs", async () => {
+    const app = appWith();
+    for (const path of [
+      "/api/wallet",
+      "/api/purchases",
+      "/api/checkout",
+      "/api/operator/treasury",
+    ]) {
+      const request =
+        path === "/api/checkout"
+          ? new Request(`http://localhost${path}`, { method: "POST" })
+          : new Request(`http://localhost${path}`);
+      expect((await app.fetch(request)).status).toBe(401);
+    }
+  });
   it("does not let an API-key scope elevate a non-operator account", async () => {
     const principal = {
       accountId: "00000000-0000-4000-8000-000000000001",
