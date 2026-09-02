@@ -113,11 +113,32 @@ export class WithdrawalService {
   }
   async reject(actorId: string, id: string, reason: string) {
     await this.operators.requireOperator(actorId);
+    if (!reason.trim()) throw new Error("Withdrawal rejection reason is required");
     return this.uow.transaction(async () => {
       const withdrawal = await this.withdrawals.findByIdForUpdate(id);
       if (!withdrawal) throw new Error("Withdrawal not found");
       if (withdrawal.state !== "requested" && withdrawal.state !== "approved")
         throw new Error(`Invalid withdrawal transition from ${withdrawal.state}`);
+      const payout = (
+        await this.sql.query<{ state: string; attempt_state: string | null }>(
+          `select e.state, a.state attempt_state
+             from payout_capability.executions e
+             left join lateral (
+               select state from payout_capability.attempts
+                where execution_id=e.id order by attempt_number desc limit 1
+             ) a on true
+            where e.withdrawal_id=$1
+            for update of e`,
+          [id],
+        )
+      ).rows[0];
+      if (
+        payout &&
+        (["submitted", "unknown", "succeeded"].includes(payout.state) ||
+          (payout.attempt_state &&
+            ["submitted", "pending", "unknown", "succeeded"].includes(payout.attempt_state)))
+      )
+        throw new Error("Withdrawal cannot be rejected after payout execution started");
       await this.withdrawals.transition(id, withdrawal.state, "rejected", reason);
       await this.funds.releaseOrComplete({
         withdrawalId: id,

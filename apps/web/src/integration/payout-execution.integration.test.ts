@@ -129,4 +129,24 @@ suite("provider-neutral payout execution", () => {
     expect((results as any[]).filter((result) => result?.kind === "succeeded")).toHaveLength(1);
     expect(await app.payoutExecution.attempts(withdrawal.id)).toHaveLength(1);
   });
+  it("does not release a reservation after an automated payout may have moved money", async () => {
+    const unknown = await setup("dev:unknown");
+    await app.payoutExecution.execute(unknown.withdrawal.id, newId());
+    await expect(
+      app.withdrawals.reject(unknown.seller.id, unknown.withdrawal.id, "reject"),
+    ).rejects.toThrow("after payout execution started");
+    expect((await app.withdrawalRepository.findById(unknown.withdrawal.id))?.state).toBe(
+      "approved",
+    );
+    expect((await app.fundsReservation.summarize(unknown.seller.id))[0].reservedMinor).toBe(5000n);
+    const submitted = await setup("dev:retry");
+    await app.payoutExecution.execute(submitted.withdrawal.id, newId());
+    await app.database.query(
+      `update payout_capability.executions set state='submitted' where withdrawal_id=$1`,
+      [submitted.withdrawal.id],
+    );
+    await expect(
+      app.withdrawals.reject(submitted.seller.id, submitted.withdrawal.id, "reject"),
+    ).rejects.toThrow("after payout execution started");
+  });
 });

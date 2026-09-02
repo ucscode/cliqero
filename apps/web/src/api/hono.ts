@@ -3,6 +3,7 @@ import type { ApplicationContainer } from "@/infrastructure/container";
 import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import { apiScopeSchema } from "@/modules/identity/api-scopes";
 import { dispatchLegacyApi, legacyApiPaths } from "./legacy-dispatch";
+import { newId } from "@/kernel/ids";
 
 type Env = { Variables: { principal: ApiPrincipal | null } };
 const errorSchema = z.object({ error: z.string(), code: z.string().optional() });
@@ -223,6 +224,66 @@ const operatorEarningsEntrySchema = z.object({
   settledAt: z.string().nullable(),
   createdAt: z.string(),
 });
+const operatorWithdrawalStateSchema = z.enum([
+  "requested",
+  "approved",
+  "rejected",
+  "cancelled",
+  "completed",
+  "failed",
+]);
+const operatorWithdrawalAttentionSchema = z.enum([
+  "review",
+  "payout",
+  "reconciliation",
+  "retry",
+  "retry_wait",
+  "none",
+]);
+const operatorWithdrawalSchema = z.object({
+  id: z.string().uuid(),
+  account: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+  amountMinor: z.string(),
+  currency: z.string(),
+  destination: z.object({ type: z.enum(["bank", "manual"]), summary: z.string() }),
+  state: operatorWithdrawalStateSchema,
+  reason: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  reservation: z
+    .object({
+      amountMinor: z.string(),
+      currency: z.string(),
+      state: z.enum(["reserved", "released", "completed"]),
+    })
+    .nullable(),
+  payout: z
+    .object({
+      provider: z.string(),
+      state: z.enum(["ready", "submitted", "succeeded", "failed", "unknown"]),
+      attemptCount: z.number().int(),
+      nextAttemptAt: z.string().nullable(),
+      lastError: z.string().nullable(),
+      providerReference: z.string().nullable(),
+    })
+    .nullable(),
+  attention: operatorWithdrawalAttentionSchema,
+});
+const operatorWithdrawalDetailSchema = operatorWithdrawalSchema.extend({
+  attempts: z.array(
+    z.object({
+      id: z.string().uuid(),
+      number: z.number().int(),
+      provider: z.string(),
+      state: z.string(),
+      providerReference: z.string().nullable(),
+      failureCategory: z.string().nullable(),
+      failureReason: z.string().nullable(),
+      createdAt: z.string(),
+      completedAt: z.string().nullable(),
+    }),
+  ),
+});
 function principal(c: any) {
   return c.get("principal") as ApiPrincipal | null;
 }
@@ -299,6 +360,11 @@ function domainError(c: any, error: unknown) {
               : "invalid_request",
     },
     status,
+  );
+}
+function jsonSafe(value: unknown) {
+  return JSON.parse(
+    JSON.stringify(value, (_key, item) => (typeof item === "bigint" ? item.toString() : item)),
   );
 }
 
@@ -392,6 +458,24 @@ export function createApiApp(container: ApplicationContainer) {
           operation["x-authentication-mode"] = "account";
           operation["x-required-api-scope"] = "operations:manage (operator)";
         }
+      }
+      for (const path of [
+        "/api/operator/withdrawals",
+        "/api/operator/withdrawals/{withdrawalId}",
+        "/api/operator/withdrawals/{withdrawalId}/approve",
+        "/api/operator/withdrawals/{withdrawalId}/reject",
+        "/api/operator/withdrawals/{withdrawalId}/payout",
+        "/api/operator/withdrawals/{withdrawalId}/payout/reconcile",
+        "/api/operator/withdrawals/{withdrawalId}/complete",
+      ]) {
+        const pathItem = document.paths[path];
+        if (pathItem)
+          for (const operation of Object.values(pathItem) as any[]) {
+            if (operation && typeof operation === "object") {
+              operation["x-authentication-mode"] = "account";
+              operation["x-required-api-scope"] = "withdrawals:manage (operator)";
+            }
+          }
       }
       const access = document.paths["/api/me/access"]?.get;
       if (access) access["x-authentication-mode"] = "account";
@@ -724,6 +808,224 @@ export function createApiApp(container: ApplicationContainer) {
       );
     },
   );
+  const operatorWithdrawalQuery = z.object({
+    search: z.string().max(100).optional(),
+    state: operatorWithdrawalStateSchema.optional(),
+    attention: operatorWithdrawalAttentionSchema.optional(),
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(25),
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/withdrawals",
+      request: { query: operatorWithdrawalQuery },
+      responses: {
+        200: {
+          description: "Bounded operator withdrawal inspection",
+          content: {
+            "application/json": {
+              schema: z.object({
+                items: z.array(operatorWithdrawalSchema),
+                nextCursor: z.string().nullable(),
+              }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "withdrawals:manage");
+      if (denied) return denied;
+      try {
+        return c.json(await container.operatorWithdrawals.list(c.req.valid("query")), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/withdrawals/{withdrawalId}",
+      request: { params: z.object({ withdrawalId: z.string().uuid() }) },
+      responses: {
+        200: {
+          description: "Safe operator withdrawal detail",
+          content: { "application/json": { schema: operatorWithdrawalDetailSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Withdrawal not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "withdrawals:manage");
+      if (denied) return denied;
+      try {
+        return c.json(
+          await container.operatorWithdrawals.get(c.req.valid("param").withdrawalId),
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  const withdrawalParam = { params: z.object({ withdrawalId: z.string().uuid() }) };
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/withdrawals/{withdrawalId}/approve",
+      request: withdrawalParam,
+      responses: {
+        200: {
+          description: "Withdrawal approved",
+          content: { "application/json": { schema: z.any() } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "withdrawals:manage");
+      if (denied) return denied;
+      try {
+        return c.json(
+          jsonSafe(
+            await container.withdrawals.approve(p.accountId, c.req.valid("param").withdrawalId),
+          ),
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/withdrawals/{withdrawalId}/reject",
+      request: {
+        ...withdrawalParam,
+        body: {
+          content: {
+            "application/json": {
+              schema: z.object({ reason: z.string().min(3).max(500) }).strict(),
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Withdrawal rejected",
+          content: { "application/json": { schema: z.any() } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "withdrawals:manage");
+      if (denied) return denied;
+      try {
+        return c.json(
+          jsonSafe(
+            await container.withdrawals.reject(
+              p.accountId,
+              c.req.valid("param").withdrawalId,
+              c.req.valid("json").reason,
+            ),
+          ),
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  for (const [path, operation] of [
+    ["/api/operator/withdrawals/{withdrawalId}/payout", "payout"],
+    ["/api/operator/withdrawals/{withdrawalId}/payout/reconcile", "reconcile"],
+    ["/api/operator/withdrawals/{withdrawalId}/complete", "complete"],
+  ] as const) {
+    app.openapi(
+      createRoute({
+        method: "post",
+        path,
+        request: withdrawalParam,
+        responses: {
+          200: {
+            description: "Withdrawal operation",
+            content: { "application/json": { schema: z.any() } },
+          },
+          401: {
+            description: "Authentication required",
+            content: { "application/json": { schema: errorSchema } },
+          },
+          403: {
+            description: "Operator access required",
+            content: { "application/json": { schema: errorSchema } },
+          },
+        },
+      }),
+      async (c) => {
+        const p = requirePrincipal(c);
+        if (!(p instanceof Object) || !("accountId" in p)) return p;
+        const denied = requireOperatorScope(c, p, "withdrawals:manage");
+        if (denied) return denied;
+        try {
+          const id = c.req.valid("param").withdrawalId;
+          const result =
+            operation === "payout"
+              ? await container.payoutExecution.execute(id, newId())
+              : operation === "reconcile"
+                ? await container.payoutExecution.reconcile(id, newId())
+                : await container.payoutExecution.manualComplete(id, p.accountId, newId());
+          return c.json(jsonSafe(result), 200);
+        } catch (error) {
+          return domainError(c, error);
+        }
+      },
+    );
+  }
   app.openapi(
     createRoute({
       method: "get",

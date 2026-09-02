@@ -102,6 +102,19 @@ function appWith(principal: any = null) {
         totals: { pendingMinor: "0", availableMinor: "0", reservedMinor: "0" },
       }),
     },
+    operatorWithdrawals: {
+      list: async () => ({ items: [], nextCursor: null }),
+      get: async () => ({ items: [] }),
+    },
+    withdrawals: {
+      approve: async () => ({}),
+      reject: async () => ({}),
+    },
+    payoutExecution: {
+      execute: async () => ({}),
+      reconcile: async () => ({}),
+      manualComplete: async () => ({}),
+    },
   } as any);
 }
 describe("Hono API foundation", () => {
@@ -143,6 +156,10 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/earnings"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "operations:manage (operator)",
+    });
+    expect(paths["/api/operator/withdrawals"].get).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "withdrawals:manage (operator)",
     });
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
@@ -273,6 +290,51 @@ describe("Hono API foundation", () => {
     expect(
       (await appWith(elevatedCatalogue).fetch(new Request("http://localhost/api/operator/funding")))
         .status,
+    ).toBe(403);
+  });
+  it("protects operator withdrawals with the withdrawals manage scope", async () => {
+    const base = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      roles: [] as string[],
+      scopes: new Set<string>(),
+    };
+    expect(
+      (await appWith().fetch(new Request("http://localhost/api/operator/withdrawals"))).status,
+    ).toBe(401);
+    expect(
+      (await appWith(base).fetch(new Request("http://localhost/api/operator/withdrawals"))).status,
+    ).toBe(403);
+    expect(
+      (
+        await appWith({ ...base, roles: ["catalogue_manager"] }).fetch(
+          new Request("http://localhost/api/operator/withdrawals"),
+        )
+      ).status,
+    ).toBe(403);
+    const operator = { ...base, roles: ["operator"] };
+    expect(
+      (await appWith(operator).fetch(new Request("http://localhost/api/operator/withdrawals")))
+        .status,
+    ).toBe(200);
+    expect(
+      (
+        await appWith({
+          ...operator,
+          kind: "api_key" as const,
+          scopes: new Set(["withdrawals:manage"]),
+        }).fetch(new Request("http://localhost/api/operator/withdrawals"))
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await appWith({
+          ...base,
+          kind: "api_key" as const,
+          scopes: new Set(["withdrawals:manage"]),
+        }).fetch(new Request("http://localhost/api/operator/withdrawals"))
+      ).status,
     ).toBe(403);
   });
   it("protects distribution and earnings inspection with the role and scope intersection", async () => {

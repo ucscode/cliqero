@@ -84,7 +84,10 @@ export class PayoutExecutionProcessor {
           providerName: "manual",
           idempotencyKey: `manual:${withdrawalId}`,
         }));
+      if (["submitted", "unknown", "succeeded"].includes(execution.state))
+        throw new Error("Manual payout cannot follow an automated payout attempt");
       const attempt = await this.payouts.latestAttempt(execution.id);
+      if (attempt) throw new Error("Manual payout cannot follow an automated payout attempt");
       if (!attempt) {
         await this.payouts.createAttempt({
           id: newId(),

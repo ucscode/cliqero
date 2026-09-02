@@ -21,7 +21,14 @@ export function OperatorShell({
   handle: string;
   email: string;
   activeSection?:
-    "overview" | "catalogue" | "users" | "network" | "funding" | "distributions" | "earnings";
+    | "overview"
+    | "catalogue"
+    | "users"
+    | "network"
+    | "funding"
+    | "distributions"
+    | "earnings"
+    | "withdrawals";
   title?: string;
   children?: ReactNode;
 }) {
@@ -127,6 +134,13 @@ export function OperatorShell({
                 onClick={() => setMenuOpen(false)}
               >
                 Earnings
+              </Link>
+              <Link
+                className={activeSection === "withdrawals" ? "active" : ""}
+                href="/operator/withdrawals"
+                onClick={() => setMenuOpen(false)}
+              >
+                Withdrawals
               </Link>
             </>
           )}
