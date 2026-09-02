@@ -86,6 +86,80 @@ const operatorAccountDetailSchema = operatorAccountSummarySchema.extend({
     })
     .nullable(),
 });
+const fundingStateSchema = z.enum([
+  "initialization_pending",
+  "initializing",
+  "awaiting_payment",
+  "verification_pending",
+  "confirmed",
+  "failed",
+  "blocked",
+  "reconciliation_pending",
+]);
+const operatorFundingWalletCreditSchema = z.object({
+  id: z.string().uuid(),
+  amountMinor: z.string(),
+  currency: z.string(),
+  state: z.enum(["pending", "available"]),
+  createdAt: z.string(),
+  availableAt: z.string().nullable(),
+});
+const operatorFundingSummarySchema = z.object({
+  id: z.string().uuid(),
+  account: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+  provider: z.string(),
+  providerReference: z.string(),
+  canonicalAmountMinor: z.string(),
+  canonicalCurrency: z.literal("USD"),
+  collectionAmountMinor: z.string(),
+  collectionCurrency: z.string(),
+  state: fundingStateSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  confirmedAt: z.string().nullable(),
+  walletCredit: operatorFundingWalletCreditSchema.nullable(),
+});
+const operatorFundingDetailSchema = operatorFundingSummarySchema.extend({
+  conversionSnapshot: z
+    .object({
+      fromCurrency: z.string(),
+      toCurrency: z.string(),
+      rate: z.string(),
+      source: z.string(),
+      sourceDate: z.string(),
+      observedAt: z.string(),
+    })
+    .nullable(),
+  providerInitialization: z.object({ authorizationUrl: z.string().nullable() }).nullable(),
+  operations: z.array(
+    z.object({
+      id: z.string().uuid(),
+      operation: z.string(),
+      outcome: z.enum(["succeeded", "failed"]),
+      httpStatus: z.number().int().nullable(),
+      providerStatus: z.boolean().nullable(),
+      providerMessage: z.string().nullable(),
+      providerCode: z.string().nullable(),
+      failureKind: z.string().nullable(),
+      occurredAt: z.string(),
+    }),
+  ),
+  events: z.array(
+    z.object({
+      id: z.string().uuid(),
+      eventType: z.string(),
+      providerReference: z.string().nullable(),
+      amountMinor: z.string().nullable(),
+      currency: z.string().nullable(),
+      state: z.enum(["received", "processed", "rejected", "ignored"]),
+      lastError: z.string().nullable(),
+      receivedAt: z.string(),
+      processedAt: z.string().nullable(),
+      outboxState: z.string().nullable(),
+      outboxLastError: z.string().nullable(),
+    }),
+  ),
+});
 function principal(c: any) {
   return c.get("principal") as ApiPrincipal | null;
 }
@@ -238,6 +312,13 @@ export function createApiApp(container: ApplicationContainer) {
           operation["x-required-api-scope"] = "operations:manage (operator)";
         }
       }
+      for (const path of ["/api/operator/funding", "/api/operator/funding/{fundingId}"]) {
+        const operation = document.paths[path]?.get;
+        if (operation) {
+          operation["x-authentication-mode"] = "account";
+          operation["x-required-api-scope"] = "operations:manage (operator)";
+        }
+      }
       const access = document.paths["/api/me/access"]?.get;
       if (access) access["x-authentication-mode"] = "account";
       return c.json(document);
@@ -282,6 +363,91 @@ export function createApiApp(container: ApplicationContainer) {
       if (denied) return denied;
       try {
         return c.json(await container.operatorAccounts.list(c.req.valid("query")), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  const operatorFundingQuery = z.object({
+    search: z.string().max(100).optional(),
+    state: fundingStateSchema.optional(),
+    provider: z
+      .string()
+      .regex(/^[a-z0-9_-]{1,50}$/)
+      .optional(),
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(25),
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/funding",
+      request: { query: operatorFundingQuery },
+      responses: {
+        200: {
+          description: "Bounded operator funding inspection",
+          content: {
+            "application/json": {
+              schema: z.object({
+                items: z.array(operatorFundingSummarySchema),
+                nextCursor: z.string().nullable(),
+              }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "operations:manage");
+      if (denied) return denied;
+      try {
+        return c.json(await container.operatorFunding.list(c.req.valid("query")), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/funding/{fundingId}",
+      request: { params: z.object({ fundingId: z.string().uuid() }) },
+      responses: {
+        200: {
+          description: "Safe operator funding detail",
+          content: { "application/json": { schema: operatorFundingDetailSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Funding not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "operations:manage");
+      if (denied) return denied;
+      try {
+        return c.json(await container.operatorFunding.get(c.req.valid("param").fundingId), 200);
       } catch (error) {
         return domainError(c, error);
       }

@@ -46,6 +46,32 @@ function appWith(principal: any = null) {
         latestParentReassignment: null,
       }),
     },
+    operatorFunding: {
+      list: async () => ({ items: [], nextCursor: null }),
+      get: async (id: string) => ({
+        id,
+        account: {
+          id: "00000000-0000-4000-8000-000000000001",
+          handle: "sample",
+          email: "sample@example.com",
+        },
+        provider: "development",
+        providerReference: "dev-reference",
+        canonicalAmountMinor: "100",
+        canonicalCurrency: "USD",
+        collectionAmountMinor: "100",
+        collectionCurrency: "USD",
+        state: "confirmed",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        confirmedAt: new Date().toISOString(),
+        walletCredit: null,
+        conversionSnapshot: null,
+        providerInitialization: null,
+        operations: [],
+        events: [],
+      }),
+    },
   } as any);
 }
 describe("Hono API foundation", () => {
@@ -64,12 +90,18 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/overview"]).toBeDefined();
     expect(paths["/api/operator/accounts"]).toBeDefined();
     expect(paths["/api/operator/accounts/{accountId}"]).toBeDefined();
+    expect(paths["/api/operator/funding"]).toBeDefined();
+    expect(paths["/api/operator/funding/{fundingId}"]).toBeDefined();
     expect(paths["/api/operator/listings"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}/integrations"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}/integrations/{integrationId}/rotate"]).toBeDefined();
     expect(paths["/api/operator/overview"].get["x-authentication-mode"]).toBe("account");
     expect(paths["/api/operator/accounts"].get).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "operations:manage (operator)",
+    });
+    expect(paths["/api/operator/funding"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "operations:manage (operator)",
     });
@@ -154,6 +186,53 @@ describe("Hono API foundation", () => {
     };
     expect(
       (await appWith(elevatedOrdinary).fetch(new Request("http://localhost/api/operator/overview")))
+        .status,
+    ).toBe(403);
+  });
+  it("protects operator funding inspection with the role and scope intersection", async () => {
+    const ordinary = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      roles: [],
+      scopes: new Set<string>(),
+    };
+    expect(
+      (await appWith().fetch(new Request("http://localhost/api/operator/funding"))).status,
+    ).toBe(401);
+    expect(
+      (await appWith(ordinary).fetch(new Request("http://localhost/api/operator/funding"))).status,
+    ).toBe(403);
+    const catalogueManager = { ...ordinary, roles: ["catalogue_manager"] };
+    expect(
+      (await appWith(catalogueManager).fetch(new Request("http://localhost/api/operator/funding")))
+        .status,
+    ).toBe(403);
+    const operator = { ...ordinary, roles: ["operator"] };
+    expect(
+      (await appWith(operator).fetch(new Request("http://localhost/api/operator/funding"))).status,
+    ).toBe(200);
+    const operatorKey = {
+      ...operator,
+      kind: "api_key" as const,
+      scopes: new Set<string>(["operations:manage"]),
+    };
+    expect(
+      (await appWith(operatorKey).fetch(new Request("http://localhost/api/operator/funding")))
+        .status,
+    ).toBe(200);
+    const missingScope = { ...operator, kind: "api_key" as const, scopes: new Set<string>() };
+    expect(
+      (await appWith(missingScope).fetch(new Request("http://localhost/api/operator/funding")))
+        .status,
+    ).toBe(403);
+    const elevatedCatalogue = {
+      ...catalogueManager,
+      kind: "api_key" as const,
+      scopes: new Set<string>(["operations:manage"]),
+    };
+    expect(
+      (await appWith(elevatedCatalogue).fetch(new Request("http://localhost/api/operator/funding")))
         .status,
     ).toBe(403);
   });
