@@ -14,6 +14,7 @@ export type HierarchyGraphNode = {
   hasMoreChildren: boolean;
   nextChildCursor: string | null;
   canLoadMoreChildren: boolean;
+  canNavigate: boolean;
 };
 
 export type HierarchyGraphEdge = {
@@ -51,6 +52,7 @@ function toGraphNode(
     hasMoreChildren: node.hasMoreChildren,
     nextChildCursor: node.nextChildCursor,
     canLoadMoreChildren: node.depth < tree.windowDepth,
+    canNavigate: node.id !== tree.root,
   };
 }
 

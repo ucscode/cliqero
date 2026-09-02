@@ -161,6 +161,46 @@ suite("headless API principal and hierarchy read model", () => {
     );
     expect(ordinaryResponse.status).toBe(403);
   });
+  it("provides a bounded safe operator account projection and detail", async () => {
+    const operator = await account("accountoperator");
+    const child = await account("accountchild");
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      [operator.id],
+    );
+    await app.referralGraphService.establish(child.id, operator.id);
+    const api = createApiApp({
+      ...app,
+      principalResolver: {
+        resolve: async () => ({
+          accountId: operator.id,
+          account: operator,
+          kind: "user_session" as const,
+          roles: ["operator"],
+          scopes: new Set<string>(),
+        }),
+      },
+    } as any);
+    const list = await api.fetch(new Request("http://localhost/api/operator/accounts?limit=1"));
+    expect(list.status).toBe(200);
+    const listBody = await list.json();
+    expect(listBody.items).toHaveLength(1);
+    expect(listBody.items[0]).toMatchObject({ id: expect.any(String), handle: expect.any(String) });
+    expect(listBody.items[0].password_hash).toBeUndefined();
+    const detail = await api.fetch(
+      new Request(`http://localhost/api/operator/accounts/${child.id}`),
+    );
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toMatchObject({
+      id: child.id,
+      parent: { id: operator.id },
+      roles: [],
+    });
+    const unrelated = await api.fetch(
+      new Request(`http://localhost/api/operator/accounts/${newId()}`),
+    );
+    expect(unrelated.status).toBe(404);
+  });
   it("keeps normalized profile handles unique under concurrent updates", async () => {
     const first = await account("handlefirst"),
       second = await account("handlesecond");
@@ -247,6 +287,14 @@ suite("headless API principal and hierarchy read model", () => {
       (await app.hierarchy.search(root.id, child.handle, false, 20)).map((x) => x.id),
     ).toContain(child.id);
     expect(await app.hierarchy.search(root.id, other.handle, false, 20)).toEqual([]);
+    const operator = await account("searchoperator");
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      [operator.id],
+    );
+    expect(
+      (await app.hierarchy.search(operator.id, other.handle, true, 20)).map((item) => item.id),
+    ).toContain(other.id);
   });
   it("allows only an operator-scoped principal to reassign a parent through Hono", async () => {
     const operator = await account("operator"),

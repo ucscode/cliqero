@@ -62,6 +62,30 @@ const operatorOverviewSchema = z.object({
     })
     .optional(),
 });
+const operatorAccountSummarySchema = z.object({
+  id: z.string().uuid(),
+  handle: z.string(),
+  displayName: z.string().nullable(),
+  email: z.string(),
+  country: z.string().nullable(),
+  roles: z.array(z.string()),
+  createdAt: z.string(),
+  directReferralCount: z.number().int().nonnegative(),
+});
+const operatorAccountDetailSchema = operatorAccountSummarySchema.extend({
+  parent: z
+    .object({ id: z.string().uuid(), handle: z.string(), displayName: z.string().nullable() })
+    .nullable(),
+  purchaseCount: z.number().int().nonnegative(),
+  latestParentReassignment: z
+    .object({
+      actorId: z.string().uuid().nullable(),
+      previousParentId: z.string().uuid().nullable(),
+      parentId: z.string().uuid().nullable(),
+      occurredAt: z.string(),
+    })
+    .nullable(),
+});
 function principal(c: any) {
   return c.get("principal") as ApiPrincipal | null;
 }
@@ -78,6 +102,14 @@ function requireScope(c: any, p: ApiPrincipal, scope: string) {
     return c.json({ error: "Forbidden", code: "insufficient_scope" }, 403);
   }
   return null;
+}
+function requireOperatorScope(c: any, p: ApiPrincipal, scope: string) {
+  if (!p.roles.includes("operator")) return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+  return requireScope(c, p, scope);
+}
+function hierarchyReadOrAdmin(c: any, p: ApiPrincipal) {
+  if (p.kind === "api_key" && p.scopes.has("hierarchy:admin")) return null;
+  return requireScope(c, p, "hierarchy:read");
 }
 function grantableScopes(p: ApiPrincipal): Set<string> {
   const allowed = new Set([
@@ -199,9 +231,96 @@ export function createApiApp(container: ApplicationContainer) {
         overview["x-required-api-scope"] =
           "operations:manage (operator) or catalogue:read (catalogue_manager)";
       }
+      for (const path of ["/api/operator/accounts", "/api/operator/accounts/{accountId}"]) {
+        const operation = document.paths[path]?.get;
+        if (operation) {
+          operation["x-authentication-mode"] = "account";
+          operation["x-required-api-scope"] = "operations:manage (operator)";
+        }
+      }
       const access = document.paths["/api/me/access"]?.get;
       if (access) access["x-authentication-mode"] = "account";
       return c.json(document);
+    },
+  );
+  const accountListQuery = z.object({
+    search: z.string().max(100).optional(),
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(25),
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/accounts",
+      request: { query: accountListQuery },
+      responses: {
+        200: {
+          description: "Bounded operator account search",
+          content: {
+            "application/json": {
+              schema: z.object({
+                items: z.array(operatorAccountSummarySchema),
+                nextCursor: z.string().nullable(),
+              }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "operations:manage");
+      if (denied) return denied;
+      try {
+        return c.json(await container.operatorAccounts.list(c.req.valid("query")), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/accounts/{accountId}",
+      request: { params: z.object({ accountId: z.string().uuid() }) },
+      responses: {
+        200: {
+          description: "Safe operator account projection",
+          content: { "application/json": { schema: operatorAccountDetailSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Account not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "operations:manage");
+      if (denied) return denied;
+      try {
+        return c.json(await container.operatorAccounts.get(c.req.valid("param").accountId), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
     },
   );
   app.openapi(
@@ -293,7 +412,7 @@ export function createApiApp(container: ApplicationContainer) {
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireScope(c, p, "hierarchy:read");
+      const denied = hierarchyReadOrAdmin(c, p);
       if (denied) return denied;
       const root = c.req.valid("query").root ?? p.accountId;
       const admin =
@@ -344,7 +463,7 @@ export function createApiApp(container: ApplicationContainer) {
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireScope(c, p, "hierarchy:read");
+      const denied = hierarchyReadOrAdmin(c, p);
       if (denied) return denied;
       const q = c.req.valid("query");
       const admin =
@@ -380,7 +499,7 @@ export function createApiApp(container: ApplicationContainer) {
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireScope(c, p, "hierarchy:read");
+      const denied = hierarchyReadOrAdmin(c, p);
       if (denied) return denied;
       const admin =
         p.roles.includes("operator") &&

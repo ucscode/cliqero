@@ -30,6 +30,22 @@ function appWith(principal: any = null) {
           : {}),
       }),
     },
+    operatorAccounts: {
+      list: async () => ({ items: [], nextCursor: null }),
+      get: async (id: string) => ({
+        id,
+        handle: "sample",
+        displayName: null,
+        email: "sample@example.com",
+        country: null,
+        roles: [],
+        createdAt: new Date().toISOString(),
+        directReferralCount: 0,
+        parent: null,
+        purchaseCount: 0,
+        latestParentReassignment: null,
+      }),
+    },
   } as any);
 }
 describe("Hono API foundation", () => {
@@ -46,11 +62,17 @@ describe("Hono API foundation", () => {
     expect(paths["/api/api-keys/{id}/revoke"]).toBeDefined();
     expect(paths["/api/me/access"]).toBeDefined();
     expect(paths["/api/operator/overview"]).toBeDefined();
+    expect(paths["/api/operator/accounts"]).toBeDefined();
+    expect(paths["/api/operator/accounts/{accountId}"]).toBeDefined();
     expect(paths["/api/operator/listings"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}/integrations"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}/integrations/{integrationId}/rotate"]).toBeDefined();
     expect(paths["/api/operator/overview"].get["x-authentication-mode"]).toBe("account");
+    expect(paths["/api/operator/accounts"].get).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "operations:manage (operator)",
+    });
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
     expect(paths["/api/listings"].get).toMatchObject({
@@ -373,5 +395,69 @@ describe("Hono API foundation", () => {
       ),
     );
     expect(response.status).toBe(403);
+  });
+  it("protects operator account inspection with role and operations scope", async () => {
+    const ordinary = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      roles: [],
+      scopes: new Set<string>(),
+    };
+    expect(
+      (await appWith().fetch(new Request("http://localhost/api/operator/accounts"))).status,
+    ).toBe(401);
+    expect(
+      (await appWith(ordinary).fetch(new Request("http://localhost/api/operator/accounts"))).status,
+    ).toBe(403);
+    expect(
+      (
+        await appWith({ ...ordinary, roles: ["catalogue_manager"] }).fetch(
+          new Request("http://localhost/api/operator/accounts"),
+        )
+      ).status,
+    ).toBe(403);
+    const operator = { ...ordinary, roles: ["operator"] };
+    expect(
+      (await appWith(operator).fetch(new Request("http://localhost/api/operator/accounts"))).status,
+    ).toBe(200);
+    expect(
+      (
+        await appWith({ ...operator, kind: "api_key", scopes: new Set<string>() }).fetch(
+          new Request("http://localhost/api/operator/accounts"),
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await appWith({
+          ...operator,
+          kind: "api_key",
+          scopes: new Set(["operations:manage"]),
+        }).fetch(new Request("http://localhost/api/operator/accounts"))
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await appWith({
+          ...ordinary,
+          kind: "api_key",
+          scopes: new Set(["operations:manage"]),
+        }).fetch(new Request("http://localhost/api/operator/accounts"))
+      ).status,
+    ).toBe(403);
+  });
+  it("allows an operator hierarchy key to use hierarchy:admin without a redundant read scope", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "api_key" as const,
+      roles: ["operator"],
+      scopes: new Set<string>(["hierarchy:admin"]),
+    };
+    const response = await appWith(principal).fetch(
+      new Request("http://localhost/api/hierarchy/tree?root=00000000-0000-4000-8000-000000000002"),
+    );
+    expect(response.status).toBe(200);
   });
 });

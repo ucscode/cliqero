@@ -197,6 +197,33 @@ export type OperatorOverview = {
   withdrawals?: { requested: number; approved: number };
 };
 
+export type OperatorAccountSummary = {
+  id: string;
+  handle: string;
+  displayName: string | null;
+  email: string;
+  country: string | null;
+  roles: string[];
+  createdAt: string;
+  directReferralCount: number;
+};
+
+export type OperatorAccountDetail = OperatorAccountSummary & {
+  parent: { id: string; handle: string; displayName: string | null } | null;
+  purchaseCount: number;
+  latestParentReassignment: {
+    actorId: string | null;
+    previousParentId: string | null;
+    parentId: string | null;
+    occurredAt: string;
+  } | null;
+};
+
+export type OperatorAccountPage = {
+  items: OperatorAccountSummary[];
+  nextCursor: string | null;
+};
+
 export type Integration = {
   id: string;
   name: string;

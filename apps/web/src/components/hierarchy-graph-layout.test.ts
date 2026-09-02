@@ -18,6 +18,7 @@ const graph: HierarchyGraph = {
       hasMoreChildren: false,
       nextChildCursor: null,
       canLoadMoreChildren: true,
+      canNavigate: false,
     },
     {
       id: "b",
@@ -33,6 +34,7 @@ const graph: HierarchyGraph = {
       hasMoreChildren: false,
       nextChildCursor: null,
       canLoadMoreChildren: true,
+      canNavigate: true,
     },
     {
       id: "a",
@@ -48,6 +50,7 @@ const graph: HierarchyGraph = {
       hasMoreChildren: false,
       nextChildCursor: null,
       canLoadMoreChildren: true,
+      canNavigate: true,
     },
   ],
   edges: [

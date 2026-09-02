@@ -364,6 +364,33 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
 .integration-list { display: grid; gap: .55rem; }
 .integration-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem; border: 1px solid var(--line); border-radius: 10px; }
 .integration-row > div:first-child { display: grid; min-width: 0; gap: .2rem; }
+.operator-users-page,.operator-user-detail,.operator-network-page { display: grid; gap: 1.2rem; min-width: 0; }
+.operator-users-toolbar,.operator-network-search { display: grid; gap: .8rem; padding: 1rem; }
+.operator-users-list { display: grid; gap: .7rem; }
+.operator-user-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 1rem; padding: 1rem; }
+.identity-row { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+.operator-user-identity { display: grid; min-width: 0; gap: .15rem; }
+.operator-user-identity a,.operator-user-identity span,.operator-user-identity small { overflow-wrap: anywhere; }
+.operator-user-identity span,.operator-user-identity small,.operator-user-meta { color: var(--muted); font-size: .75rem; }
+.operator-user-meta { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; }
+.operator-detail-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
+.operator-detail-grid > .card,.reassignment-card { min-width: 0; padding: 1.2rem; }
+.detail-list { display: grid; gap: .7rem; margin: .7rem 0 1rem; }
+.detail-list div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding-bottom: .5rem; }
+.detail-list dt { color: var(--muted); font-size: .76rem; }
+.detail-list dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.break-value { max-width: 65%; }
+.badge-row { display: flex; flex-wrap: wrap; gap: .4rem; margin: .8rem 0; }
+.reassignment-card h3 { margin: .3rem 0; }
+.reassignment-current { display: flex; justify-content: space-between; gap: 1rem; margin: 1rem 0; padding: .7rem; border-radius: 8px; background: var(--surface-muted); color: var(--muted); font-size: .8rem; }
+.reassignment-current strong { color: var(--ink); }
+.reassignment-search { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: .7rem; }
+.operator-search-results { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.operator-search-results button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 1rem; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); text-align: left; cursor: pointer; }
+.operator-search-results button:hover,.operator-search-results button.selected { border-color: var(--accent); background: var(--accent-soft); }
+.operator-search-results span { color: var(--muted); font-size: .75rem; overflow-wrap: anywhere; }
+.reassignment-confirm { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+.hierarchy-skeleton { min-height: 540px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes pulse { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
@@ -420,6 +447,12 @@ h3 { margin-bottom: .5rem; font-size: 1.1rem; letter-spacing: -.025em; }
   .operator-heading { align-items: flex-start; flex-direction: column; }
   .operator-metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .operator-metric-card { padding: 1rem; }
+  .operator-user-row { grid-template-columns: 1fr; align-items: start; }
+  .operator-user-meta { justify-content: flex-start; }
+  .operator-detail-grid { grid-template-columns: 1fr; }
+  .reassignment-search { grid-template-columns: 1fr; }
+  .reassignment-confirm { align-items: flex-start; flex-direction: column; }
+  .operator-search-results button { align-items: flex-start; flex-direction: column; gap: .25rem; }
   .catalogue-list-grid { grid-template-columns: 1fr; }
   .catalogue-filters,.catalogue-form-grid { grid-template-columns: 1fr; }
   .catalogue-pagination { align-items: flex-start; flex-direction: column; }

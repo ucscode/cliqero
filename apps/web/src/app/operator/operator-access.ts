@@ -16,8 +16,14 @@ export async function requireOperatorPage(pathname: string) {
       ? "catalogue_manager"
       : null;
   if (!role) redirect("/dashboard");
-  return { role, handle: principal.account.handle, email: principal.account.email } satisfies {
+  return {
+    role,
+    accountId: principal.account.id,
+    handle: principal.account.handle,
+    email: principal.account.email,
+  } satisfies {
     role: OperatorRole;
+    accountId: string;
     handle: string;
     email: string;
   };

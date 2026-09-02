@@ -20,7 +20,7 @@ export function OperatorShell({
   role: OperatorRole;
   handle: string;
   email: string;
-  activeSection?: "overview" | "catalogue";
+  activeSection?: "overview" | "catalogue" | "users" | "network";
   title?: string;
   children?: ReactNode;
 }) {
@@ -90,6 +90,24 @@ export function OperatorShell({
           >
             Catalogue
           </Link>
+          {role === "operator" && (
+            <>
+              <Link
+                className={activeSection === "users" ? "active" : ""}
+                href="/operator/users"
+                onClick={() => setMenuOpen(false)}
+              >
+                Users
+              </Link>
+              <Link
+                className={activeSection === "network" ? "active" : ""}
+                href="/operator/network"
+                onClick={() => setMenuOpen(false)}
+              >
+                Network
+              </Link>
+            </>
+          )}
         </nav>
         <Link className="operator-user-link" href="/dashboard" onClick={() => setMenuOpen(false)}>
           ← User dashboard

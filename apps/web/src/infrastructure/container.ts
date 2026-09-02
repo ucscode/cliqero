@@ -99,6 +99,7 @@ import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
 import { ApiPrincipalResolver } from "@/modules/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
 import { OperatorOverviewService } from "@/application/operator-overview";
+import { OperatorAccountService } from "@/application/operator-accounts";
 
 export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
@@ -372,6 +373,7 @@ export function createContainer(databaseUrl: string) {
     access,
     hierarchy: new HierarchyService(database),
     operatorOverview: new OperatorOverviewService(database),
+    operatorAccounts: new OperatorAccountService(database),
   };
 }
 export type ApplicationContainer = ReturnType<typeof createContainer>;

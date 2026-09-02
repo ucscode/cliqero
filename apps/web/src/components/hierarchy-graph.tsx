@@ -20,6 +20,9 @@ import { Badge, Button, Card } from "./ui";
 
 type HierarchyNodeData = HierarchyGraphNode & {
   onViewBranch: (id: string) => void;
+  onViewUser?: (id: string) => void;
+  onReassignParent?: (id: string) => void;
+  operatorMode?: boolean;
   onLoadChildren: (id: string) => void;
   loadingChildren: boolean;
 };
@@ -78,6 +81,30 @@ function CliqeroHierarchyNode({ data }: NodeProps<FlowNode>) {
             {data.loadingChildren ? "Loading…" : "Load more"}
           </button>
         )}
+        {data.operatorMode && data.onViewUser && (
+          <button
+            type="button"
+            className="hierarchy-node-action"
+            onClick={(event) => {
+              event.stopPropagation();
+              data.onViewUser?.(data.id);
+            }}
+          >
+            View user
+          </button>
+        )}
+        {data.operatorMode && data.onReassignParent && !data.isRoot && (
+          <button
+            type="button"
+            className="hierarchy-node-action"
+            onClick={(event) => {
+              event.stopPropagation();
+              data.onReassignParent?.(data.id);
+            }}
+          >
+            Reassign parent
+          </button>
+        )}
       </div>
       <Handle type="source" position={Position.Bottom} className="hierarchy-handle" />
     </div>
@@ -92,6 +119,9 @@ export function HierarchyGraph({
   loadingChildren,
   onNavigateParent,
   onResetRoot,
+  operatorMode = false,
+  onViewUser,
+  onReassignParent,
 }: {
   tree: HierarchyTree;
   selfAccountId: string;
@@ -100,6 +130,9 @@ export function HierarchyGraph({
   loadingChildren: string | null;
   onNavigateParent: () => void;
   onResetRoot: () => void;
+  operatorMode?: boolean;
+  onViewUser?: (id: string) => void;
+  onReassignParent?: (id: string) => void;
 }) {
   const graph = useMemo(() => hierarchyGraphFromTree(tree, selfAccountId), [tree, selfAccountId]);
   const layout = useMemo(() => layoutHierarchyGraph(graph), [graph]);
@@ -114,11 +147,22 @@ export function HierarchyGraph({
         data: {
           ...node,
           onViewBranch,
+          onViewUser,
+          onReassignParent,
+          operatorMode,
           onLoadChildren,
           loadingChildren: loadingChildren === node.id,
         },
       })),
-    [layout.nodes, loadingChildren, onLoadChildren, onViewBranch],
+    [
+      layout.nodes,
+      loadingChildren,
+      onLoadChildren,
+      onReassignParent,
+      onViewBranch,
+      onViewUser,
+      operatorMode,
+    ],
   );
   const flowEdges = useMemo<Edge[]>(
     () => layout.edges.map((edge) => ({ ...edge, type: "smoothstep", animated: false })),
@@ -141,10 +185,12 @@ export function HierarchyGraph({
       <div className="hierarchy-explorer-heading">
         <div>
           <p className="eyebrow">Network explorer</p>
-          <h3>Explore your referral network</h3>
+          <h3>{operatorMode ? "Explore the referral network" : "Explore your referral network"}</h3>
           <p className="panel-note">
-            This window shows up to {tree.windowDepth} generations. Rebase onto a descendant to keep
-            exploring your authorized network.
+            This window shows up to {tree.windowDepth} generations.{" "}
+            {operatorMode
+              ? "Rebase onto any account to inspect another branch."
+              : "Rebase onto a descendant to keep exploring your authorized network."}
           </p>
         </div>
         <div className="hierarchy-explorer-actions">
