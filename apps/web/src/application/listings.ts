@@ -5,11 +5,15 @@ import type { Account } from "@/modules/identity/account";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import type { ListingMedia } from "@/modules/listing-media/media";
 import type { ListingMediaService } from "@/application/listing-media";
+import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 export class ListingService {
   constructor(
     private readonly listings: ListingRepository,
     private readonly authorization: AuthorizationPolicy,
+    private readonly sql?: SqlExecutor,
+    private readonly uow?: UnitOfWork,
   ) {}
   async create(
     seller: Account,
@@ -55,7 +59,16 @@ export class ListingService {
   }
   /** Catalogue-managed creation. The manager is an audit actor, not a seller/payee. */
   async createCatalogue(actor: Account, input: Parameters<ListingService["create"]>[1]) {
-    return this.create(actor, input);
+    return this.catalogueMutation(async () => {
+      const listing = await this.create(actor, input);
+      await this.audit(actor.id, "listing.created", listing.id, null, {
+        state: listing.state,
+        title: listing.title,
+        price_minor: listing.price.minorAmount.toString(),
+        currency: listing.price.currency,
+      });
+      return listing;
+    });
   }
   async update(
     actor: Account,
@@ -88,22 +101,36 @@ export class ListingService {
     return listing;
   }
   async updateCatalogue(_actor: Account, id: Id, input: Parameters<ListingService["update"]>[2]) {
-    const listing = await this.listings.findById(id);
-    if (!listing) throw new Error("Listing not found");
-    if (input.currency !== undefined && input.currency.trim().toUpperCase() !== "USD")
-      throw new Error("Listings must use the canonical USD currency");
-    listing.update({
-      title: input.title ?? listing.title,
-      description: input.description ?? listing.description,
-      price: Money.of(
-        BigInt(input.priceMinor ?? listing.price.minorAmount.toString()),
-        input.currency ?? listing.price.currency,
-      ),
-      destination: input.destination ?? listing.destination,
-      metadata: input.metadata ?? listing.metadata,
+    return this.catalogueMutation(async () => {
+      const listing = await this.listings.findById(id);
+      if (!listing) throw new Error("Listing not found");
+      if (input.currency !== undefined && input.currency.trim().toUpperCase() !== "USD")
+        throw new Error("Listings must use the canonical USD currency");
+      const previous = {
+        state: listing.state,
+        title: listing.title,
+        price_minor: listing.price.minorAmount.toString(),
+        currency: listing.price.currency,
+      };
+      listing.update({
+        title: input.title ?? listing.title,
+        description: input.description ?? listing.description,
+        price: Money.of(
+          BigInt(input.priceMinor ?? listing.price.minorAmount.toString()),
+          input.currency ?? listing.price.currency,
+        ),
+        destination: input.destination ?? listing.destination,
+        metadata: input.metadata ?? listing.metadata,
+      });
+      await this.listings.save(listing);
+      await this.audit(_actor.id, "listing.updated", listing.id, previous, {
+        state: listing.state,
+        title: listing.title,
+        price_minor: listing.price.minorAmount.toString(),
+        currency: listing.price.currency,
+      });
+      return listing;
     });
-    await this.listings.save(listing);
-    return listing;
   }
   async publish(actor: Account, id: Id) {
     const listing = await this.owned(actor, id);
@@ -124,25 +151,44 @@ export class ListingService {
     return listing;
   }
   async publishCatalogue(_actor: Account, id: Id) {
-    const listing = await this.listings.findById(id);
-    if (!listing) throw new Error("Listing not found");
-    listing.publish();
-    await this.listings.save(listing);
-    return listing;
+    return this.catalogueMutation(async () => {
+      const listing = await this.listings.findById(id);
+      if (!listing) throw new Error("Listing not found");
+      const previous = { state: listing.state };
+      listing.publish();
+      await this.listings.save(listing);
+      await this.audit(_actor.id, "listing.published", listing.id, previous, {
+        state: listing.state,
+      });
+      return listing;
+    });
   }
   async archiveCatalogue(_actor: Account, id: Id) {
-    const listing = await this.listings.findById(id);
-    if (!listing) throw new Error("Listing not found");
-    listing.archive();
-    await this.listings.save(listing);
-    return listing;
+    return this.catalogueMutation(async () => {
+      const listing = await this.listings.findById(id);
+      if (!listing) throw new Error("Listing not found");
+      const previous = { state: listing.state };
+      listing.archive();
+      await this.listings.save(listing);
+      if (previous.state !== listing.state)
+        await this.audit(_actor.id, "listing.archived", listing.id, previous, {
+          state: listing.state,
+        });
+      return listing;
+    });
   }
   async restoreCatalogue(_actor: Account, id: Id) {
-    const listing = await this.listings.findById(id);
-    if (!listing) throw new Error("Listing not found");
-    listing.restore();
-    await this.listings.save(listing);
-    return listing;
+    return this.catalogueMutation(async () => {
+      const listing = await this.listings.findById(id);
+      if (!listing) throw new Error("Listing not found");
+      const previous = { state: listing.state };
+      listing.restore();
+      await this.listings.save(listing);
+      await this.audit(_actor.id, "listing.restored", listing.id, previous, {
+        state: listing.state,
+      });
+      return listing;
+    });
   }
   async getCatalogue(id: Id) {
     const listing = await this.listings.findById(id);
@@ -191,6 +237,28 @@ export class ListingService {
     if (!listing) throw new Error("Listing not found");
     if (!this.authorization.canModifyListing(actor, listing)) throw new Error("Forbidden");
     return listing;
+  }
+  private async audit(
+    actorId: string,
+    action: string,
+    subjectId: string,
+    previousState: object | null,
+    newState: object,
+  ) {
+    await this.sql?.query(
+      `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
+       values($1,$2,'listing',$3,$4::jsonb,$5::jsonb,gen_random_uuid())`,
+      [
+        actorId,
+        action,
+        subjectId,
+        previousState ? JSON.stringify(previousState) : null,
+        JSON.stringify(newState),
+      ],
+    );
+  }
+  private catalogueMutation<T>(operation: () => Promise<T>) {
+    return this.uow ? this.uow.transaction(operation) : operation();
   }
 }
 

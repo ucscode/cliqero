@@ -2,7 +2,18 @@
 
 ## Resource boundaries
 
-Listings and integration descriptions are owner-managed resources. The existing `state` field is the authoritative publication status; no second status exists. Only `published` listings are publicly readable or discoverable. Listing deletion is archival, and restoration returns an archived listing to `draft`. Publishing is the explicit `draft -> published` command. Import applies a requested desired state through those same transitions; for example `published -> draft` converges through `published -> archived -> draft`, and repeating any import state is idempotent. Media metadata is owner-managed while its storage identity is immutable; deletion is a durable `deletion_pending -> deleted` workflow.
+Listings and integration descriptions are platform-managed resources. The existing
+`state` field is the authoritative publication status; no second status exists.
+Only `published` listings are publicly readable or discoverable. Listing
+deletion is archival, and restoration returns an archived listing to `draft`.
+Publishing is the explicit `draft -> published` command. Import applies a
+requested desired state through those same transitions; for example,
+`published -> draft` converges through `published -> archived -> draft`, and
+repeating any import state is idempotent. Media metadata is managed by the
+catalogue capability while its storage identity is immutable; deletion is a
+durable `deletion_pending -> deleted` workflow. Legacy owner-scoped routes remain
+for compatibility, but the operator catalogue routes are the authoritative
+management surface for new platform listings.
 
 Wallet transactions, funding, purchases, checkouts, distributions, ledger entries, settlement, provider operations, payout history, referral attribution, and reversals are immutable or state-machine resources. Their APIs expose projections and explicit commands only—never generic financial `PATCH` or `DELETE`.
 

@@ -46,6 +46,10 @@ describe("Hono API foundation", () => {
     expect(paths["/api/api-keys/{id}/revoke"]).toBeDefined();
     expect(paths["/api/me/access"]).toBeDefined();
     expect(paths["/api/operator/overview"]).toBeDefined();
+    expect(paths["/api/operator/listings"]).toBeDefined();
+    expect(paths["/api/operator/listings/{id}"]).toBeDefined();
+    expect(paths["/api/operator/listings/{id}/integrations"]).toBeDefined();
+    expect(paths["/api/operator/listings/{id}/integrations/{integrationId}/rotate"]).toBeDefined();
     expect(paths["/api/operator/overview"].get["x-authentication-mode"]).toBe("account");
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
@@ -257,6 +261,15 @@ describe("Hono API foundation", () => {
       apiKey: "allow",
     });
     expect(getLegacyRouteAccess("/api/listings/export", "GET")).toEqual({
+      mode: "account",
+      scope: "catalogue:manage",
+    });
+    expect(
+      getLegacyRouteAccess(
+        "/api/operator/listings/00000000-0000-4000-8000-000000000001/integrations",
+        "GET",
+      ),
+    ).toEqual({
       mode: "account",
       scope: "catalogue:manage",
     });

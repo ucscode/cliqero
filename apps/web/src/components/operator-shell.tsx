@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch, type OperatorOverview } from "@/lib/api-client";
@@ -13,10 +13,16 @@ export function OperatorShell({
   role,
   handle,
   email,
+  activeSection = "overview",
+  title = "Overview",
+  children,
 }: {
   role: OperatorRole;
   handle: string;
   email: string;
+  activeSection?: "overview" | "catalogue";
+  title?: string;
+  children?: ReactNode;
 }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -70,8 +76,19 @@ export function OperatorShell({
           <Badge tone="accent">{role === "operator" ? "Operator" : "Catalogue manager"}</Badge>
         </div>
         <nav id="operator-navigation" aria-label="Operator navigation" className="operator-nav">
-          <Link className="active" href="/operator" onClick={() => setMenuOpen(false)}>
+          <Link
+            className={activeSection === "overview" ? "active" : ""}
+            href="/operator"
+            onClick={() => setMenuOpen(false)}
+          >
             Overview
+          </Link>
+          <Link
+            className={activeSection === "catalogue" ? "active" : ""}
+            href="/operator/catalogue"
+            onClick={() => setMenuOpen(false)}
+          >
+            Catalogue
           </Link>
         </nav>
         <Link className="operator-user-link" href="/dashboard" onClick={() => setMenuOpen(false)}>
@@ -92,7 +109,7 @@ export function OperatorShell({
           </button>
           <div>
             <p className="eyebrow">Operational view</p>
-            <h1>Overview</h1>
+            <h1>{title}</h1>
           </div>
           <details className="menu operator-account-menu">
             <summary>
@@ -110,45 +127,49 @@ export function OperatorShell({
           </details>
         </header>
 
-        <section aria-labelledby="operator-overview-heading">
-          <div className="operator-heading">
-            <div>
-              <p className="eyebrow">
-                {role === "operator" ? "Platform operations" : "Catalogue operations"}
-              </p>
-              <h2 id="operator-overview-heading">
-                {role === "operator" ? "A clear view of the platform" : "A focused catalogue view"}
-              </h2>
-              <p className="panel-intro">
-                {role === "operator"
-                  ? "Authoritative operational counts from Cliqero services."
-                  : "Only catalogue information is available to this role."}
-              </p>
+        {children ?? (
+          <section aria-labelledby="operator-overview-heading">
+            <div className="operator-heading">
+              <div>
+                <p className="eyebrow">
+                  {role === "operator" ? "Platform operations" : "Catalogue operations"}
+                </p>
+                <h2 id="operator-overview-heading">
+                  {role === "operator"
+                    ? "A clear view of the platform"
+                    : "A focused catalogue view"}
+                </h2>
+                <p className="panel-intro">
+                  {role === "operator"
+                    ? "Authoritative operational counts from Cliqero services."
+                    : "Only catalogue information is available to this role."}
+                </p>
+              </div>
+              <Badge tone="success">
+                {role === "operator" ? "Full operator access" : "Catalogue scope"}
+              </Badge>
             </div>
-            <Badge tone="success">
-              {role === "operator" ? "Full operator access" : "Catalogue scope"}
-            </Badge>
-          </div>
-          {error && <Toast>{error}</Toast>}
-          {loading ? (
-            <div className="operator-metric-grid" aria-label="Loading overview">
-              {Array.from({ length: role === "operator" ? 7 : 3 }, (_, index) => (
-                <Card className="operator-metric-card" key={index}>
-                  <Skeleton className="operator-metric-skeleton" />
-                </Card>
-              ))}
-            </div>
-          ) : overview ? (
-            <OverviewMetrics overview={overview} />
-          ) : (
-            <Card>
-              <EmptyState title="Overview unavailable" description="Try refreshing this page." />
-              <Button variant="secondary" onClick={() => window.location.reload()}>
-                Refresh
-              </Button>
-            </Card>
-          )}
-        </section>
+            {error && <Toast>{error}</Toast>}
+            {loading ? (
+              <div className="operator-metric-grid" aria-label="Loading overview">
+                {Array.from({ length: role === "operator" ? 7 : 3 }, (_, index) => (
+                  <Card className="operator-metric-card" key={index}>
+                    <Skeleton className="operator-metric-skeleton" />
+                  </Card>
+                ))}
+              </div>
+            ) : overview ? (
+              <OverviewMetrics overview={overview} />
+            ) : (
+              <Card>
+                <EmptyState title="Overview unavailable" description="Try refreshing this page." />
+                <Button variant="secondary" onClick={() => window.location.reload()}>
+                  Refresh
+                </Button>
+              </Card>
+            )}
+          </section>
+        )}
       </main>
     </div>
   );

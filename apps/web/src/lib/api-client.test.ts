@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMinorUsd, parseUsdMinor, safeContinuation } from "./api-client";
+import { formatMinorUsd, minorToUsdInput, parseUsdMinor, safeContinuation } from "./api-client";
 
 describe("frontend API presentation helpers", () => {
   it("formats canonical USD minor units without floating point arithmetic", () => {
@@ -31,5 +31,10 @@ describe("frontend API presentation helpers", () => {
     expect(() => parseUsdMinor("-1")).toThrow();
     expect(() => parseUsdMinor("1.001")).toThrow();
     expect(() => parseUsdMinor("one dollar")).toThrow();
+  });
+
+  it("converts minor units to an editable decimal without Number precision loss", () => {
+    expect(minorToUsdInput("1000")).toBe("10.00");
+    expect(minorToUsdInput("123456789012345678901")).toBe("1234567890123456789.01");
   });
 });

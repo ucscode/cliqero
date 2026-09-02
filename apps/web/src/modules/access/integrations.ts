@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { newId, type Id } from "@/kernel/ids";
 import type { IntegrationPrincipal } from "./access";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 const hashCredential = (salt: Buffer, secret: string) =>
   createHash("sha256").update(salt).update(secret, "utf8").digest();
@@ -27,7 +28,10 @@ export class ScopedIntegration implements IntegrationPrincipal {
 }
 
 export class IntegrationService {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(
+    private readonly sql: SqlExecutor,
+    private readonly uow?: UnitOfWork,
+  ) {}
   async create(ownerId: Id, name: string, listingId: Id): Promise<{ id: Id; credential: string }> {
     const id = newId();
     const secret = randomBytes(32).toString("base64url");
@@ -42,6 +46,17 @@ export class IntegrationService {
       [id, listingId],
     );
     return { id, credential: `cli_int_${id}.${secret}` };
+  }
+  /** Catalogue-managed credentials are scoped to a listing, not to a seller. */
+  createManaged(actorId: Id, name: string, listingId: Id) {
+    return this.managedMutation(async () => {
+      const created = await this.create(actorId, name, listingId);
+      await this.audit(actorId, "integration.created", created.id, listingId, null, {
+        state: "active",
+        name: name.trim(),
+      });
+      return created;
+    });
   }
   async authenticate(credential: string): Promise<ScopedIntegration | null> {
     const match = /^cli_int_([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/.exec(credential);
@@ -79,6 +94,14 @@ export class IntegrationService {
       )
     ).rows.map(view);
   }
+  async listForListing(listingId: Id) {
+    return (
+      await this.sql.query<any>(
+        `select i.id,i.name,i.state,i.created_at,coalesce(array_agg(il.listing_id) filter(where il.listing_id is not null),'{}') listing_ids from access_capability.integrations i join access_capability.integration_listings il on il.integration_id=i.id where il.listing_id=$1 group by i.id order by i.created_at desc,i.id`,
+        [listingId],
+      )
+    ).rows.map(view);
+  }
   async find(ownerId: Id, id: Id) {
     const row = (
       await this.sql.query<any>(
@@ -105,6 +128,32 @@ export class IntegrationService {
     if (result.rowCount !== 1) throw new Error("Integration not found");
     return this.find(ownerId, id);
   }
+  async revokeForListing(actorId: Id, listingId: Id, id: Id) {
+    return this.managedMutation(async () => {
+      const current = (
+        await this.sql.query<{ state: "active" | "revoked" }>(
+          `select i.state from access_capability.integrations i join access_capability.integration_listings il on il.integration_id=i.id where i.id=$1 and il.listing_id=$2 for update`,
+          [id, listingId],
+        )
+      ).rows[0];
+      if (!current) throw new Error("Integration not found");
+      if (current.state === "revoked") return this.listForListing(listingId);
+      const result = await this.sql.query(
+        `update access_capability.integrations i set state='revoked',updated_at=now() where i.id=$1 and exists (select 1 from access_capability.integration_listings il where il.integration_id=i.id and il.listing_id=$2) returning i.id`,
+        [id, listingId],
+      );
+      if (result.rowCount !== 1) return this.listForListing(listingId);
+      await this.audit(
+        actorId,
+        "integration.revoked",
+        id,
+        listingId,
+        { state: current.state },
+        { state: "revoked" },
+      );
+      return this.listForListing(listingId);
+    });
+  }
   async rotate(ownerId: Id, id: Id) {
     const secret = randomBytes(32).toString("base64url"),
       salt = randomBytes(16);
@@ -114,6 +163,56 @@ export class IntegrationService {
     );
     if (result.rowCount !== 1) throw new Error("Integration not found");
     return { id, credential: `cli_int_${id}.${secret}` };
+  }
+  async rotateForListing(actorId: Id, listingId: Id, id: Id) {
+    return this.managedMutation(async () => {
+      const secret = randomBytes(32).toString("base64url"),
+        salt = randomBytes(16);
+      const current = (
+        await this.sql.query<{ state: "active" | "revoked" }>(
+          `select i.state from access_capability.integrations i join access_capability.integration_listings il on il.integration_id=i.id where i.id=$1 and il.listing_id=$2 for update`,
+          [id, listingId],
+        )
+      ).rows[0];
+      if (!current) throw new Error("Integration not found");
+      const result = await this.sql.query(
+        `update access_capability.integrations i set credential_hash=$3,credential_salt=$4,state='active',updated_at=now() where i.id=$1 and exists (select 1 from access_capability.integration_listings il where il.integration_id=i.id and il.listing_id=$2) returning i.id`,
+        [id, listingId, hashCredential(salt, secret), salt],
+      );
+      if (result.rowCount !== 1) throw new Error("Integration not found");
+      await this.audit(
+        actorId,
+        "integration.rotated",
+        id,
+        listingId,
+        { state: current.state },
+        { state: "active" },
+      );
+      return { id, credential: `cli_int_${id}.${secret}` };
+    });
+  }
+  private async audit(
+    actorId: string | undefined,
+    action: string,
+    subjectId: string,
+    listingId: string,
+    previousState: object | null,
+    newState: object,
+  ) {
+    await this.sql.query(
+      `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
+       values($1,$2,'integration',$3,$4::jsonb,$5::jsonb,gen_random_uuid())`,
+      [
+        actorId ?? null,
+        action,
+        subjectId,
+        previousState === null ? null : JSON.stringify({ listing_id: listingId, ...previousState }),
+        JSON.stringify({ listing_id: listingId, ...newState }),
+      ],
+    );
+  }
+  private managedMutation<T>(operation: () => Promise<T>) {
+    return this.uow ? this.uow.transaction(operation) : operation();
   }
 }
 const view = (row: any) => ({

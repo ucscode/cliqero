@@ -116,7 +116,12 @@ export function createContainer(databaseUrl: string) {
     listingMediaRepository,
     objectStorage,
   );
-  const listingService = new ListingService(listings, new AuthorizationPolicy());
+  const listingService = new ListingService(
+    listings,
+    new AuthorizationPolicy(),
+    database,
+    database,
+  );
   const listingTransfer = new ListingTransferService(
     listingService,
     listingMedia,
@@ -282,7 +287,7 @@ export function createContainer(databaseUrl: string) {
     apiKeys,
     principalResolver,
     authorization: new AuthorizationPolicy(),
-    integrations: new IntegrationService(database),
+    integrations: new IntegrationService(database, database),
     profiles: new ProfileService(database),
     accountProjections: new AccountProjectionService(database),
     listingService,

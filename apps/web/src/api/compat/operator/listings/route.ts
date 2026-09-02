@@ -44,13 +44,24 @@ export async function GET(request: Request) {
     const c = getContainer();
     await c.operators.requireCatalogueManager(account.id);
     const u = new URL(request.url),
-      limit = Math.min(Math.max(Number(u.searchParams.get("limit") ?? 20), 1), 100),
-      state = (u.searchParams.get("state") as any) || undefined,
+      query = z
+        .object({
+          limit: z.coerce.number().int().min(1).max(100).default(20),
+          state: z.enum(["draft", "published", "archived"]).optional(),
+          search: z.string().max(200).optional(),
+          cursor: z.string().optional(),
+        })
+        .parse({
+          limit: u.searchParams.get("limit") ?? undefined,
+          state: u.searchParams.get("state") ?? undefined,
+          search: u.searchParams.get("search") ?? undefined,
+          cursor: u.searchParams.get("cursor") ?? undefined,
+        }),
       page = await c.listingService.queryCatalogue({
-        state,
-        search: u.searchParams.get("search") ?? undefined,
-        cursor: u.searchParams.get("cursor") ?? undefined,
-        limit,
+        state: query.state,
+        search: query.search,
+        cursor: query.cursor,
+        limit: query.limit,
       }),
       media = await c.listingMediaRepository.listByListings(page.items.map((x) => x.id));
     return Response.json({

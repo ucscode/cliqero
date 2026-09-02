@@ -19,7 +19,7 @@ suite("listing management and media", () => {
   const app = createContainer(url!);
   beforeEach(async () => {
     await app.database.query(
-      `truncate table listing_capability.media,listing_capability.listings,identity_capability.sessions,identity_capability.accounts restart identity cascade`,
+      `truncate table kernel.audit_records,listing_capability.media,listing_capability.listings,identity_capability.sessions,identity_capability.accounts restart identity cascade`,
     );
   });
   afterAll(() => app.database.close());
@@ -248,6 +248,129 @@ suite("listing management and media", () => {
     expect(competing.flat().map((item) => item.id)).toEqual([one.id]);
     app.objectStorage.register(original);
     expect((await app.listingMediaDeletion.process(one.id))?.state).toBe("deleted");
+  });
+
+  it("scopes catalogue access credentials to a listing rather than a seller", async () => {
+    const { owner, other } = await accounts("integration");
+    const listing = await app.listingService.create(owner, {
+      title: "Managed destination",
+      description: "",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://private.example/destination",
+    });
+    const created = await app.integrations.createManaged(owner.id, "destination", listing.id);
+    expect((await app.integrations.listForListing(listing.id)).map((item) => item.id)).toEqual([
+      created.id,
+    ]);
+    const rotated = await app.integrations.rotateForListing(owner.id, listing.id, created.id);
+    expect(await app.integrations.authenticate(created.credential)).toBeNull();
+    expect(await app.integrations.authenticate(rotated.credential)).not.toBeNull();
+    await app.integrations.revokeForListing(owner.id, listing.id, created.id);
+    expect(await app.integrations.authenticate(rotated.credential)).toBeNull();
+    const rotatedAgain = await app.integrations.rotateForListing(owner.id, listing.id, created.id);
+    expect(await app.integrations.authenticate(rotatedAgain.credential)).not.toBeNull();
+    expect(await app.integrations.list(other.id)).toEqual([]);
+    const audit = (
+      await app.database.query<{
+        action: string;
+        actor_id: string;
+        previous_state: unknown;
+        new_state: unknown;
+      }>(
+        `select action,actor_id,previous_state,new_state from kernel.audit_records where subject_type='integration' and subject_id=$1 order by id`,
+        [created.id],
+      )
+    ).rows;
+    expect(audit.map((row) => [row.action, row.actor_id])).toEqual([
+      ["integration.created", owner.id],
+      ["integration.rotated", owner.id],
+      ["integration.revoked", owner.id],
+      ["integration.rotated", owner.id],
+    ]);
+    expect(audit[0].previous_state).toBeNull();
+    expect(audit[0].new_state).toMatchObject({ listing_id: listing.id, state: "active" });
+    expect(audit[2].previous_state).toMatchObject({ listing_id: listing.id, state: "active" });
+    expect(audit[2].new_state).toMatchObject({ listing_id: listing.id, state: "revoked" });
+    expect(audit[3].previous_state).toMatchObject({ listing_id: listing.id, state: "revoked" });
+    expect(audit[3].new_state).toMatchObject({ listing_id: listing.id, state: "active" });
+  });
+
+  it("uses catalogue capability rather than legacy seller_id for management authority", async () => {
+    const managerA = await app.authentication.register({
+        email: "manager-a.catalogue@example.com",
+        handle: "manageracatalogue",
+        password: "correct-horse-battery",
+        country: "NG",
+      }),
+      managerB = await app.authentication.register({
+        email: "manager-b.catalogue@example.com",
+        handle: "managerbcatalogue",
+        password: "correct-horse-battery",
+        country: "NG",
+      }),
+      ordinary = await app.authentication.register({
+        email: "ordinary.catalogue@example.com",
+        handle: "ordinarycatalogue",
+        password: "correct-horse-battery",
+        country: "NG",
+      });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'catalogue_manager'),($2,'catalogue_manager')`,
+      [managerA.id, managerB.id],
+    );
+    const listing = await app.listingService.createCatalogue(managerA, {
+      title: "Platform listing",
+      description: "",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://private.example/platform",
+    });
+    const createdAudit = (
+      await app.database.query<{
+        action: string;
+        actor_id: string;
+        previous_state: unknown;
+        new_state: unknown;
+      }>(
+        `select action,actor_id,previous_state,new_state from kernel.audit_records where subject_type='listing' and subject_id=$1 order by id`,
+        [listing.id],
+      )
+    ).rows;
+    expect(createdAudit).toHaveLength(1);
+    expect(createdAudit[0]).toMatchObject({ action: "listing.created", actor_id: managerA.id });
+    expect(createdAudit[0].previous_state).toBeNull();
+    expect(createdAudit[0].new_state).toMatchObject({ state: "draft", title: "Platform listing" });
+    await app.operators.requireCatalogueManager(managerB.id);
+    await expect(app.operators.requireCatalogueManager(ordinary.id)).rejects.toThrow("Forbidden");
+    expect(
+      (await app.listingService.updateCatalogue(managerB, listing.id, { title: "Curated" })).title,
+    ).toBe("Curated");
+    await app.listingService.publishCatalogue(managerB, listing.id);
+    await app.listingService.archiveCatalogue(managerB, listing.id);
+    await app.listingService.restoreCatalogue(managerB, listing.id);
+    const listingAudit = (
+      await app.database.query<{
+        action: string;
+        actor_id: string;
+        previous_state: unknown;
+        new_state: unknown;
+      }>(
+        `select action,actor_id,previous_state,new_state from kernel.audit_records where subject_type='listing' and subject_id=$1 order by id`,
+        [listing.id],
+      )
+    ).rows;
+    expect(listingAudit.map((row) => [row.action, row.actor_id])).toEqual([
+      ["listing.created", managerA.id],
+      ["listing.updated", managerB.id],
+      ["listing.published", managerB.id],
+      ["listing.archived", managerB.id],
+      ["listing.restored", managerB.id],
+    ]);
+    expect(listingAudit[2].previous_state).toMatchObject({ state: "draft" });
+    expect(listingAudit[2].new_state).toMatchObject({ state: "published" });
+    expect(listingAudit[3].previous_state).toMatchObject({ state: "published" });
+    expect(listingAudit[3].new_state).toMatchObject({ state: "archived" });
   });
 
   it("reports durable partial imports and retries the same listing without duplicate active media", async () => {

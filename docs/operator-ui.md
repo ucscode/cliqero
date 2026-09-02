@@ -5,11 +5,15 @@ Cliqero keeps the operator console separate from the ordinary user dashboard at
 ordinary accounts are redirected to the user dashboard, while `operator` and
 `catalogue_manager` accounts are admitted.
 
-The initial milestone exposes only the Overview section. It deliberately does
-not advertise catalogue CRUD, users, treasury, payout execution, provider, or
-operations controls before those workflows have their own UI. Catalogue
+The operator console now exposes Overview and the platform-managed Catalogue
+section. It deliberately does not advertise users, treasury, payout execution,
+provider, or operations controls before those workflows have their own UI. Catalogue
 managers receive catalogue counts only; operators receive catalogue, account,
 purchase, and withdrawal state counts.
+
+Catalogue management is documented in `docs/operator-catalogue.md`. It uses the
+existing Hono listing, media, and transfer APIs and never treats a manager as a
+seller or payee.
 
 Overview data comes from `GET /api/operator/overview`, a Hono-owned aggregate
 projection. Browser sessions use the persisted role. API keys additionally need

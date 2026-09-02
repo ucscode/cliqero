@@ -20,6 +20,17 @@ export type Listing = {
 
 export type ListingPage = { items: Listing[]; next_cursor: string | null };
 
+export type OperatorListing = Listing & {
+  destination: string;
+  external_key: string | null;
+  managed_by?: string;
+};
+
+export type OperatorListingPage = {
+  items: OperatorListing[];
+  next_cursor: string | null;
+};
+
 export type WalletSummary = {
   currency: "USD";
   available_minor: string;
@@ -302,4 +313,11 @@ export function parseUsdMinor(value: string): string {
   const minor = BigInt(dollars) * 100n + BigInt(cents.padEnd(2, "0") || "0");
   if (minor <= 0n) throw new Error("Enter an amount greater than zero.");
   return minor.toString();
+}
+
+export function minorToUsdInput(minor: string | bigint): string {
+  const value = typeof minor === "bigint" ? minor : BigInt(minor);
+  const sign = value < 0n ? "-" : "";
+  const absolute = value < 0n ? -value : value;
+  return `${sign}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, "0")}`;
 }
