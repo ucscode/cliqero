@@ -101,6 +101,10 @@ import { HierarchyService } from "@/application/hierarchy";
 import { OperatorOverviewService } from "@/application/operator-overview";
 import { OperatorAccountService } from "@/application/operator-accounts";
 import { OperatorFundingService } from "@/application/operator-funding";
+import {
+  OperatorDistributionService,
+  OperatorEarningsService,
+} from "@/application/operator-distributions";
 
 export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
@@ -376,6 +380,8 @@ export function createContainer(databaseUrl: string) {
     operatorOverview: new OperatorOverviewService(database),
     operatorAccounts: new OperatorAccountService(database),
     operatorFunding: new OperatorFundingService(database),
+    operatorDistributions: new OperatorDistributionService(database),
+    operatorEarnings: new OperatorEarningsService(database),
   };
 }
 export type ApplicationContainer = ReturnType<typeof createContainer>;

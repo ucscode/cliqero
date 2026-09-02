@@ -3,6 +3,7 @@ import { createApiApp } from "./hono";
 import { authorizeLegacyRequest, getLegacyRouteAccess } from "./legacy-dispatch";
 
 function appWith(principal: any = null) {
+  const ordinaryId = "00000000-0000-4000-8000-000000000001";
   return createApiApp({
     principalResolver: { resolve: async () => principal },
     hierarchy: {
@@ -72,6 +73,35 @@ function appWith(principal: any = null) {
         events: [],
       }),
     },
+    operatorDistributions: {
+      list: async () => ({ items: [], nextCursor: null }),
+      get: async (id: string) => ({
+        id,
+        purchaseId: "00000000-0000-4000-8000-000000000002",
+        listingId: "00000000-0000-4000-8000-000000000003",
+        listingTitle: "Sample",
+        buyer: { id: ordinaryId, handle: "buyer", email: "buyer@example.com" },
+        grossAmountMinor: "100",
+        currency: "USD",
+        referralAllocatedMinor: "0",
+        platformRemainderMinor: "100",
+        beneficiaryCount: 0,
+        completedAt: new Date().toISOString(),
+        purchaseState: "completed",
+        purchaseCreatedAt: new Date().toISOString(),
+        attribution: { id: null, linkId: null, referrer: null },
+        policySnapshot: {},
+        allocations: [],
+        reversal: null,
+      }),
+    },
+    operatorEarnings: {
+      list: async () => ({
+        items: [],
+        nextCursor: null,
+        totals: { pendingMinor: "0", availableMinor: "0", reservedMinor: "0" },
+      }),
+    },
   } as any);
 }
 describe("Hono API foundation", () => {
@@ -102,6 +132,15 @@ describe("Hono API foundation", () => {
       "x-required-api-scope": "operations:manage (operator)",
     });
     expect(paths["/api/operator/funding"].get).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "operations:manage (operator)",
+    });
+    expect(paths["/api/operator/distributions"].get).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "operations:manage (operator)",
+    });
+    expect(paths["/api/operator/distributions/{distributionId}"].get).toBeDefined();
+    expect(paths["/api/operator/earnings"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "operations:manage (operator)",
     });
@@ -235,6 +274,65 @@ describe("Hono API foundation", () => {
       (await appWith(elevatedCatalogue).fetch(new Request("http://localhost/api/operator/funding")))
         .status,
     ).toBe(403);
+  });
+  it("protects distribution and earnings inspection with the role and scope intersection", async () => {
+    const ordinary = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      roles: [],
+      scopes: new Set<string>(),
+    };
+    for (const path of ["/api/operator/distributions", "/api/operator/earnings"]) {
+      expect((await appWith().fetch(new Request(`http://localhost${path}`))).status).toBe(401);
+      expect((await appWith(ordinary).fetch(new Request(`http://localhost${path}`))).status).toBe(
+        403,
+      );
+      expect(
+        (
+          await appWith({ ...ordinary, roles: ["catalogue_manager"] }).fetch(
+            new Request(`http://localhost${path}`),
+          )
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await appWith({ ...ordinary, roles: ["operator"] }).fetch(
+            new Request(`http://localhost${path}`),
+          )
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await appWith({
+            ...ordinary,
+            roles: ["operator"],
+            kind: "api_key" as const,
+            scopes: new Set<string>(),
+          }).fetch(new Request(`http://localhost${path}`))
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await appWith({
+            ...ordinary,
+            roles: ["operator"],
+            kind: "api_key" as const,
+            scopes: new Set<string>(["operations:manage"]),
+          }).fetch(new Request(`http://localhost${path}`))
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await appWith({
+            ...ordinary,
+            roles: ["catalogue_manager"],
+            kind: "api_key" as const,
+            scopes: new Set<string>(["operations:manage"]),
+          }).fetch(new Request(`http://localhost${path}`))
+        ).status,
+      ).toBe(403);
+    }
   });
   it("allows a resolved principal through the protected read route", async () => {
     const principal = {

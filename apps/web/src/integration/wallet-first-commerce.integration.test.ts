@@ -221,6 +221,26 @@ suite("wallet-first durable commerce", () => {
         { level: 3, percentage: 5, recipient: null, amountMinor: "0" },
       ],
     });
+    const operatorPage = await app.operatorDistributions.list({ limit: 25, search: "Policy item" });
+    expect(operatorPage.items).toHaveLength(1);
+    expect(operatorPage.items[0]).toMatchObject({
+      id: distribution.id,
+      listingTitle: "Policy item",
+      grossAmountMinor: "10000",
+      referralAllocatedMinor: "3000",
+      platformRemainderMinor: "7000",
+      beneficiaryCount: 2,
+    });
+    const operatorDetail = await app.operatorDistributions.get(distribution.id);
+    expect(operatorDetail.policySnapshot).toMatchObject({ allocatedPercentage: 35 });
+    expect(operatorDetail.allocations.map((entry) => entry.account.id).sort()).toEqual(
+      [promoter.id, parent.id].sort(),
+    );
+    expect((await app.operatorEarnings.list({ limit: 25 })).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ distributionId: distribution.id, balanceState: "available" }),
+      ]),
+    );
   });
   it("denies expired entitlements without depending on an expiry worker", async () => {
     const e = new (await import("@/modules/entitlement/entitlement")).Entitlement(

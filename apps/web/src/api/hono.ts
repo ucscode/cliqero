@@ -160,6 +160,69 @@ const operatorFundingDetailSchema = operatorFundingSummarySchema.extend({
     }),
   ),
 });
+const operatorDistributionSummarySchema = z.object({
+  id: z.string().uuid(),
+  purchaseId: z.string().uuid(),
+  listingId: z.string().uuid(),
+  listingTitle: z.string(),
+  buyer: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+  grossAmountMinor: z.string(),
+  currency: z.string(),
+  referralAllocatedMinor: z.string(),
+  platformRemainderMinor: z.string(),
+  beneficiaryCount: z.number().int().nonnegative(),
+  completedAt: z.string(),
+});
+const operatorDistributionDetailSchema = operatorDistributionSummarySchema.extend({
+  purchaseState: z.string(),
+  purchaseCreatedAt: z.string(),
+  attribution: z.object({
+    id: z.string().uuid().nullable(),
+    linkId: z.string().uuid().nullable(),
+    referrer: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }).nullable(),
+  }),
+  policySnapshot: z.unknown(),
+  allocations: z.array(
+    z.object({
+      id: z.string().uuid(),
+      account: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+      level: z.number().int().positive().nullable(),
+      amountMinor: z.string(),
+      currency: z.string(),
+      direction: z.enum(["credit", "debit"]),
+      entryType: z.string(),
+      balanceState: z.string(),
+      maturityAt: z.string().nullable(),
+      settledAt: z.string().nullable(),
+      originalEntryId: z.string().uuid().nullable(),
+      reversalId: z.string().uuid().nullable(),
+      createdAt: z.string(),
+    }),
+  ),
+  reversal: z
+    .object({
+      id: z.string().uuid(),
+      reason: z.string(),
+      source: z.string(),
+      state: z.string(),
+      processedAt: z.string().nullable(),
+    })
+    .nullable(),
+});
+const operatorEarningsEntrySchema = z.object({
+  id: z.string().uuid(),
+  account: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+  purchaseId: z.string().uuid().nullable(),
+  distributionId: z.string().uuid().nullable(),
+  entryType: z.string(),
+  direction: z.enum(["credit", "debit"]),
+  amountMinor: z.string(),
+  currency: z.string(),
+  level: z.number().int().positive().nullable(),
+  balanceState: z.string(),
+  settledAt: z.string().nullable(),
+  createdAt: z.string(),
+});
 function principal(c: any) {
   return c.get("principal") as ApiPrincipal | null;
 }
@@ -313,6 +376,17 @@ export function createApiApp(container: ApplicationContainer) {
         }
       }
       for (const path of ["/api/operator/funding", "/api/operator/funding/{fundingId}"]) {
+        const operation = document.paths[path]?.get;
+        if (operation) {
+          operation["x-authentication-mode"] = "account";
+          operation["x-required-api-scope"] = "operations:manage (operator)";
+        }
+      }
+      for (const path of [
+        "/api/operator/distributions",
+        "/api/operator/distributions/{distributionId}",
+        "/api/operator/earnings",
+      ]) {
         const operation = document.paths[path]?.get;
         if (operation) {
           operation["x-authentication-mode"] = "account";
@@ -484,6 +558,139 @@ export function createApiApp(container: ApplicationContainer) {
       if (denied) return denied;
       try {
         return c.json(await container.operatorAccounts.get(c.req.valid("param").accountId), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  const operatorDistributionQuery = z.object({
+    search: z.string().max(100).optional(),
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(25),
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/distributions",
+      request: { query: operatorDistributionQuery },
+      responses: {
+        200: {
+          description: "Bounded operator distribution inspection",
+          content: {
+            "application/json": {
+              schema: z.object({
+                items: z.array(operatorDistributionSummarySchema),
+                nextCursor: z.string().nullable(),
+              }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "operations:manage");
+      if (denied) return denied;
+      try {
+        return c.json(await container.operatorDistributions.list(c.req.valid("query")), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/distributions/{distributionId}",
+      request: { params: z.object({ distributionId: z.string().uuid() }) },
+      responses: {
+        200: {
+          description: "Safe operator distribution detail",
+          content: { "application/json": { schema: operatorDistributionDetailSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Distribution not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "operations:manage");
+      if (denied) return denied;
+      try {
+        return c.json(
+          await container.operatorDistributions.get(c.req.valid("param").distributionId),
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  const operatorEarningsQuery = z.object({
+    search: z.string().max(100).optional(),
+    state: z.enum(["pending", "available", "reversed"]).optional(),
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(25),
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/earnings",
+      request: { query: operatorEarningsQuery },
+      responses: {
+        200: {
+          description: "Bounded operator earnings ledger inspection",
+          content: {
+            "application/json": {
+              schema: z.object({
+                items: z.array(operatorEarningsEntrySchema),
+                nextCursor: z.string().nullable(),
+                totals: z.object({
+                  pendingMinor: z.string(),
+                  availableMinor: z.string(),
+                  reservedMinor: z.string(),
+                }),
+              }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Operator access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireOperatorScope(c, p, "operations:manage");
+      if (denied) return denied;
+      try {
+        return c.json(await container.operatorEarnings.list(c.req.valid("query")), 200);
       } catch (error) {
         return domainError(c, error);
       }
