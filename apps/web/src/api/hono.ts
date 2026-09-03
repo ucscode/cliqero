@@ -4,6 +4,7 @@ import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import { apiScopeSchema } from "@/modules/identity/api-scopes";
 import { dispatchLegacyApi, legacyApiPaths } from "./legacy-dispatch";
 import { newId } from "@/kernel/ids";
+import { blogPostInputSchema } from "@/modules/blog/domain/blog";
 
 type Env = { Variables: { principal: ApiPrincipal | null } };
 const errorSchema = z.object({ error: z.string(), code: z.string().optional() });
@@ -300,6 +301,29 @@ const operatorTreasurySummarySchema = z.object({
   debitsMinor: z.string(),
   currency: z.literal("USD"),
 });
+const blogPostSchema = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  title: z.string(),
+  excerpt: z.string(),
+  content: z.string(),
+  status: z.enum(["draft", "published"]),
+  featuredImageUrl: z.string().nullable(),
+  authorAccountId: z.string().uuid().nullable(),
+  seoTitle: z.string().nullable(),
+  seoDescription: z.string().nullable(),
+  canonicalUrl: z.string().nullable(),
+  publishedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  category: z.object({ slug: z.string(), name: z.string() }).nullable(),
+  tags: z.array(z.object({ slug: z.string(), name: z.string() })),
+});
+const blogPageSchema = z.object({
+  items: z.array(blogPostSchema),
+  nextCursor: z.string().nullable(),
+  limit: z.number().int(),
+});
 function principal(c: any) {
   return c.get("principal") as ApiPrincipal | null;
 }
@@ -320,6 +344,20 @@ function requireScope(c: any, p: ApiPrincipal, scope: string) {
 function requireOperatorScope(c: any, p: ApiPrincipal, scope: string) {
   if (!p.roles.includes("operator")) return c.json({ error: "Forbidden", code: "forbidden" }, 403);
   return requireScope(c, p, scope);
+}
+function requireBlogScope(c: any, p: ApiPrincipal, scope: string) {
+  if (!p.roles.includes("operator") && !p.roles.includes("blog_manager"))
+    return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+  return requireScope(c, p, scope);
+}
+function blogJson(post: any) {
+  if (!post) return null;
+  return {
+    ...post,
+    publishedAt: post.publishedAt?.toISOString() ?? null,
+    createdAt: post.createdAt.toISOString(),
+    updatedAt: post.updatedAt.toISOString(),
+  };
 }
 function hierarchyReadOrAdmin(c: any, p: ApiPrincipal) {
   if (p.kind === "api_key" && p.scopes.has("hierarchy:admin")) return null;
@@ -349,8 +387,16 @@ function grantableScopes(p: ApiPrincipal): Set<string> {
       "treasury:read",
       "treasury:manage",
       "operations:manage",
+      "blog:read",
+      "blog:write",
+      "blog:publish",
+      "blog:manage",
     ])
       allowed.add(scope);
+  if (p.roles.includes("blog_manager")) {
+    for (const scope of ["blog:read", "blog:write", "blog:publish", "blog:manage"])
+      allowed.add(scope);
+  }
   return allowed;
 }
 function domainError(c: any, error: unknown) {
@@ -476,6 +522,29 @@ export function createApiApp(container: ApplicationContainer) {
         }
       }
       for (const path of [
+        "/api/operator/blog",
+        "/api/blog/posts",
+        "/api/blog/posts/{id}",
+        "/api/blog/posts/{id}/publish",
+        "/api/blog/posts/{id}/unpublish",
+      ]) {
+        const pathItem = document.paths[path];
+        if (pathItem)
+          for (const [method, operation] of Object.entries(pathItem) as any[])
+            if (operation && typeof operation === "object") {
+              operation["x-authentication-mode"] =
+                path === "/api/blog/posts" && method === "get" ? "public" : "account";
+              operation["x-required-api-scope"] =
+                method === "post" && path.endsWith("publish")
+                  ? "blog:publish"
+                  : method === "delete"
+                    ? "blog:manage"
+                    : method === "patch" || method === "post"
+                      ? "blog:write"
+                      : "blog:read";
+            }
+      }
+      for (const path of [
         "/api/operator/withdrawals",
         "/api/operator/withdrawals/{withdrawalId}",
         "/api/operator/withdrawals/{withdrawalId}/approve",
@@ -492,23 +561,262 @@ export function createApiApp(container: ApplicationContainer) {
               operation["x-required-api-scope"] = "withdrawals:manage (operator)";
             }
           }
-        for (const [path, method] of [
-          ["/api/operator/treasury", "get"],
-          ["/api/operator/treasury/entries", "get"],
-          ["/api/operator/treasury/entries/{entryId}", "get"],
-          ["/api/operator/treasury/entries", "post"],
-        ] as const) {
-          const operation = document.paths[path]?.[method];
-          if (operation) {
-            operation["x-authentication-mode"] = "account";
-            operation["x-required-api-scope"] =
-              method === "post" ? "treasury:manage (operator)" : "treasury:read (operator)";
-          }
+      }
+      for (const [path, method] of [
+        ["/api/operator/treasury", "get"],
+        ["/api/operator/treasury/entries", "get"],
+        ["/api/operator/treasury/entries/{entryId}", "get"],
+        ["/api/operator/treasury/entries", "post"],
+      ] as const) {
+        const operation = document.paths[path]?.[method];
+        if (operation) {
+          operation["x-authentication-mode"] = "account";
+          operation["x-required-api-scope"] =
+            method === "post" ? "treasury:manage (operator)" : "treasury:read (operator)";
         }
       }
       const access = document.paths["/api/me/access"]?.get;
       if (access) access["x-authentication-mode"] = "account";
       return c.json(document);
+    },
+  );
+  const blogListQuery = z.object({
+    search: z.string().max(100).optional(),
+    status: z.enum(["draft", "published"]).optional(),
+    category: z.string().max(100).optional(),
+    tag: z.string().max(100).optional(),
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(25),
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/blog/posts",
+      request: { query: blogListQuery },
+      responses: {
+        200: {
+          description: "Published blog posts",
+          content: { "application/json": { schema: blogPageSchema } },
+        },
+      },
+    }),
+    (c) => {
+      try {
+        const page = container.blog.list({ ...c.req.valid("query"), publishedOnly: true });
+        return c.json({ ...page, items: page.items.map(blogJson) }, 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/blog/posts/{slug}",
+      request: { params: z.object({ slug: z.string().min(1).max(160) }) },
+      responses: {
+        200: {
+          description: "Published blog post",
+          content: { "application/json": { schema: blogPostSchema } },
+        },
+        404: { description: "Not found", content: { "application/json": { schema: errorSchema } } },
+      },
+    }),
+    (c) => {
+      const post = container.blog.get(c.req.valid("param").slug, true);
+      return post
+        ? c.json(blogJson(post), 200)
+        : c.json({ error: "Blog post not found", code: "not_found" }, 404);
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/blog/categories",
+      responses: {
+        200: {
+          description: "Blog categories",
+          content: {
+            "application/json": {
+              schema: z.object({
+                items: z.array(z.object({ id: z.string(), slug: z.string(), name: z.string() })),
+              }),
+            },
+          },
+        },
+      },
+    }),
+    (c) =>
+      c.json(
+        { items: container.blog.categories() as Array<{ id: string; slug: string; name: string }> },
+        200,
+      ),
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/blog/tags",
+      responses: {
+        200: {
+          description: "Blog tags",
+          content: {
+            "application/json": {
+              schema: z.object({
+                items: z.array(z.object({ id: z.string(), slug: z.string(), name: z.string() })),
+              }),
+            },
+          },
+        },
+      },
+    }),
+    (c) =>
+      c.json(
+        { items: container.blog.tags() as Array<{ id: string; slug: string; name: string }> },
+        200,
+      ),
+  );
+  const blogAdminListQuery = blogListQuery.extend({});
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/blog",
+      request: { query: blogAdminListQuery },
+      responses: {
+        200: {
+          description: "Operator blog posts",
+          content: { "application/json": { schema: blogPageSchema } },
+        },
+        403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireBlogScope(c, p, "blog:read");
+      if (denied) return denied;
+      const page = container.blog.list(c.req.valid("query"));
+      return c.json({ ...page, items: page.items.map(blogJson) }, 200);
+    },
+  );
+  const blogWriteBody = blogPostInputSchema;
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/blog/posts",
+      request: {
+        headers: z.object({ "idempotency-key": z.string().trim().min(1).max(200) }),
+        body: { content: { "application/json": { schema: blogWriteBody } } },
+      },
+      responses: {
+        201: {
+          description: "Blog post created",
+          content: { "application/json": { schema: blogPostSchema } },
+        },
+        403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireBlogScope(c, p, "blog:write");
+      if (denied) return denied;
+      try {
+        const body = c.req.valid("json");
+        if (body.status === "published" && p.kind === "api_key" && !p.scopes.has("blog:publish"))
+          return c.json({ error: "Forbidden", code: "insufficient_scope" }, 403);
+        const key = c.req.header("Idempotency-Key");
+        if (!key) throw new Error("Idempotency-Key is required");
+        return c.json(blogJson(container.blog.create(body, p.accountId, key)), 201);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "patch",
+      path: "/api/blog/posts/{id}",
+      request: {
+        params: z.object({ id: z.string().uuid() }),
+        body: { content: { "application/json": { schema: blogWriteBody.partial() } } },
+      },
+      responses: {
+        200: {
+          description: "Blog post updated",
+          content: { "application/json": { schema: blogPostSchema } },
+        },
+        403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireBlogScope(c, p, "blog:write");
+      if (denied) return denied;
+      try {
+        const body = c.req.valid("json");
+        if (body.status === "published" && p.kind === "api_key" && !p.scopes.has("blog:publish"))
+          return c.json({ error: "Forbidden", code: "insufficient_scope" }, 403);
+        return c.json(blogJson(container.blog.update(c.req.valid("param").id, body)), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  for (const [path, published] of [
+    ["/api/blog/posts/{id}/publish", true],
+    ["/api/blog/posts/{id}/unpublish", false],
+  ] as const) {
+    app.openapi(
+      createRoute({
+        method: "post",
+        path,
+        request: { params: z.object({ id: z.string().uuid() }) },
+        responses: {
+          200: {
+            description: "Blog publication state changed",
+            content: { "application/json": { schema: blogPostSchema } },
+          },
+          403: {
+            description: "Forbidden",
+            content: { "application/json": { schema: errorSchema } },
+          },
+        },
+      }),
+      (c) => {
+        const p = requirePrincipal(c);
+        if (!(p instanceof Object) || !("accountId" in p)) return p;
+        const denied = requireBlogScope(c, p, "blog:publish");
+        if (denied) return denied;
+        try {
+          return c.json(blogJson(container.blog.publish(c.req.valid("param").id, published)), 200);
+        } catch (error) {
+          return domainError(c, error);
+        }
+      },
+    );
+  }
+  app.openapi(
+    createRoute({
+      method: "delete",
+      path: "/api/blog/posts/{id}",
+      request: { params: z.object({ id: z.string().uuid() }) },
+      responses: {
+        204: { description: "Blog post deleted" },
+        403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireBlogScope(c, p, "blog:manage");
+      if (denied) return denied;
+      try {
+        container.blog.delete(c.req.valid("param").id);
+        return c.body(null, 204);
+      } catch (error) {
+        return domainError(c, error);
+      }
     },
   );
   const accountListQuery = z.object({
@@ -831,7 +1139,10 @@ export function createApiApp(container: ApplicationContainer) {
         {
           accountId: p.accountId,
           roles: [...p.roles],
-          canAccessOperator: p.roles.includes("operator") || p.roles.includes("catalogue_manager"),
+          canAccessOperator:
+            p.roles.includes("operator") ||
+            p.roles.includes("catalogue_manager") ||
+            p.roles.includes("blog_manager"),
         },
         200,
       );

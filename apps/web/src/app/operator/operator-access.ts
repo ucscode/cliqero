@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getContainer } from "@/infrastructure/container";
 
-export type OperatorRole = "operator" | "catalogue_manager";
+export type OperatorRole = "operator" | "catalogue_manager" | "blog_manager";
 
 export async function requireOperatorPage(pathname: string) {
   const requestHeaders = await headers();
@@ -12,10 +12,13 @@ export async function requireOperatorPage(pathname: string) {
   if (!principal) redirect(`/login?next=${encodeURIComponent(pathname)}`);
   const role = principal.roles.includes("operator")
     ? "operator"
-    : principal.roles.includes("catalogue_manager")
-      ? "catalogue_manager"
-      : null;
+    : principal.roles.includes("blog_manager")
+      ? "blog_manager"
+      : principal.roles.includes("catalogue_manager")
+        ? "catalogue_manager"
+        : null;
   if (!role) redirect("/dashboard");
+  if (role === "blog_manager" && pathname === "/operator") redirect("/operator/blog");
   return {
     role,
     accountId: principal.account.id,

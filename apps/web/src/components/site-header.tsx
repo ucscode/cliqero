@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Menu } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Button } from "./ui/button";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "./ui/sheet";
 
 export function SiteHeader() {
   const router = useRouter();
@@ -32,9 +33,28 @@ export function SiteHeader() {
           className="ml-auto hidden items-center gap-6 text-sm text-slate-500 md:flex"
           aria-label="Primary navigation"
         >
-          <Link href="/">Discover</Link>
+          <Link href="/">Catalogue</Link>
+          <Link href="/how-it-works">How it works</Link>
+          <Link href="/blog">Blog</Link>
+          <Link href="/about">About</Link>
           {user && <Link href="/dashboard">Dashboard</Link>}
         </nav>
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open navigation">
+              <Menu className="h-5 w-5" aria-hidden="true" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent>
+            <SheetTitle>Site navigation</SheetTitle>
+            <nav className="mt-6 grid gap-4 text-base" aria-label="Mobile navigation">
+              <Link href="/">Catalogue</Link>
+              <Link href="/how-it-works">How it works</Link>
+              <Link href="/blog">Blog</Link>
+              <Link href="/about">About</Link>
+            </nav>
+          </SheetContent>
+        </Sheet>
         <div className="ml-4 flex items-center gap-3">
           {session.isPending ? (
             <span

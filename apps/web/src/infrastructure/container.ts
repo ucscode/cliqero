@@ -107,6 +107,7 @@ import {
   OperatorEarningsService,
 } from "@/application/operator-distributions";
 import { OperatorWithdrawalService } from "@/application/operator-withdrawals";
+import { getBlogService } from "@/modules/blog/application/blog-service";
 
 export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
@@ -386,6 +387,7 @@ export function createContainer(databaseUrl: string) {
     operatorEarnings: new OperatorEarningsService(database),
     operatorWithdrawals: new OperatorWithdrawalService(database),
     operatorTreasury: new OperatorTreasuryService(database),
+    blog: getBlogService(),
   };
 }
 export type ApplicationContainer = ReturnType<typeof createContainer>;

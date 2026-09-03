@@ -158,9 +158,42 @@ function appWith(principal: any = null) {
       reconcile: async () => ({}),
       manualComplete: async () => ({}),
     },
+    blog: {
+      list: () => ({ items: [], nextCursor: null, limit: 25 }),
+      get: () => null,
+      categories: () => [],
+      tags: () => [],
+      create: () => ({}),
+      update: () => ({}),
+      publish: () => ({}),
+      delete: () => {},
+    },
   } as any);
 }
 describe("Hono API foundation", () => {
+  it("keeps public blog reads open and blog administration role/scope constrained", async () => {
+    const publicResponse = await appWith().fetch(new Request("http://localhost/api/blog/posts"));
+    expect(publicResponse.status).toBe(200);
+    const catalogue = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session",
+      roles: ["catalogue_manager"],
+      scopes: new Set<string>(),
+    };
+    expect(
+      (await appWith(catalogue).fetch(new Request("http://localhost/api/operator/blog"))).status,
+    ).toBe(403);
+    const operator = {
+      ...catalogue,
+      roles: ["operator"],
+      kind: "api_key",
+      scopes: new Set(["blog:read"]),
+    };
+    expect(
+      (await appWith(operator).fetch(new Request("http://localhost/api/operator/blog"))).status,
+    ).toBe(200);
+  });
   it("serves an OpenAPI document", async () => {
     const response = await appWith().fetch(new Request("http://localhost/api/openapi.json"));
     expect(response.status).toBe(200);
@@ -212,6 +245,8 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:manage (operator)",
     });
+    expect(paths["/api/blog/posts"]).toBeDefined();
+    expect(paths["/api/operator/blog"]).toBeDefined();
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
     expect(paths["/api/listings"].get).toMatchObject({

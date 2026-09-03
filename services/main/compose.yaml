@@ -7,6 +7,7 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-cliqero}:${POSTGRES_PASSWORD:-cliqero-local}@postgres:5432/${POSTGRES_DB:-cliqero}
       APP_URL: ${APP_URL:-http://localhost:3000}
+      BLOG_DATABASE_PATH: ${BLOG_DATABASE_PATH:-/workspace/data/blog/blog.sqlite}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-cliqero-development-better-auth-secret-change-me-32}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -18,3 +19,7 @@ services:
       - "${APP_PORT:-3000}:3000"
     volumes:
       - ../../config:/workspace/config:ro
+      - blog-data:/workspace/data/blog
+
+volumes:
+  blog-data:

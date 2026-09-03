@@ -19,6 +19,10 @@ export const API_SCOPES = [
   "treasury:read",
   "treasury:manage",
   "operations:manage",
+  "blog:read",
+  "blog:write",
+  "blog:publish",
+  "blog:manage",
 ] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 export const apiScopeSchema = z.enum(API_SCOPES);

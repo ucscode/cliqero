@@ -33,7 +33,7 @@ import {
   SidebarTrigger,
 } from "./ui/sidebar";
 
-type OperatorRole = "operator" | "catalogue_manager";
+type OperatorRole = "operator" | "catalogue_manager" | "blog_manager";
 
 export function OperatorShell({
   role,
@@ -55,7 +55,8 @@ export function OperatorShell({
     | "distributions"
     | "earnings"
     | "withdrawals"
-    | "treasury";
+    | "treasury"
+    | "blog";
   title?: string;
   children?: ReactNode;
 }) {
@@ -66,6 +67,11 @@ export function OperatorShell({
 
   useEffect(() => {
     let active = true;
+    if (role === "blog_manager") {
+      return () => {
+        active = false;
+      };
+    }
     void apiFetch<OperatorOverview>("/api/operator/overview")
       .then((value) => {
         if (active) setOverview(value);
@@ -80,7 +86,7 @@ export function OperatorShell({
     return () => {
       active = false;
     };
-  }, []);
+  }, [role]);
 
   async function signOut() {
     await authClient.signOut();
@@ -89,8 +95,13 @@ export function OperatorShell({
   }
 
   const navigation = [
-    { key: "overview", href: "/operator", label: "Overview", visible: true },
-    { key: "catalogue", href: "/operator/catalogue", label: "Catalogue", visible: true },
+    { key: "overview", href: "/operator", label: "Overview", visible: role !== "blog_manager" },
+    {
+      key: "catalogue",
+      href: "/operator/catalogue",
+      label: "Catalogue",
+      visible: role === "operator" || role === "catalogue_manager",
+    },
     { key: "users", href: "/operator/users", label: "Users", visible: role === "operator" },
     { key: "network", href: "/operator/network", label: "Network", visible: role === "operator" },
     { key: "funding", href: "/operator/funding", label: "Funding", visible: role === "operator" },
@@ -117,6 +128,12 @@ export function OperatorShell({
       href: "/operator/treasury",
       label: "Treasury",
       visible: role === "operator",
+    },
+    {
+      key: "blog",
+      href: "/operator/blog",
+      label: "Blog",
+      visible: role === "operator" || role === "blog_manager",
     },
   ];
 
