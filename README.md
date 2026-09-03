@@ -12,16 +12,21 @@ Requirements: Node.js 22+, npm 11+, Docker Engine, and Docker Compose with `incl
 
 ```bash
 npm ci
-npm test
-npm run typecheck
-npm run dev
+just dev
 ```
 
-Run the application and PostgreSQL together with:
+The preferred development workflow is `just dev`; it uses Docker Compose's
+development override for source hot reload while retaining the dependency tree
+installed in the image. To run the production-like stack locally, use:
 
 ```bash
-docker compose up --build
+just prod-build
 ```
+
+Running `docker compose` without `-f` automatically loads
+`compose.override.yaml`. The `prod-*` recipes explicitly use only
+`compose.yaml`. `just dev-clean` is destructive and deletes local volumes and
+data; `just dev-down` and `just prod-down` stop services without deleting them.
 
 The web application is available at `http://localhost:3000`; its health endpoint is `/api/health`.
 

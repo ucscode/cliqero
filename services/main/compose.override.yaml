@@ -12,8 +12,6 @@ services:
       # Keep Next.js dev/build output in a disposable Docker volume instead of
       # creating container-owned files in the host source tree.
       - web-next:/workspace/apps/web/.next
-      - /workspace/node_modules
-      - /workspace/apps/web/node_modules
 
 volumes:
   web-next:
