@@ -1,8 +1,10 @@
 services:
   main:
+    image: cliqero-main-prod
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
+      target: production
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-cliqero}:${POSTGRES_PASSWORD:-cliqero-local}@postgres:5432/${POSTGRES_DB:-cliqero}

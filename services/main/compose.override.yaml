@@ -1,5 +1,6 @@
 services:
   main:
+    image: cliqero-main-dev
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
