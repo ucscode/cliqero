@@ -361,6 +361,29 @@ export type OperatorEarningsPage = {
   totals: { pendingMinor: string; availableMinor: string; reservedMinor: string };
 };
 
+export type OperatorTreasurySummary = {
+  balanceMinor: string;
+  creditsMinor: string;
+  debitsMinor: string;
+  currency: "USD";
+};
+
+export type OperatorTreasuryEntry = {
+  id: string;
+  direction: "credit" | "debit";
+  amountMinor: string;
+  title: string;
+  note: string | null;
+  source: { kind: string; id: string } | null;
+  actor: { id: string; handle: string; email: string } | null;
+  createdAt: string;
+};
+
+export type OperatorTreasuryPage = {
+  items: OperatorTreasuryEntry[];
+  nextCursor: string | null;
+};
+
 export type OperatorAccountPage = {
   items: OperatorAccountSummary[];
   nextCursor: string | null;

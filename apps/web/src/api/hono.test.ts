@@ -106,6 +106,49 @@ function appWith(principal: any = null) {
       list: async () => ({ items: [], nextCursor: null }),
       get: async () => ({ items: [] }),
     },
+    operatorTreasury: {
+      summary: async () => ({
+        balanceMinor: "0",
+        creditsMinor: "0",
+        debitsMinor: "0",
+        currency: "USD",
+      }),
+      list: async () => ({ items: [], nextCursor: null }),
+      createManual: async (input: any) => ({
+        id: "00000000-0000-4000-8000-000000000004",
+        direction: input.direction,
+        amountMinor: input.amountMinor,
+        title: input.title.trim(),
+        note: input.note ?? null,
+        sourceKind: null,
+        sourceId: null,
+        actorId: input.actorId,
+        createdAt: new Date(),
+      }),
+      get: async () => ({
+        id: "00000000-0000-4000-8000-000000000004",
+        direction: "credit",
+        amountMinor: "100",
+        title: "Sample",
+        note: null,
+        source: null,
+        actor: null,
+        createdAt: new Date().toISOString(),
+      }),
+    },
+    treasury: {
+      createManual: async (input: any) => ({
+        id: "00000000-0000-4000-8000-000000000004",
+        direction: input.direction,
+        amountMinor: input.amountMinor,
+        title: input.title.trim(),
+        note: input.note ?? null,
+        sourceKind: null,
+        sourceId: null,
+        actorId: input.actorId,
+        createdAt: new Date(),
+      }),
+    },
     withdrawals: {
       approve: async () => ({}),
       reject: async () => ({}),
@@ -160,6 +203,14 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/withdrawals"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "withdrawals:manage (operator)",
+    });
+    expect(paths["/api/operator/treasury"].get).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "treasury:read (operator)",
+    });
+    expect(paths["/api/operator/treasury/entries"].post).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "treasury:manage (operator)",
     });
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
@@ -698,5 +749,94 @@ describe("Hono API foundation", () => {
       new Request("http://localhost/api/hierarchy/tree?root=00000000-0000-4000-8000-000000000002"),
     );
     expect(response.status).toBe(200);
+  });
+  it("protects treasury APIs by both operator role and treasury scope", async () => {
+    const base = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { handle: "operator", email: "operator@example.com" },
+      kind: "user_session" as const,
+      roles: [] as string[],
+      scopes: new Set<string>(),
+    };
+    const get = (principal: any) =>
+      appWith(principal).fetch(new Request("http://localhost/api/operator/treasury"));
+    expect((await get(base)).status).toBe(403);
+    expect((await get({ ...base, roles: ["catalogue_manager"] })).status).toBe(403);
+    expect((await get({ ...base, roles: ["operator"] })).status).toBe(200);
+    expect((await get({ ...base, roles: ["operator"], kind: "api_key" })).status).toBe(403);
+    expect(
+      (
+        await get({
+          ...base,
+          roles: ["operator"],
+          kind: "api_key",
+          scopes: new Set(["treasury:read"]),
+        })
+      ).status,
+    ).toBe(200);
+    const post = (principal: any) =>
+      appWith(principal).fetch(
+        new Request("http://localhost/api/operator/treasury/entries", {
+          method: "POST",
+          headers: { "content-type": "application/json", "Idempotency-Key": "test-key" },
+          body: JSON.stringify({ direction: "credit", amount_minor: "100", title: "Test" }),
+        }),
+      );
+    expect((await post({ ...base, roles: ["operator"] })).status).toBe(201);
+    expect((await post({ ...base, roles: ["operator"], kind: "api_key" })).status).toBe(403);
+    expect(
+      (
+        await post({
+          ...base,
+          roles: ["operator"],
+          kind: "api_key",
+          scopes: new Set(["treasury:manage"]),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await post({
+          ...base,
+          kind: "api_key",
+          scopes: new Set(["treasury:manage"]),
+        })
+      ).status,
+    ).toBe(403);
+  });
+  it("keeps treasury facts append-only and rejects source/actor overrides", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { handle: "operator", email: "operator@example.com" },
+      kind: "user_session" as const,
+      roles: ["operator"],
+      scopes: new Set<string>(),
+    };
+    const response = await appWith(principal).fetch(
+      new Request("http://localhost/api/operator/treasury/entries", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": "strict-key" },
+        body: JSON.stringify({
+          direction: "credit",
+          amount_minor: "100",
+          title: "Unsafe override",
+          source_kind: "distribution",
+          actor_id: principal.accountId,
+        }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(
+      (
+        await appWith(principal).fetch(
+          new Request(
+            "http://localhost/api/operator/treasury/entries/00000000-0000-4000-8000-000000000004",
+            {
+              method: "DELETE",
+            },
+          ),
+        )
+      ).status,
+    ).toBe(405);
   });
 });

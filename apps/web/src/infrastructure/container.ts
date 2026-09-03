@@ -95,6 +95,7 @@ import { loadYamlCommissionPolicy } from "@/modules/referral/yaml-policy";
 import { PostgresTreasuryRepository } from "./postgres/treasury";
 import { TreasuryService } from "@/modules/treasury/treasury";
 import { TreasuryProcessor } from "@/processors/treasury";
+import { OperatorTreasuryService } from "@/application/operator-treasury";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
 import { ApiPrincipalResolver } from "@/modules/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
@@ -384,6 +385,7 @@ export function createContainer(databaseUrl: string) {
     operatorDistributions: new OperatorDistributionService(database),
     operatorEarnings: new OperatorEarningsService(database),
     operatorWithdrawals: new OperatorWithdrawalService(database),
+    operatorTreasury: new OperatorTreasuryService(database),
   };
 }
 export type ApplicationContainer = ReturnType<typeof createContainer>;

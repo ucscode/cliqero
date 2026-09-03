@@ -28,7 +28,8 @@ export function OperatorShell({
     | "funding"
     | "distributions"
     | "earnings"
-    | "withdrawals";
+    | "withdrawals"
+    | "treasury";
   title?: string;
   children?: ReactNode;
 }) {
@@ -141,6 +142,13 @@ export function OperatorShell({
                 onClick={() => setMenuOpen(false)}
               >
                 Withdrawals
+              </Link>
+              <Link
+                className={activeSection === "treasury" ? "active" : ""}
+                href="/operator/treasury"
+                onClick={() => setMenuOpen(false)}
+              >
+                Treasury
               </Link>
             </>
           )}

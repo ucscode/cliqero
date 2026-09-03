@@ -1910,10 +1910,69 @@ h3 {
 .operator-distribution-detail,
 .operator-earnings-page,
 .operator-withdrawals-page,
-.operator-withdrawal-detail {
+.operator-withdrawal-detail,
+.operator-treasury-page {
   display: grid;
   gap: 1.2rem;
   min-width: 0;
+}
+.operator-treasury-form,
+.operator-treasury-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.8rem;
+}
+.operator-treasury-form label,
+.operator-treasury-filters label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.operator-treasury-form .toast {
+  grid-column: 1 / -1;
+}
+.operator-treasury-list {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+.operator-treasury-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.operator-treasury-row h4 {
+  margin: 0.45rem 0 0;
+}
+.operator-treasury-row p {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+}
+.operator-treasury-row-heading,
+.operator-treasury-row-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.operator-treasury-row-meta {
+  justify-content: flex-end;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: right;
+}
+.operator-treasury-row-meta a {
+  color: var(--accent);
+}
+.operator-treasury-skeleton {
+  display: block;
+  min-height: 6rem;
 }
 .operator-users-toolbar,
 .operator-network-search {
@@ -2703,8 +2762,17 @@ h3 {
     flex: 1 1 160px;
   }
   .operator-distributions-filters,
-  .operator-earnings-filters {
+  .operator-earnings-filters,
+  .operator-treasury-form,
+  .operator-treasury-filters {
     grid-template-columns: 1fr;
+  }
+  .operator-treasury-row {
+    flex-direction: column;
+  }
+  .operator-treasury-row-meta {
+    justify-content: flex-start;
+    text-align: left;
   }
   .operator-distribution-row-main,
   .operator-earnings-row-main {
