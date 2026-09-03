@@ -11,7 +11,12 @@ import {
   type ReferralPage,
   type UplinePage,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
 import { HierarchyGraph } from "./hierarchy-graph";
 import { mergeHierarchyChildren } from "./hierarchy-graph-model";
 
@@ -133,12 +138,12 @@ export function ReferralsPanel() {
   }, [tree]);
 
   return (
-    <section className="referral-panel" aria-labelledby="referrals-heading">
-      <div className="panel-heading">
+    <section className="grid gap-4" aria-labelledby="referrals-heading">
+      <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Referrals</p>
           <h2 id="referrals-heading">Your referral network</h2>
-          <p className="panel-intro">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Explore your authorized network visually. Financial information for other accounts is
             never shown here.
           </p>
@@ -150,15 +155,15 @@ export function ReferralsPanel() {
       {error && (
         <Toast>
           <span>{error}</span>
-          <button type="button" onClick={() => void load()}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
             Try again
-          </button>
+          </Button>
         </Toast>
       )}
       {loading ? (
-        <div className="referral-grid" aria-label="Loading referrals">
-          <Skeleton className="referral-skeleton" />
-          <Skeleton className="referral-skeleton" />
+        <div className="grid gap-4 md:grid-cols-2" aria-label="Loading referrals">
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-48 w-full" />
         </div>
       ) : tree && selfAccountId ? (
         <>
@@ -173,24 +178,29 @@ export function ReferralsPanel() {
             }}
             onResetRoot={resetRoot}
           />
-          <div className="referral-grid">
-            <Card className="referral-section-card">
-              <div className="card-kicker">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
                 <h3>Direct referrals</h3>
-                <Badge tone="accent">{direct?.accounts.length ?? 0}</Badge>
+                <Badge variant="destructive">{direct?.accounts.length ?? 0}</Badge>
               </div>
               {direct?.accounts.length ? (
-                <ul className="identity-list">
+                <ul className="grid gap-2">
                   {direct.accounts.map((id) => {
                     const node = nodesById.get(id);
                     return (
-                      <li key={id}>
-                        <span className="identity-avatar">
+                      <li
+                        className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 p-3"
+                        key={id}
+                      >
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-50 text-sm font-semibold text-emerald-800">
                           {(node?.handle ?? id).slice(0, 1).toUpperCase()}
                         </span>
-                        <span>
+                        <span className="grid min-w-0 gap-1">
                           <strong>{node?.displayName || node?.handle || "Cliqero account"}</strong>
-                          <small>{node?.handle ?? id}</small>
+                          <small className="break-all text-xs text-slate-500">
+                            {node?.handle ?? id}
+                          </small>
                         </span>
                       </li>
                     );
@@ -214,23 +224,26 @@ export function ReferralsPanel() {
               )}
             </Card>
 
-            <Card className="referral-section-card">
-              <div className="card-kicker">
+            <Card className="p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
                 <h3>Upline context</h3>
                 <Badge>{uplines?.uplines.length ?? 0}</Badge>
               </div>
               {uplines?.uplines.length ? (
-                <ol className="identity-list">
+                <ol className="grid gap-2">
                   {uplines.uplines.map((upline) => {
                     const node = nodesById.get(upline.accountId);
                     return (
-                      <li key={upline.accountId}>
-                        <span className="identity-avatar">
+                      <li
+                        className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 p-3"
+                        key={upline.accountId}
+                      >
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-50 text-sm font-semibold text-emerald-800">
                           {(node?.handle ?? upline.accountId).slice(0, 1).toUpperCase()}
                         </span>
-                        <span>
+                        <span className="grid min-w-0 gap-1">
                           <strong>{node?.displayName || node?.handle || "Cliqero account"}</strong>
-                          <small>Level {upline.depth}</small>
+                          <small className="text-xs text-slate-500">Level {upline.depth}</small>
                         </span>
                       </li>
                     );
@@ -244,32 +257,37 @@ export function ReferralsPanel() {
               )}
             </Card>
 
-            <Card className="referral-section-card referral-downline-card">
-              <div className="card-kicker">
+            <Card className="p-5 md:col-span-2">
+              <div className="mb-4 flex items-center justify-between gap-3">
                 <h3>Network context</h3>
-                <Badge tone="accent">{tree.windowDepth} levels</Badge>
+                <Badge variant="destructive">{tree.windowDepth} levels</Badge>
               </div>
-              <p className="panel-note">
+              <p className="text-sm leading-relaxed text-slate-500">
                 The graph is bounded to {tree.windowDepth} generations and {tree.childLimit}{" "}
                 children per branch at a time. Use View branch to explore deeper generations.
               </p>
               {generations.length ? (
-                <div className="generation-list">
+                <div className="grid gap-4 md:grid-cols-2">
                   {generations.map(([depth, nodes]) => (
-                    <div className="generation" key={depth}>
-                      <div className="generation-heading">
+                    <div className="grid gap-2" key={depth}>
+                      <div className="flex justify-between gap-3 text-xs text-slate-500">
                         <strong>Generation {depth}</strong>
                         <span>{nodes.length} shown</span>
                       </div>
-                      <ul className="identity-list">
+                      <ul className="grid gap-2">
                         {nodes.map((node) => (
-                          <li key={node.id}>
-                            <span className="identity-avatar">
+                          <li
+                            className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 p-3"
+                            key={node.id}
+                          >
+                            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-50 text-sm font-semibold text-emerald-800">
                               {node.handle.slice(0, 1).toUpperCase()}
                             </span>
-                            <span>
+                            <span className="grid min-w-0 gap-1">
                               <strong>{node.displayName || node.handle}</strong>
-                              <small>{node.handle}</small>
+                              <small className="break-all text-xs text-slate-500">
+                                {node.handle}
+                              </small>
                             </span>
                             {node.hasMoreChildren && <Badge>More below</Badge>}
                           </li>

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch, type OperatorEarningsEntry, type OperatorEarningsPage } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Money, Select, Skeleton, Toast } from "./ui";
+import { Badge, Button, Card, EmptyState, Input, Select, Skeleton, Toast } from "./ui";
+import { Money } from "./money";
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString();

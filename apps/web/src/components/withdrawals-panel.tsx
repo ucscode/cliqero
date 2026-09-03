@@ -12,7 +12,15 @@ import {
   type WithdrawalPage,
   type WithdrawalPolicy,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Money, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
+import { Money } from "./money";
 
 const activeStates = new Set<Withdrawal["state"]>(["requested", "approved"]);
 
@@ -201,12 +209,12 @@ export function WithdrawalsPanel() {
   }
 
   return (
-    <section className="withdrawals-panel" aria-labelledby="withdrawals-heading">
-      <div className="panel-heading">
+    <section className="grid gap-4" aria-labelledby="withdrawals-heading">
+      <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Withdrawals</p>
           <h2 id="withdrawals-heading">Move available earnings</h2>
-          <p className="panel-intro">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Request a payout from settled referral earnings. Your buyer wallet remains separate.
           </p>
         </div>
@@ -222,51 +230,56 @@ export function WithdrawalsPanel() {
       {error && <Toast>{error}</Toast>}
       {success && <Toast tone="success">{success}</Toast>}
       {loading ? (
-        <div className="withdrawal-summary-grid" aria-label="Loading withdrawals">
-          <Skeleton className="withdrawal-summary-skeleton" />
-          <Skeleton className="withdrawal-summary-skeleton" />
-          <Skeleton className="withdrawal-form-skeleton" />
+        <div className="grid gap-4 md:grid-cols-3" aria-label="Loading withdrawals">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-64 w-full" />
         </div>
       ) : (
         <>
-          <div className="withdrawal-summary-grid">
-            <Card className="withdrawal-summary-card">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="min-w-0 p-5">
               <p className="eyebrow">Available earnings</p>
-              <h3>
+              <h3 className="my-2 text-2xl">
                 <Money minor={availableMinor} currency={currency} />
               </h3>
-              <Link className="arrow-link" href="/dashboard?section=earnings">
+              <Link
+                className="text-sm font-semibold text-emerald-700"
+                href="/dashboard?section=earnings"
+              >
                 View earnings ↗
               </Link>
             </Card>
-            <Card className="withdrawal-summary-card">
+            <Card className="min-w-0 p-5">
               <p className="eyebrow">Reserved in withdrawals</p>
-              <h3>
+              <h3 className="my-2 text-2xl">
                 <Money minor={reservedMinor} currency={currency} />
               </h3>
-              <p className="panel-note">Reserved funds are not available for another request.</p>
+              <p className="text-sm leading-relaxed text-slate-500">
+                Reserved funds are not available for another request.
+              </p>
             </Card>
-            <Card className="withdrawal-summary-card">
+            <Card className="min-w-0 p-5">
               <p className="eyebrow">Minimum request</p>
-              <h3>
+              <h3 className="my-2 text-2xl">
                 <Money minor={policy?.minimum_amount_minor ?? "0"} currency={currency} />
               </h3>
-              <p className="panel-note">
+              <p className="text-sm leading-relaxed text-slate-500">
                 {policy?.enabled
                   ? "Policy supplied by Cliqero."
                   : "Withdrawals are currently disabled."}
               </p>
             </Card>
           </div>
-          <Card className="withdrawal-request-card">
-            <div className="card-kicker">
+          <Card className="min-w-0 p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <h3>Request a withdrawal</h3>
-              <Badge tone={policy?.enabled ? "success" : "neutral"}>
+              <Badge variant={policy?.enabled ? "default" : "secondary"}>
                 {policy?.enabled ? "Available" : "Disabled"}
               </Badge>
             </div>
-            <form className="withdrawal-form" onSubmit={submit}>
-              <label htmlFor="withdrawal-amount">Amount (USD)</label>
+            <form className="grid max-w-2xl gap-3" onSubmit={submit}>
+              <Label htmlFor="withdrawal-amount">Amount (USD)</Label>
               <Input
                 id="withdrawal-amount"
                 inputMode="decimal"
@@ -275,13 +288,13 @@ export function WithdrawalsPanel() {
                 onChange={(event) => setAmount(event.target.value)}
                 disabled={!policy?.enabled || submitting}
               />
-              <span className="field-help">
+              <span className="text-xs text-slate-500">
                 Minimum {formatMinorUsd(policy?.minimum_amount_minor ?? "0")}
                 {policy?.maximum_amount_minor
                   ? ` · Maximum ${formatMinorUsd(policy.maximum_amount_minor)}`
                   : ""}
               </span>
-              <label htmlFor="withdrawal-destination">Payout destination reference</label>
+              <Label htmlFor="withdrawal-destination">Payout destination reference</Label>
               <Input
                 id="withdrawal-destination"
                 placeholder="Your saved or provider-approved reference"
@@ -289,7 +302,7 @@ export function WithdrawalsPanel() {
                 onChange={(event) => setDestination(event.target.value)}
                 disabled={!policy?.enabled || submitting}
               />
-              <span className="field-help">
+              <span className="text-xs text-slate-500">
                 This milestone uses the existing provider-neutral manual destination.
               </span>
               <Button type="submit" disabled={!policy?.enabled || submitting}>
@@ -297,15 +310,15 @@ export function WithdrawalsPanel() {
               </Button>
             </form>
           </Card>
-          <Card className="withdrawal-history-card">
-            <div className="card-kicker">
+          <Card className="min-w-0 p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <h3>Withdrawal history</h3>
               {page?.withdrawals.length ? (
-                <Badge tone="accent">{page.withdrawals.length}</Badge>
+                <Badge variant="destructive">{page.withdrawals.length}</Badge>
               ) : null}
             </div>
             {page?.withdrawals.length ? (
-              <div className="withdrawal-list">
+              <div className="grid gap-2">
                 {page.withdrawals.map((withdrawal) => (
                   <WithdrawalRow key={withdrawal.id} withdrawal={withdrawal} onCancel={cancel} />
                 ))}
@@ -331,27 +344,38 @@ function WithdrawalRow({
   onCancel: (withdrawal: Withdrawal) => void;
 }) {
   return (
-    <div className="withdrawal-row">
-      <div className="withdrawal-row-main">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-slate-200 py-4 last:border-0">
+      <div className="grid min-w-0 gap-1">
         <strong>
           <Money minor={withdrawal.amount_minor} currency={withdrawal.currency} />
         </strong>
-        <span>
+        <span className="break-words text-sm text-slate-500">
           {withdrawal.destination_type === "manual" ? "Manual destination" : "Bank destination"} ·{" "}
           {withdrawal.destination_summary}
         </span>
-        <small>{new Date(withdrawal.created_at).toLocaleDateString()}</small>
+        <small className="text-xs text-slate-500">
+          {new Date(withdrawal.created_at).toLocaleDateString()}
+        </small>
       </div>
-      <div className="withdrawal-row-end">
-        <Badge tone={stateTone(withdrawal.state)}>{stateLabel(withdrawal.state)}</Badge>
-        {withdrawal.reason && <span className="withdrawal-reason">{withdrawal.reason}</span>}
+      <div className="grid justify-items-end gap-2">
+        <Badge
+          variant={
+            stateTone(withdrawal.state) === "success"
+              ? "default"
+              : stateTone(withdrawal.state) === "accent"
+                ? "destructive"
+                : "secondary"
+          }
+        >
+          {stateLabel(withdrawal.state)}
+        </Badge>
+        {withdrawal.reason && (
+          <span className="max-w-48 break-words text-right text-xs text-slate-500">
+            {withdrawal.reason}
+          </span>
+        )}
         {withdrawal.state === "requested" && (
-          <Button
-            type="button"
-            variant="ghost"
-            className="button-small"
-            onClick={() => onCancel(withdrawal)}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={() => onCancel(withdrawal)}>
             Cancel request
           </Button>
         )}

@@ -9,7 +9,8 @@ import {
   type OperatorFundingPage,
   type OperatorFundingState,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Money, Select, Skeleton, Toast } from "./ui";
+import { Badge, Button, Card, EmptyState, Input, Select, Skeleton, Toast } from "./ui";
+import { Money } from "./money";
 
 const states: Array<{ value: OperatorFundingState; label: string }> = [
   { value: "initialization_pending", label: "Initialization pending" },

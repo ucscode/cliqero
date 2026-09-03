@@ -8,7 +8,8 @@ import {
   type OperatorDistributionDetail as DistributionDetail,
   type OperatorDistributionPage,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Money, Skeleton, Toast } from "./ui";
+import { Badge, Button, Card, EmptyState, Input, Skeleton, Toast } from "./ui";
+import { Money } from "./money";
 
 function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";

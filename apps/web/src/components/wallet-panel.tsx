@@ -11,7 +11,16 @@ import {
   type WalletSummary,
   type WalletTransaction,
 } from "@/lib/api-client";
-import { Badge, Button, Card, Dialog, EmptyState, Input, Money, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
+import { Money } from "./money";
 
 const terminalFundingStates = new Set(["confirmed", "failed", "blocked", "reconciliation_pending"]);
 
@@ -178,31 +187,31 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
 
   if (loading)
     return (
-      <div className="wallet-panel">
-        <Skeleton className="wallet-balance-skeleton" />
-        <Skeleton className="wallet-history-skeleton" />
+      <div className="grid gap-4">
+        <Skeleton className="h-56 w-full" />
+        <Skeleton className="h-80 w-full" />
       </div>
     );
 
   return (
-    <div className="wallet-panel">
+    <div className="grid gap-4">
       {error && <Toast>{error}</Toast>}
-      <section className="wallet-overview">
-        <Card className="wallet-balance-card">
-          <div className="card-kicker">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(250px,0.7fr)]">
+        <Card className="bg-emerald-50/70 p-6 sm:p-8">
+          <div className="mb-4 flex items-center justify-between gap-3 text-sm text-slate-600">
             <span>Available wallet balance</span>
-            {refreshing && <span className="refreshing-label">Updating…</span>}
+            {refreshing && <span className="text-xs text-slate-500">Updating…</span>}
           </div>
-          <p className="wallet-balance">
+          <p className="my-2 text-4xl font-semibold tracking-tight sm:text-5xl">
             <Money minor={summary?.available_minor ?? "0"} currency="USD" />
           </p>
-          <p className="wallet-balance-note">Ready for one-listing purchases.</p>
+          <p className="text-sm text-slate-500">Ready for one-listing purchases.</p>
           <Button onClick={() => setFundOpen(true)}>Fund wallet</Button>
         </Card>
-        <Card className="wallet-pending-card">
+        <Card className="p-6 sm:p-8">
           <p className="eyebrow">In progress</p>
           <h3>Pending wallet credit</h3>
-          <p className="wallet-pending-value">
+          <p className="my-3 text-2xl font-semibold tracking-tight">
             <Money minor={summary?.pending_minor ?? "0"} currency="USD" />
           </p>
           <p>Pending credits become spendable only after availability processing.</p>
@@ -210,22 +219,22 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
       </section>
 
       {funding && (
-        <Card className="funding-status-card" aria-live="polite">
-          <div className="funding-status-head">
+        <Card className="grid gap-3 p-5" aria-live="polite">
+          <div className="flex items-start justify-between gap-4">
             <div>
               <p className="eyebrow">Funding activity</p>
               <h2>{fundingLabel(funding.state)}</h2>
             </div>
-            <Badge tone={funding.state === "confirmed" ? "success" : "accent"}>
+            <Badge variant={funding.state === "confirmed" ? "default" : "destructive"}>
               {funding.state.replaceAll("_", " ")}
             </Badge>
           </div>
           <p>{pendingMessage}</p>
           <Money minor={funding.amount_minor} currency={funding.currency} />
-          <div className="funding-status-actions">
+          <div className="flex flex-wrap gap-2">
             {providerUrl && (
               <a
-                className="button button-primary"
+                className="inline-flex h-10 items-center rounded-md bg-emerald-700 px-4 text-sm font-medium text-white hover:bg-emerald-800"
                 href={providerUrl}
                 target="_blank"
                 rel="noreferrer"
@@ -239,17 +248,17 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
               </Button>
             )}
             {returnTo && (
-              <Link className="button button-secondary" href={returnTo}>
-                Return to checkout
-              </Link>
+              <Button asChild variant="secondary">
+                <Link href={returnTo}>Return to checkout</Link>
+              </Button>
             )}
           </div>
           {providerError && <Toast>{providerError}</Toast>}
         </Card>
       )}
 
-      <section className="wallet-history-section" aria-labelledby="wallet-history-heading">
-        <div className="section-heading compact-heading">
+      <section className="grid gap-3" aria-labelledby="wallet-history-heading">
+        <div className="mb-1 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="eyebrow">Your money movement</p>
             <h2 id="wallet-history-heading">Wallet activity</h2>
@@ -264,21 +273,29 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
             description="Fund your wallet to make your first purchase, or come back after a payment settles."
           />
         ) : (
-          <div className="transaction-list">
+          <div className="grid gap-2">
             {transactions.map((transaction) => (
-              <article className="transaction-row" key={transaction.id}>
-                <div className="transaction-icon" aria-hidden="true">
-                  {transaction.type === "funding_credit" ? "＋" : "−"}
+              <article
+                className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-slate-200 bg-white p-4"
+                key={transaction.id}
+              >
+                <div
+                  className="grid h-8 w-8 place-items-center rounded-full bg-emerald-50 text-emerald-800"
+                  aria-hidden="true"
+                >
+                  {transaction.type === "funding_credit" ? "+" : "−"}
                 </div>
-                <div className="transaction-main">
+                <div className="grid gap-1">
                   <strong>
                     {transaction.type === "funding_credit" ? "Wallet funding" : "Listing purchase"}
                   </strong>
-                  <span>{new Date(transaction.created_at).toLocaleString()}</span>
+                  <span className="text-xs text-slate-500">
+                    {new Date(transaction.created_at).toLocaleString()}
+                  </span>
                 </div>
-                <div className="transaction-end">
+                <div className="grid justify-items-end gap-1">
                   <Money minor={transaction.amount_minor} currency={transaction.currency} />
-                  <Badge tone={transaction.state === "available" ? "success" : "neutral"}>
+                  <Badge variant={transaction.state === "available" ? "default" : "secondary"}>
                     {transaction.state}
                   </Badge>
                 </div>
@@ -288,26 +305,31 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
         )}
       </section>
 
-      <Dialog open={fundOpen} title="Fund your wallet" onClose={() => setFundOpen(false)}>
-        <form className="funding-form" onSubmit={submitFunding}>
-          <p>Funding is collected externally and becomes available after verification.</p>
-          <label htmlFor="funding-amount">Amount in USD</label>
-          <Input
-            id="funding-amount"
-            inputMode="decimal"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            placeholder="25.00"
-            aria-describedby="funding-help"
-          />
-          <span id="funding-help" className="field-help">
-            Enter a positive amount with up to two decimal places.
-          </span>
-          {providerError && <Toast>{providerError}</Toast>}
-          <Button type="submit" disabled={submitting}>
-            {submitting ? "Starting funding…" : "Start funding"}
-          </Button>
-        </form>
+      <Dialog open={fundOpen} onOpenChange={setFundOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Fund your wallet</DialogTitle>
+          </DialogHeader>
+          <form className="grid gap-3" onSubmit={submitFunding}>
+            <p>Funding is collected externally and becomes available after verification.</p>
+            <Label htmlFor="funding-amount">Amount in USD</Label>
+            <Input
+              id="funding-amount"
+              inputMode="decimal"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              placeholder="25.00"
+              aria-describedby="funding-help"
+            />
+            <span id="funding-help" className="text-xs text-slate-500">
+              Enter a positive amount with up to two decimal places.
+            </span>
+            {providerError && <Toast>{providerError}</Toast>}
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Starting funding…" : "Start funding"}
+            </Button>
+          </form>
+        </DialogContent>
       </Dialog>
     </div>
   );

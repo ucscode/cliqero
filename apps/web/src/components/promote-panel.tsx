@@ -8,7 +8,11 @@ import {
   type ReferralLink,
   type ReferralLinkPage,
 } from "@/lib/api-client";
-import { Button, Card, EmptyState, Skeleton, Toast } from "./ui";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
 import { ReferralShareActions } from "./referral-share-actions";
 
 export function PromotePanel() {
@@ -40,12 +44,12 @@ export function PromotePanel() {
   }, [load]);
 
   return (
-    <section className="referral-panel" aria-labelledby="promote-heading">
-      <div className="panel-heading">
+    <section className="grid gap-4" aria-labelledby="promote-heading">
+      <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Promote</p>
           <h2 id="promote-heading">Your promotional links</h2>
-          <p className="panel-intro">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Share a listing with your network. A qualifying purchase may create referral earnings; a
             visit alone never guarantees a commission.
           </p>
@@ -57,15 +61,15 @@ export function PromotePanel() {
       {error && (
         <Toast>
           <span>{error}</span>
-          <button type="button" onClick={() => void load()}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
             Try again
-          </button>
+          </Button>
         </Toast>
       )}
       {loading ? (
-        <div className="referral-list" aria-label="Loading promotional links">
-          <Skeleton className="referral-skeleton" />
-          <Skeleton className="referral-skeleton" />
+        <div className="grid gap-3" aria-label="Loading promotional links">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
         </div>
       ) : links.length === 0 ? (
         <EmptyState
@@ -73,24 +77,31 @@ export function PromotePanel() {
           description="Open a published listing and choose Promote to create your first shareable link."
         />
       ) : (
-        <div className="referral-list">
+        <div className="grid gap-3">
           {links.map((link) => (
-            <Card className="referral-link-card" key={link.id}>
-              <div className="referral-link-heading">
+            <Card className="grid gap-3 p-5" key={link.id}>
+              <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="eyebrow">Catalogue listing</p>
                   <h3>{link.listing_title ?? "Unavailable listing"}</h3>
-                  <small className="referral-link-id">Listing {link.listing_id}</small>
+                  <small className="break-all text-xs text-slate-500">
+                    Listing {link.listing_id}
+                  </small>
                 </div>
-                <span className={`status-dot status-${link.state}`}>{link.state}</span>
+                <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold capitalize text-emerald-800">
+                  {link.state}
+                </span>
               </div>
               <ReferralShareActions url={link.url} compact />
               {link.created_at && (
-                <p className="panel-note referral-link-date">
+                <p className="m-0 text-xs text-slate-500">
                   Created {new Date(link.created_at).toLocaleDateString()}
                 </p>
               )}
-              <Link className="arrow-link" href={`/listings/${link.listing_id}`}>
+              <Link
+                className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+                href={`/listings/${link.listing_id}`}
+              >
                 View listing ↗
               </Link>
             </Card>

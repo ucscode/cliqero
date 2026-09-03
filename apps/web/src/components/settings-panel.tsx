@@ -14,7 +14,14 @@ import {
   type ListingPage,
   type Profile,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Select } from "./ui/select";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
 
 const userScopes = [
   ["Catalogue", ["catalogue:read"]],
@@ -45,20 +52,27 @@ export function SettingsPanel() {
   const tab = params.get("tab") ?? "profile";
   const active = tabItems.some(([value]) => value === tab) ? tab : "profile";
   return (
-    <section className="settings-panel" aria-labelledby="settings-heading">
-      <div className="panel-heading">
+    <section className="grid gap-4" aria-labelledby="settings-heading">
+      <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Settings</p>
           <h2 id="settings-heading">Your Cliqero account</h2>
-          <p className="panel-intro">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Manage your profile, connected access tools, and API credentials.
           </p>
         </div>
       </div>
-      <nav className="settings-tabs" aria-label="Settings sections">
+      <nav
+        className="flex flex-wrap gap-1 border-b border-slate-200"
+        aria-label="Settings sections"
+      >
         {tabItems.map(([value, label]) => (
           <Link
-            className={active === value ? "settings-tab active" : "settings-tab"}
+            className={
+              active === value
+                ? "border-b-2 border-emerald-700 px-3 py-2 text-sm font-semibold text-emerald-800"
+                : "border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:border-slate-300 hover:text-slate-800"
+            }
             href={`/dashboard?section=settings&tab=${value}`}
             key={value}
           >
@@ -123,26 +137,26 @@ function ProfileSettings() {
     }
   }
 
-  if (loading) return <Card className="settings-card">Loading profile…</Card>;
+  if (loading) return <Card className="p-5">Loading profile…</Card>;
   if (!profile)
     return (
-      <Card className="settings-card">
+      <Card className="p-5">
         <EmptyState title="Profile unavailable" description={error ?? "Try again."} />
       </Card>
     );
   return (
-    <Card className="settings-card">
-      <div className="settings-card-heading">
+    <Card className="grid gap-5 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="eyebrow">Profile</p>
           <h3>Your public account details</h3>
         </div>
-        <Badge tone="success">Cliqero identity</Badge>
+        <Badge variant="default">Cliqero identity</Badge>
       </div>
       {error && <Toast>{error}</Toast>}
       {message && <Toast tone="success">{message}</Toast>}
-      <form className="settings-form" onSubmit={save}>
-        <label htmlFor="settings-handle">Handle</label>
+      <form className="grid max-w-2xl gap-3" onSubmit={save}>
+        <Label htmlFor="settings-handle">Handle</Label>
         <Input
           id="settings-handle"
           value={handle}
@@ -152,12 +166,12 @@ function ProfileSettings() {
           autoComplete="username"
           required
         />
-        <p className="field-help">
+        <p className="text-xs leading-relaxed text-slate-500">
           Lowercase letters, numbers, underscores, and hyphens. Handles are unique.
         </p>
-        <label htmlFor="settings-country">
+        <Label htmlFor="settings-country">
           Country <span>(optional)</span>
-        </label>
+        </Label>
         <Input
           id="settings-country"
           value={country}
@@ -165,14 +179,14 @@ function ProfileSettings() {
           maxLength={2}
           placeholder="NG"
         />
-        <label htmlFor="settings-email">Email</label>
+        <Label htmlFor="settings-email">Email</Label>
         <Input
           id="settings-email"
           value={profile.email}
           readOnly
           aria-describedby="settings-email-help"
         />
-        <p id="settings-email-help" className="field-help">
+        <p id="settings-email-help" className="text-xs leading-relaxed text-slate-500">
           Email changes are managed by the authentication provider.
         </p>
         <Button type="submit" disabled={busy}>
@@ -289,11 +303,11 @@ export function IntegrationSettings() {
     }
   }
 
-  if (loading) return <Card className="settings-card">Loading integrations…</Card>;
+  if (loading) return <Card className="p-5">Loading integrations…</Card>;
   return (
-    <div className="settings-stack">
-      <Card className="settings-card">
-        <div className="settings-card-heading">
+    <div className="grid gap-4">
+      <Card className="grid gap-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="eyebrow">Integrations</p>
             <h3>Connected access tools</h3>
@@ -302,7 +316,7 @@ export function IntegrationSettings() {
             Refresh
           </Button>
         </div>
-        <p className="panel-note">
+        <p className="text-sm leading-relaxed text-slate-500">
           These credentials are for supported listing access integrations. Secrets are never shown
           again after this panel.
         </p>
@@ -314,10 +328,13 @@ export function IntegrationSettings() {
             description="Integrations are available when you manage a supported listing."
           />
         ) : (
-          <div className="settings-list">
+          <div className="grid gap-2">
             {items.map((item) => (
-              <div className="settings-list-row" key={item.id}>
-                <div className="settings-list-main">
+              <div
+                className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 py-3 last:border-0"
+                key={item.id}
+              >
+                <div className="grid min-w-0 gap-1">
                   <strong>{item.name}</strong>
                   <span>
                     {item.listing_ids.length} linked listing
@@ -325,8 +342,10 @@ export function IntegrationSettings() {
                     {dateLabel(item.created_at)}
                   </span>
                 </div>
-                <div className="settings-list-actions">
-                  <Badge tone={item.state === "active" ? "success" : "neutral"}>{item.state}</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={item.state === "active" ? "default" : "secondary"}>
+                    {item.state}
+                  </Badge>
                   <Button
                     variant="ghost"
                     onClick={() => void rename(item)}
@@ -343,7 +362,7 @@ export function IntegrationSettings() {
                   </Button>
                   {item.state === "active" && (
                     <Button
-                      variant="danger"
+                      variant="destructive"
                       onClick={() => void revoke(item)}
                       disabled={busy === item.id}
                     >
@@ -357,11 +376,11 @@ export function IntegrationSettings() {
         )}
       </Card>
       {listings.length > 0 && (
-        <Card className="settings-card">
+        <Card className="grid gap-4 p-5">
           <p className="eyebrow">Add integration</p>
           <h3>Connect a listing access tool</h3>
-          <form className="settings-form" onSubmit={create}>
-            <label htmlFor="integration-name">Name</label>
+          <form className="grid max-w-2xl gap-3" onSubmit={create}>
+            <Label htmlFor="integration-name">Name</Label>
             <Input
               id="integration-name"
               value={name}
@@ -370,9 +389,8 @@ export function IntegrationSettings() {
               maxLength={100}
               placeholder="My access tool"
             />
-            <label htmlFor="integration-listing">Listing</label>
-            <select
-              className="input"
+            <Label htmlFor="integration-listing">Listing</Label>
+            <Select
               id="integration-listing"
               value={listingId}
               onChange={(event) => setListingId(event.target.value)}
@@ -383,7 +401,7 @@ export function IntegrationSettings() {
                   {listing.title}
                 </option>
               ))}
-            </select>
+            </Select>
             <Button type="submit" disabled={busy === "create"}>
               {busy === "create" ? "Connecting…" : "Connect integration"}
             </Button>
@@ -472,11 +490,11 @@ function ApiKeySettings() {
       setBusy(false);
     }
   }
-  if (loading) return <Card className="settings-card">Loading API keys…</Card>;
+  if (loading) return <Card className="p-5">Loading API keys…</Card>;
   return (
-    <div className="settings-stack">
-      <Card className="settings-card">
-        <div className="settings-card-heading">
+    <div className="grid gap-4">
+      <Card className="grid gap-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="eyebrow">API keys</p>
             <h3>Headless access for your account</h3>
@@ -485,13 +503,13 @@ function ApiKeySettings() {
             Refresh
           </Button>
         </div>
-        <p className="panel-note">
+        <p className="text-sm leading-relaxed text-slate-500">
           Keys are hashed and shown only once. Scopes can restrict what a key does, but can never
           grant account roles.
         </p>
         {error && <Toast>{error}</Toast>}
-        <form className="settings-form" onSubmit={create}>
-          <label htmlFor="api-key-name">Name</label>
+        <form className="grid max-w-2xl gap-3" onSubmit={create}>
+          <Label htmlFor="api-key-name">Name</Label>
           <Input
             id="api-key-name"
             value={name}
@@ -500,22 +518,22 @@ function ApiKeySettings() {
             maxLength={100}
             placeholder="Automation"
           />
-          <label htmlFor="api-key-expiry">
+          <Label htmlFor="api-key-expiry">
             Expiry <span>(optional)</span>
-          </label>
+          </Label>
           <Input
             id="api-key-expiry"
             type="date"
             value={expiry}
             onChange={(event) => setExpiry(event.target.value)}
           />
-          <fieldset className="scope-fieldset">
+          <fieldset className="grid gap-4 rounded-lg border border-slate-200 p-4">
             <legend>Allowed capabilities</legend>
             {grouped.map(([label, scopes]) => (
-              <div className="scope-group" key={label}>
-                <strong>{label}</strong>
+              <div className="grid gap-2" key={label}>
+                <strong className="text-sm">{label}</strong>
                 {scopes.map((scope) => (
-                  <label className="scope-option" key={scope}>
+                  <label className="flex items-center gap-2 text-sm text-slate-600" key={scope}>
                     <input
                       type="checkbox"
                       checked={selected.includes(scope)}
@@ -532,8 +550,8 @@ function ApiKeySettings() {
           </Button>
         </form>
       </Card>
-      <Card className="settings-card">
-        <div className="settings-card-heading">
+      <Card className="grid gap-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="eyebrow">Your keys</p>
             <h3>Active and revoked credentials</h3>
@@ -545,10 +563,13 @@ function ApiKeySettings() {
             description="Create a key when you need headless access to your own Cliqero account."
           />
         ) : (
-          <div className="settings-list">
+          <div className="grid gap-2">
             {items.map((item) => (
-              <div className="settings-list-row" key={item.id}>
-                <div className="settings-list-main">
+              <div
+                className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 py-3 last:border-0"
+                key={item.id}
+              >
+                <div className="grid min-w-0 gap-1">
                   <strong>{item.name}</strong>
                   <span>
                     {item.key_prefix} · Created {dateLabel(item.created_at)} · Last used{" "}
@@ -559,12 +580,12 @@ function ApiKeySettings() {
                     {item.expires_at ? ` · Expires ${dateLabel(item.expires_at)}` : " · No expiry"}
                   </small>
                 </div>
-                <div className="settings-list-actions">
-                  <Badge tone={item.revoked_at ? "neutral" : "success"}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={item.revoked_at ? "secondary" : "default"}>
                     {item.revoked_at ? "revoked" : "active"}
                   </Badge>
                   {!item.revoked_at && (
-                    <Button variant="danger" onClick={() => void revoke(item)} disabled={busy}>
+                    <Button variant="destructive" onClick={() => void revoke(item)} disabled={busy}>
                       Revoke
                     </Button>
                   )}
@@ -600,14 +621,19 @@ function OneTimeSecret({
     }
   }
   return (
-    <div className="card one-time-secret" role="status">
+    <div
+      className="grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-5"
+      role="status"
+    >
       <p className="eyebrow">Shown once</p>
       <h3>{title}</h3>
-      <p className="panel-note">
+      <p className="text-sm leading-relaxed text-slate-600">
         Copy this value now. It will not be recoverable after you dismiss this message.
       </p>
-      <code>{value}</code>
-      <div className="settings-list-actions">
+      <code className="block break-all rounded-md border border-emerald-200 bg-white p-3 text-sm">
+        {value}
+      </code>
+      <div className="flex flex-wrap gap-2">
         <Button onClick={() => void copy()}>{copied ? "Copied" : "Copy"}</Button>
         <Button variant="secondary" onClick={onDismiss}>
           Done
@@ -626,28 +652,28 @@ function AccountSettings() {
     router.refresh();
   }
   return (
-    <Card className="settings-card">
-      <div className="settings-card-heading">
+    <Card className="grid gap-4 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="eyebrow">Account</p>
           <h3>Authentication and account context</h3>
         </div>
       </div>
-      <dl className="account-details">
-        <div>
+      <dl className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 p-3">
           <dt>Signed in as</dt>
           <dd>{session.data?.user?.email ?? "—"}</dd>
         </div>
-        <div>
+        <div className="rounded-lg border border-slate-200 p-3">
           <dt>Authentication</dt>
           <dd>Better Auth session</dd>
         </div>
-        <div>
+        <div className="rounded-lg border border-slate-200 p-3">
           <dt>Provider linking</dt>
           <dd>Managed by Better Auth</dd>
         </div>
       </dl>
-      <p className="panel-note">
+      <p className="text-sm leading-relaxed text-slate-500">
         Password resets, email changes, and provider unlinking remain in the authentication flow and
         are not changed by Cliqero profile settings.
       </p>

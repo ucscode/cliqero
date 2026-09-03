@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Input, Toast } from "./ui";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Toast } from "./toast";
 
 type ReferralShareActionsProps = {
   url: string;
@@ -43,8 +45,10 @@ export function ReferralShareActions({ url, compact = false }: ReferralShareActi
   }
 
   return (
-    <div className={`referral-share ${compact ? "referral-share-compact" : ""}`.trim()}>
-      <div className="referral-share-input">
+    <div
+      className={`grid gap-2 ${compact ? "sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" : ""}`}
+    >
+      <div className="flex min-w-0 gap-2">
         <label className="sr-only" htmlFor={`referral-link-${url}`}>
           Referral link
         </label>
@@ -55,7 +59,7 @@ export function ReferralShareActions({ url, compact = false }: ReferralShareActi
           onFocus={(event) => event.currentTarget.select()}
         />
       </div>
-      <div className="referral-share-actions">
+      <div className="flex flex-wrap gap-2">
         <Button type="button" variant="secondary" onClick={copy} disabled={busy}>
           {state === "copied" ? "Copied" : "Copy link"}
         </Button>

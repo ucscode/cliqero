@@ -15,3 +15,13 @@ The referral hierarchy remains a specialized `@xyflow/react` + Dagre
 visualization. All shared controls must remain keyboard accessible, labelled,
 focus-visible, and usable at mobile widths without page-level horizontal
 overflow.
+
+## Migration status
+
+The public storefront/authentication surfaces and the normal-user dashboard now
+compose the primitives directly. Dashboard navigation uses the shared
+Sidebar/Sheet composition; operator feature screens remain on the temporary
+compatibility barrel until their own migration milestones. `Money` is a
+Cliqero-specific formatting component at `components/money.tsx`, never a
+generic UI primitive. Remaining global CSS is limited to document tokens,
+legacy operator screens, and the specialized referral graph.

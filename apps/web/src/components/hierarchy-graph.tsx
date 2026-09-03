@@ -16,7 +16,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { HierarchyTree } from "@/lib/api-client";
 import { hierarchyGraphFromTree, type HierarchyGraphNode } from "./hierarchy-graph-model";
 import { layoutHierarchyGraph } from "./hierarchy-graph-layout";
-import { Badge, Button, Card } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
 
 type HierarchyNodeData = HierarchyGraphNode & {
   onViewBranch: (id: string) => void;
@@ -48,8 +50,8 @@ function CliqeroHierarchyNode({ data }: NodeProps<FlowNode>) {
       </div>
       <div className="hierarchy-node-meta">
         <span>Generation {data.depth}</span>
-        {data.isRoot && <Badge tone="accent">Current root</Badge>}
-        {data.isSelf && !data.isRoot && <Badge tone="success">You</Badge>}
+        {data.isRoot && <Badge variant="destructive">Current root</Badge>}
+        {data.isSelf && !data.isRoot && <Badge variant="default">You</Badge>}
       </div>
       <div className="hierarchy-node-footer">
         <span>{data.directChildCount} direct children</span>
@@ -181,19 +183,19 @@ export function HierarchyGraph({
   }
 
   return (
-    <Card className="hierarchy-explorer-card">
-      <div className="hierarchy-explorer-heading">
+    <Card className="min-w-0 p-5">
+      <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row">
         <div>
           <p className="eyebrow">Network explorer</p>
           <h3>{operatorMode ? "Explore the referral network" : "Explore your referral network"}</h3>
-          <p className="panel-note">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             This window shows up to {tree.windowDepth} generations.{" "}
             {operatorMode
               ? "Rebase onto any account to inspect another branch."
               : "Rebase onto a descendant to keep exploring your authorized network."}
           </p>
         </div>
-        <div className="hierarchy-explorer-actions">
+        <div className="flex flex-wrap gap-2">
           {tree.root !== selfAccountId && (
             <Button type="button" variant="secondary" onClick={onResetRoot}>
               My network
@@ -215,13 +217,19 @@ export function HierarchyGraph({
         </div>
       </div>
       {tree.parent && (
-        <div className="hierarchy-parent-context" role="status">
+        <div
+          className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-500"
+          role="status"
+        >
           <span>Parent context</span>
           <strong>{tree.parent.displayName || tree.parent.handle}</strong>
           {!tree.parent.canNavigate && <small>Navigation stops at your account.</small>}
         </div>
       )}
-      <div className="hierarchy-graph-canvas" aria-label="Referral hierarchy graph">
+      <div
+        className="h-[min(640px,68vh)] min-h-[440px] overflow-hidden rounded-xl border border-slate-200 bg-[#f8fbf7]"
+        aria-label="Referral hierarchy graph"
+      >
         <ReactFlow
           key={tree.root}
           nodes={nodes}
@@ -242,7 +250,7 @@ export function HierarchyGraph({
           <Controls showInteractive={false} position="bottom-right" />
         </ReactFlow>
       </div>
-      <p className="hierarchy-graph-note">
+      <p className="mt-3 text-xs text-slate-500">
         Dragging is visual only. Referral relationships change only through authorized account
         operations.
       </p>

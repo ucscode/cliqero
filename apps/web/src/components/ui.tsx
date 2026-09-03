@@ -11,9 +11,6 @@ import type {
   ReactNode,
   SelectHTMLAttributes,
 } from "react";
-import { formatMinorUsd } from "@/lib/api-client";
-import { CircleDashed } from "lucide-react";
-import { Alert } from "./ui/alert";
 import { Badge as ShadcnBadge } from "./ui/badge";
 import { Button as ShadcnButton } from "./ui/button";
 import { Card as ShadcnCard } from "./ui/card";
@@ -21,6 +18,10 @@ import { Dialog as RadixDialog, DialogContent, DialogHeader, DialogTitle } from 
 import { Input as ShadcnInput } from "./ui/input";
 import { Select as ShadcnSelect } from "./ui/select";
 import { Skeleton as ShadcnSkeleton } from "./ui/skeleton";
+
+// Domain compositions retained here only for unmigrated operator screens.
+export { EmptyState } from "./empty-state";
+export { Toast } from "./toast";
 
 export function Button({
   variant = "primary",
@@ -65,41 +66,8 @@ export function Badge({
     </ShadcnBadge>
   );
 }
-export function Money({ minor, currency = "USD" }: { minor: string | bigint; currency?: string }) {
-  return (
-    <span className="money">
-      {currency === "USD" ? formatMinorUsd(minor) : `${currency} ${minor}`}
-    </span>
-  );
-}
 export function Skeleton({ className }: { className?: string }) {
   return <ShadcnSkeleton className={className} />;
-}
-export function EmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-slate-300 px-4 py-16 text-center">
-      <CircleDashed className="mx-auto mb-3 h-8 w-8 text-slate-400" aria-hidden="true" />
-      <h3 className="mb-2 text-base font-semibold text-slate-900">{title}</h3>
-      <p className="mx-auto max-w-[420px] text-sm text-slate-500">{description}</p>
-    </div>
-  );
-}
-export function Toast({
-  children,
-  tone = "error",
-}: {
-  children: ReactNode;
-  tone?: "error" | "success";
-}) {
-  return (
-    <Alert
-      className={
-        tone === "success" ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"
-      }
-    >
-      {children}
-    </Alert>
-  );
 }
 export function Dialog({
   open,

@@ -10,7 +10,8 @@ import type { Listing } from "@/lib/api-client";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
-import { Money, Toast } from "./ui";
+import { Toast } from "./toast";
+import { Money } from "./money";
 import { canShowPromote } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
 

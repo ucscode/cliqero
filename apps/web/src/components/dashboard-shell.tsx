@@ -20,7 +20,9 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
-import { EmptyState, Money, Toast } from "./ui";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
+import { Money } from "./money";
 import { PurchasesPanel } from "./purchases-panel";
 import { WalletPanel } from "./wallet-panel";
 import { PromotePanel } from "./promote-panel";
@@ -28,7 +30,20 @@ import { ReferralsPanel } from "./referrals-panel";
 import { EarningsPanel } from "./earnings-panel";
 import { WithdrawalsPanel } from "./withdrawals-panel";
 import { SettingsPanel } from "./settings-panel";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "./ui/sheet";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "./ui/sidebar";
 
 const navigation = [
   { label: "Overview", href: "/dashboard", section: "overview" },
@@ -53,7 +68,6 @@ export function DashboardShell() {
   const [accountAccess, setAccountAccess] = useState<AccountAccess | null>(null);
   const [listing, setListing] = useState<Listing | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!session.data?.user) return;
@@ -74,20 +88,20 @@ export function DashboardShell() {
 
   if (session.isPending)
     return (
-      <div className="dashboard-loading">
-        <Skeleton className="detail-skeleton" />
+      <div className="min-h-screen p-6">
+        <Skeleton className="h-48 w-full" />
       </div>
     );
   if (!session.data?.user)
     return (
-      <main className="page-shell">
+      <main className="mx-auto grid max-w-2xl gap-4 px-4 py-12">
         <EmptyState
           title="Sign in to continue"
           description="Your dashboard is private to your Cliqero account."
         />
-        <Link className="button" href={`/login?next=${encodeURIComponent("/dashboard")}`}>
-          Sign in
-        </Link>
+        <Button asChild>
+          <Link href={`/login?next=${encodeURIComponent("/dashboard")}`}>Sign in</Link>
+        </Button>
       </main>
     );
 
@@ -120,85 +134,75 @@ export function DashboardShell() {
       listing ? (
         <CheckoutFlow listing={listing} />
       ) : (
-        <Skeleton className="detail-skeleton" />
+        <Skeleton className="h-48 w-full" />
       )
     ) : (
       <DashboardOverview profile={profile} />
     );
 
-  const navigationContent = (
-    <>
-      <Link href="/" className="brand">
-        <span className="brand-mark">C</span>
-        <span>cliqero</span>
-      </Link>
-      <nav className="grid gap-1" aria-label="Dashboard navigation">
-        {navigation.map((item) => (
-          <Link
-            className={`rounded-md px-3 py-2 text-sm transition-colors hover:bg-emerald-50 hover:text-emerald-900 ${section === item.section ? "bg-emerald-100 font-semibold text-emerald-900" : "text-slate-500"}`}
-            href={item.href}
-            key={item.href}
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            {item.label}
-          </Link>
-        ))}
-        {accountAccess?.canAccessOperator && (
-          <Link
-            className="mt-2 rounded-md border-t border-slate-200 px-3 py-2 text-sm font-semibold text-emerald-900"
-            href="/operator"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Operator console
-          </Link>
-        )}
-      </nav>
-      <Link
-        className="mt-auto text-sm text-slate-500"
-        href="/"
-        onClick={() => setMobileMenuOpen(false)}
-      >
-        ← Browse catalogue
-      </Link>
-    </>
-  );
-
   return (
-    <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-      <div className="min-h-screen bg-[var(--canvas)] lg:grid lg:grid-cols-[250px_minmax(0,1fr)]">
-        <aside className="hidden flex-col gap-10 border-r border-slate-200 bg-[#f1f4ef] p-6 lg:flex">
-          {navigationContent}
-        </aside>
-        <main className="min-w-0 w-full max-w-[1050px] px-4 py-8 sm:px-8 lg:px-16 lg:py-14">
-          <header className="mb-10 flex flex-wrap items-center justify-between gap-4 sm:mb-10">
-            <SheetTrigger asChild>
-              <Button variant="outline" size="sm" className="lg:hidden">
-                Menu
-              </Button>
-            </SheetTrigger>
-            <div>
-              <p className="eyebrow">Your space</p>
-              <h1>{title}</h1>
-            </div>
-            <div className="account-chip">
-              <span className="avatar">
-                {(profile?.handle ?? session.data.user.name ?? "C").slice(0, 1).toUpperCase()}
+    <SidebarProvider>
+      <div className="flex min-h-screen bg-slate-50">
+        <Sidebar>
+          <SidebarHeader>
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-950"
+            >
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-700 text-sm font-bold text-white">
+                C
               </span>
-              <span>{profile?.handle ?? session.data.user.name}</span>
-            </div>
-          </header>
-          {error && <Toast>{error}</Toast>}
-          {content}
-        </main>
-        <SheetContent
-          side="left"
-          className="flex w-[min(82vw,280px)] flex-col gap-10 bg-[#f1f4ef] p-6"
-        >
-          <SheetTitle className="sr-only">Dashboard navigation</SheetTitle>
-          {navigationContent}
-        </SheetContent>
+              <span>cliqero</span>
+            </Link>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel>Your space</SidebarGroupLabel>
+              <SidebarMenu aria-label="Dashboard navigation">
+                {navigation.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton asChild isActive={section === item.section}>
+                      <Link href={item.href}>{item.label}</Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+                {accountAccess?.canAccessOperator && (
+                  <SidebarMenuItem className="mt-2 border-t border-slate-200 pt-2">
+                    <SidebarMenuButton asChild>
+                      <Link href="/operator">Operator console</Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+              </SidebarMenu>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter>
+            <SidebarMenuButton asChild>
+              <Link href="/">← Browse catalogue</Link>
+            </SidebarMenuButton>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset>
+          <main className="min-w-0 w-full max-w-[1050px] px-4 py-8 sm:px-8 lg:px-16 lg:py-14">
+            <header className="mb-10 flex flex-wrap items-center justify-between gap-4">
+              <SidebarTrigger aria-label="Open dashboard navigation" />
+              <div>
+                <p className="eyebrow">Your space</p>
+                <h1 className="mb-0 text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-900">
+                  {(profile?.handle ?? session.data.user.name ?? "C").slice(0, 1).toUpperCase()}
+                </span>
+                <span>{profile?.handle ?? session.data.user.name}</span>
+              </div>
+            </header>
+            {error && <Toast>{error}</Toast>}
+            {content}
+          </main>
+        </SidebarInset>
       </div>
-    </Sheet>
+    </SidebarProvider>
   );
 }
 
@@ -223,19 +227,22 @@ function DashboardOverview({ profile }: { profile: { handle: string; email: stri
   return (
     <>
       {error && <Toast>Some account summaries are temporarily unavailable.</Toast>}
-      <div className="dashboard-summary-grid">
-        <Card>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="p-5">
           <p className="eyebrow">Available wallet</p>
-          <h2 className="summary-amount">
+          <h2 className="my-2 text-3xl font-semibold tracking-tight">
             <Money minor={wallet?.available_minor ?? "0"} currency="USD" />
           </h2>
-          <Link className="arrow-link" href="/dashboard?section=wallet">
+          <Link
+            className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+            href="/dashboard?section=wallet"
+          >
             View wallet ↗
           </Link>
         </Card>
-        <Card>
+        <Card className="p-5">
           <p className="eyebrow">Available earnings</p>
-          <h2 className="summary-amount">
+          <h2 className="my-2 text-3xl font-semibold tracking-tight">
             <Money
               minor={
                 earnings?.balances.find((balance) => balance.state === "available")?.amount_minor ??
@@ -244,28 +251,36 @@ function DashboardOverview({ profile }: { profile: { handle: string; email: stri
               currency="USD"
             />
           </h2>
-          <Link className="arrow-link" href="/dashboard?section=earnings">
+          <Link
+            className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+            href="/dashboard?section=earnings"
+          >
             View earnings ↗
           </Link>
         </Card>
-        <Card>
+        <Card className="p-5">
           <p className="eyebrow">Purchases</p>
-          <h2 className="summary-amount">{purchases?.items.length ?? "—"}</h2>
-          <p className="summary-copy">Recent purchases in your collection.</p>
-          <Link className="arrow-link" href="/dashboard?section=purchases">
+          <h2 className="my-2 text-3xl font-semibold tracking-tight">
+            {purchases?.items.length ?? "—"}
+          </h2>
+          <p className="text-sm text-slate-500">Recent purchases in your collection.</p>
+          <Link
+            className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+            href="/dashboard?section=purchases"
+          >
             View purchases ↗
           </Link>
         </Card>
       </div>
-      <Card className="welcome-card">
+      <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="eyebrow">Cliqero dashboard</p>
           <h2>Keep exploring, {profile?.handle ?? "there"}.</h2>
           <p>Your wallet and purchases are ready when you are.</p>
         </div>
-        <Link className="button" href="/">
-          Explore catalogue
-        </Link>
+        <Button asChild>
+          <Link href="/">Explore catalogue</Link>
+        </Button>
       </Card>
     </>
   );
@@ -358,7 +373,7 @@ function CheckoutFlow({ listing }: { listing: Listing }) {
   }
 
   return (
-    <Card className="checkout-card">
+    <Card className="grid gap-4 p-5">
       <p className="eyebrow">One listing, one checkout</p>
       <h2>{listing.title}</h2>
       <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
@@ -378,25 +393,28 @@ function CheckoutFlow({ listing }: { listing: Listing }) {
               : "Your checkout is waiting for available wallet funds."}
           </p>
           {wallet && (
-            <p className="checkout-wallet-balance">
+            <p className="text-sm text-slate-600">
               Available wallet: <Money minor={wallet.available_minor} currency={wallet.currency} />
             </p>
           )}
-          <Link
-            className="button button-primary"
-            href={`/dashboard?section=wallet&return=${encodeURIComponent(`/dashboard?buy=${listing.id}`)}`}
-          >
-            Fund wallet
-          </Link>
-          <p className="checkout-note">This checkout is preserved while your funding settles.</p>
+          <Button asChild>
+            <Link
+              href={`/dashboard?section=wallet&return=${encodeURIComponent(`/dashboard?buy=${listing.id}`)}`}
+            >
+              Fund wallet
+            </Link>
+          </Button>
+          <p className="text-sm text-slate-500">
+            This checkout is preserved while your funding settles.
+          </p>
         </>
       ) : checkout?.state === "paid" ? (
         <>
           <Badge variant="default">Payment confirmed</Badge>
           <p>Wallet debit is complete. Your entitlement is being prepared separately.</p>
-          <Link className="button button-primary" href="/dashboard?section=purchases">
-            View purchases
-          </Link>
+          <Button asChild>
+            <Link href="/dashboard?section=purchases">View purchases</Link>
+          </Button>
         </>
       ) : (
         <>

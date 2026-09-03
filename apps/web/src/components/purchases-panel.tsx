@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, ApiClientError, type Purchase, type PurchasePage } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Money, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
+import { Money } from "./money";
 
 function purchaseLabel(state: Purchase["state"]): string {
   switch (state) {
@@ -78,17 +84,17 @@ export function PurchasesPanel({ selectedId }: { selectedId?: string }) {
 
   if (loading)
     return (
-      <div className="purchase-skeleton-list">
-        <Skeleton className="purchase-skeleton" />
-        <Skeleton className="purchase-skeleton" />
-        <Skeleton className="purchase-skeleton" />
+      <div className="grid gap-3">
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-40 w-full" />
       </div>
     );
 
   return (
-    <section className="purchases-panel" aria-labelledby="purchases-heading">
+    <section className="grid gap-4" aria-labelledby="purchases-heading">
       {error && <Toast>{error}</Toast>}
-      <div className="section-heading compact-heading">
+      <div className="mb-1 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="eyebrow">Your collection</p>
           <h2 id="purchases-heading">Purchases</h2>
@@ -103,48 +109,48 @@ export function PurchasesPanel({ selectedId }: { selectedId?: string }) {
           description="When you buy something from the catalogue, it will appear here."
         />
       ) : (
-        <div className="purchase-list">
+        <div className="grid gap-3">
           {purchases.map((purchase) => (
-            <Card className="purchase-card" key={purchase.id}>
-              <div className="purchase-card-main">
+            <Card className="grid gap-4 p-5" key={purchase.id}>
+              <div className="flex flex-wrap justify-between gap-4">
                 <div>
                   <p className="eyebrow">{new Date(purchase.created_at).toLocaleDateString()}</p>
                   <h3>{purchase.title}</h3>
-                  <p className="purchase-status-copy">{accessLabel(purchase)}</p>
+                  <p className="m-0 text-sm text-slate-500">{accessLabel(purchase)}</p>
                 </div>
-                <div className="purchase-card-meta">
+                <div className="grid content-start justify-items-end gap-2 whitespace-nowrap">
                   <Money minor={purchase.amount_minor} currency={purchase.currency} />
-                  <Badge tone={purchase.state === "completed" ? "success" : "accent"}>
+                  <Badge variant={purchase.state === "completed" ? "default" : "destructive"}>
                     {purchaseLabel(purchase.state)}
                   </Badge>
                 </div>
               </div>
-              <div className="purchase-card-actions">
+              <div className="flex flex-wrap gap-2">
                 {purchase.access_available ? (
-                  <a className="button button-primary" href={`/access/${purchase.id}`}>
-                    Open access
-                  </a>
+                  <Button asChild>
+                    <a href={`/access/${purchase.id}`}>Open access</a>
+                  </Button>
                 ) : (
-                  <span className="purchase-processing" aria-live="polite">
+                  <span
+                    className="inline-flex min-h-10 items-center text-sm text-slate-500"
+                    aria-live="polite"
+                  >
                     {accessLabel(purchase)}
                   </span>
                 )}
-                <Link
-                  className="button button-secondary"
-                  href={`/dashboard?section=purchases&purchase=${purchase.id}`}
-                >
-                  Details
-                </Link>
+                <Button asChild variant="secondary">
+                  <Link href={`/dashboard?section=purchases&purchase=${purchase.id}`}>Details</Link>
+                </Button>
               </div>
             </Card>
           ))}
         </div>
       )}
       {selected && (
-        <Card className="purchase-detail-card" aria-live="polite">
-          <div className="card-kicker">
+        <Card className="grid gap-3 p-5" aria-live="polite">
+          <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
             <span>Purchase detail</span>
-            {refreshing && <span className="refreshing-label">Updating…</span>}
+            {refreshing && <span className="text-xs text-slate-500">Updating…</span>}
           </div>
           <h3>{selected.title}</h3>
           <p>
@@ -152,9 +158,9 @@ export function PurchasesPanel({ selectedId }: { selectedId?: string }) {
           </p>
           <Money minor={selected.amount_minor} currency={selected.currency} />
           {selected.access_available && (
-            <a className="button button-primary" href={`/access/${selected.id}`}>
-              Open access
-            </a>
+            <Button asChild>
+              <a href={`/access/${selected.id}`}>Open access</a>
+            </Button>
           )}
         </Card>
       )}

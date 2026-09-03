@@ -9,7 +9,13 @@ import {
   type EarningsEntryPage,
   type EarningsSummary,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Money, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
+import { Money } from "./money";
 
 function label(value: string) {
   return value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -45,12 +51,12 @@ export function EarningsPanel() {
   }, [load]);
 
   return (
-    <section className="earnings-panel" aria-labelledby="earnings-heading">
-      <div className="panel-heading">
+    <section className="grid gap-4" aria-labelledby="earnings-heading">
+      <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Earnings</p>
           <h2 id="earnings-heading">Referral earnings</h2>
-          <p className="panel-intro">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Ledger-backed commission activity. Pending earnings become available only when the
             settlement process says they are ready.
           </p>
@@ -62,62 +68,65 @@ export function EarningsPanel() {
       {error && (
         <Toast>
           <span>{error}</span>
-          <button type="button" onClick={() => void load()}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
             Try again
-          </button>
+          </Button>
         </Toast>
       )}
       {loading ? (
-        <div className="earnings-summary-grid" aria-label="Loading earnings">
-          <Skeleton className="earnings-skeleton" />
-          <Skeleton className="earnings-skeleton" />
+        <div className="grid gap-4 md:grid-cols-3" aria-label="Loading earnings">
+          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-36 w-full" />
         </div>
       ) : (
         <>
-          <div className="earnings-summary-grid">
+          <div className="grid gap-4 md:grid-cols-3">
             {(summary?.balances ?? []).length ? (
               summary!.balances.map((balance) => (
-                <Card
-                  className="earnings-summary-card"
-                  key={`${balance.currency}-${balance.state}`}
-                >
+                <Card className="p-5" key={`${balance.currency}-${balance.state}`}>
                   <p className="eyebrow">{label(balance.state)}</p>
                   <h3>
                     <Money minor={balance.amount_minor} currency={balance.currency} />
                   </h3>
-                  <p className="panel-note">{balance.currency} ledger projection</p>
+                  <p className="text-sm leading-relaxed text-slate-500">
+                    {balance.currency} ledger projection
+                  </p>
                 </Card>
               ))
             ) : (
-              <Card className="earnings-summary-card">
+              <Card className="p-5">
                 <p className="eyebrow">Available</p>
                 <h3>
                   <Money minor="0" currency="USD" />
                 </h3>
-                <p className="panel-note">
+                <p className="text-sm leading-relaxed text-slate-500">
                   Your referral earnings will appear after qualifying purchases settle.
                 </p>
               </Card>
             )}
           </div>
-          <Card className="earnings-history-card">
-            <div className="card-kicker">
+          <Card className="p-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h3>Ready to withdraw?</h3>
-                <p className="panel-note">Only available earnings can be requested for payout.</p>
+                <p className="text-sm leading-relaxed text-slate-500">
+                  Only available earnings can be requested for payout.
+                </p>
               </div>
-              <Link className="button" href="/dashboard?section=withdrawals">
-                Withdraw earnings
-              </Link>
+              <Button asChild>
+                <Link href="/dashboard?section=withdrawals">Withdraw earnings</Link>
+              </Button>
             </div>
           </Card>
-          <Card className="earnings-history-card">
-            <div className="card-kicker">
+          <Card className="p-5">
+            <div className="flex items-center justify-between gap-3">
               <h3>Earnings activity</h3>
-              {entries?.items.length ? <Badge tone="accent">{entries.items.length}</Badge> : null}
+              {entries?.items.length ? (
+                <Badge variant="destructive">{entries.items.length}</Badge>
+              ) : null}
             </div>
             {entries?.items.length ? (
-              <div className="earning-list">
+              <div className="grid">
                 {entries.items.map((entry) => (
                   <EarningRow entry={entry} key={entry.id} />
                 ))}
@@ -139,18 +148,24 @@ function EarningRow({ entry }: { entry: EarningsEntry }) {
   const signedMinor = entry.direction === "debit" ? `-${entry.amount_minor}` : entry.amount_minor;
   const tone = entry.balance_state === "available" ? "success" : "accent";
   return (
-    <div className="earning-row">
-      <div>
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-slate-200 py-3 last:border-0">
+      <div className="grid min-w-0 gap-1">
         <strong>{label(entry.entry_type)}</strong>
-        <span>
+        <span className="text-xs text-slate-500">
           {label(entry.balance_state)} · {new Date(entry.created_at).toLocaleDateString()}
         </span>
       </div>
-      <div className="earning-row-end">
-        <Badge tone={tone}>{label(entry.balance_state)}</Badge>
+      <div className="grid justify-items-end gap-1 whitespace-nowrap">
+        <Badge variant={tone === "success" ? "default" : "destructive"}>
+          {label(entry.balance_state)}
+        </Badge>
         <Money minor={signedMinor} currency={entry.currency} />
       </div>
-      {entry.purchase_id && <small className="earning-context">Purchase {entry.purchase_id}</small>}
+      {entry.purchase_id && (
+        <small className="col-span-full break-all text-xs text-slate-500">
+          Purchase {entry.purchase_id}
+        </small>
+      )}
     </div>
   );
 }

@@ -10,7 +10,8 @@ import {
   type OperatorTreasuryPage,
   type OperatorTreasurySummary,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Money, Select, Skeleton, Toast } from "./ui";
+import { Badge, Button, Card, EmptyState, Input, Select, Skeleton, Toast } from "./ui";
+import { Money } from "./money";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Treasury data is temporarily unavailable.";
