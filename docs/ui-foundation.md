@@ -35,6 +35,8 @@ stable checkout idempotency key for the listing, while each deliberate new fundi
 new idempotency key. Pending, empty, unavailable, and entitlement-preparation states are shown
 without fabricating balances or purchase success.
 
-The shared presentation layer lives in `src/components/ui.tsx` and uses canonical USD minor units
-for display through the `Money` component. Media URLs are rendered from the provider-neutral URLs
-returned by the API and never expose listing destinations.
+Generic presentation primitives now come from `src/components/ui/*`, using Tailwind utilities and
+Radix-backed shadcn patterns. The legacy `src/components/ui.tsx` barrel remains only as a temporary
+compatibility import for feature screens that have not migrated; new UI should import primitives
+directly. Money still uses canonical USD minor units through the `Money` component. Media URLs are
+rendered from provider-neutral API URLs and never expose listing destinations.

@@ -1,28 +1,54 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+/**
+ * Compatibility barrel for feature screens that have not yet migrated.
+ * Generic presentation is implemented by the shadcn-compatible primitives in
+ * components/ui/*; this file preserves existing imports while larger feature
+ * surfaces move in later milestones.
+ */
+import type {
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+} from "react";
 import { formatMinorUsd } from "@/lib/api-client";
+import { Alert } from "./ui/alert";
+import { Badge as ShadcnBadge } from "./ui/badge";
+import { Button as ShadcnButton } from "./ui/button";
+import { Card as ShadcnCard } from "./ui/card";
+import { Dialog as RadixDialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Input as ShadcnInput } from "./ui/input";
+import { Select as ShadcnSelect } from "./ui/select";
+import { Skeleton as ShadcnSkeleton } from "./ui/skeleton";
 
 export function Button({
   variant = "primary",
-  className = "",
+  className,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
 }) {
-  return <button className={`button button-${variant} ${className}`.trim()} {...props} />;
+  return (
+    <ShadcnButton
+      variant={variant === "primary" ? "default" : variant === "danger" ? "destructive" : variant}
+      className={className}
+      {...props}
+    />
+  );
 }
-
-export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={`input ${className}`.trim()} {...props} />;
+export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <ShadcnInput className={className} {...props} />;
 }
-
-export function Select({ className = "", ...props }: InputHTMLAttributes<HTMLSelectElement>) {
-  return <select className={`input ${className}`.trim()} {...props} />;
+export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <ShadcnSelect className={className} {...props} />;
 }
-
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <article className={`card ${className}`.trim()}>{children}</article>;
+export function Card({ children, className, ...props }: HTMLAttributes<HTMLElement>) {
+  return (
+    <ShadcnCard className={className} {...props}>
+      {children}
+    </ShadcnCard>
+  );
 }
-
 export function Badge({
   children,
   tone = "neutral",
@@ -30,9 +56,14 @@ export function Badge({
   children: ReactNode;
   tone?: "neutral" | "accent" | "success";
 }) {
-  return <span className={`badge badge-${tone}`}>{children}</span>;
+  return (
+    <ShadcnBadge
+      variant={tone === "success" ? "default" : tone === "accent" ? "destructive" : "secondary"}
+    >
+      {children}
+    </ShadcnBadge>
+  );
 }
-
 export function Money({ minor, currency = "USD" }: { minor: string | bigint; currency?: string }) {
   return (
     <span className="money">
@@ -40,21 +71,37 @@ export function Money({ minor, currency = "USD" }: { minor: string | bigint; cur
     </span>
   );
 }
-
-export function Skeleton({ className = "" }: { className?: string }) {
-  return <span className={`skeleton ${className}`.trim()} aria-hidden="true" />;
+export function Skeleton({ className }: { className?: string }) {
+  return <ShadcnSkeleton className={className} />;
 }
-
 export function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="empty-state">
-      <span className="empty-mark">◌</span>
+      <span className="text-2xl text-slate-400" aria-hidden="true">
+        ◌
+      </span>
       <h3>{title}</h3>
       <p>{description}</p>
     </div>
   );
 }
-
+export function Toast({
+  children,
+  tone = "error",
+}: {
+  children: ReactNode;
+  tone?: "error" | "success";
+}) {
+  return (
+    <Alert
+      className={
+        tone === "success" ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"
+      }
+    >
+      {children}
+    </Alert>
+  );
+}
 export function Dialog({
   open,
   title,
@@ -66,76 +113,19 @@ export function Dialog({
   children: ReactNode;
   onClose: () => void;
 }) {
-  if (!open) return null;
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        className="dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="dialog-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="dialog-head">
-          <h2 id="dialog-title">{title}</h2>
-          <button className="icon-button" aria-label="Close" onClick={onClose}>
-            ×
-          </button>
-        </div>
+    <RadixDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
         {children}
-      </section>
-    </div>
-  );
-}
-
-export function Menu({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <details className="menu">
-      <summary>
-        {label}
-        <span aria-hidden="true">⌄</span>
-      </summary>
-      <div className="menu-popover">{children}</div>
-    </details>
-  );
-}
-
-export function Tabs({
-  items,
-  active,
-}: {
-  items: Array<{ label: string; href: string }>;
-  active?: string;
-}) {
-  return (
-    <nav className="tabs" aria-label="Sections">
-      {items.map((item) => (
-        <a className={item.href === active ? "tab active" : "tab"} href={item.href} key={item.href}>
-          {item.label}
-        </a>
-      ))}
-    </nav>
-  );
-}
-
-export function Table({ children }: { children: ReactNode }) {
-  return (
-    <div className="table-wrap">
-      <table>{children}</table>
-    </div>
-  );
-}
-
-export function Toast({
-  children,
-  tone = "error",
-}: {
-  children: ReactNode;
-  tone?: "error" | "success";
-}) {
-  return (
-    <div className={`toast toast-${tone}`} role="status">
-      {children}
-    </div>
+      </DialogContent>
+    </RadixDialog>
   );
 }

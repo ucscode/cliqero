@@ -3,9 +3,20 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch, type OperatorOverview } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState, Toast } from "./ui";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 type OperatorRole = "operator" | "catalogue_manager";
 
@@ -82,7 +93,9 @@ export function OperatorShell({
         </div>
         <div className="operator-console-label">
           <span className="eyebrow">Operations</span>
-          <Badge tone="accent">{role === "operator" ? "Operator" : "Catalogue manager"}</Badge>
+          <Badge variant="destructive">
+            {role === "operator" ? "Operator" : "Catalogue manager"}
+          </Badge>
         </div>
         <nav id="operator-navigation" aria-label="Operator navigation" className="operator-nav">
           <Link
@@ -173,20 +186,27 @@ export function OperatorShell({
             <p className="eyebrow">Operational view</p>
             <h1>{title}</h1>
           </div>
-          <details className="menu operator-account-menu">
-            <summary>
-              <span className="avatar">{handle.slice(0, 1).toUpperCase()}</span>
-              <span>{handle}</span>
-              <span aria-hidden="true">⌄</span>
-            </summary>
-            <div className="menu-popover">
-              <span className="operator-account-email">{email}</span>
-              <Link href="/dashboard?section=settings">Account settings</Link>
-              <button type="button" onClick={() => void signOut()}>
-                Sign out
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100"
+                aria-label="Open operator account menu"
+              >
+                <span className="avatar">{handle.slice(0, 1).toUpperCase()}</span>
+                <span>{handle}</span>
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
               </button>
-            </div>
-          </details>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="text-xs text-slate-500" disabled>
+                {email}
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard?section=settings">Account settings</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void signOut()}>Sign out</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </header>
 
         {children ?? (
@@ -207,7 +227,7 @@ export function OperatorShell({
                     : "Only catalogue information is available to this role."}
                 </p>
               </div>
-              <Badge tone="success">
+              <Badge variant="default">
                 {role === "operator" ? "Full operator access" : "Catalogue scope"}
               </Badge>
             </div>

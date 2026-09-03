@@ -1,3 +1,4 @@
+@import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
 :root {
@@ -264,26 +265,6 @@ h3 {
   font-size: 0.88rem;
   font-weight: 700;
 }
-.badge {
-  display: inline-flex;
-  padding: 0.3rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.67rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-.badge-accent {
-  background: var(--accent-soft);
-  color: var(--accent-dark);
-}
-.badge-neutral {
-  background: var(--surface-muted);
-  color: var(--muted);
-}
-.badge-success {
-  background: #e3f3db;
-  color: #39712f;
-}
 .button {
   display: inline-flex;
   align-items: center;
@@ -352,32 +333,6 @@ h3 {
   border-color: #71a98a;
   outline: 0;
   box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.toast {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 1rem 0;
-  padding: 0.85rem 1rem;
-  border: 1px solid #edc3bd;
-  border-radius: 10px;
-  background: #fff5f3;
-  color: var(--danger);
-  font-size: 0.9rem;
-}
-.toast button {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-weight: 700;
-  text-decoration: underline;
-}
-.toast-success {
-  border-color: #b6dabb;
-  background: #f0faf1;
-  color: #39712f;
 }
 .empty-state {
   padding: 4rem 1rem;
@@ -590,159 +545,6 @@ h3 {
 .auth-switch a {
   color: var(--accent);
   font-weight: 700;
-}
-.menu {
-  position: relative;
-}
-.menu summary {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.2rem;
-  cursor: pointer;
-  list-style: none;
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-.menu summary::-webkit-details-marker {
-  display: none;
-}
-.menu-popover {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  z-index: 2;
-  display: grid;
-  min-width: 150px;
-  gap: 0.15rem;
-  padding: 0.4rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: 0 12px 32px rgba(23, 32, 25, 0.12);
-}
-.menu-popover a,
-.menu-popover button {
-  padding: 0.6rem 0.7rem;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  text-align: left;
-  font-size: 0.82rem;
-}
-.menu-popover a:hover,
-.menu-popover button:hover {
-  background: var(--surface-muted);
-}
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgba(23, 32, 25, 0.35);
-}
-.dialog {
-  width: min(100%, 520px);
-  padding: 1.3rem;
-  border-radius: 16px;
-  background: var(--surface);
-}
-.dialog-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-.dialog-head h2 {
-  font-size: 1.4rem;
-}
-.icon-button {
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  font-size: 1.5rem;
-}
-.tabs {
-  display: flex;
-  gap: 1rem;
-  border-bottom: 1px solid var(--line);
-}
-.tab {
-  padding: 0.8rem 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-.tab.active {
-  border-bottom: 2px solid var(--accent);
-  color: var(--accent);
-  font-weight: 700;
-}
-.table-wrap {
-  overflow-x: auto;
-}
-.table-wrap table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.table-wrap th,
-.table-wrap td {
-  padding: 0.8rem;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-}
-.dashboard-layout {
-  display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  min-height: 100vh;
-}
-.dashboard-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 2.5rem;
-  padding: 2rem 1.4rem;
-  border-right: 1px solid var(--line);
-  background: #f1f4ef;
-}
-.dashboard-sidebar nav {
-  display: grid;
-  gap: 0.25rem;
-}
-.dashboard-sidebar nav a {
-  padding: 0.72rem 0.8rem;
-  border-radius: 8px;
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-.dashboard-sidebar nav a:hover,
-.dashboard-sidebar nav a.active {
-  background: var(--accent-soft);
-  color: var(--accent-dark);
-  font-weight: 700;
-}
-.sidebar-back {
-  margin-top: auto;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-.dashboard-main {
-  min-width: 0;
-  max-width: 1050px;
-  width: 100%;
-  padding: 3.5rem clamp(1.2rem, 4vw, 4rem);
-}
-.dashboard-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  margin-bottom: 2.5rem;
-}
-.dashboard-topbar h1 {
-  margin-bottom: 0;
-  font-size: clamp(2.2rem, 5vw, 4.4rem);
 }
 .account-chip {
   display: flex;
@@ -1589,12 +1391,6 @@ h3 {
   color: var(--muted);
   font-size: 0.76rem;
 }
-.dashboard-operator-link {
-  margin-top: 0.7rem;
-  border-top: 1px solid var(--line);
-  color: var(--accent-dark) !important;
-  font-weight: 700;
-}
 .operator-layout {
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr);
@@ -1662,16 +1458,6 @@ h3 {
 .operator-topbar h1 {
   margin: 0;
   font-size: clamp(2.2rem, 5vw, 4.4rem);
-}
-.operator-account-menu summary {
-  color: var(--muted);
-}
-.operator-account-email {
-  display: block;
-  padding: 0.6rem 0.7rem;
-  color: var(--muted);
-  font-size: 0.72rem;
-  overflow-wrap: anywhere;
 }
 .operator-menu-toggle,
 .operator-menu-close {
@@ -2541,29 +2327,6 @@ h3 {
   .page-shell {
     padding: 2rem 1rem 4rem;
   }
-  .dashboard-layout {
-    display: block;
-  }
-  .dashboard-sidebar {
-    gap: 1rem;
-    padding: 1rem;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-  .dashboard-sidebar nav {
-    display: flex;
-    overflow-x: auto;
-    gap: 0.3rem;
-  }
-  .dashboard-sidebar nav a {
-    white-space: nowrap;
-  }
-  .sidebar-back {
-    display: none;
-  }
-  .dashboard-main {
-    padding: 2rem 1rem 4rem;
-  }
   .operator-layout {
     display: block;
   }
@@ -2614,10 +2377,6 @@ h3 {
   }
   .welcome-card .button {
     align-self: flex-start;
-  }
-  .dashboard-topbar {
-    align-items: flex-start;
-    flex-direction: column;
   }
   .panel-heading {
     align-items: flex-start;
@@ -2684,9 +2443,6 @@ h3 {
   .operator-topbar > div {
     order: 3;
     flex-basis: 100%;
-  }
-  .operator-account-menu {
-    margin-left: auto;
   }
   .operator-heading {
     align-items: flex-start;

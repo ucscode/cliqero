@@ -13,3 +13,7 @@ Use `npm run format:check` in CI or when verifying a clean formatting diff.
 Prettier is authoritative for formatting; ESLint supplies code-quality rules and
 must not reformat code independently. Keep generated, vendor, build, and local
 credential/configuration files out of formatting and lint runs.
+
+Before implementing frontend UI, prefer the established component library and
+Tailwind utilities. Do not create custom generic UI primitives or large custom
+CSS systems when an existing project dependency solves the problem.

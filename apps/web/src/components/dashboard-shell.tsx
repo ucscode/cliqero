@@ -16,7 +16,11 @@ import {
   type PurchasePage,
   type WalletSummary,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Money, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState, Money, Toast } from "./ui";
 import { PurchasesPanel } from "./purchases-panel";
 import { WalletPanel } from "./wallet-panel";
 import { PromotePanel } from "./promote-panel";
@@ -24,6 +28,7 @@ import { ReferralsPanel } from "./referrals-panel";
 import { EarningsPanel } from "./earnings-panel";
 import { WithdrawalsPanel } from "./withdrawals-panel";
 import { SettingsPanel } from "./settings-panel";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "./ui/sheet";
 
 const navigation = [
   { label: "Overview", href: "/dashboard", section: "overview" },
@@ -48,6 +53,7 @@ export function DashboardShell() {
   const [accountAccess, setAccountAccess] = useState<AccountAccess | null>(null);
   const [listing, setListing] = useState<Listing | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!session.data?.user) return;
@@ -120,50 +126,79 @@ export function DashboardShell() {
       <DashboardOverview profile={profile} />
     );
 
+  const navigationContent = (
+    <>
+      <Link href="/" className="brand">
+        <span className="brand-mark">C</span>
+        <span>cliqero</span>
+      </Link>
+      <nav className="grid gap-1" aria-label="Dashboard navigation">
+        {navigation.map((item) => (
+          <Link
+            className={`rounded-md px-3 py-2 text-sm transition-colors hover:bg-emerald-50 hover:text-emerald-900 ${section === item.section ? "bg-emerald-100 font-semibold text-emerald-900" : "text-slate-500"}`}
+            href={item.href}
+            key={item.href}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            {item.label}
+          </Link>
+        ))}
+        {accountAccess?.canAccessOperator && (
+          <Link
+            className="mt-2 rounded-md border-t border-slate-200 px-3 py-2 text-sm font-semibold text-emerald-900"
+            href="/operator"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            Operator console
+          </Link>
+        )}
+      </nav>
+      <Link
+        className="mt-auto text-sm text-slate-500"
+        href="/"
+        onClick={() => setMobileMenuOpen(false)}
+      >
+        ← Browse catalogue
+      </Link>
+    </>
+  );
+
   return (
-    <div className="dashboard-layout">
-      <aside className="dashboard-sidebar">
-        <Link href="/" className="brand">
-          <span className="brand-mark">C</span>
-          <span>cliqero</span>
-        </Link>
-        <nav aria-label="Dashboard navigation">
-          {navigation.map((item) => (
-            <Link
-              className={section === item.section ? "active" : ""}
-              href={item.href}
-              key={item.href}
-            >
-              {item.label}
-            </Link>
-          ))}
-          {accountAccess?.canAccessOperator && (
-            <Link className="dashboard-operator-link" href="/operator">
-              Operator console
-            </Link>
-          )}
-        </nav>
-        <Link className="sidebar-back" href="/">
-          ← Browse catalogue
-        </Link>
-      </aside>
-      <main className="dashboard-main">
-        <header className="dashboard-topbar">
-          <div>
-            <p className="eyebrow">Your space</p>
-            <h1>{title}</h1>
-          </div>
-          <div className="account-chip">
-            <span className="avatar">
-              {(profile?.handle ?? session.data.user.name ?? "C").slice(0, 1).toUpperCase()}
-            </span>
-            <span>{profile?.handle ?? session.data.user.name}</span>
-          </div>
-        </header>
-        {error && <Toast>{error}</Toast>}
-        {content}
-      </main>
-    </div>
+    <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+      <div className="min-h-screen bg-[var(--canvas)] lg:grid lg:grid-cols-[250px_minmax(0,1fr)]">
+        <aside className="hidden flex-col gap-10 border-r border-slate-200 bg-[#f1f4ef] p-6 lg:flex">
+          {navigationContent}
+        </aside>
+        <main className="min-w-0 w-full max-w-[1050px] px-4 py-8 sm:px-8 lg:px-16 lg:py-14">
+          <header className="mb-10 flex flex-wrap items-center justify-between gap-4 sm:mb-10">
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" className="lg:hidden">
+                Menu
+              </Button>
+            </SheetTrigger>
+            <div>
+              <p className="eyebrow">Your space</p>
+              <h1>{title}</h1>
+            </div>
+            <div className="account-chip">
+              <span className="avatar">
+                {(profile?.handle ?? session.data.user.name ?? "C").slice(0, 1).toUpperCase()}
+              </span>
+              <span>{profile?.handle ?? session.data.user.name}</span>
+            </div>
+          </header>
+          {error && <Toast>{error}</Toast>}
+          {content}
+        </main>
+        <SheetContent
+          side="left"
+          className="flex w-[min(82vw,280px)] flex-col gap-10 bg-[#f1f4ef] p-6"
+        >
+          <SheetTitle className="sr-only">Dashboard navigation</SheetTitle>
+          {navigationContent}
+        </SheetContent>
+      </div>
+    </Sheet>
   );
 }
 
@@ -336,7 +371,7 @@ function CheckoutFlow({ listing }: { listing: Listing }) {
         </>
       ) : checkout?.state === "awaiting_funds" ? (
         <>
-          <Badge tone="accent">Awaiting funds</Badge>
+          <Badge variant="destructive">Awaiting funds</Badge>
           <p>
             {shortfallMinor && BigInt(shortfallMinor) > 0n
               ? `You need ${formatMinorUsd(shortfallMinor)} more in your available wallet.`
@@ -357,7 +392,7 @@ function CheckoutFlow({ listing }: { listing: Listing }) {
         </>
       ) : checkout?.state === "paid" ? (
         <>
-          <Badge tone="success">Payment confirmed</Badge>
+          <Badge variant="default">Payment confirmed</Badge>
           <p>Wallet debit is complete. Your entitlement is being prepared separately.</p>
           <Link className="button button-primary" href="/dashboard?section=purchases">
             View purchases
@@ -365,7 +400,7 @@ function CheckoutFlow({ listing }: { listing: Listing }) {
         </>
       ) : (
         <>
-          <Badge tone="neutral">Checkout unavailable</Badge>
+          <Badge variant="secondary">Checkout unavailable</Badge>
           <p>{error ?? "This checkout could not be completed."}</p>
           <Button variant="secondary" onClick={() => setStarted(false)}>
             Try again
