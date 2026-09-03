@@ -9,7 +9,14 @@ import {
   type OperatorFundingPage,
   type OperatorFundingState,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Select, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Select } from "./ui/select";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
 import { Money } from "./money";
 
 const states: Array<{ value: OperatorFundingState; label: string }> = [
@@ -192,9 +199,9 @@ function FundingRow({ funding }: { funding: OperatorFunding }) {
         <span>{funding.provider}</span>
         <span className="break-value">{funding.providerReference}</span>
         <span>Credit: {funding.walletCredit ? funding.walletCredit.state : "none"}</span>
-        <Link className="button button-ghost" href={`/operator/funding/${funding.id}`}>
-          Inspect
-        </Link>
+        <Button asChild variant="ghost">
+          <Link href={`/operator/funding/${funding.id}`}>Inspect</Link>
+        </Button>
       </div>
     </Card>
   );

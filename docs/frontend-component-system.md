@@ -18,10 +18,11 @@ overflow.
 
 ## Migration status
 
-The public storefront/authentication surfaces and the normal-user dashboard now
-compose the primitives directly. Dashboard navigation uses the shared
-Sidebar/Sheet composition; operator feature screens remain on the temporary
-compatibility barrel until their own migration milestones. `Money` is a
-Cliqero-specific formatting component at `components/money.tsx`, never a
+The public storefront/authentication surfaces, normal-user dashboard, and
+operator shell now compose the primitives directly. Dashboard navigation uses
+the shared Sidebar/Sheet composition; operator feature screens import shadcn
+primitives directly rather than the temporary compatibility barrel. `Money` is
+a Cliqero-specific formatting component at `components/money.tsx`, never a
 generic UI primitive. Remaining global CSS is limited to document tokens,
-legacy operator screens, and the specialized referral graph.
+feature-specific layouts, and the specialized referral graph; Milestone 5 will
+perform the final dead-selector audit.

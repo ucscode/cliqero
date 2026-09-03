@@ -8,7 +8,13 @@ import {
   type OperatorAccountPage,
   type OperatorAccountSummary,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The account service is temporarily unavailable.";
@@ -144,9 +150,9 @@ function AccountRow({ account }: { account: OperatorAccountSummary }) {
         <span>{account.directReferralCount} direct referrals</span>
         <span>{account.country || "Country not set"}</span>
       </div>
-      <Link className="button button-ghost" href={`/operator/network?root=${account.id}`}>
-        View network
-      </Link>
+      <Button asChild variant="ghost">
+        <Link href={`/operator/network?root=${account.id}`}>View network</Link>
+      </Button>
     </Card>
   );
 }
@@ -300,9 +306,9 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
               <dd>{account.directReferralCount}</dd>
             </div>
           </dl>
-          <Link className="button button-secondary" href={`/operator/network?root=${account.id}`}>
-            View network
-          </Link>
+          <Button asChild variant="secondary">
+            <Link href={`/operator/network?root=${account.id}`}>View network</Link>
+          </Button>
         </Card>
         <Card>
           <p className="eyebrow">Commerce</p>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatMinorUsd } from "@/lib/api-client";
-import * as compatibilityUi from "./ui";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 describe("Money formatting", () => {
   it("keeps canonical integer minor units exact", () => {
@@ -10,6 +11,6 @@ describe("Money formatting", () => {
   });
 
   it("is not exported from the generic compatibility barrel", () => {
-    expect("Money" in compatibilityUi).toBe(false);
+    expect(() => readFileSync(resolve(__dirname, "ui.tsx"))).toThrow();
   });
 });

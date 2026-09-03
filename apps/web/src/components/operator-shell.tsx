@@ -10,13 +10,28 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
-import { EmptyState, Toast } from "./ui";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "./ui/sidebar";
 
 type OperatorRole = "operator" | "catalogue_manager";
 
@@ -45,7 +60,6 @@ export function OperatorShell({
   children?: ReactNode;
 }) {
   const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [overview, setOverview] = useState<OperatorOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,186 +88,177 @@ export function OperatorShell({
     router.refresh();
   }
 
+  const navigation = [
+    { key: "overview", href: "/operator", label: "Overview", visible: true },
+    { key: "catalogue", href: "/operator/catalogue", label: "Catalogue", visible: true },
+    { key: "users", href: "/operator/users", label: "Users", visible: role === "operator" },
+    { key: "network", href: "/operator/network", label: "Network", visible: role === "operator" },
+    { key: "funding", href: "/operator/funding", label: "Funding", visible: role === "operator" },
+    {
+      key: "distributions",
+      href: "/operator/distributions",
+      label: "Distributions",
+      visible: role === "operator",
+    },
+    {
+      key: "earnings",
+      href: "/operator/earnings",
+      label: "Earnings",
+      visible: role === "operator",
+    },
+    {
+      key: "withdrawals",
+      href: "/operator/withdrawals",
+      label: "Withdrawals",
+      visible: role === "operator",
+    },
+    {
+      key: "treasury",
+      href: "/operator/treasury",
+      label: "Treasury",
+      visible: role === "operator",
+    },
+  ];
+
   return (
-    <div className="operator-layout">
-      <aside className={menuOpen ? "operator-sidebar open" : "operator-sidebar"}>
-        <div className="operator-brand-row">
-          <Link href="/" className="brand">
-            <span className="brand-mark">C</span>
-            <span>cliqero</span>
-          </Link>
-          <button
-            className="operator-menu-close"
-            type="button"
-            aria-label="Close operator navigation"
-            onClick={() => setMenuOpen(false)}
-          >
-            ×
-          </button>
-        </div>
-        <div className="operator-console-label">
-          <span className="eyebrow">Operations</span>
-          <Badge variant="destructive">
-            {role === "operator" ? "Operator" : "Catalogue manager"}
-          </Badge>
-        </div>
-        <nav id="operator-navigation" aria-label="Operator navigation" className="operator-nav">
-          <Link
-            className={activeSection === "overview" ? "active" : ""}
-            href="/operator"
-            onClick={() => setMenuOpen(false)}
-          >
-            Overview
-          </Link>
-          <Link
-            className={activeSection === "catalogue" ? "active" : ""}
-            href="/operator/catalogue"
-            onClick={() => setMenuOpen(false)}
-          >
-            Catalogue
-          </Link>
-          {role === "operator" && (
-            <>
-              <Link
-                className={activeSection === "users" ? "active" : ""}
-                href="/operator/users"
-                onClick={() => setMenuOpen(false)}
-              >
-                Users
-              </Link>
-              <Link
-                className={activeSection === "network" ? "active" : ""}
-                href="/operator/network"
-                onClick={() => setMenuOpen(false)}
-              >
-                Network
-              </Link>
-              <Link
-                className={activeSection === "funding" ? "active" : ""}
-                href="/operator/funding"
-                onClick={() => setMenuOpen(false)}
-              >
-                Funding
-              </Link>
-              <Link
-                className={activeSection === "distributions" ? "active" : ""}
-                href="/operator/distributions"
-                onClick={() => setMenuOpen(false)}
-              >
-                Distributions
-              </Link>
-              <Link
-                className={activeSection === "earnings" ? "active" : ""}
-                href="/operator/earnings"
-                onClick={() => setMenuOpen(false)}
-              >
-                Earnings
-              </Link>
-              <Link
-                className={activeSection === "withdrawals" ? "active" : ""}
-                href="/operator/withdrawals"
-                onClick={() => setMenuOpen(false)}
-              >
-                Withdrawals
-              </Link>
-              <Link
-                className={activeSection === "treasury" ? "active" : ""}
-                href="/operator/treasury"
-                onClick={() => setMenuOpen(false)}
-              >
-                Treasury
-              </Link>
-            </>
-          )}
-        </nav>
-        <Link className="operator-user-link" href="/dashboard" onClick={() => setMenuOpen(false)}>
-          ← User dashboard
-        </Link>
-      </aside>
-
-      <main className="operator-main">
-        <header className="operator-topbar">
-          <button
-            className="operator-menu-toggle"
-            type="button"
-            aria-expanded={menuOpen}
-            aria-controls="operator-navigation"
-            onClick={() => setMenuOpen(true)}
-          >
-            Menu
-          </button>
-          <div>
-            <p className="eyebrow">Operational view</p>
-            <h1>{title}</h1>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100"
-                aria-label="Open operator account menu"
-              >
-                <span className="avatar">{handle.slice(0, 1).toUpperCase()}</span>
-                <span>{handle}</span>
-                <ChevronDown className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem className="text-xs text-slate-500" disabled>
-                {email}
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard?section=settings">Account settings</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void signOut()}>Sign out</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </header>
-
-        {children ?? (
-          <section aria-labelledby="operator-overview-heading">
-            <div className="operator-heading">
-              <div>
-                <p className="eyebrow">
-                  {role === "operator" ? "Platform operations" : "Catalogue operations"}
-                </p>
-                <h2 id="operator-overview-heading">
-                  {role === "operator"
-                    ? "A clear view of the platform"
-                    : "A focused catalogue view"}
-                </h2>
-                <p className="panel-intro">
-                  {role === "operator"
-                    ? "Authoritative operational counts from Cliqero services."
-                    : "Only catalogue information is available to this role."}
-                </p>
-              </div>
-              <Badge variant="default">
-                {role === "operator" ? "Full operator access" : "Catalogue scope"}
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full bg-slate-50">
+        <Sidebar>
+          <SidebarHeader>
+            <Link href="/" className="flex items-center gap-2 font-semibold text-slate-900">
+              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-700 text-white">
+                C
+              </span>
+              <span>cliqero</span>
+            </Link>
+          </SidebarHeader>
+          <SidebarContent>
+            <div className="grid gap-2 px-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                Operations
+              </span>
+              <Badge variant="destructive">
+                {role === "operator" ? "Operator" : "Catalogue manager"}
               </Badge>
             </div>
-            {error && <Toast>{error}</Toast>}
-            {loading ? (
-              <div className="operator-metric-grid" aria-label="Loading overview">
-                {Array.from({ length: role === "operator" ? 7 : 3 }, (_, index) => (
-                  <Card className="operator-metric-card" key={index}>
-                    <Skeleton className="operator-metric-skeleton" />
-                  </Card>
-                ))}
+            <SidebarGroup>
+              <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+              <SidebarMenu id="operator-navigation" aria-label="Operator navigation">
+                {navigation
+                  .filter((item) => item.visible)
+                  .map((item) => (
+                    <SidebarMenuItem key={item.key}>
+                      <SidebarMenuButton asChild isActive={activeSection === item.key}>
+                        <Link href={item.href}>{item.label}</Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+              </SidebarMenu>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link href="/dashboard">User dashboard</Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset>
+          <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between gap-4 border-b bg-white/95 px-4 backdrop-blur lg:px-8">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger aria-label="Open operator navigation" />
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                  Operational view
+                </p>
+                <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
               </div>
-            ) : overview ? (
-              <OverviewMetrics overview={overview} />
-            ) : (
-              <Card>
-                <EmptyState title="Overview unavailable" description="Try refreshing this page." />
-                <Button variant="secondary" onClick={() => window.location.reload()}>
-                  Refresh
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="inline-flex items-center gap-2 px-2 py-1.5"
+                  aria-label="Open operator account menu"
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-800">
+                    {handle.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="hidden sm:inline">{handle}</span>
+                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
                 </Button>
-              </Card>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem className="text-xs text-slate-500" disabled>
+                  {email}
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard?section=settings">Account settings</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void signOut()}>Sign out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </header>
+          <main className="min-w-0 space-y-6 p-4 lg:p-8">
+            {children ?? (
+              <section aria-labelledby="operator-overview-heading">
+                <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                      {role === "operator" ? "Platform operations" : "Catalogue operations"}
+                    </p>
+                    <h2
+                      id="operator-overview-heading"
+                      className="text-2xl font-semibold text-slate-900"
+                    >
+                      {role === "operator"
+                        ? "A clear view of the platform"
+                        : "A focused catalogue view"}
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                      {role === "operator"
+                        ? "Authoritative operational counts from Cliqero services."
+                        : "Only catalogue information is available to this role."}
+                    </p>
+                  </div>
+                  <Badge variant="default">
+                    {role === "operator" ? "Full operator access" : "Catalogue scope"}
+                  </Badge>
+                </div>
+                {error && <Toast>{error}</Toast>}
+                {loading ? (
+                  <div
+                    className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                    aria-label="Loading overview"
+                  >
+                    {Array.from({ length: role === "operator" ? 7 : 3 }, (_, index) => (
+                      <Card className="p-6" key={index}>
+                        <Skeleton className="h-24 w-full" />
+                      </Card>
+                    ))}
+                  </div>
+                ) : overview ? (
+                  <OverviewMetrics overview={overview} />
+                ) : (
+                  <Card className="p-6">
+                    <EmptyState
+                      title="Overview unavailable"
+                      description="Try refreshing this page."
+                    />
+                    <Button variant="secondary" onClick={() => window.location.reload()}>
+                      Refresh
+                    </Button>
+                  </Card>
+                )}
+              </section>
             )}
-          </section>
-        )}
-      </main>
-    </div>
+          </main>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }
 
@@ -272,12 +277,14 @@ function OverviewMetrics({ overview }: { overview: OperatorOverview }) {
     );
   }
   return (
-    <div className="operator-metric-grid">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {cards.map(([label, value, group]) => (
-        <Card className="operator-metric-card" key={label}>
-          <p className="eyebrow">{group}</p>
-          <p className="operator-metric-value">{value.toLocaleString("en-US")}</p>
-          <p className="operator-metric-label">{label}</p>
+        <Card className="p-6" key={label}>
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">{group}</p>
+          <p className="mt-3 text-3xl font-semibold text-slate-900">
+            {value.toLocaleString("en-US")}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">{label}</p>
         </Card>
       ))}
     </div>

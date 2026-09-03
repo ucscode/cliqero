@@ -17,7 +17,15 @@ import {
   type OperatorListing,
   type OperatorListingPage,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Select, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Select } from "./ui/select";
+import { Skeleton } from "./ui/skeleton";
+import { Textarea } from "./ui/textarea";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -121,9 +129,9 @@ export function OperatorCatalogueList() {
             Create and curate the listings Cliqero makes available to customers.
           </p>
         </div>
-        <Link className="button button-primary" href="/operator/catalogue/new">
-          New listing
-        </Link>
+        <Button asChild>
+          <Link href="/operator/catalogue/new">New listing</Link>
+        </Button>
       </div>
 
       <Card className="catalogue-toolbar">
@@ -160,7 +168,7 @@ export function OperatorCatalogueList() {
           <div className="catalogue-transfer-actions">
             {(["json", "csv", "yaml"] as const).map((format) => (
               <a
-                className="button button-ghost"
+                className="inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium hover:bg-slate-100"
                 href={`/api/operator/listings/export?format=${format}`}
                 key={format}
               >
@@ -265,11 +273,11 @@ function CatalogueCard({
           <p className="catalogue-card-key">External key: {listing.external_key}</p>
         )}
         <div className="catalogue-card-actions">
-          <Link className="button button-secondary" href={`/operator/catalogue/${listing.id}`}>
-            Edit
-          </Link>
+          <Button asChild variant="secondary">
+            <Link href={`/operator/catalogue/${listing.id}`}>Edit</Link>
+          </Button>
           {listing.state === "draft" && (
-            <Button variant="primary" onClick={() => void onAction(listing, "publish")}>
+            <Button variant="default" onClick={() => void onAction(listing, "publish")}>
               Publish
             </Button>
           )}
@@ -279,7 +287,7 @@ function CatalogueCard({
             </Button>
           )}
           {listing.state === "published" && (
-            <Button variant="danger" onClick={() => void onAction(listing, "archive")}>
+            <Button variant="destructive" onClick={() => void onAction(listing, "archive")}>
               Archive
             </Button>
           )}
@@ -381,9 +389,9 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             Listings are managed by Cliqero. No seller or payee is selected here.
           </p>
         </div>
-        <Link className="button button-ghost" href="/operator/catalogue">
-          Back to catalogue
-        </Link>
+        <Button asChild variant="ghost">
+          <Link href="/operator/catalogue">Back to catalogue</Link>
+        </Button>
       </div>
       {error && <Toast>{error}</Toast>}
       {saved && <Toast tone="success">Listing saved.</Toast>}
@@ -399,8 +407,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           </label>
           <label>
             Description
-            <textarea
-              className="input textarea"
+            <Textarea
               rows={6}
               value={form.description}
               onChange={(event) => setForm({ ...form, description: event.target.value })}
@@ -581,7 +588,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
                   Rotate
                 </Button>
                 {item.state === "active" && (
-                  <Button variant="danger" onClick={() => void revoke(item)}>
+                  <Button variant="destructive" onClick={() => void revoke(item)}>
                     Revoke
                   </Button>
                 )}
@@ -694,7 +701,7 @@ function CatalogueMedia({
                 >
                   Move down
                 </Button>
-                <Button variant="danger" onClick={() => void remove(media)}>
+                <Button variant="destructive" onClick={() => void remove(media)}>
                   Remove
                 </Button>
               </div>

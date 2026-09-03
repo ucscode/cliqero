@@ -10,7 +10,14 @@ import {
   type OperatorWithdrawalPage,
   type OperatorWithdrawalState,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Select, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Select } from "./ui/select";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
 
 const states: Array<[OperatorWithdrawalState, string]> = [
   ["requested", "Requested"],
@@ -167,9 +174,9 @@ function WithdrawalRow({ item }: { item: OperatorWithdrawal }) {
         <span>Reservation: {item.reservation?.state ?? "missing"}</span>
         <span>Payout: {item.payout?.state ?? "not started"}</span>
         <span>{item.attention === "none" ? "No action" : item.attention.replace("_", " ")}</span>
-        <Link className="button button-ghost" href={`/operator/withdrawals/${item.id}`}>
-          Inspect
-        </Link>
+        <Button asChild variant="ghost">
+          <Link href={`/operator/withdrawals/${item.id}`}>Inspect</Link>
+        </Button>
       </div>
     </Card>
   );

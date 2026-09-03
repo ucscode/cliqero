@@ -8,7 +8,13 @@ import {
   type OperatorDistributionDetail as DistributionDetail,
   type OperatorDistributionPage,
 } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Input, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
+import { Toast } from "./toast";
 import { Money } from "./money";
 
 function formatDate(value: string | null) {
@@ -147,9 +153,9 @@ function DistributionRow({ distribution }: { distribution: OperatorDistribution 
         <span>
           Platform remainder <Money minor={distribution.platformRemainderMinor} />
         </span>
-        <Link className="button button-ghost" href={`/operator/distributions/${distribution.id}`}>
-          Inspect
-        </Link>
+        <Button asChild variant="ghost">
+          <Link href={`/operator/distributions/${distribution.id}`}>Inspect</Link>
+        </Button>
       </div>
     </Card>
   );
@@ -334,9 +340,9 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
           </p>
         )}
       </Card>
-      <Link className="button button-secondary" href="/operator/distributions">
-        Back to distributions
-      </Link>
+      <Button asChild variant="secondary">
+        <Link href="/operator/distributions">Back to distributions</Link>
+      </Button>
     </div>
   );
 }
