@@ -137,12 +137,12 @@ function AccountRow({ account }: { account: OperatorAccountSummary }) {
       </div>
       <div className="operator-user-meta">
         <Badge
-          tone={
+          variant={
             account.roles.includes("operator")
-              ? "accent"
+              ? "destructive"
               : account.roles.includes("catalogue_manager")
-                ? "success"
-                : "neutral"
+                ? "default"
+                : "secondary"
           }
         >
           {roleLabel(account.roles)}
@@ -243,12 +243,12 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
           </p>
         </div>
         <Badge
-          tone={
+          variant={
             account.roles.includes("operator")
-              ? "accent"
+              ? "destructive"
               : account.roles.includes("catalogue_manager")
-                ? "success"
-                : "neutral"
+                ? "default"
+                : "secondary"
           }
         >
           {roleLabel(account.roles)}

@@ -148,7 +148,7 @@ function DistributionRow({ distribution }: { distribution: OperatorDistribution 
         </div>
       </div>
       <div className="operator-distribution-row-meta">
-        <Badge tone="success">Completed</Badge>
+        <Badge variant="default">Completed</Badge>
         <span>{distribution.beneficiaryCount} beneficiary(ies)</span>
         <span>
           Platform remainder <Money minor={distribution.platformRemainderMinor} />
@@ -195,7 +195,7 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
           <h2>{distribution.listingTitle}</h2>
           <p className="panel-intro break-value">{distribution.id}</p>
         </div>
-        <Badge tone="success">Completed</Badge>
+        <Badge variant="default">Completed</Badge>
       </div>
       {error && <Toast>{error}</Toast>}
       <div className="operator-detail-grid">
@@ -307,12 +307,12 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
                 </div>
                 <div>
                   <Badge
-                    tone={
+                    variant={
                       allocation.balanceState === "available"
-                        ? "success"
+                        ? "default"
                         : allocation.balanceState === "reversed"
-                          ? "accent"
-                          : "neutral"
+                          ? "destructive"
+                          : "secondary"
                     }
                   >
                     {stateLabel(allocation.balanceState)}

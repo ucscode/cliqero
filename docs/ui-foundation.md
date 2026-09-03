@@ -36,7 +36,7 @@ new idempotency key. Pending, empty, unavailable, and entitlement-preparation st
 without fabricating balances or purchase success.
 
 Generic presentation primitives now come from `src/components/ui/*`, using Tailwind utilities and
-Radix-backed shadcn patterns. The legacy `src/components/ui.tsx` barrel remains only as a temporary
-compatibility import for feature screens that have not migrated; new UI should import primitives
-directly. Money still uses canonical USD minor units through the `Money` component. Media URLs are
+Radix-backed shadcn patterns. There is no compatibility barrel; new UI imports primitives directly
+and domain compositions remain under `src/components`. Money still uses canonical USD minor units
+through the `Money` component. Media URLs are
 rendered from provider-neutral API URLs and never expose listing destinations.

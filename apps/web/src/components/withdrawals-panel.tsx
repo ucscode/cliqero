@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ApiClientError,
@@ -247,7 +248,7 @@ export function WithdrawalsPanel() {
                 className="text-sm font-semibold text-emerald-700"
                 href="/dashboard?section=earnings"
               >
-                View earnings ↗
+                View earnings <ArrowUpRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
               </Link>
             </Card>
             <Card className="min-w-0 p-5">

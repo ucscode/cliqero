@@ -288,7 +288,7 @@ function TreasuryRow({ entry }: { entry: OperatorTreasuryEntry }) {
     <article className="operator-treasury-row">
       <div>
         <div className="operator-treasury-row-heading">
-          <Badge tone={entry.direction === "credit" ? "success" : "accent"}>
+          <Badge variant={entry.direction === "credit" ? "default" : "destructive"}>
             {entry.direction === "credit" ? "Credit" : "Debit"}
           </Badge>
           <strong>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   ApiClientError,
@@ -102,7 +103,7 @@ export function PromotePanel() {
                 className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
                 href={`/listings/${link.listing_id}`}
               >
-                View listing ↗
+                View listing <ArrowUpRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
               </Link>
             </Card>
           ))}

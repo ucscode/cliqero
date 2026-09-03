@@ -21,8 +21,8 @@ overflow.
 The public storefront/authentication surfaces, normal-user dashboard, and
 operator shell now compose the primitives directly. Dashboard navigation uses
 the shared Sidebar/Sheet composition; operator feature screens import shadcn
-primitives directly rather than the temporary compatibility barrel. `Money` is
+primitives directly. `Money` is
 a Cliqero-specific formatting component at `components/money.tsx`, never a
 generic UI primitive. Remaining global CSS is limited to document tokens,
-feature-specific layouts, and the specialized referral graph; Milestone 5 will
-perform the final dead-selector audit.
+feature-specific layouts, and the specialized referral graph. The compatibility
+barrel and deprecated primitive shims are removed.

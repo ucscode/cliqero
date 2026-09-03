@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import {
   apiFetch,
@@ -178,7 +179,10 @@ export function DashboardShell() {
           </SidebarContent>
           <SidebarFooter>
             <SidebarMenuButton asChild>
-              <Link href="/">← Browse catalogue</Link>
+              <Link href="/">
+                <ArrowLeft className="mr-1 inline h-4 w-4" aria-hidden="true" />
+                Browse catalogue
+              </Link>
             </SidebarMenuButton>
           </SidebarFooter>
         </Sidebar>
@@ -237,7 +241,7 @@ function DashboardOverview({ profile }: { profile: { handle: string; email: stri
             className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
             href="/dashboard?section=wallet"
           >
-            View wallet ↗
+            View wallet <ArrowUpRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
           </Link>
         </Card>
         <Card className="p-5">
@@ -255,7 +259,7 @@ function DashboardOverview({ profile }: { profile: { handle: string; email: stri
             className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
             href="/dashboard?section=earnings"
           >
-            View earnings ↗
+            View earnings <ArrowUpRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
           </Link>
         </Card>
         <Card className="p-5">
@@ -268,7 +272,7 @@ function DashboardOverview({ profile }: { profile: { handle: string; email: stri
             className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
             href="/dashboard?section=purchases"
           >
-            View purchases ↗
+            View purchases <ArrowUpRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
           </Link>
         </Card>
       </div>

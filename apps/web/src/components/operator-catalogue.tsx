@@ -259,7 +259,7 @@ function CatalogueCard({
       <div className="catalogue-card-content">
         <div className="catalogue-card-title-row">
           <h3>{listing.title}</h3>
-          <Badge tone={listing.state === "published" ? "success" : "neutral"}>
+          <Badge variant={listing.state === "published" ? "default" : "secondary"}>
             {listing.state ?? "draft"}
           </Badge>
         </div>

@@ -34,11 +34,11 @@ function stateLabel(state: OperatorFundingState) {
   return states.find((item) => item.value === state)?.label ?? state;
 }
 
-function stateTone(state: OperatorFundingState): "neutral" | "accent" | "success" {
-  if (state === "confirmed") return "success";
+function stateTone(state: OperatorFundingState): "secondary" | "destructive" | "default" {
+  if (state === "confirmed") return "default";
   if (state === "failed" || state === "blocked" || state === "reconciliation_pending")
-    return "accent";
-  return "neutral";
+    return "destructive";
+  return "secondary";
 }
 
 function formatDate(value: string | null) {
@@ -195,7 +195,7 @@ function FundingRow({ funding }: { funding: OperatorFunding }) {
         </div>
       </div>
       <div className="operator-funding-row-meta">
-        <Badge tone={stateTone(funding.state)}>{stateLabel(funding.state)}</Badge>
+        <Badge variant={stateTone(funding.state)}>{stateLabel(funding.state)}</Badge>
         <span>{funding.provider}</span>
         <span className="break-value">{funding.providerReference}</span>
         <span>Credit: {funding.walletCredit ? funding.walletCredit.state : "none"}</span>
@@ -267,7 +267,7 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
           <h2>Wallet funding inspection</h2>
           <p className="panel-intro break-value">{funding.id}</p>
         </div>
-        <Badge tone={stateTone(funding.state)}>{stateLabel(funding.state)}</Badge>
+        <Badge variant={stateTone(funding.state)}>{stateLabel(funding.state)}</Badge>
       </div>
       {error && <Toast>{error}</Toast>}
       <div className="operator-funding-detail-grid">
@@ -339,7 +339,7 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
           <h3>Wallet consequence</h3>
           {funding.walletCredit ? (
             <p className="operator-funding-credit-status">
-              <Badge tone={funding.walletCredit.state === "available" ? "success" : "neutral"}>
+              <Badge variant={funding.walletCredit.state === "available" ? "default" : "secondary"}>
                 {funding.walletCredit.state}
               </Badge>{" "}
               credit · <Money minor={funding.walletCredit.amountMinor} />
@@ -398,7 +398,7 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
                   <strong>{operation.operation}</strong>
                   <span>{formatDate(operation.occurredAt)}</span>
                 </div>
-                <Badge tone={operation.outcome === "succeeded" ? "success" : "accent"}>
+                <Badge variant={operation.outcome === "succeeded" ? "default" : "destructive"}>
                   {operation.outcome}
                 </Badge>
                 <p>{operation.providerMessage || operation.failureKind || "No provider message"}</p>
@@ -420,12 +420,12 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
                   <span>{formatDate(event.receivedAt)}</span>
                 </div>
                 <Badge
-                  tone={
+                  variant={
                     event.state === "processed"
-                      ? "success"
+                      ? "default"
                       : event.state === "rejected"
-                        ? "accent"
-                        : "neutral"
+                        ? "destructive"
+                        : "secondary"
                   }
                 >
                   {event.state}

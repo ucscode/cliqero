@@ -27,12 +27,12 @@ const states: Array<[OperatorWithdrawalState, string]> = [
   ["completed", "Completed"],
   ["failed", "Failed"],
 ];
-const tone = (state: OperatorWithdrawalState): "neutral" | "accent" | "success" =>
+const tone = (state: OperatorWithdrawalState): "secondary" | "destructive" | "default" =>
   state === "completed"
-    ? "success"
+    ? "default"
     : state === "rejected" || state === "cancelled" || state === "failed"
-      ? "accent"
-      : "neutral";
+      ? "destructive"
+      : "secondary";
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Withdrawal data is temporarily unavailable.";
 
@@ -168,7 +168,7 @@ function WithdrawalRow({ item }: { item: OperatorWithdrawal }) {
         <strong>{formatMinorUsd(item.amountMinor)}</strong>
       </div>
       <div className="operator-funding-row-meta">
-        <Badge tone={tone(item.state)}>
+        <Badge variant={tone(item.state)}>
           {states.find(([value]) => value === item.state)?.[1] ?? item.state}
         </Badge>
         <span>Reservation: {item.reservation?.state ?? "missing"}</span>
@@ -243,7 +243,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
           <h2>{formatMinorUsd(item.amountMinor)} withdrawal</h2>
           <p className="panel-intro break-value">{item.id}</p>
         </div>
-        <Badge tone={tone(item.state)}>{item.state}</Badge>
+        <Badge variant={tone(item.state)}>{item.state}</Badge>
       </div>
       {error && <Toast>{error}</Toast>}
       <div className="operator-detail-grid">

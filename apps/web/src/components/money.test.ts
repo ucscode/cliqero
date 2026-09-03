@@ -10,7 +10,7 @@ describe("Money formatting", () => {
     expect(formatMinorUsd("1000")).toBe("$10.00");
   });
 
-  it("is not exported from the generic compatibility barrel", () => {
+  it("has no generic UI barrel module", () => {
     expect(() => readFileSync(resolve(__dirname, "ui.tsx"))).toThrow();
   });
 });

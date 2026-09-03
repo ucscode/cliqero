@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch, type Listing, ApiClientError } from "@/lib/api-client";
 import { Badge } from "./ui/badge";
@@ -90,7 +91,8 @@ export function ListingDetail({ id }: { id: string }) {
         href="/"
         className="mb-8 inline-flex text-sm font-semibold text-emerald-700 hover:text-emerald-900"
       >
-        ← Back to catalogue
+        <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
+        Back to catalogue
       </Link>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <div className="grid content-start gap-3">

@@ -28,4 +28,17 @@ describe("operator component-system migration", () => {
     expect(source).toContain("SidebarMenuButton");
     expect(source).not.toContain("operator-sidebar");
   });
+
+  it("has no deprecated Badge tone compatibility prop", () => {
+    const source = readFileSync(resolve(__dirname, "ui/badge.tsx"), "utf8");
+    expect(source).not.toContain("tone?");
+    expect(source).not.toContain("deprecated");
+  });
+
+  it("does not reintroduce deleted generic CSS infrastructure", () => {
+    const css = readFileSync(resolve(__dirname, "../app/styles.css"), "utf8");
+    for (const selector of [".button {", ".input {", ".card {", ".skeleton {"]) {
+      expect(css).not.toContain(selector);
+    }
+  });
 });

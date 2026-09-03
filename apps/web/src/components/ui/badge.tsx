@@ -17,13 +17,8 @@ const badgeVariants = cva(
   },
 );
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {
-  /** @deprecated Prefer the shadcn `variant`; retained for unmigrated semantics. */
-  tone?: "neutral" | "accent" | "success";
-}
-function Badge({ className, variant, tone, ...props }: BadgeProps) {
-  const resolved =
-    variant ?? (tone === "success" ? "default" : tone === "accent" ? "destructive" : "secondary");
-  return <div className={cn(badgeVariants({ variant: resolved }), className)} {...props} />;
+  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
+function Badge({ className, variant, ...props }: BadgeProps) {
+  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 export { Badge, badgeVariants };

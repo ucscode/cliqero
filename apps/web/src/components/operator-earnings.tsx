@@ -159,12 +159,12 @@ function EarningsRow({ entry }: { entry: OperatorEarningsEntry }) {
         </div>
         <div className="operator-earnings-row-amount">
           <Badge
-            tone={
+            variant={
               entry.balanceState === "available"
-                ? "success"
+                ? "default"
                 : entry.balanceState === "reversed"
-                  ? "accent"
-                  : "neutral"
+                  ? "destructive"
+                  : "secondary"
             }
           >
             {label(entry.balanceState)}
