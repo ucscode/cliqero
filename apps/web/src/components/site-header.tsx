@@ -22,23 +22,23 @@ export function SiteHeader() {
     router.push("/");
   }
   return (
-    <header className="site-header border-slate-200 bg-[#f7f8f4]/95">
-      <div className="header-inner mx-auto flex min-h-[72px] max-w-[1240px] items-center justify-between gap-6 px-4 sm:px-8">
+    <header className="sticky top-0 z-10 border-b border-slate-200 bg-[#f7f8f4]/95 backdrop-blur">
+      <div className="mx-auto flex min-h-[72px] max-w-[1240px] items-center justify-between gap-6 px-4 sm:px-8">
         <Link href="/" className="brand">
           <span className="brand-mark">C</span>
           <span>cliqero</span>
         </Link>
         <nav
-          className="desktop-nav ml-auto hidden items-center gap-6 text-sm text-slate-500 md:flex"
+          className="ml-auto hidden items-center gap-6 text-sm text-slate-500 md:flex"
           aria-label="Primary navigation"
         >
           <Link href="/">Discover</Link>
           {user && <Link href="/dashboard">Dashboard</Link>}
         </nav>
-        <div className="header-actions flex items-center gap-3">
+        <div className="ml-4 flex items-center gap-3">
           {session.isPending ? (
             <span
-              className="header-loading h-3 w-7 animate-pulse rounded-full bg-slate-200"
+              className="h-3 w-7 animate-pulse rounded-full bg-slate-200"
               aria-label="Loading account"
             />
           ) : user ? (
@@ -64,7 +64,10 @@ export function SiteHeader() {
             </DropdownMenu>
           ) : (
             <>
-              <Link className="text-link hide-mobile" href="/login">
+              <Link
+                className="hidden text-sm font-medium text-slate-600 hover:text-emerald-700 sm:inline"
+                href="/login"
+              >
                 Sign in
               </Link>
               <Button asChild size="sm">

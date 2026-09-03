@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch, type Listing, type ListingPage, ApiClientError } from "@/lib/api-client";
-import { Button, EmptyState, Input, Skeleton, Toast } from "./ui";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState, Toast } from "./ui";
 import { ListingCard } from "./listing-card";
 
 export function Storefront() {
@@ -37,36 +41,38 @@ export function Storefront() {
   }, [submittedQuery]);
   return (
     <>
-      <section className="storefront-intro">
+      <section className="grid items-end gap-10 border-b border-slate-200 py-16 sm:py-24 lg:grid-cols-[minmax(0,1fr)_220px] lg:gap-12">
         <div>
           <p className="eyebrow">The Cliqero catalogue</p>
-          <h1>
+          <h1 className="!mb-6 !max-w-4xl !text-5xl !leading-[0.95] sm:!text-7xl">
             Find something worth
             <br />
             <em>making yours.</em>
           </h1>
-          <p className="intro-copy">
+          <p className="max-w-xl text-lg leading-relaxed text-slate-500">
             Thoughtful digital experiences, gathered in one clear place. Browse the catalogue and
             choose your next useful thing.
           </p>
         </div>
-        <div className="intro-note">
-          <span className="note-dot" />
-          <p>
+        <div className="border-t-2 border-emerald-700 pt-4 text-slate-500 lg:justify-self-end lg:w-[170px]">
+          <span className="block h-2.5 w-2.5 rounded-full bg-emerald-700" aria-hidden="true" />
+          <p className="mt-3 text-sm leading-relaxed">
             One wallet.
             <br />
             Every possibility.
           </p>
         </div>
       </section>
-      <section className="catalogue-section" aria-labelledby="catalogue-heading">
-        <div className="section-heading">
+      <section className="grid gap-8 pt-12 sm:pt-16" aria-labelledby="catalogue-heading">
+        <div className="flex flex-col items-stretch justify-between gap-6 lg:flex-row lg:items-end">
           <div>
             <p className="eyebrow">Explore</p>
-            <h2 id="catalogue-heading">Latest from the catalogue</h2>
+            <h2 id="catalogue-heading" className="!text-3xl sm:!text-4xl">
+              Latest from the catalogue
+            </h2>
           </div>
           <form
-            className="search-form"
+            className="flex w-full max-w-md gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               setSubmittedQuery(query.trim());
@@ -81,7 +87,7 @@ export function Storefront() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search listings"
             />
-            <Button type="submit" variant="secondary">
+            <Button type="submit" variant="secondary" className="shrink-0">
               Search
             </Button>
           </form>
@@ -89,17 +95,19 @@ export function Storefront() {
         {error && (
           <Toast>
             <span>{error}</span>
-            <button onClick={() => window.location.reload()}>Try again</button>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              Try again
+            </Button>
           </Toast>
         )}
         {loading ? (
-          <div className="listing-grid">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }, (_, index) => (
               <CardSkeleton key={index} />
             ))}
           </div>
         ) : listings.length ? (
-          <div className="listing-grid">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {listings.map((listing) => (
               <ListingCard listing={listing} key={listing.id} />
             ))}
@@ -121,13 +129,13 @@ export function Storefront() {
 
 function CardSkeleton() {
   return (
-    <div className="card skeleton-card">
-      <Skeleton className="skeleton-image" />
-      <div className="skeleton-lines">
-        <Skeleton />
-        <Skeleton />
-        <Skeleton />
+    <Card className="overflow-hidden">
+      <Skeleton className="aspect-[1.34] rounded-none" />
+      <div className="grid gap-3 p-5">
+        <Skeleton className="h-4 w-1/3" />
+        <Skeleton className="h-4 w-5/6" />
+        <Skeleton className="h-4 w-2/3" />
       </div>
-    </div>
+    </Card>
   );
 }

@@ -7,7 +7,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch, type Listing, ApiClientError } from "@/lib/api-client";
-import { Badge, Button, Card, EmptyState, Money, Skeleton, Toast } from "./ui";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState, Money, Toast } from "./ui";
 import { canShowPromote, postAuthBuyPath } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
 
@@ -34,20 +38,20 @@ export function ListingDetail({ id }: { id: string }) {
   }, [id]);
   if (loading)
     return (
-      <main className="page-shell">
-        <Skeleton className="detail-skeleton" />
+      <main className="mx-auto min-h-screen max-w-6xl px-4 py-10 sm:px-8">
+        <Skeleton className="h-96 w-full" />
       </main>
     );
   if (!listing)
     return (
-      <main className="page-shell">
+      <main className="mx-auto min-h-screen max-w-6xl px-4 py-10 sm:px-8">
         <EmptyState
           title="Listing unavailable"
           description={message ?? "This listing could not be found."}
         />
-        <Link className="button button-secondary" href="/">
-          Back to catalogue
-        </Link>
+        <Button asChild variant="secondary">
+          <Link href="/">Back to catalogue</Link>
+        </Button>
       </main>
     );
   const currentListing = listing;
@@ -79,44 +83,52 @@ export function ListingDetail({ id }: { id: string }) {
       .finally(() => setPromoting(false));
   }
   return (
-    <main className="page-shell detail-page">
-      <Link href="/" className="back-link">
+    <main className="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-8 sm:py-12">
+      <Link
+        href="/"
+        className="mb-8 inline-flex text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+      >
         ← Back to catalogue
       </Link>
-      <div className="detail-grid">
-        <div className="detail-gallery">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div className="grid content-start gap-3">
           {image ? (
             <img
               src={image.url}
               alt={image.alt_text || currentListing.title}
-              className="detail-image"
+              className="block max-h-[620px] w-full rounded-xl border border-slate-200 object-cover"
             />
           ) : (
-            <div className="detail-image placeholder-image">
+            <div className="grid aspect-[1.34] place-items-center rounded-xl bg-slate-100 text-5xl font-bold text-slate-400">
               <span>{currentListing.title.slice(0, 1).toUpperCase()}</span>
             </div>
           )}
           {currentListing.media.length > 1 && (
-            <div className="gallery-thumbs">
+            <div className="flex flex-wrap gap-2">
               {currentListing.media.map((media) => (
-                <img src={media.url} alt={media.alt_text || ""} key={media.id} />
+                <img
+                  src={media.url}
+                  alt={media.alt_text || ""}
+                  key={media.id}
+                  className="h-16 w-16 rounded-md border border-slate-200 object-cover"
+                />
               ))}
             </div>
           )}
         </div>
-        <Card className="detail-card">
-          <div className="card-kicker">
-            <Badge tone="accent">In the catalogue</Badge>
+        <Card className="h-fit p-6 sm:p-8">
+          <div className="mb-5">
+            <Badge variant="destructive">In the catalogue</Badge>
           </div>
-          <h1>{currentListing.title}</h1>
-          <div className="detail-price">
+          <h1 className="!mb-4 !text-4xl !leading-tight sm:!text-5xl">{currentListing.title}</h1>
+          <div className="mb-5 text-2xl font-bold tracking-tight">
             <Money
               minor={currentListing.price.minor_amount}
               currency={currentListing.price.currency}
             />
           </div>
-          <p className="detail-description">{currentListing.description}</p>
-          <div className="detail-actions">
+          <p className="mb-8 leading-relaxed text-slate-600">{currentListing.description}</p>
+          <div className="grid gap-3">
             <Button onClick={buy}>Buy now</Button>
             {canShowPromote(Boolean(session.data?.user)) && (
               <Button variant="secondary" onClick={promote} disabled={promoting}>
@@ -126,9 +138,7 @@ export function ListingDetail({ id }: { id: string }) {
             {promoteMessage && <Toast tone="success">{promoteMessage}</Toast>}
             {referralUrl && <ReferralShareActions url={referralUrl} />}
           </div>
-          <p className="secure-note">
-            <span aria-hidden="true">◈</span> Secure access through Cliqero
-          </p>
+          <p className="mt-6 text-xs text-slate-500">Secure access through Cliqero</p>
         </Card>
       </div>
     </main>

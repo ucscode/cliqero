@@ -1,10 +1,16 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { safeContinuation } from "@/lib/api-client";
-import { Button, Input, Toast } from "./ui";
+import { Alert } from "./ui/alert";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Separator } from "./ui/separator";
+import { Globe2 } from "lucide-react";
 
 export function AuthForm({
   mode,
@@ -79,100 +85,112 @@ export function AuthForm({
     }
   }
   return (
-    <main className="auth-page">
-      <div className="auth-panel">
-        <div className="auth-brand">
-          <span className="brand-mark">C</span>
-          <span>cliqero</span>
-        </div>
-        <p className="eyebrow">{mode === "login" ? "Welcome back" : "Start exploring"}</p>
-        <h1>{mode === "login" ? "Good to see you." : "Make it yours."}</h1>
-        <p className="auth-copy">
-          {mode === "login"
-            ? "Sign in to pick up where you left off."
-            : "Create your Cliqero account and discover what comes next."}
-        </p>
-        {error && <Toast>{error}</Toast>}
-        <form onSubmit={submit} className="auth-form">
-          {mode === "register" && (
+    <main className="flex min-h-screen items-center justify-center bg-[var(--canvas)] px-4 py-10 sm:px-8">
+      <Card className="w-full max-w-md">
+        <CardHeader className="gap-4">
+          <div className="flex items-center gap-2 font-semibold">
+            <span className="brand-mark">C</span>
+            <span>cliqero</span>
+          </div>
+          <p className="eyebrow">{mode === "login" ? "Welcome back" : "Start exploring"}</p>
+          <CardTitle className="!text-3xl">
+            {mode === "login" ? "Good to see you." : "Make it yours."}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-6 text-sm leading-relaxed text-slate-500">
+            {mode === "login"
+              ? "Sign in to pick up where you left off."
+              : "Create your Cliqero account and discover what comes next."}
+          </p>
+          {error && (
+            <Alert role="alert" className="mb-5 border-red-200 bg-red-50 text-red-900">
+              {error}
+            </Alert>
+          )}
+          <form onSubmit={submit} className="grid gap-4">
+            {mode === "register" && (
+              <>
+                <Label htmlFor="handle">Handle</Label>
+                <Input
+                  id="handle"
+                  value={handle}
+                  onChange={(event) => setHandle(event.target.value)}
+                  required
+                  minLength={3}
+                  maxLength={32}
+                  autoComplete="username"
+                  placeholder="your-handle"
+                />
+                <Label htmlFor="country">
+                  Country <span>(optional)</span>
+                </Label>
+                <Input
+                  id="country"
+                  value={country}
+                  onChange={(event) => setCountry(event.target.value.toUpperCase())}
+                  maxLength={2}
+                  placeholder="NG"
+                />
+              </>
+            )}
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              autoComplete="email"
+              placeholder="you@example.com"
+            />
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              minLength={12}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              placeholder="At least 12 characters"
+            />
+            <Button type="submit" disabled={busy}>
+              {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
+            </Button>
+          </form>
+          {googleEnabled && (
             <>
-              <label htmlFor="handle">Handle</label>
-              <Input
-                id="handle"
-                value={handle}
-                onChange={(event) => setHandle(event.target.value)}
-                required
-                minLength={3}
-                maxLength={32}
-                autoComplete="username"
-                placeholder="your-handle"
-              />
-              <label htmlFor="country">
-                Country <span>(optional)</span>
-              </label>
-              <Input
-                id="country"
-                value={country}
-                onChange={(event) => setCountry(event.target.value.toUpperCase())}
-                maxLength={2}
-                placeholder="NG"
-              />
+              <div className="my-6 flex items-center gap-3 text-xs text-slate-500">
+                <Separator className="flex-1" />
+                <span>or continue with</span>
+                <Separator className="flex-1" />
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                onClick={google}
+                disabled={busy}
+              >
+                <Globe2 className="h-4 w-4" aria-hidden="true" /> Google
+              </Button>
             </>
           )}
-          <label htmlFor="email">Email</label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            autoComplete="email"
-            placeholder="you@example.com"
-          />
-          <label htmlFor="password">Password</label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            minLength={12}
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-            placeholder="At least 12 characters"
-          />
-          <Button type="submit" disabled={busy}>
-            {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
-          </Button>
-        </form>
-        {googleEnabled && (
-          <>
-            <div className="auth-divider">
-              <span>or continue with</span>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              className="google-button"
-              onClick={google}
-              disabled={busy}
+          <p className="mt-6 text-center text-sm text-slate-500">
+            {mode === "login" ? "New to Cliqero?" : "Already have an account?"}{" "}
+            <a
+              href={
+                mode === "login"
+                  ? `/register?next=${encodeURIComponent(next)}`
+                  : `/login?next=${encodeURIComponent(next)}`
+              }
             >
-              <span className="google-mark">G</span> Google
-            </Button>
-          </>
-        )}
-        <p className="auth-switch">
-          {mode === "login" ? "New to Cliqero?" : "Already have an account?"}{" "}
-          <a
-            href={
-              mode === "login"
-                ? `/register?next=${encodeURIComponent(next)}`
-                : `/login?next=${encodeURIComponent(next)}`
-            }
-          >
-            {mode === "login" ? "Create an account" : "Sign in"}
-          </a>
-        </p>
-      </div>
+              {mode === "login" ? "Create an account" : "Sign in"}
+            </a>
+          </p>
+        </CardContent>
+      </Card>
     </main>
   );
 }
