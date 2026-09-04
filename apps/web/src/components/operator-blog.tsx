@@ -14,6 +14,7 @@ import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
 import { Alert } from "./ui/alert";
 import type { BlogPost } from "@/modules/blog/domain/blog";
+import { HoneypotField } from "./honeypot-field";
 
 export function OperatorBlogList() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -167,6 +168,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   }
   return (
     <form onSubmit={submit} className="space-y-6">
+      <HoneypotField />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold text-slate-900">

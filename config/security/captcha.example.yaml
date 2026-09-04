@@ -1,0 +1,7 @@
+# Optional provider-neutral CAPTCHA capability configuration.
+# Copy to config/security/captcha.yaml. Real YAML files are ignored by Git and
+# may contain provider keys directly; do not add them to .env solely for this.
+enabled: false
+provider: turnstile # turnstile | hcaptcha | recaptcha
+site_key: replace-with-provider-site-key
+secret_key: replace-with-provider-secret

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./styles.css";
+import { siteConfig } from "@/config/site";
 
 export const metadata: Metadata = {
-  title: "Cliqero",
-  description: "Productless commerce and referrals",
+  title: siteConfig.name,
+  description: siteConfig.description,
   alternates: { types: { "application/rss+xml": "/blog/rss.xml" } },
 };
 

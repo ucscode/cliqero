@@ -22,6 +22,7 @@ import { Label } from "./ui/label";
 import { Select } from "./ui/select";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
+import { HoneypotField } from "./honeypot-field";
 
 const userScopes = [
   ["Catalogue", ["catalogue:read"]],
@@ -156,6 +157,7 @@ function ProfileSettings() {
       {error && <Toast>{error}</Toast>}
       {message && <Toast tone="success">{message}</Toast>}
       <form className="grid max-w-2xl gap-3" onSubmit={save}>
+        <HoneypotField />
         <Label htmlFor="settings-handle">Handle</Label>
         <Input
           id="settings-handle"
@@ -380,6 +382,7 @@ export function IntegrationSettings() {
           <p className="eyebrow">Add integration</p>
           <h3>Connect a listing access tool</h3>
           <form className="grid max-w-2xl gap-3" onSubmit={create}>
+            <HoneypotField />
             <Label htmlFor="integration-name">Name</Label>
             <Input
               id="integration-name"
@@ -509,6 +512,7 @@ function ApiKeySettings() {
         </p>
         {error && <Toast>{error}</Toast>}
         <form className="grid max-w-2xl gap-3" onSubmit={create}>
+          <HoneypotField />
           <Label htmlFor="api-key-name">Name</Label>
           <Input
             id="api-key-name"

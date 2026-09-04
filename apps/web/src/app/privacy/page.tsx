@@ -1,21 +1,22 @@
 import type { Metadata } from "next";
 import { PublicPage } from "@/components/public-page";
+import { siteConfig } from "@/config/site";
 export const metadata: Metadata = {
-  title: "Privacy | Cliqero",
-  description: "Cliqero privacy information.",
+  title: `Privacy | ${siteConfig.name}`,
+  description: `${siteConfig.name} privacy information.`,
 };
 export default function Privacy() {
   return (
     <PublicPage
       title="Privacy"
-      intro="This page is a clear, review-ready summary of how Cliqero approaches information. It is not legal advice."
+      intro={`This page is a clear, review-ready summary of how ${siteConfig.name} approaches information. It is not legal advice.`}
     >
       <section>
         <h2 className="text-xl font-semibold text-slate-900">Information we use</h2>
         <p className="mt-2">
-          Cliqero uses account, profile, purchase, wallet and referral information to provide the
-          service, protect accounts, and support access. Payment providers process provider-side
-          payment details according to their own policies.
+          {siteConfig.name} uses account, profile, purchase, wallet and referral information to
+          provide the service, protect accounts, and support access. Payment providers process
+          provider-side payment details according to their own policies.
         </p>
       </section>
       <section>

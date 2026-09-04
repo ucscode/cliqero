@@ -9,6 +9,8 @@ import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { ListingCard } from "./listing-card";
+import { siteConfig } from "@/config/site";
+import { HoneypotField } from "./honeypot-field";
 
 export function Storefront() {
   const [listings, setListings] = useState<Listing[]>([]);
@@ -44,7 +46,7 @@ export function Storefront() {
     <>
       <section className="grid items-end gap-10 border-b border-slate-200 py-16 sm:py-24 lg:grid-cols-[minmax(0,1fr)_220px] lg:gap-12">
         <div>
-          <p className="eyebrow">The Cliqero catalogue</p>
+          <p className="eyebrow">The {siteConfig.name} catalogue</p>
           <h1 className="!mb-6 !max-w-4xl !text-5xl !leading-[0.95] sm:!text-7xl">
             Find something worth
             <br />
@@ -79,6 +81,7 @@ export function Storefront() {
               setSubmittedQuery(query.trim());
             }}
           >
+            <HoneypotField />
             <label className="sr-only" htmlFor="catalogue-search">
               Search catalogue
             </label>

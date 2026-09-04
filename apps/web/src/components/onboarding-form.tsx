@@ -9,6 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Skeleton } from "./ui/skeleton";
+import { CountrySelect } from "./country-select";
+import { HoneypotField } from "./honeypot-field";
+import { siteConfig } from "@/config/site";
 
 export function OnboardingForm() {
   const router = useRouter();
@@ -38,10 +41,16 @@ export function OnboardingForm() {
     };
   }, [next, router]);
 
-  async function submit(event: FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    const website = String(new FormData(event.currentTarget).get("website") ?? "");
+    if (website.trim()) {
+      setError("Request rejected.");
+      setBusy(false);
+      return;
+    }
     try {
       await apiFetch("/api/me/onboarding", {
         method: "POST",
@@ -70,15 +79,15 @@ export function OnboardingForm() {
       <Card className="w-full max-w-md">
         <CardHeader className="gap-4">
           <div className="flex items-center gap-2 font-semibold">
-            <span className="brand-mark">C</span>
-            <span>cliqero</span>
+            <span className="brand-mark">{siteConfig.name.slice(0, 1)}</span>
+            <span>{siteConfig.name}</span>
           </div>
           <p className="eyebrow">One last step</p>
           <CardTitle className="!text-3xl">Make your account yours.</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="mb-6 text-sm leading-relaxed text-slate-500">
-            Choose the Cliqero details we’ll use across your account.
+            Choose the {siteConfig.name} details we’ll use across your account.
           </p>
           {error && (
             <Alert role="alert" className="mb-5 border-red-200 bg-red-50 text-red-900">
@@ -86,7 +95,8 @@ export function OnboardingForm() {
             </Alert>
           )}
           <form onSubmit={submit} className="grid gap-4">
-            <Label htmlFor="onboarding-handle">Handle</Label>
+            <HoneypotField />
+            <Label htmlFor="onboarding-handle">Username</Label>
             <Input
               id="onboarding-handle"
               value={handle}
@@ -97,16 +107,7 @@ export function OnboardingForm() {
               autoComplete="username"
               placeholder="your-handle"
             />
-            <Label htmlFor="onboarding-country">
-              Country <span>(optional)</span>
-            </Label>
-            <Input
-              id="onboarding-country"
-              value={country}
-              onChange={(event) => setCountry(event.target.value.toUpperCase())}
-              maxLength={2}
-              placeholder="NG"
-            />
+            <CountrySelect value={country} onChange={setCountry} />
             <Button type="submit" disabled={busy}>
               {busy ? "Saving…" : "Continue"}
             </Button>

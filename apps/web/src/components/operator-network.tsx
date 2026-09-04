@@ -11,6 +11,7 @@ import {
 } from "@/lib/api-client";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
+import { HoneypotField } from "./honeypot-field";
 import { Input } from "./ui/input";
 import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
@@ -142,6 +143,7 @@ export function OperatorNetwork() {
             void searchAccounts();
           }}
         >
+          <HoneypotField />
           <label>
             Find an account
             <Input

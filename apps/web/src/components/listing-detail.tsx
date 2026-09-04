@@ -17,6 +17,7 @@ import { Toast } from "./toast";
 import { Money } from "./money";
 import { canShowPromote, postAuthBuyPath } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
+import { siteConfig } from "@/config/site";
 
 export function ListingDetail({ id }: { id: string }) {
   const router = useRouter();
@@ -142,7 +143,7 @@ export function ListingDetail({ id }: { id: string }) {
             {promoteMessage && <Toast tone="success">{promoteMessage}</Toast>}
             {referralUrl && <ReferralShareActions url={referralUrl} />}
           </div>
-          <p className="mt-6 text-xs text-slate-500">Secure access through Cliqero</p>
+          <p className="mt-6 text-xs text-slate-500">Secure access through {siteConfig.name}</p>
         </Card>
       </div>
     </main>

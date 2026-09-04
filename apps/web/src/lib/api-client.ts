@@ -508,10 +508,35 @@ export class ApiClientError extends Error {
 }
 
 export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  let body = init?.body;
+  const headers = new Headers(init?.headers);
+  if (!headers.has("accept")) headers.set("accept", "application/json");
+  if (
+    typeof document !== "undefined" &&
+    typeof body === "string" &&
+    ["POST", "PUT", "PATCH", "DELETE"].includes((init?.method ?? "GET").toUpperCase()) &&
+    headers.get("content-type")?.includes("application/json")
+  ) {
+    const filled = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="website"]'))
+      .map((input) => input.value)
+      .find((value) => value.trim());
+    if (filled) {
+      headers.set("x-cliqero-honeypot", filled);
+      try {
+        body = JSON.stringify({
+          ...(JSON.parse(body) as Record<string, unknown>),
+          website: filled,
+        });
+      } catch {
+        // Leave a non-JSON request body unchanged.
+      }
+    }
+  }
   const response = await fetch(input, {
     ...init,
+    body,
     credentials: "include",
-    headers: { accept: "application/json", ...(init?.headers ?? {}) },
+    headers,
   });
   if (!response.ok) {
     let body: { error?: string; code?: string } = {};

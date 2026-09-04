@@ -23,6 +23,7 @@ import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { Select } from "./ui/select";
 import { Skeleton } from "./ui/skeleton";
+import { HoneypotField } from "./honeypot-field";
 import { Textarea } from "./ui/textarea";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
@@ -87,7 +88,12 @@ export function OperatorCatalogueList() {
   async function importFile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const file = (new FormData(form).get("file") as File | null) ?? null;
+    const formData = new FormData(form);
+    if (String(formData.get("website") ?? "").trim()) {
+      setImportMessage("Request rejected.");
+      return;
+    }
+    const file = (formData.get("file") as File | null) ?? null;
     const format = (new FormData(form).get("format") as string | null) ?? "json";
     const mode = (new FormData(form).get("mode") as string | null) ?? "create";
     if (!file || file.size === 0) {
@@ -142,6 +148,7 @@ export function OperatorCatalogueList() {
             void load();
           }}
         >
+          <HoneypotField />
           <label>
             Search
             <Input
@@ -177,6 +184,7 @@ export function OperatorCatalogueList() {
             ))}
           </div>
           <form className="catalogue-import" onSubmit={(event) => void importFile(event)}>
+            <HoneypotField />
             <Input
               type="file"
               name="file"
@@ -397,6 +405,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       {saved && <Toast tone="success">Listing saved.</Toast>}
       <Card>
         <form className="catalogue-editor-form" onSubmit={save}>
+          <HoneypotField />
           <label>
             Title
             <Input
@@ -559,6 +568,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
         </Toast>
       )}
       <form className="media-upload-form" onSubmit={(event) => void create(event)}>
+        <HoneypotField />
         <label className="sr-only" htmlFor={`integration-name-${listingId}`}>
           Credential name
         </label>
@@ -618,13 +628,19 @@ function CatalogueMedia({
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const file = new FormData(form).get("file");
+    const formData = new FormData(form);
+    if (String(formData.get("website") ?? "").trim()) {
+      setError("Request rejected.");
+      return;
+    }
+    const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) return;
     setBusy(true);
     setError(null);
     try {
       const body = new FormData();
       body.set("file", file);
+      body.set("website", String(formData.get("website") ?? ""));
       const media = await apiFetch<ListingMedia>(`/api/operator/listings/${listing.id}/media`, {
         method: "POST",
         body,
@@ -680,6 +696,7 @@ function CatalogueMedia({
       </div>
       {error && <Toast>{error}</Toast>}
       <form className="media-upload-form" onSubmit={(event) => void upload(event)}>
+        <HoneypotField />
         <Input name="file" type="file" accept="image/*" required />
         <Button type="submit" variant="secondary" disabled={busy}>
           {busy ? "Uploading…" : "Add image"}

@@ -14,6 +14,7 @@ import { Toast } from "./toast";
 import { Money } from "./money";
 import { canShowPromote } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
+import { siteConfig } from "@/config/site";
 
 export function ListingCard({ listing }: { listing: Listing }) {
   const image = listing.media[0];
@@ -56,7 +57,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
       <div className="grid gap-4 p-5">
         <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
           <Badge variant="destructive">Featured</Badge>
-          <span>Cliqero catalogue</span>
+          <span>{siteConfig.name} catalogue</span>
         </div>
         <h3 className="!mb-0 !text-lg">
           <Link href={`/listings/${listing.id}`}>{listing.title}</Link>

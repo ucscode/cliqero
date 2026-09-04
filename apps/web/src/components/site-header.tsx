@@ -12,6 +12,7 @@ import {
 } from "./ui/dropdown-menu";
 import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "./ui/sheet";
+import { siteConfig } from "@/config/site";
 
 export function SiteHeader() {
   const router = useRouter();
@@ -25,9 +26,9 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-[#f7f8f4]/95 backdrop-blur">
       <div className="mx-auto flex min-h-[72px] max-w-[1240px] items-center justify-between gap-6 px-4 sm:px-8">
-        <Link href="/" className="brand">
-          <span className="brand-mark">C</span>
-          <span>cliqero</span>
+        <Link href="/" className="brand" aria-label={`${siteConfig.name} home`}>
+          <span className="brand-mark">{siteConfig.name.slice(0, 1)}</span>
+          <span>{siteConfig.name}</span>
         </Link>
         <nav
           className="ml-auto hidden items-center gap-6 text-sm text-slate-500 md:flex"
@@ -37,6 +38,7 @@ export function SiteHeader() {
           <Link href="/how-it-works">How it works</Link>
           <Link href="/blog">Blog</Link>
           <Link href="/about">About</Link>
+          <Link href="/promote">Promote</Link>
           {user && <Link href="/dashboard">Dashboard</Link>}
         </nav>
         <Sheet>
@@ -52,6 +54,7 @@ export function SiteHeader() {
               <Link href="/how-it-works">How it works</Link>
               <Link href="/blog">Blog</Link>
               <Link href="/about">About</Link>
+              <Link href="/promote">Promote</Link>
             </nav>
           </SheetContent>
         </Sheet>
@@ -91,7 +94,7 @@ export function SiteHeader() {
                 Sign in
               </Link>
               <Button asChild size="sm">
-                <Link href="/register">Join Cliqero</Link>
+                <Link href="/register">Join {siteConfig.name}</Link>
               </Button>
             </>
           )}

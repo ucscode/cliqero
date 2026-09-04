@@ -6,6 +6,7 @@ import { apiFetch, type OperatorEarningsEntry, type OperatorEarningsPage } from 
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
+import { HoneypotField } from "./honeypot-field";
 import { Input } from "./ui/input";
 import { Select } from "./ui/select";
 import { Skeleton } from "./ui/skeleton";
@@ -87,6 +88,7 @@ export function OperatorEarningsList() {
             void load();
           }}
         >
+          <HoneypotField />
           <label>
             Search account or entry
             <Input

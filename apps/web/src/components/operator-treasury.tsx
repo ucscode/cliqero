@@ -19,6 +19,7 @@ import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { Money } from "./money";
+import { HoneypotField } from "./honeypot-field";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Treasury data is temporarily unavailable.";
@@ -149,6 +150,7 @@ export function OperatorTreasuryPage() {
           <p className="panel-intro">Corrections are made with a separate opposite entry.</p>
         </div>
         <form className="operator-treasury-form" onSubmit={createEntry}>
+          <HoneypotField />
           <label>
             Direction
             <Select
@@ -208,6 +210,7 @@ export function OperatorTreasuryPage() {
             void load();
           }}
         >
+          <HoneypotField />
           <label>
             Search
             <Input

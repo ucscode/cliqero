@@ -21,6 +21,7 @@ import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { Money } from "./money";
+import { HoneypotField } from "./honeypot-field";
 
 const terminalFundingStates = new Set(["confirmed", "failed", "blocked", "reconciliation_pending"]);
 
@@ -311,6 +312,7 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
             <DialogTitle>Fund your wallet</DialogTitle>
           </DialogHeader>
           <form className="grid gap-3" onSubmit={submitFunding}>
+            <HoneypotField />
             <p>Funding is collected externally and becomes available after verification.</p>
             <Label htmlFor="funding-amount">Amount in USD</Label>
             <Input

@@ -1,0 +1,12 @@
+# Authentication email delivery. Copy to config/modules/email.yaml.
+# Real YAML is ignored by Git and can contain SMTP credentials directly.
+provider: smtp
+smtp:
+  # Local development uses the Compose service name. Set deployment-specific
+  # values directly in the ignored email.yaml file.
+  host: mailpit
+  port: 1025
+  secure: false
+  user: ""
+  password: ""
+  from: "Cliqero <no-reply@cliqero.local>"

@@ -1,15 +1,16 @@
 import { Feed } from "feed";
 import { getBlogService } from "@/modules/blog/application/blog-service";
+import { siteConfig } from "@/config/site";
 export const dynamic = "force-dynamic";
 export function GET() {
   const origin = process.env.APP_URL ?? "http://localhost:3000";
   const feed = new Feed({
     id: `${origin}/blog`,
-    title: "Cliqero Blog",
-    description: "Guides and updates from Cliqero",
+    title: `${siteConfig.name} Blog`,
+    description: `Guides and updates from ${siteConfig.name}`,
     link: `${origin}/blog`,
     language: "en",
-    copyright: `© ${new Date().getFullYear()} Cliqero`,
+    copyright: `© ${new Date().getFullYear()} ${siteConfig.name}`,
   });
   for (const post of getBlogService().list({ publishedOnly: true, limit: 50 }).items)
     feed.addItem({

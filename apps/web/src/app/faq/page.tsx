@@ -1,18 +1,19 @@
 import type { Metadata } from "next";
 import { PublicPage } from "@/components/public-page";
+import { siteConfig } from "@/config/site";
 export const metadata: Metadata = {
-  title: "Cliqero FAQ",
-  description: "Answers about buying, wallet funding and referrals on Cliqero.",
+  title: `${siteConfig.name} FAQ`,
+  description: `Answers about buying, wallet funding and referrals on ${siteConfig.name}.`,
 };
 export default function Faq() {
   const items = [
     [
-      "What is Cliqero?",
-      "Cliqero is a catalogue and access platform. You can discover products, fund a buyer wallet, purchase access and promote listings.",
+      `What is ${siteConfig.name}?`,
+      `${siteConfig.name} is a catalogue and access platform. You can discover products, fund a buyer wallet, purchase access and promote listings.`,
     ],
     [
       "How does funding work?",
-      "External providers fund your Cliqero wallet. A successful funding transaction is separate from a later wallet purchase.",
+      `External providers fund your ${siteConfig.name} wallet. A successful funding transaction is separate from a later wallet purchase.`,
     ],
     [
       "How do referrals work?",
@@ -30,7 +31,7 @@ export default function Faq() {
   return (
     <PublicPage
       title="Frequently asked questions"
-      intro="Clear answers to common Cliqero questions."
+      intro={`Clear answers to common ${siteConfig.name} questions.`}
     >
       {items.map(([q, a]) => (
         <section key={q}>

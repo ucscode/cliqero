@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { BlogMarkdown } from "@/components/blog-markdown";
 import { getBlogService } from "@/modules/blog/application/blog-service";
+import { siteConfig } from "@/config/site";
 export const dynamic = "force-dynamic";
 export async function generateMetadata({
   params,
@@ -13,7 +14,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const post = getBlogService().get(slug, true);
-  if (!post) return { title: "Post not found | Cliqero" };
+  if (!post) return { title: `Post not found | ${siteConfig.name}` };
   return {
     title: post.seoTitle ?? post.title,
     description: post.seoDescription ?? post.excerpt,

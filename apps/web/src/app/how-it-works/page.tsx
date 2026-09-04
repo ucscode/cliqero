@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { PublicPage } from "@/components/public-page";
+import { siteConfig } from "@/config/site";
 export const metadata: Metadata = {
-  title: "How Cliqero works",
-  description: "Discover, fund, buy, access and promote on Cliqero.",
+  title: `How ${siteConfig.name} works`,
+  description: `Discover, fund, buy, access and promote on ${siteConfig.name}.`,
 };
 export default function HowItWorks() {
   return (
     <PublicPage
-      title="How Cliqero works"
+      title={`How ${siteConfig.name} works`}
       intro="A catalogue, wallet and referral experience built around access to useful digital products."
     >
       <section>

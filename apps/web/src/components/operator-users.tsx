@@ -11,6 +11,7 @@ import {
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
+import { HoneypotField } from "./honeypot-field";
 import { Input } from "./ui/input";
 import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
@@ -73,6 +74,7 @@ export function OperatorUsersList() {
             void load();
           }}
         >
+          <HoneypotField />
           <label>
             Search accounts
             <Input
@@ -145,6 +147,7 @@ function AccountRow({ account }: { account: OperatorAccountSummary }) {
                 : "secondary"
           }
         >
+          <HoneypotField />
           {roleLabel(account.roles)}
         </Badge>
         <span>{account.directReferralCount} direct referrals</span>

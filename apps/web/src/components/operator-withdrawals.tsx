@@ -13,6 +13,7 @@ import {
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
+import { HoneypotField } from "./honeypot-field";
 import { Input } from "./ui/input";
 import { Select } from "./ui/select";
 import { Skeleton } from "./ui/skeleton";
@@ -83,6 +84,7 @@ export function OperatorWithdrawalList() {
             void load();
           }}
         >
+          <HoneypotField />
           <label>
             Search account, withdrawal, or destination
             <Input
@@ -97,6 +99,7 @@ export function OperatorWithdrawalList() {
               value={state}
               onChange={(e) => setState(e.target.value as OperatorWithdrawalState | "")}
             >
+              <HoneypotField />
               <option value="">All states</option>
               {states.map(([value, label]) => (
                 <option key={value} value={value}>

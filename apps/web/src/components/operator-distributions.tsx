@@ -11,6 +11,7 @@ import {
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
+import { HoneypotField } from "./honeypot-field";
 import { Input } from "./ui/input";
 import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
@@ -72,6 +73,7 @@ export function OperatorDistributionList() {
             void load();
           }}
         >
+          <HoneypotField />
           <label>
             Search distributions
             <Input

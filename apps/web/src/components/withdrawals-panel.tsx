@@ -20,6 +20,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
+import { HoneypotField } from "./honeypot-field";
 import { Toast } from "./toast";
 import { Money } from "./money";
 
@@ -280,6 +281,7 @@ export function WithdrawalsPanel() {
               </Badge>
             </div>
             <form className="grid max-w-2xl gap-3" onSubmit={submit}>
+              <HoneypotField />
               <Label htmlFor="withdrawal-amount">Amount (USD)</Label>
               <Input
                 id="withdrawal-amount"

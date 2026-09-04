@@ -3,6 +3,8 @@ import { betterAuth, type Auth } from "better-auth";
 import { bearer } from "better-auth/plugins/bearer";
 import { nextCookies } from "better-auth/next-js";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import { sendAuthEmail, type AuthEmail } from "@/lib/email";
+import { siteConfig } from "@/config/site";
 
 const developmentSecret = "cliqero-development-better-auth-secret-change-me-32";
 
@@ -23,10 +25,11 @@ function socialProviders() {
   return { google: { clientId, clientSecret } };
 }
 
-async function deliverAuthenticationEmail(): Promise<void> {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("Authentication email delivery is not configured");
-  }
+async function deliverAuthenticationEmail(
+  kind: "verification" | "reset",
+  message: { user: { email: string; name?: string | null }; url: string; token: string },
+): Promise<void> {
+  await sendAuthEmail(kind, message);
 }
 
 // The concrete option object is intentionally assembled from environment
@@ -54,7 +57,7 @@ export class BetterAuthBoundary {
       connectionTimeoutMillis: 5_000,
     });
     this.auth = betterAuth({
-      appName: "Cliqero",
+      appName: siteConfig.name,
       baseURL: process.env.BETTER_AUTH_URL ?? process.env.APP_URL ?? "http://localhost:3000",
       basePath: "/api/auth",
       secret: requiredSecret(),
@@ -64,14 +67,12 @@ export class BetterAuthBoundary {
         autoSignIn: false,
         minPasswordLength: 12,
         requireEmailVerification: false,
-        // The delivery boundary is deliberately a no-op until a production
-        // mail provider is selected. Better Auth still owns token creation,
-        // expiry and verification/reset flows.
-        sendResetPassword: deliverAuthenticationEmail,
+        sendResetPassword: (message: AuthEmail) => deliverAuthenticationEmail("reset", message),
       },
       emailVerification: {
-        sendVerificationEmail: deliverAuthenticationEmail,
-        sendOnSignUp: false,
+        sendVerificationEmail: (message: AuthEmail) =>
+          deliverAuthenticationEmail("verification", message),
+        sendOnSignUp: true,
       },
       account: {
         accountLinking: {

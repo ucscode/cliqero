@@ -1,6 +1,7 @@
 import { SiteHeader } from "@/components/site-header";
 import { Storefront } from "@/components/storefront";
 import { SiteFooter } from "@/components/site-footer";
+import { siteConfig } from "@/config/site";
 
 export default function Home() {
   return (
@@ -15,8 +16,8 @@ export default function Home() {
             Find something useful, fund your wallet, and get access.
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-slate-600">
-            Browse the Cliqero catalogue. Members can also promote listings and earn qualifying
-            referral commissions.
+            Browse the {siteConfig.name} catalogue. Members can also promote listings and earn
+            qualifying referral commissions.
           </p>
         </section>
         <Storefront />

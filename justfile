@@ -78,7 +78,7 @@ test-unit:
 
 # Run the complete PostgreSQL integration suite
 test-integration:
-	APP_URL=http://localhost:3000 npm run test:integration --workspace @cliqero/web -- --no-file-parallelism
+	TEST_DATABASE_URL="$${TEST_DATABASE_URL:-postgresql://cliqero:cliqero-local@localhost:5432/cliqero}" APP_URL=http://localhost:3000 BLOG_DATABASE_PATH=/tmp/cliqero-blog-integration.sqlite npm run test:integration --workspace @cliqero/web -- --no-file-parallelism
 
 # Run TypeScript checks
 typecheck:
@@ -103,6 +103,17 @@ build:
 # Initialize/apply migrations to the isolated blog SQLite database
 blog-migrate:
 	npm run blog:migrate --workspace @cliqero/web
+
+# Seed development-only catalogue fixtures (never run in production)
+seed-catalogue:
+	docker compose exec -T main sh -lc 'NODE_ENV=development npm run seed:catalogue --workspace @cliqero/web'
+
+# Seed development-only SQLite blog fixtures (never run in production)
+seed-blog:
+	docker compose exec -T main sh -lc 'NODE_ENV=development npm run seed:blog --workspace @cliqero/web'
+
+# Seed all development fixtures
+seed: seed-catalogue seed-blog
 
 # Validate the development Compose configuration
 compose-dev-config:

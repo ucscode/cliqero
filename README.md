@@ -47,6 +47,14 @@ just worker-shell
 just db-shell
 just test
 just typecheck
+
+For representative local-only catalogue and blog content, run `just seed` (or
+`just seed-catalogue` / `just seed-blog`). These commands are explicit and
+never run automatically; fixture scripts refuse production mode. Development
+authentication email is delivered to Mailpit at `http://localhost:8025`.
+Grouped email and CAPTCHA settings use ignored YAML files; copy
+`config/modules/email.example.yaml` and `config/security/captcha.example.yaml`
+when enabling those capabilities.
 ```
 
 `just dev-clean` is destructive: it removes local Compose volumes and their data.

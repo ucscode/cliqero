@@ -3,10 +3,11 @@ import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getBlogService } from "@/modules/blog/application/blog-service";
+import { siteConfig } from "@/config/site";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Cliqero Blog",
-  description: "Guides and updates from Cliqero.",
+  title: `${siteConfig.name} Blog`,
+  description: `Guides and updates from ${siteConfig.name}.`,
   alternates: { types: { "application/rss+xml": "/blog/rss.xml" } },
 };
 type BlogIndexProps = { category?: string; tag?: string; cursor?: string };
@@ -19,7 +20,7 @@ export function BlogIndex({ category, tag, cursor }: BlogIndexProps = {}) {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-              Cliqero Blog
+              {siteConfig.name} Blog
             </p>
             <h1 className="mt-2 text-4xl font-semibold text-slate-900">
               Ideas for buying, access and referrals
