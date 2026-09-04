@@ -4,121 +4,72 @@
 
 ## What Cliqero is
 
-Cliqero is a productless commerce and referral platform.
+Cliqero is a catalogue-led commerce platform for purchasing access to products and services fulfilled through configured destinations.
 
-A seller lists something people can pay to access. Another user may refer that listing and earn from a successful purchase. A buyer pays through Cliqero and gains access to the listing's configured destination.
+The platform owns and curates the commercial catalogue. Ordinary accounts are customers and, where eligible, promoters. They do not become sellers merely by registering. Catalogue creation and publication require operator authority or the dedicated `catalogue_manager` capability.
 
-The core flow is deliberately small:
+The primary commerce flow is:
 
-> List -> Refer -> Buy -> Access
+> Catalogue → Buy → Entitlement → Access
 
-Cliqero does not need to understand what the destination contains. It may lead to an ebook download, software, a SaaS application, a private page, an offer, a course, a repository, a download gateway, a custom service, or something not yet invented.
+Referral distribution exists around that commerce flow but does not define the storefront or customer proposition.
 
-## The productless principle
+## Productless commerce
 
-Cliqero must not create separate domain models for ebook, software, course, template, API, download, service, or similar product types merely because those things can be sold.
+Cliqero does not need a separate core domain model for ebook, software, course, template, API, download, service, or every future product category. A listing describes what is being offered; a purchase records the commercial fact; an entitlement records the buyer's right; and a destination defines where authorized access is handed off.
 
-The platform models three stable primitives:
+The stable primitives are:
 
-1. **Listing** — metadata describing something that can be purchased.
-2. **Entitlement** — evidence that an account has the right to access a purchased listing.
-3. **Destination** — the external or internal location through which that entitlement is used.
+1. **Listing** — platform-managed metadata describing something purchasable.
+2. **Purchase** — immutable commercial fact and purchase terms.
+3. **Entitlement** — the account's access right.
+4. **Destination** — the location through which authorized access is fulfilled.
 
-The thing behind the destination belongs to the seller or destination system, not to Cliqero's core domain.
+Product-specific information is introduced only when a real requirement establishes a new invariant. Otherwise metadata and provider-neutral integrations keep the catalogue extensible.
 
-Product-specific information should be added only when real user requirements prove that additional structured data is needed. Peripheral information should prefer metadata/extensible structures over speculative schema.
+## Catalogue ownership
 
-## What Cliqero owns
+Commercial listings are platform inventory, not user storefronts.
 
-Cliqero owns the commerce and access relationship:
+Operators and catalogue managers can create, edit, import, publish, archive, restore, and manage listing media. A creator/manager identifier may exist for audit, but it does not make that account the seller or payee. Historical seller fields are compatibility/audit data only for new wallet commerce.
 
-- account identity;
-- listings and listing metadata;
-- public discovery/presentation;
-- referral attribution;
-- checkout and payment verification;
-- purchase records;
-- entitlements;
-- access handoff;
-- referral commission calculation;
-- ledger/wallet accounting;
-- withdrawals;
-- audit and administration.
+This distinction also controls economics: completed commerce may produce referral earnings and platform allocation, but there is no normal seller-credit branch for ordinary user-created inventory.
 
-Cliqero does not need to host or implement the thing being sold.
+## Buyer experience
+
+The public product should primarily present useful listings and the value buyers receive. Internal accounting mechanics, funding providers, referral commissions, hierarchy, and treasury are supporting capabilities rather than the public identity of the business.
+
+A visitor can discover catalogue listings without authentication. Account-specific actions such as purchase/access require identity. An authenticated account may also promote eligible listings, but promotion belongs in a dedicated opportunity/referral experience rather than dominating general commerce messaging.
 
 ## Access handoff
 
-After a purchase is authorized, the buyer can open the listing destination through Cliqero.
+After a valid purchase, the buyer opens access through Cliqero. The platform verifies purchase ownership and active entitlement before resolving the configured destination.
 
-Where useful, Cliqero appends a `source` value to the destination URL:
+Where useful, the destination receives a `source` credential. It is cryptographically random, opaque, and resolved server-side. It is not a JWT/JWE and contains no buyer, listing, purchase, entitlement, price, or other business claims.
 
-`https://destination.example/access?source=<token>`
-
-The `source` value must not be a forgeable user ID, email address, raw purchase ID, or other trust-by-query-string mechanism. It is a cryptographically random opaque bearer credential/reference containing no business data. Cliqero resolves it server-side to the relevant access grant and authorization context.
-
-An integrated destination may validate that token through a Cliqero access-verification API before granting its own service.
-
-This makes Cliqero responsible for answering the stable question:
-
-> Is this access request currently entitled to this listing?
-
-The destination remains responsible for deciding what authorized access means.
-
-## Why this model exists
-
-The platform should not keep changing architecture because a different kind of sellable thing is discovered.
-
-A seller should be able to create something elsewhere, add its metadata and destination to Cliqero, set a price, and sell access without Cliqero learning a new product category.
-
-The architecture evolves from observed requirements, not imagined product taxonomies.
+An integrated destination can verify the credential through an authenticated access API. Cliqero remains authoritative for whether the entitlement is currently usable; the destination remains responsible for its specialized fulfillment.
 
 ## Referral model
 
-A user can share an attributed listing link. If an attributed buyer completes a valid purchase, the applicable referral commission can be credited according to platform policy.
+Authenticated accounts may share attributed links for eligible listings. A qualifying completed purchase can create referral earnings according to the configured policy.
 
-Referral rewards originate from real sales activity. Registration alone does not create earnings.
+Referral rewards are consequences of real commerce. Registration, page views, clicks, and recruitment alone do not create earnings. Referral messaging should therefore live in dedicated promotion/opportunity surfaces instead of being mixed into every customer-facing catalogue message.
+
+## Accounting boundary
+
+External payment providers fund internal buyer value; they do not directly purchase listings. Buyer funds, referral earnings, and company treasury are distinct accounting domains. Balances are projections over append-only facts rather than mutable authoritative fields.
 
 ## What Cliqero is not
 
-Cliqero is not inherently:
+Cliqero is not inherently a multi-seller marketplace, recruitment-fee scheme, payment wallet product, ebook host, course platform, file-storage service, streaming platform, or SaaS provisioning system.
 
-- an ebook host;
-- a software distribution server;
-- a course platform;
-- a file-storage service;
-- a streaming platform;
-- a license manager;
-- a SaaS provisioning system;
-- an inventory-management system;
-- a recruitment-fee scheme.
-
-Those capabilities may integrate with Cliqero when needed, but none defines the core product.
+Those capabilities may integrate with the platform where required, but none defines the core product.
 
 ## Product philosophy
 
-### 1. Model access, not product categories
-
-A listing sells entitlement to a destination. Do not branch the architecture by product type without a proven requirement.
-
-### 2. Keep the base object small
-
-Stable invariant data remains explicit. Optional and evolving listing data belongs in metadata where appropriate.
-
-### 3. Let destinations specialize
-
-A private download gateway, SaaS app, API, course system, or custom service can interpret Cliqero authorization in its own way.
-
-### 4. Referrals follow successful commerce
-
-Referral earnings are consequences of valid purchases, not page views, clicks, or account recruitment.
-
-### 5. Reduce scope, never integrity
-
-Cliqero handles real money and access rights. The first release can be narrow, but payment, ledger, entitlement, attribution, authorization, and audit behavior must be production-grade.
-
-## Long-term opportunity
-
-The strength of the model is that new sellable experiences do not require a new commerce architecture.
-
-If a future requirement cannot be represented by listing metadata, entitlement, and destination, Cliqero may introduce a new capability. Until then, it should not speculate.
+- Lead with catalogue value and commerce, not internal money mechanics.
+- Model access and stable commercial facts, not speculative product categories.
+- Keep ordinary users out of privileged catalogue management.
+- Keep referral opportunity distinct from primary storefront messaging.
+- Let destinations specialize while Cliqero owns entitlement authorization.
+- Reduce scope without reducing financial, authorization, or audit integrity.

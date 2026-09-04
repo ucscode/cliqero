@@ -4,213 +4,73 @@
 
 ## Configuration philosophy
 
-Cliqero separates deployment/bootstrap configuration, removable module/provider configuration, secrets, and runtime administrative settings.
+Configuration is separated by responsibility rather than placed into one global environment namespace.
 
-The system must not place every value into environment variables.
+- `.env` — deployment/bootstrap values.
+- `config/` YAML — capability/provider/policy configuration.
+- PostgreSQL — runtime commercial/accounting/identity facts and auditable administrative state.
+- SQLite — isolated blog content.
 
-## Environment variables
+Tracked `*.example.yaml` files document supported provider configuration. Real YAML provider files are ignored by Git and excluded from normal source control.
 
-Environment variables should be reserved for platform/deployment/bootstrap concerns such as:
+YAML can explicitly reference environment values with `%env(NAME)%`; environment variables do not implicitly override YAML authority.
 
-- application environment;
-- application name;
-- base domain;
-- configuration path;
-- database/bootstrap connection settings;
-- Redis/bootstrap connection settings;
-- infrastructure-specific startup values.
+## Deployment values
 
-Provider secrets such as Paystack keys should not be treated as ordinary application environment variables.
+Environment variables cover concerns such as application URL, PostgreSQL bootstrap connection, Better Auth bootstrap values, ports, and persistent paths. See [Installation and Configuration](./installation-and-configuration.md).
 
-## Module/provider configuration files
+Provider credentials belong to provider configuration rather than becoming an ever-growing flat application environment.
 
-Removable provider-specific configuration should live with the provider/module configuration structure.
+## Referral commission policy
 
-Conceptual example:
+Referral commission policy is fixed/readymade YAML, not editable database configuration. `config/hierarchy/distribution.yaml` defines contiguous percentage levels. Explicit `levels: null` or `levels: {}` represents no referral commissions. Missing configured uplines are not redistributed; their share remains with the platform.
 
-```text
-config/
-  modules/
-    payment/
-      paystack.example.yaml
-      usdt-trc20.example.yaml
-  secrets/
-    payment/
-      paystack.yaml
-      usdt-trc20.yaml
-```
+Applied policy is immutably snapshotted when distribution is created.
 
-Secret configuration must never be committed. Example files may document required structure without real credentials.
+## Catalogue-owned listing model
 
-Deleting or disabling one provider should not prevent unrelated providers or modules from starting.
+Ordinary users are not sellers. Listing management is restricted to operator or `catalogue_manager` capability.
 
-## Static configuration versus runtime configuration
+Stable listing data includes identity, title/presentation, canonical price, destination reference, lifecycle state, media, metadata, and audit timestamps. A creator/manager audit reference must not be interpreted as seller/payee semantics.
 
-Static/provider configuration answers deployment/provider questions such as credentials and endpoints.
+Historical `seller_id`-style fields may remain for compatibility/audit but are not authoritative economics for new wallet purchases.
 
-Runtime configuration answers policy questions such as:
+## Metadata philosophy
 
-- is a provider enabled?
-- what referral commission policy is active?
-- what is the minimum withdrawal?
-- are new listings allowed?
-- is a provider in maintenance mode?
+Use JSON/EAV/key-value structures for peripheral or evolving attributes where relational integrity is unnecessary. Keep core authorization, commercial, accounting, and identity invariants relational.
 
-Runtime configuration belongs in persistent application storage and should be editable administratively where appropriate.
+Core relational examples include account identity, listing identity/state, purchase snapshots, entitlement ownership/state, access-grant token hash, funding/payment facts, ledger facts, referral graph/attribution, withdrawals, treasury entries, idempotency, and audit identifiers.
 
-## Productless listing model
+## Money representation
 
-Cliqero must not model separate database entities for ebook, software, course, template, API, service, download, offer, or similar product categories unless a real requirement establishes a distinct invariant.
+Authoritative money is integer USD minor units:
 
-The core Listing schema should contain stable relational fields such as:
+- `$0.01` → `1`
+- `$1.00` → `100`
+- `$10.00` → `1000`
 
-- listing ID;
-- seller/account ID;
-- title;
-- description or primary presentation content;
-- canonical price/money reference;
-- destination URL/reference;
-- status/visibility;
-- created/updated timestamps.
+APIs should prefer explicit `amount_minor`. Floating point is never authoritative accounting state.
 
-Media and optional product-specific presentation data may use related generic structures or metadata.
-
-## Metadata/EAV philosophy
-
-Use EAV, JSON, key-value, or similarly extensible structures for peripheral, optional, or frequently changing attributes where relational integrity is not required.
-
-Good candidates include:
-
-- optional user/profile metadata;
-- listing metadata;
-- listing presentation attributes;
-- destination metadata that does not determine authorization;
-- provider runtime settings;
-- feature flags;
-- preferences;
-- integration-specific non-secret hints.
-
-Do not pre-create fields merely because a future kind of product might need them.
-
-The rule is:
-
-> Add data because a user requirement exists, not because a product category can be imagined.
-
-## What must not be EAV
-
-Core relational, authorization, and financial invariants remain explicit schema.
-
-Examples include:
-
-- account identity and ownership;
-- listing ownership and stable identity;
-- canonical price at purchase time;
-- purchase buyer/listing/payment relationship;
-- entitlement owner/listing/state;
-- access-grant identity and token hash;
-- ledger amount/currency/type;
-- payment provider reference/status;
-- wallet ownership;
-- affiliate parent/relationship data;
-- attribution records used for commission;
-- idempotency records;
-- audit identifiers.
-
-> Core invariant data is relational. Peripheral/extensible data may be metadata/EAV.
+There is no authoritative mutable buyer-wallet, earnings, or company-treasury balance. Each is a projection over its own append-only facts.
 
 ## Purchase snapshot
 
-A purchase must preserve the commercial terms that applied at checkout. Later listing edits must not rewrite history.
+A purchase preserves the terms that applied at checkout, including listing, buyer, canonical amount, referral attribution where present, and enough immutable context to explain later entitlement/distribution consequences. Later catalogue edits must not rewrite purchase history.
 
-The purchase should snapshot or durably reference enough information to explain:
+New wallet commerce does not snapshot an ordinary-user seller/payee because ordinary users do not own commercial inventory.
 
-- what listing was bought;
-- by whom;
-- from whom;
-- for what amount/currency/canonical value;
-- through which payment;
-- under what referral attribution;
-- what entitlement resulted.
+## Entitlement
 
-## Entitlement model
+Entitlement is explicit relational state. It references buyer/account, listing, originating purchase, state, and timestamps. Expiry may be nullable; a valid entitlement is active and either has no expiry or expires in the future.
 
-Entitlement should be explicit relational state rather than inferred from payment history on every access request.
+## Access credential
 
-Minimum V1 concept:
+`source` is a cryptographically random opaque bearer credential. It is stored/resolved server-side (preferably by secure hash) and never encodes buyer, listing, purchase, entitlement, price, or other business claims. It is not JWT/JWE.
 
-- entitlement ID;
-- buyer/account ID;
-- listing ID;
-- originating purchase ID;
-- state;
-- created/updated timestamps.
+The canonical browser access route is `/access/{purchaseId}`. It authenticates the buyer, verifies ownership and entitlement, resolves the destination, issues the opaque credential where needed, and redirects.
 
-Future properties such as expiration, consumption count, or scope may be added only when actual requirements need them.
+## State and audit
 
-## Access grant and source token
+Important workflows use explicit states rather than contradictory boolean collections. Financial corrections append new facts rather than rewriting or deleting original financial records.
 
-The listing destination is data. Authorization is not.
-
-Do not treat possession of a destination URL, listing ID, buyer ID, entitlement ID, purchase ID, email, or other business identifier as sufficient proof of access.
-
-`source` is a cryptographically random opaque bearer token. It is not JWT, JWE, or another self-contained claims document. It carries no authoritative product, buyer, purchase, entitlement, or pricing data.
-
-The token maps to server-side access state owned by Cliqero.
-
-A minimal access-grant record should conceptually contain:
-
-- access-grant ID;
-- entitlement reference;
-- secure hash of the bearer token;
-- state;
-- created timestamp;
-- optional last-used timestamp;
-- optional expiry/revocation/consumption policy only when required.
-
-Prefer storing a secure one-way hash of the token rather than the raw credential. The plaintext token should be returned only when issued and then presented by the buyer/destination as a bearer credential.
-
-Use a cryptographically secure random generator with sufficient entropy. Do not generate source tokens from sequential IDs, deterministic hashes of known records, timestamps, emails, or ordinary non-security random functions.
-
-## Server-side resolution
-
-Cliqero resolves the source token internally, for example:
-
-`source token -> access grant -> entitlement -> purchase -> listing -> buyer/seller`
-
-The token itself does not encode those relationships.
-
-This makes the server-side state authoritative and allows revocation, refund consequences, entitlement changes, access-policy changes, or future consumption rules to take effect without changing or decoding token claims.
-
-## Access API and integration credentials
-
-External destinations verify `source` through the Access API.
-
-The destination/integration must authenticate independently to Cliqero. A source bearer token authorizes the access handoff; it is not also an API client credential.
-
-Integration credentials, API keys, OAuth-style client credentials, signatures, or another provider mechanism may be used according to the eventual integration capability. The important boundary is that the verification API must know which integration is asking and enforce what information that integration may receive.
-
-API responses should expose only the minimum context required by the caller.
-
-Cliqero's own web application should use the same access capability contracts as external integrations. Future SDKs/libraries may wrap the API but must not duplicate authorization truth client-side.
-
-## State over booleans
-
-Important processes should use explicit status/state fields rather than collections of booleans.
-
-Examples:
-
-- listing state;
-- purchase state;
-- payment verification state;
-- entitlement state;
-- access-grant state;
-- earning state;
-- withdrawal state.
-
-Explicit states improve auditability and prevent contradictory combinations.
-
-## Configuration audit
-
-Material runtime configuration changes should be auditable, including provider state, referral percentages, minimum withdrawal, listing policies, entitlement/access policy, integration credentials/policy, and moderation rules.
-
-Audit information should include actor, previous value, new value, timestamp, and correlation/reference information where applicable.
+Material administrative actions and provider operations must remain auditable with actor, time, correlation/idempotency identity, and relevant before/after semantics where applicable.

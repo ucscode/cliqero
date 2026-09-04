@@ -1,72 +1,62 @@
 # Cliqero Documentation
 
-Cliqero is a productless catalogue, wallet-commerce, and referral platform.
+Cliqero is a catalogue-led commerce platform with optional referral distribution and external access fulfillment.
 
-Cliqero owns the commercial catalogue: ordinary users browse and buy, while catalogue managers create and publish listings. External providers fund buyer wallets; listings are purchased from the canonical USD wallet. Referrers can share an attributed link and earn from a valid wallet purchase, and buyers receive entitlements that allow access to destinations.
+The platform owns the commercial catalogue. Ordinary accounts browse, purchase, access purchases, and may promote eligible listings. Listing creation and publication are privileged operations for operators or accounts with the `catalogue_manager` capability. Ordinary users are not sellers.
 
-The core flow is:
+The primary customer-facing commerce flow is:
 
-> List -> Refer -> Buy -> Access
+> Catalogue → Buy → Entitlement → Access
 
-Cliqero deliberately does not define what kind of product exists behind the destination. It may be an ebook, software, a private application, a course, an offer, a download gateway, a repository, a service, or something not yet imagined.
+Referral promotion is a secondary distribution capability:
 
-The stable product model is:
+> Eligible listing → attributed promotion → qualifying purchase → earnings
 
-- **Listing** — metadata describing something purchasable;
-- **Purchase** — the commercial fact and immutable purchase terms;
-- **Entitlement** — the buyer's access right;
-- **Destination** — where authorized access is handed off.
+External payment providers only bring funds into the platform. They do not directly buy listings. Internal commerce spends available canonical USD value. Buyer funds, referral earnings, and company treasury are separate accounting domains.
 
-When appropriate, access redirects append `?source=<token>`. `source` is a cryptographically random opaque bearer token. It is not JWT/JWE and contains no buyer, listing, purchase, entitlement, price, or other business data. Cliqero resolves it server-side to the access grant and related entitlement/purchase/listing/account graph.
+The underlying thing represented by a listing may be software, a download, a service, a course, an offer, an application, a repository, or another externally fulfilled experience. Cliqero models the listing, purchase, entitlement, destination, and access boundary rather than inventing a domain model for every product type.
 
-Integrated destinations verify the token through Cliqero's authenticated Access API. The destination authenticates separately as an integration/API client; possession of `source` alone must not provide unrestricted access to Cliqero APIs. Server-side access state remains authoritative, which allows revocation and future access-policy changes without changing the public token format.
+## Start here
 
-This product-model correction does **not** change the previously established architectural strategy. Cliqero remains modular, capability-driven, event-aware, API-powered, production-grade, and composed through grouped Docker Compose files using `include`.
+- [Installation and Configuration](./installation-and-configuration.md) — local development, production-like execution, environment values, YAML configuration, persistence, and common commands.
+- [Product Vision](./01-product-vision.md) — catalogue ownership, productless commerce, entitlement, destination, and access.
+- [Roles and User Journeys](./02-roles-and-user-journeys.md) — visitor, buyer/member, promoter, catalogue manager, and operator journeys.
+- [Listings, Profiles, and Access Links](./03-offers-profiles-and-links.md) — listing data, destinations, referral URLs, and source credentials.
+- [Purchase and Entitlement Model](./04-campaign-and-action-model.md) — purchase lifecycle and entitlement consequences. The historical filename is retained for link stability.
+- [Money, Wallets, and Currency](./05-money-wallets-and-currency.md) — internal funding, canonical accounting, earnings, settlement, withdrawals, and treasury boundaries.
+- [Referrers, Promotion, and Referral Network](./06-promoters-and-referrals.md) — attributed promotion and network rules.
+- [System Architecture](./07-system-architecture.md) — modular monolith, processors, Hono APIs, Docker Compose, Next.js, and failure isolation.
+- [Configuration and Data Model](./08-configuration-and-data-model.md) — deployment values, YAML configuration, data invariants, metadata, and access credentials.
+- [Reliability, Fraud, and Audit](./09-reliability-fraud-and-audit.md) — idempotency, financial/access integrity, and auditability.
+- [Investor and Business Overview](./10-investor-business-overview.md) — catalogue-led business model and expansion strategy.
+- [Initial Production Scope](./11-initial-production-scope.md) — current production scope and build boundaries.
+- [Catalogue, Commission, and Treasury](./catalogue-treasury.md) — privileged catalogue ownership, commission policy, and platform treasury.
+- [Authentication](./authentication.md) — Better Auth boundary and canonical account identity.
+- [API Foundation](./api-foundation.md) — Hono/OpenAPI, principals, sessions, API keys, and scopes.
+- [Blog Platform](./blog-platform.md) — isolated SQLite content platform.
+- [Wallet-first Commerce](./wallet-first-commerce.md) — funding and internal checkout workflow.
+- [Listing Management and Media](./listing-management-and-media.md) — lifecycle, media providers, import, and export.
+- [Public API Matrix](./public-api-matrix.md) — implemented application API surface.
 
-## Documentation map
+## Current business invariants
 
-1. [Product Vision](./01-product-vision.md) — authoritative definition of productless commerce, listings, entitlements, destinations, and referral sales.
-2. [Roles and User Journeys](./02-roles-and-user-journeys.md) — seller, referrer, buyer, visitor, administrator, and access journeys.
-3. [Listings, Profiles, and Access Links](./03-offers-profiles-and-links.md) — generic listing data, destinations, referral URLs, opaque source tokens, and authenticated verification.
-4. [Purchase and Entitlement Model](./04-campaign-and-action-model.md) — purchase lifecycle, entitlement creation, access handoff, and commission consequences. The filename is retained for link stability; the former campaign model is superseded.
-5. [Money, Wallets, and Currency](./05-money-wallets-and-currency.md) — canonical accounting, payment verification, sale distribution, ledger rules, reversals, and withdrawals.
-6. [Referrers, Promotion, and Referral Network](./06-promoters-and-referrals.md) — attributed links, sale-based commission, account referral graph behavior, and reward boundaries.
-7. [System Architecture](./07-system-architecture.md) — modularity, capabilities, contracts, processors, events, API-first access, OOP, Docker Compose includes, and Next.js surfaces.
-8. [Configuration and Data Model](./08-configuration-and-data-model.md) — configuration layers, secrets, generic listing schema, metadata/EAV, purchase snapshots, entitlements, access grants, and source-token rules.
-9. [Reliability, Fraud, and Audit](./09-reliability-fraud-and-audit.md) — idempotency, payment/referral/access threats, token security, immutable records, and failure isolation.
-10. [Investor and Business Overview](./10-investor-business-overview.md) — productless business model, seller/referrer/buyer value, economics, network effects, and expansion principle.
-11. [Initial Production Scope](./11-initial-production-scope.md) — production V1 and build order centered on listing -> checkout -> purchase -> entitlement -> access.
-12. [Catalogue, Commission, and Treasury](./catalogue-treasury.md) — privileged catalogue ownership, YAML referral policy, platform allocation, and company treasury.
-13. [Authentication boundary](./authentication.md) — Better Auth sessions and OAuth mapped to the canonical Cliqero account.
+1. Cliqero owns/provides the catalogue; ordinary users do not create listings.
+2. `catalogue_manager` is a privileged catalogue capability, not a seller role.
+3. External providers fund internal buyer value only.
+4. A listing purchase is paid internally and creates a durable purchase fact.
+5. Entitlement/access is independent from referral distribution processing.
+6. Referral earnings originate only from qualifying completed commerce.
+7. There is no authoritative mutable buyer-wallet, earnings, or treasury balance.
+8. Canonical authoritative money is integer USD minor units.
+9. `source` access credentials are opaque random server-resolved credentials, never self-contained JWT/JWE business claims.
+10. PostgreSQL owns the commercial/accounting domain; blog content lives independently in SQLite.
 
-## Architectural principle
+## Architecture principle
 
-A concise statement continues to govern the system:
+> Modules determine facts; processors coordinate consequences; append-only records preserve financial truth; events communicate what happened.
 
-> Modules determine facts; processors coordinate consequences; the ledger records money; events communicate what happened.
+Cross-capability behavior goes through contracts, APIs, persisted facts, or events rather than reaching into another module's private storage.
 
-A module must not access another module's internal storage or implementation. Cross-module behavior occurs through contracts, APIs, or events. Optional capabilities degrade gracefully where safe instead of crashing unrelated parts of Cliqero.
+## Documentation warning
 
-## Product principle
-
-The core rule for preventing scope drift is:
-
-> Do not model the thing behind the link unless a real user requirement proves that Cliqero must understand it.
-
-By default, new sellable things require new metadata, not new product architectures.
-
-## Access principle
-
-The external access contract is deliberately simple and stable:
-
-> `source` is an opaque credential, not data. Cliqero resolves the data.
-
-Do not replace this with self-contained JWT/JWE claims.
-
-## Build constraint for Codex
-
-Codex should treat these documents as the current product authority.
-
-Do not reconstruct the superseded pay-per-action campaign model from repository history, old discussions, naming leftovers, or the historical filenames of documents 03/04/06.
-
-The current business primitive is a paid listing that creates entitlement and access. Referrals earn from valid purchases. The established modular Docker Compose `include` architecture remains unchanged.
+Some historical filenames and database fields predate the current catalogue-owned model. A filename containing words such as `campaign` or a legacy `seller_id` column does not restore the superseded business model. Where an older document contradicts the invariants above, this index and the newer capability-specific documentation take precedence until that document is rewritten.
