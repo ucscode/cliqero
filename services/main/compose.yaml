@@ -20,6 +20,8 @@ services:
       - ../../config:/workspace/config:ro
       - ../../config:/app/config:ro
       - blog-data:/workspace/data/blog
+      - listing-media-data:/var/lib/cliqero/listing-media
 
 volumes:
   blog-data:
+  listing-media-data:

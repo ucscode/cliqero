@@ -60,6 +60,29 @@ suite("Better Auth and Cliqero identity boundary", () => {
     await expect(app.authentication.authenticate(result.token)).resolves.toBeNull();
   });
 
+  it("resets a credential without requiring the previous password", async () => {
+    const account = await app.authentication.register({
+      email: "console-reset@example.com",
+      handle: "console_reset",
+      password: "console-reset-password-a",
+    });
+    const authUserId = (
+      await app.database.query<{ auth_user_id: string }>(
+        `select auth_user_id from identity_capability.auth_account_links where account_id=$1`,
+        [account.id],
+      )
+    ).rows[0].auth_user_id;
+
+    await app.authentication.resetPassword(authUserId, "console-reset-password-b");
+
+    await expect(
+      app.authentication.login(account.email, "console-reset-password-a"),
+    ).rejects.toThrow("Invalid credentials");
+    await expect(
+      app.authentication.login(account.email, "console-reset-password-b"),
+    ).resolves.toMatchObject({ account: { id: account.id } });
+  });
+
   it("uses Better Auth's HTTP-only cookie response for the compatibility login endpoint", async () => {
     const account = await app.authentication.register({
       email: "cookie@example.com",

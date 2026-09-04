@@ -41,7 +41,7 @@ export function loadListingMediaStorage() {
           providers: {
             filesystem: {
               enabled: true,
-              root: "/tmp/cliqero-listing-media",
+              root: "/var/lib/cliqero/listing-media",
               public_base_url: `${publicOrigin.replace(/\/$/, "")}/media/filesystem`,
             },
           },

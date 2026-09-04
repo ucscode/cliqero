@@ -19,6 +19,7 @@ import { canShowPromote, postAuthBuyPath } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
 import { siteConfig } from "@/config/site";
 import { ListingDescription } from "./listing-description";
+import { TextLink } from "./text-link";
 
 export function ListingDetail({ id }: { id: string }) {
   const router = useRouter();
@@ -89,13 +90,10 @@ export function ListingDetail({ id }: { id: string }) {
   }
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-8 sm:py-12">
-      <Link
-        href="/"
-        className="mb-8 inline-flex text-sm font-semibold text-emerald-700 hover:text-emerald-900"
-      >
+      <TextLink href="/" className="mb-8 inline-flex text-sm">
         <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
         Back to catalogue
-      </Link>
+      </TextLink>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <div className="grid content-start gap-3">
           {image ? (
@@ -124,7 +122,7 @@ export function ListingDetail({ id }: { id: string }) {
         </div>
         <Card className="h-fit p-6 sm:p-8">
           <div className="mb-5">
-            <Badge variant="destructive">In the catalogue</Badge>
+            <Badge variant="secondary">In the catalogue</Badge>
           </div>
           <h1 className="!mb-4 !text-4xl !leading-tight sm:!text-5xl">{currentListing.title}</h1>
           <div className="mb-5 text-2xl font-bold tracking-tight">

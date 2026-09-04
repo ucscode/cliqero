@@ -10,12 +10,12 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Separator } from "./ui/separator";
 import { Eye, EyeOff, Globe2 } from "lucide-react";
-import Link from "next/link";
 import { CountrySelect } from "./country-select";
 import { HoneypotField } from "./honeypot-field";
 import { siteConfig } from "@/config/site";
 import { Captcha, type CaptchaClientConfig } from "./captcha";
 import { AuthShell } from "./auth-shell";
+import { TextLink } from "./text-link";
 
 export function AuthForm({
   mode,
@@ -148,7 +148,7 @@ export function AuthForm({
               minLength={3}
               maxLength={32}
               autoComplete="username"
-              placeholder="your-handle"
+              placeholder="username"
             />
             <CountrySelect value={country} onChange={setCountry} />
           </>
@@ -223,12 +223,9 @@ export function AuthForm({
       </form>
       <div className="mt-6 grid gap-4 border-t border-slate-200 pt-6">
         {mode === "login" && (
-          <Link
-            className="text-sm text-emerald-700 underline"
-            href={`/forgot-password?next=${encodeURIComponent(next)}`}
-          >
+          <TextLink className="text-sm" href={`/forgot-password?next=${encodeURIComponent(next)}`}>
             Forgot password?
-          </Link>
+          </TextLink>
         )}
         {googleEnabled && (
           <>

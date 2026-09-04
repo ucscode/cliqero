@@ -22,7 +22,7 @@ silently imported; development/pre-production accounts must register again or
 use an explicit password reset. This avoids keeping two password verifiers.
 
 Google is enabled when the `social.google` provider is enabled with complete
-credentials in `config/modules/auth.yaml`. Better Auth's account-linking policy trusts Google only when its verified
+credentials in `config/security/auth.yaml`. Better Auth's account-linking policy trusts Google only when its verified
 identity can be safely linked; a local password identity must have a verified
 email before implicit linking. A Google-first user is authenticated but has an
 incomplete Cliqero mapping until `POST /api/me/onboarding` supplies a unique
@@ -58,6 +58,21 @@ Authorization remains Cliqero-owned: authentication establishes a principal,
 then operator/catalogue-manager capabilities are evaluated from the account's
 domain records. Public listing reads remain anonymous; authenticated state can
 be resolved server-side without exposing authentication-provider objects.
+
+## Google OAuth setup
+
+The Better Auth base path in this application is `/api/auth`, so the Google
+OAuth callback is `http://localhost:3000/api/auth/callback/google` locally and
+`https://your-production-host.example/api/auth/callback/google` in production.
+The production host must match `APP_URL` exactly. In Google Cloud Console,
+create/select a project, configure **Google Auth Platform → Branding** (app
+name, support email, authorized domain, homepage, privacy policy and terms),
+keep the audience in testing while developing, and add test users. Create a
+**Web application** OAuth client and register those exact redirect URIs (and
+the matching JavaScript origins when requested). Put credentials in ignored
+`config/security/auth.yaml` under `social.google`, then restart the web process.
+`redirect_uri_mismatch` means the generated URI and the Google client's URI do
+not match exactly.
 
 ## Headless API keys
 

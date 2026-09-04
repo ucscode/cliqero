@@ -30,3 +30,12 @@ lengths/prices/media metadata). The blog seed creates 20 SQLite posts (19
 published, one draft) across categories and tags. Seeds refuse production
 mode, are not run by `just dev`, and update deterministic fixture slugs/keys.
 Blog data remains in the configured SQLite path and never enters PostgreSQL.
+
+For local identity bootstrapping, use the single application console rather
+than editing PostgreSQL manually:
+
+```text
+just cli --help
+just cli user:create --email operator@example.test --username operator --country NG
+just cli user:role operator@example.test operator
+```

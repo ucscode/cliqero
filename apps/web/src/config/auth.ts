@@ -27,8 +27,8 @@ const schema = z.object({
 
 export type AuthConfiguration = z.infer<typeof schema>;
 
-export function loadAuthConfiguration(path = "config/modules/auth.yaml"): AuthConfiguration {
-  if (path === "config/modules/auth.yaml" && typeof window !== "undefined") {
+export function loadAuthConfiguration(path = "config/security/auth.yaml"): AuthConfiguration {
+  if (path === "config/security/auth.yaml" && typeof window !== "undefined") {
     return schema.parse({
       social: {
         google: {

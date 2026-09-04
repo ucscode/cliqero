@@ -97,4 +97,42 @@ export class BetterAuthBoundary {
   async close(): Promise<void> {
     await this.pool.end();
   }
+
+  /**
+   * Reset a credential from a trusted server-side operation.
+   *
+   * Better Auth's public changePassword endpoint is intentionally a
+   * self-service operation and requires the current password. The canonical
+   * reset flow in Better Auth hashes through its configured password utility
+   * and persists through the internal adapter, so the console uses the same
+   * supported primitives without duplicating hashing or credential storage.
+   */
+  async resetPassword(authUserId: string, newPassword: string): Promise<void> {
+    const context = await this.auth.$context;
+    const minLength = context.password.config.minPasswordLength;
+    const maxLength = context.password.config.maxPasswordLength;
+    if (newPassword.length < minLength)
+      throw new Error(`Password must contain at least ${minLength} characters`);
+    if (newPassword.length > maxLength)
+      throw new Error(`Password must contain no more than ${maxLength} characters`);
+
+    const user = await context.internalAdapter.findUserById(authUserId);
+    if (!user) throw new Error("Authentication user not found");
+    const password = await context.password.hash(newPassword);
+    const credential = await context.internalAdapter.findCredentialAccount(authUserId);
+    if (credential) {
+      await context.internalAdapter.updatePassword(authUserId, password);
+    } else {
+      const { createLocalAccountIssuer } = await import("@better-auth/core/db");
+      await context.internalAdapter.createAccount({
+        userId: authUserId,
+        providerId: "credential",
+        issuer: createLocalAccountIssuer("credential"),
+        accountId: user.id,
+        password,
+      });
+    }
+    if (context.options.emailAndPassword?.revokeSessionsOnPasswordReset)
+      await context.internalAdapter.deleteUserSessions(authUserId);
+  }
 }

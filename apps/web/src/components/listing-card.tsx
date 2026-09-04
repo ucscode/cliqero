@@ -57,7 +57,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
       </Link>
       <div className="grid gap-4 p-5">
         <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
-          <Badge variant="destructive">Featured</Badge>
+          <Badge variant="secondary">Featured</Badge>
           <span>{siteConfig.name} catalogue</span>
         </div>
         <h3 className="!mb-0 !text-lg">

@@ -15,11 +15,14 @@ export default function Contact() {
         <h2 className="text-2xl font-semibold text-slate-900">Support</h2>
         <p className="mt-2">
           Email{" "}
-          <a className="text-emerald-700 underline" href={`mailto:${siteConfig.supportEmail}`}>
+          <a
+            className="font-medium text-emerald-700 underline underline-offset-4 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700"
+            href={`mailto:${siteConfig.supportEmail}`}
+          >
             {siteConfig.supportEmail}
           </a>{" "}
-          with your account handle and a clear description of the issue. Never send a password, API
-          key or payment secret.
+          with your account username and a clear description of the issue. Never send a password,
+          API key or payment secret.
         </p>
       </section>
     </PublicPage>

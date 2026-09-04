@@ -158,7 +158,7 @@ function ProfileSettings() {
       {message && <Toast tone="success">{message}</Toast>}
       <form className="grid max-w-2xl gap-3" onSubmit={save}>
         <HoneypotField />
-        <Label htmlFor="settings-handle">Handle</Label>
+        <Label htmlFor="settings-handle">Username</Label>
         <Input
           id="settings-handle"
           value={handle}
@@ -169,7 +169,7 @@ function ProfileSettings() {
           required
         />
         <p className="text-xs leading-relaxed text-slate-500">
-          Lowercase letters, numbers, underscores, and hyphens. Handles are unique.
+          Lowercase letters, numbers, underscores, and hyphens. Usernames are unique.
         </p>
         <Label htmlFor="settings-country">
           Country <span>(optional)</span>

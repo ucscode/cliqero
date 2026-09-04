@@ -32,6 +32,7 @@ The underlying thing represented by a listing may be software, a download, a ser
 - [Initial Production Scope](./11-initial-production-scope.md) — current production scope and build boundaries.
 - [Catalogue, Commission, and Treasury](./catalogue-treasury.md) — privileged catalogue ownership, commission policy, and platform treasury.
 - [Authentication](./authentication.md) — Better Auth boundary and canonical account identity.
+- [Application Console](./console.md) — user creation, password changes, and capability bootstrap.
 - [API Foundation](./api-foundation.md) — Hono/OpenAPI, principals, sessions, API keys, and scopes.
 - [Blog Platform](./blog-platform.md) — isolated SQLite content platform.
 - [Wallet-first Commerce](./wallet-first-commerce.md) — funding and internal checkout workflow.

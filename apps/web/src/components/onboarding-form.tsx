@@ -95,7 +95,7 @@ export function OnboardingForm() {
           minLength={3}
           maxLength={32}
           autoComplete="username"
-          placeholder="your-handle"
+          placeholder="username"
         />
         <CountrySelect value={country} onChange={setCountry} />
         <Button type="submit" disabled={busy}>

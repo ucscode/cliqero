@@ -1,4 +1,4 @@
-# Better Auth social providers. Copy to config/modules/auth.yaml.
+# Better Auth social providers. Copy to config/security/auth.yaml.
 # Disabled providers are ignored; enabled providers require both credentials.
 social:
   google:

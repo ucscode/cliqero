@@ -104,6 +104,10 @@ build:
 blog-migrate:
 	npm run blog:migrate --workspace @cliqero/web
 
+# Run the application console (for example: just cli --help)
+cli *args:
+	npm run cli --workspace @cliqero/web -- {{args}}
+
 # Seed development-only catalogue fixtures (never run in production)
 seed-catalogue:
 	docker compose exec -T main sh -lc 'NODE_ENV=development npm run seed:catalogue --workspace @cliqero/web'

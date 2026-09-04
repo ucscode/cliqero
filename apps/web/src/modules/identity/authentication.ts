@@ -161,6 +161,10 @@ export class AuthenticationService {
     return row?.email ?? null;
   }
 
+  async resetPassword(authUserId: string, newPassword: string): Promise<void> {
+    await this.betterAuth.resetPassword(authUserId, newPassword);
+  }
+
   async completeOnboarding(
     authUserId: string,
     input: { email: string; handle: string; country?: string | null },
