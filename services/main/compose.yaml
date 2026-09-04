@@ -11,9 +11,6 @@ services:
       APP_URL: ${APP_URL:-http://localhost:3000}
       BLOG_DATABASE_PATH: ${BLOG_DATABASE_PATH:-/workspace/data/blog/blog.sqlite}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-cliqero-development-better-auth-secret-change-me-32}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -21,6 +18,7 @@ services:
       - "${APP_PORT:-3000}:3000"
     volumes:
       - ../../config:/workspace/config:ro
+      - ../../config:/app/config:ro
       - blog-data:/workspace/data/blog
 
 volumes:

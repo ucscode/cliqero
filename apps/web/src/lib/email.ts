@@ -23,40 +23,37 @@ const emailSchema = z.object({
     .default({ port: 1025, secure: false }),
 });
 
-function loadEmailConfiguration() {
-  const raw = loadYamlConfiguration("config/modules/email.yaml");
+export function loadEmailConfiguration(path = "config/modules/email.yaml") {
+  const raw = loadYamlConfiguration(path);
   return raw === null
     ? { provider: "smtp" as const, smtp: { port: 1025, secure: false } }
     : emailSchema.parse(raw);
 }
 
 export async function sendAuthEmail(kind: "verification" | "reset", message: AuthEmail) {
-  // Authentication integration tests intentionally do not deliver mail. Keep
-  // this guard before YAML placeholder resolution so a local SMTP placeholder
-  // never becomes a test-only required environment variable.
-  if (process.env.NODE_ENV === "test" && !process.env.SMTP_HOST) return;
+  // Authentication integration tests intentionally do not deliver mail.
+  if (process.env.NODE_ENV === "test") return;
   const configuration = loadEmailConfiguration();
   const smtp = configuration.smtp;
-  const host = smtp.host?.trim() || process.env.SMTP_HOST?.trim();
+  const host = smtp.host?.trim();
   if (!host) {
-    throw new Error("SMTP_HOST is required for authentication email delivery");
+    throw new Error("config/modules/email.yaml must define smtp.host");
   }
   const transporter = nodemailer.createTransport({
     host,
-    port: smtp.port ?? Number(process.env.SMTP_PORT ?? 1025),
-    secure: smtp.secure ?? process.env.SMTP_SECURE === "true",
-    auth:
-      smtp.user || process.env.SMTP_USER
-        ? {
-            user: smtp.user || process.env.SMTP_USER,
-            pass: smtp.password ?? process.env.SMTP_PASSWORD ?? "",
-          }
-        : undefined,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: smtp.user
+      ? {
+          user: smtp.user,
+          pass: smtp.password ?? "",
+        }
+      : undefined,
   });
   const subject =
     kind === "verification" ? `Verify your ${siteConfig.name} email` : "Reset your password";
   await transporter.sendMail({
-    from: smtp.from ?? process.env.SMTP_FROM ?? `${siteConfig.name} <no-reply@localhost>`,
+    from: smtp.from ?? `${siteConfig.name} <no-reply@localhost>`,
     to: message.user.email,
     subject,
     text: `${kind === "verification" ? "Verify your email" : "Reset your password"}: ${message.url}`,

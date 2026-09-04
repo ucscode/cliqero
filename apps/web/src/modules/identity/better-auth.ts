@@ -5,6 +5,7 @@ import { nextCookies } from "better-auth/next-js";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import { sendAuthEmail, type AuthEmail } from "@/lib/email";
 import { siteConfig } from "@/config/site";
+import { getEnabledSocialProviders } from "@/config/auth";
 
 const developmentSecret = "cliqero-development-better-auth-secret-change-me-32";
 
@@ -14,15 +15,6 @@ function requiredSecret(): string {
   if (process.env.NODE_ENV === "production")
     throw new Error("BETTER_AUTH_SECRET is required in production");
   return developmentSecret;
-}
-
-function socialProviders() {
-  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
-  if (!!clientId !== !!clientSecret)
-    throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured together");
-  if (!clientId || !clientSecret) return undefined;
-  return { google: { clientId, clientSecret } };
 }
 
 async function deliverAuthenticationEmail(
@@ -58,7 +50,7 @@ export class BetterAuthBoundary {
     });
     this.auth = betterAuth({
       appName: siteConfig.name,
-      baseURL: process.env.BETTER_AUTH_URL ?? process.env.APP_URL ?? "http://localhost:3000",
+      baseURL: siteConfig.url,
       basePath: "/api/auth",
       secret: requiredSecret(),
       database: this.pool,
@@ -77,14 +69,14 @@ export class BetterAuthBoundary {
       account: {
         accountLinking: {
           enabled: true,
-          trustedProviders: ["google"],
+          trustedProviders: Object.keys(getEnabledSocialProviders()),
           // A local password account must prove ownership of its email before
           // an OAuth identity can be implicitly linked to it.
           requireLocalEmailVerified: true,
           allowDifferentEmails: false,
         },
       },
-      socialProviders: socialProviders(),
+      socialProviders: getEnabledSocialProviders(),
       plugins: [bearer(), nextCookies()],
       databaseHooks: {
         user: {

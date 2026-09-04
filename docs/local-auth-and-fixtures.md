@@ -1,8 +1,7 @@
 # Local authentication and fixture data
 
-Runtime site identity comes from `NEXT_PUBLIC_SITE_NAME`,
-`NEXT_PUBLIC_SITE_URL`, and `NEXT_PUBLIC_SUPPORT_EMAIL` (with safe local
-defaults). Grouped email delivery settings live in the ignored
+Runtime site identity lives in ignored `config/site.yaml`; copy the tracked
+`config/site.example.yaml`. Grouped email delivery settings live in the ignored
 `config/modules/email.yaml`; copy `config/modules/email.example.yaml`. The
 development YAML points at the Compose service directly (`mailpit:1025`). The
 development Compose override runs Mailpit at `http://localhost:8025` and routes

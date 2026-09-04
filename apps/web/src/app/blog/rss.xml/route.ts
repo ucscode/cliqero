@@ -3,7 +3,7 @@ import { getBlogService } from "@/modules/blog/application/blog-service";
 import { siteConfig } from "@/config/site";
 export const dynamic = "force-dynamic";
 export function GET() {
-  const origin = process.env.APP_URL ?? "http://localhost:3000";
+  const origin = siteConfig.url;
   const feed = new Feed({
     id: `${origin}/blog`,
     title: `${siteConfig.name} Blog`,

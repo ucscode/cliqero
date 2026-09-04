@@ -21,8 +21,8 @@ account creation fails. Existing pre-Better-Auth scrypt credentials are not
 silently imported; development/pre-production accounts must register again or
 use an explicit password reset. This avoids keeping two password verifiers.
 
-Google is enabled when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set.
-Better Auth's account-linking policy trusts Google only when its verified
+Google is enabled when the `social.google` provider is enabled with complete
+credentials in `config/modules/auth.yaml`. Better Auth's account-linking policy trusts Google only when its verified
 identity can be safely linked; a local password identity must have a verified
 email before implicit linking. A Google-first user is authenticated but has an
 incomplete Cliqero mapping until `POST /api/me/onboarding` supplies a unique
@@ -34,7 +34,7 @@ The canonical browser endpoints are Better Auth's `/api/auth/*` routes,
 including sign-up, sign-in, sign-out, OAuth callbacks, verification and reset
 password. Sessions use Better Auth's HTTP-only `better-auth.session_token`
 cookie with SameSite protection and secure cookies in HTTPS production. The
-The former `/api/auth/sessions` compatibility facade is retired; clients use
+former `/api/auth/sessions` compatibility facade is retired; clients use
 Better Auth's canonical protocol endpoints directly rather than maintaining a
 second login implementation.
 
@@ -42,16 +42,17 @@ Required production settings are:
 
 ```text
 BETTER_AUTH_SECRET=<random value of at least 32 characters>
-BETTER_AUTH_URL=https://app.example
-GOOGLE_CLIENT_ID=<Google OAuth client id>
-GOOGLE_CLIENT_SECRET=<Google OAuth client secret>
+APP_URL=https://app.example
 ```
 
-The mail-delivery callbacks are intentionally provider-neutral no-ops in local
-development. A production mail provider can be attached to Better Auth's
-`sendVerificationEmail` and `sendResetPassword` hooks without changing any
-Cliqero business capability. Future 2FA/passkey plugins can be added at this
-same boundary.
+Grouped site identity and social-provider settings live in ignored YAML files;
+tracked `*.example.yaml` files document their shape. `APP_URL` is the single
+canonical application origin and is reused by site and Better Auth settings.
+
+Authentication mail is delivered through the provider-neutral transport in
+`config/modules/email.yaml` (Mailpit locally). A production SMTP/provider
+configuration can use the same Better Auth hooks without changing any Cliqero
+business capability. Future 2FA/passkey plugins can be added at this boundary.
 
 Authorization remains Cliqero-owned: authentication establishes a principal,
 then operator/catalogue-manager capabilities are evaluated from the account's

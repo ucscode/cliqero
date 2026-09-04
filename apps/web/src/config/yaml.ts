@@ -1,26 +1,44 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
 import { parse } from "yaml";
+
+type RuntimeModules = {
+  fs: { existsSync(path: string): boolean; readFileSync(path: string, encoding: "utf8"): string };
+  path: { dirname(path: string): string; resolve(...paths: string[]): string };
+};
+
+function runtimeModules(): RuntimeModules | null {
+  const getBuiltinModule = (
+    globalThis as typeof globalThis & {
+      process?: { getBuiltinModule?: (name: string) => unknown };
+    }
+  ).process?.getBuiltinModule;
+  if (!getBuiltinModule) return null;
+  return {
+    fs: getBuiltinModule("node:fs") as RuntimeModules["fs"],
+    path: getBuiltinModule("node:path") as RuntimeModules["path"],
+  };
+}
 
 export function parseYamlConfiguration(path: string): unknown {
   const resolved = resolveConfigurationPath(path);
   if (!resolved) return null;
-  return parse(readFileSync(/* turbopackIgnore: true */ resolved, "utf8"));
+  return parse(runtimeModules()!.fs.readFileSync(resolved, "utf8"));
 }
 
 function resolveConfigurationPath(path: string): string | null {
+  const modules = runtimeModules();
+  if (!modules) return null;
   if (!path.startsWith(".") && !path.startsWith("/")) {
     let directory = process.cwd();
     for (let i = 0; i < 6; i++) {
-      const candidate = resolve(directory, path);
-      if (existsSync(/* turbopackIgnore: true */ candidate)) return candidate;
-      const parent = dirname(directory);
+      const candidate = modules.path.resolve(directory, path);
+      if (modules.fs.existsSync(candidate)) return candidate;
+      const parent = modules.path.dirname(directory);
       if (parent === directory) break;
       directory = parent;
     }
     return null;
   }
-  return existsSync(/* turbopackIgnore: true */ path) ? resolve(path) : null;
+  return modules.fs.existsSync(path) ? modules.path.resolve(path) : null;
 }
 
 export function resolveEnvironmentPlaceholders(
