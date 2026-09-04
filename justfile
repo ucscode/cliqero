@@ -104,9 +104,12 @@ build:
 blog-migrate:
 	npm run blog:migrate --workspace @cliqero/web
 
-# Run the application console (for example: just cli --help)
+# Run the application console inside the development main container.
+# Keeping this command in Compose gives it the same Node dependencies and
+# DATABASE_URL as the running application. TTY is intentionally preserved for
+# hidden password prompts.
 cli *args:
-	npm run cli --workspace @cliqero/web -- {{args}}
+	docker compose exec main npm run cli --workspace @cliqero/web -- {{args}}
 
 # Seed development-only catalogue fixtures (never run in production)
 seed-catalogue:
