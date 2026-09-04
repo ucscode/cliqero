@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 describe("UI foundation primitives", () => {
   it("maps semantic button variants to accessible utility styles", () => {
+    expect(buttonVariants({ variant: "default" })).toContain("!text-white");
     expect(buttonVariants({ variant: "destructive", size: "sm" })).toContain("bg-red-700");
     expect(buttonVariants({ variant: "outline" })).toContain("border-slate-300");
   });

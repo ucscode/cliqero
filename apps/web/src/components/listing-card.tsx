@@ -15,6 +15,7 @@ import { Money } from "./money";
 import { canShowPromote } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
 import { siteConfig } from "@/config/site";
+import { ListingDescription } from "./listing-description";
 
 export function ListingCard({ listing }: { listing: Listing }) {
   const image = listing.media[0];
@@ -62,9 +63,10 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <h3 className="!mb-0 !text-lg">
           <Link href={`/listings/${listing.id}`}>{listing.title}</Link>
         </h3>
-        <p className="min-h-0 text-sm leading-relaxed text-slate-500">
-          {listing.description || "A considered way to move forward."}
-        </p>
+        <ListingDescription
+          className="min-h-0 text-sm leading-relaxed text-slate-500"
+          description={listing.description}
+        />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
           <div className="flex flex-wrap gap-2">

@@ -5,13 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiClientError, safeContinuation } from "@/lib/api-client";
 import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Skeleton } from "./ui/skeleton";
 import { CountrySelect } from "./country-select";
 import { HoneypotField } from "./honeypot-field";
-import { siteConfig } from "@/config/site";
+import { AuthShell } from "./auth-shell";
 
 export function OnboardingForm() {
   const router = useRouter();
@@ -75,45 +74,34 @@ export function OnboardingForm() {
       </main>
     );
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--canvas)] px-4 py-10 sm:px-8">
-      <Card className="w-full max-w-md">
-        <CardHeader className="gap-4">
-          <div className="flex items-center gap-2 font-semibold">
-            <span className="brand-mark">{siteConfig.name.slice(0, 1)}</span>
-            <span>{siteConfig.name}</span>
-          </div>
-          <p className="eyebrow">One last step</p>
-          <CardTitle className="!text-3xl">Make your account yours.</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-6 text-sm leading-relaxed text-slate-500">
-            Choose the {siteConfig.name} details we’ll use across your account.
-          </p>
-          {error && (
-            <Alert role="alert" className="mb-5 border-red-200 bg-red-50 text-red-900">
-              {error}
-            </Alert>
-          )}
-          <form onSubmit={submit} className="grid gap-4">
-            <HoneypotField />
-            <Label htmlFor="onboarding-handle">Username</Label>
-            <Input
-              id="onboarding-handle"
-              value={handle}
-              onChange={(event) => setHandle(event.target.value)}
-              required
-              minLength={3}
-              maxLength={32}
-              autoComplete="username"
-              placeholder="your-handle"
-            />
-            <CountrySelect value={country} onChange={setCountry} />
-            <Button type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Continue"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+    <AuthShell
+      eyebrow="One last step"
+      title="Make your account yours."
+      description="Choose the account details we’ll use across your account."
+    >
+      {error && (
+        <Alert role="alert" className="mb-5 border-red-200 bg-red-50 text-red-900">
+          {error}
+        </Alert>
+      )}
+      <form onSubmit={submit} className="grid gap-4">
+        <HoneypotField />
+        <Label htmlFor="onboarding-handle">Username</Label>
+        <Input
+          id="onboarding-handle"
+          value={handle}
+          onChange={(event) => setHandle(event.target.value)}
+          required
+          minLength={3}
+          maxLength={32}
+          autoComplete="username"
+          placeholder="your-handle"
+        />
+        <CountrySelect value={country} onChange={setCountry} />
+        <Button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Continue"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

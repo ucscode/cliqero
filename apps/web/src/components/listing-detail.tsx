@@ -18,6 +18,7 @@ import { Money } from "./money";
 import { canShowPromote, postAuthBuyPath } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
 import { siteConfig } from "@/config/site";
+import { ListingDescription } from "./listing-description";
 
 export function ListingDetail({ id }: { id: string }) {
   const router = useRouter();
@@ -132,7 +133,10 @@ export function ListingDetail({ id }: { id: string }) {
               currency={currentListing.price.currency}
             />
           </div>
-          <p className="mb-8 leading-relaxed text-slate-600">{currentListing.description}</p>
+          <ListingDescription
+            className="mb-8 text-base leading-relaxed text-slate-600"
+            description={currentListing.description}
+          />
           <div className="grid gap-3">
             <Button onClick={buy}>Buy now</Button>
             {canShowPromote(Boolean(session.data?.user)) && (

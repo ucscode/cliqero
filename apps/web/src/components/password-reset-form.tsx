@@ -5,11 +5,10 @@ import { useState, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { HoneypotField } from "./honeypot-field";
-import { siteConfig } from "@/config/site";
+import { AuthShell } from "./auth-shell";
 
 export function PasswordResetForm({ token }: { token: string }) {
   const [password, setPassword] = useState("");
@@ -44,83 +43,71 @@ export function PasswordResetForm({ token }: { token: string }) {
     }
   }
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--canvas)] px-4 py-10">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <Link href="/" className="font-semibold">
-            {siteConfig.name}
+    <AuthShell eyebrow="Account security" title="Choose a new password">
+      {message ? (
+        <Alert role="status">
+          {message}{" "}
+          <Link className="underline" href="/login">
+            Sign in
           </Link>
-          <CardTitle>Choose a new password</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {message ? (
-            <Alert role="status">
-              {message}{" "}
-              <Link className="underline" href="/login">
-                Sign in
-              </Link>
+        </Alert>
+      ) : (
+        <form onSubmit={submit} className="grid gap-4">
+          <HoneypotField />
+          <Label htmlFor="new-password">New password</Label>
+          <div className="relative">
+            <Input
+              id="new-password"
+              type={show ? "text" : "password"}
+              minLength={12}
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="pr-11"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1 h-8 w-8"
+              aria-label={show ? "Hide password" : "Show password"}
+              onClick={() => setShow((value) => !value)}
+            >
+              {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </div>
+          <Label htmlFor="confirm-new-password">Confirm password</Label>
+          <div className="relative">
+            <Input
+              id="confirm-new-password"
+              type={showConfirm ? "text" : "password"}
+              minLength={12}
+              required
+              value={confirm}
+              onChange={(event) => setConfirm(event.target.value)}
+              className="pr-11"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1 h-8 w-8"
+              aria-label={showConfirm ? "Hide confirmation password" : "Show confirmation password"}
+              onClick={() => setShowConfirm((value) => !value)}
+            >
+              {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </div>
+          {error && (
+            <Alert role="alert" className="border-red-200 bg-red-50 text-red-900">
+              {error}
             </Alert>
-          ) : (
-            <form onSubmit={submit} className="grid gap-4">
-              <HoneypotField />
-              <Label htmlFor="new-password">New password</Label>
-              <div className="relative">
-                <Input
-                  id="new-password"
-                  type={show ? "text" : "password"}
-                  minLength={12}
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="pr-11"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-8 w-8"
-                  aria-label={show ? "Hide password" : "Show password"}
-                  onClick={() => setShow((value) => !value)}
-                >
-                  {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-              <Label htmlFor="confirm-new-password">Confirm password</Label>
-              <div className="relative">
-                <Input
-                  id="confirm-new-password"
-                  type={showConfirm ? "text" : "password"}
-                  minLength={12}
-                  required
-                  value={confirm}
-                  onChange={(event) => setConfirm(event.target.value)}
-                  className="pr-11"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-8 w-8"
-                  aria-label={
-                    showConfirm ? "Hide confirmation password" : "Show confirmation password"
-                  }
-                  onClick={() => setShowConfirm((value) => !value)}
-                >
-                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-              {error && (
-                <Alert role="alert" className="border-red-200 bg-red-50 text-red-900">
-                  {error}
-                </Alert>
-              )}
-              <Button type="submit" disabled={busy}>
-                {busy ? "Saving…" : "Reset password"}
-              </Button>
-            </form>
           )}
-        </CardContent>
-      </Card>
-    </main>
+          <Button type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Reset password"}
+          </Button>
+        </form>
+      )}
+    </AuthShell>
   );
 }

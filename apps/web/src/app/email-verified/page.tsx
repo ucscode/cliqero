@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { siteConfig } from "@/config/site";
-import { PublicPage } from "@/components/public-page";
+import { AuthShell } from "@/components/auth-shell";
 
 export default async function EmailVerifiedPage({
   searchParams,
@@ -9,9 +9,10 @@ export default async function EmailVerifiedPage({
 }) {
   const { status } = await searchParams;
   return (
-    <PublicPage
+    <AuthShell
+      eyebrow="Account security"
       title={status === "error" ? "Verification link unavailable" : "Email verified"}
-      intro={
+      description={
         status === "error"
           ? "This verification link is missing or expired. Request a new one from your account."
           : `Your ${siteConfig.name} email is verified. You can continue using your account.`
@@ -20,6 +21,6 @@ export default async function EmailVerifiedPage({
       <Link className="text-emerald-700 underline" href="/login">
         Return to sign in
       </Link>
-    </PublicPage>
+    </AuthShell>
   );
 }

@@ -1,5 +1,5 @@
 import { PasswordResetForm } from "@/components/password-reset-form";
-import { PublicPage } from "@/components/public-page";
+import { AuthShell } from "@/components/auth-shell";
 
 export default async function ResetPasswordQueryPage({
   searchParams,
@@ -9,9 +9,13 @@ export default async function ResetPasswordQueryPage({
   const token = (await searchParams).token;
   if (!token)
     return (
-      <PublicPage title="Reset link unavailable" intro="This password reset link is incomplete.">
+      <AuthShell
+        eyebrow="Account security"
+        title="Reset link unavailable"
+        description="This password reset link is incomplete."
+      >
         <p>Request a new reset link and try again.</p>
-      </PublicPage>
+      </AuthShell>
     );
   return <PasswordResetForm token={token} />;
 }
