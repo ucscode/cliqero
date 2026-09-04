@@ -1,18 +1,8 @@
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { siteConfig } from "@/config/site";
+import { BrandLink } from "./brand-identity";
 
 export function AuthBrandHeader() {
-  return (
-    <Link
-      href="/"
-      className="flex items-center gap-2 font-semibold"
-      aria-label={`${siteConfig.name} home`}
-    >
-      <span className="brand-mark">{siteConfig.name.slice(0, 1)}</span>
-      <span>{siteConfig.name}</span>
-    </Link>
-  );
+  return <BrandLink />;
 }
 
 export function AuthShell({

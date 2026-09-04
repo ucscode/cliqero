@@ -13,6 +13,7 @@ import {
 import { Button } from "./ui/button";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "./ui/sheet";
 import { siteConfig } from "@/config/site";
+import { BrandIdentity, BrandLink } from "./brand-identity";
 
 export function SiteHeader() {
   const router = useRouter();
@@ -26,10 +27,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-[#f7f8f4]/95 backdrop-blur">
       <div className="mx-auto flex min-h-[72px] max-w-[1240px] items-center justify-between gap-6 px-4 sm:px-8">
-        <Link href="/" className="brand" aria-label={`${siteConfig.name} home`}>
-          <span className="brand-mark">{siteConfig.name.slice(0, 1)}</span>
-          <span>{siteConfig.name}</span>
-        </Link>
+        <BrandLink />
         <nav
           className="ml-auto hidden items-center gap-6 text-sm text-slate-500 md:flex"
           aria-label="Primary navigation"
@@ -94,7 +92,9 @@ export function SiteHeader() {
             </Button>
           </SheetTrigger>
           <SheetContent>
-            <SheetTitle>Site navigation</SheetTitle>
+            <SheetTitle className="text-base font-semibold tracking-normal">
+              <BrandIdentity />
+            </SheetTitle>
             <nav className="mt-6 grid gap-1 text-base" aria-label="Mobile navigation">
               {[
                 ["Catalogue", "/"],

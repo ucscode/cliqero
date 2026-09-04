@@ -7,15 +7,24 @@ import { SiteFooter } from "@/components/site-footer";
 import { getBlogService } from "@/modules/blog/application/blog-service";
 import { siteConfig } from "@/config/site";
 import { Separator } from "@/components/ui/separator";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { archiveNavigation } from "./pagination";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: `${siteConfig.name} Blog`,
   description: `Guides and updates from ${siteConfig.name}.`,
   alternates: { types: { "application/rss+xml": "/blog/rss.xml" } },
 };
-type BlogIndexProps = { category?: string; tag?: string; cursor?: string };
-export function BlogIndex({ category, tag, cursor }: BlogIndexProps = {}) {
+type BlogIndexProps = { category?: string; tag?: string; cursor?: string; trail?: string };
+export function BlogIndex({ category, tag, cursor, trail }: BlogIndexProps = {}) {
   const page = getBlogService().list({ publishedOnly: true, category, tag, cursor, limit: 12 });
+  const navigation = archiveNavigation({
+    category,
+    tag,
+    cursor,
+    trail,
+    nextCursor: page.nextCursor,
+  });
   return (
     <>
       <SiteHeader />
@@ -75,14 +84,31 @@ export function BlogIndex({ category, tag, cursor }: BlogIndexProps = {}) {
             <p className="text-slate-600">No published posts yet.</p>
           )}
         </div>
-        {page.nextCursor && (
-          <nav className="mt-8 flex justify-end" aria-label="Blog pagination">
-            <Link
-              className="rounded-md border px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-              href={`${category ? `/blog/category/${category}` : tag ? `/blog/tag/${tag}` : "/blog"}?cursor=${encodeURIComponent(page.nextCursor)}`}
-            >
-              Older posts
-            </Link>
+        {(navigation.newerHref || navigation.olderHref) && (
+          <nav
+            className="mt-8 flex items-center justify-between gap-4 border-t border-slate-200 pt-6"
+            aria-label="Blog pagination"
+          >
+            {navigation.newerHref ? (
+              <Link
+                className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 underline-offset-4 hover:underline"
+                href={navigation.newerHref}
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                Newer posts
+              </Link>
+            ) : (
+              <span aria-hidden="true" />
+            )}
+            {navigation.olderHref ? (
+              <Link
+                className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 underline-offset-4 hover:underline"
+                href={navigation.olderHref}
+              >
+                Older posts
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            ) : null}
           </nav>
         )}
       </main>
@@ -94,8 +120,8 @@ export function BlogIndex({ category, tag, cursor }: BlogIndexProps = {}) {
 export default async function BlogPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ cursor?: string }>;
+  searchParams?: Promise<{ cursor?: string; trail?: string }>;
 }) {
   const params = (await searchParams) ?? {};
-  return <BlogIndex cursor={params.cursor} />;
+  return <BlogIndex cursor={params.cursor} trail={params.trail} />;
 }

@@ -7,10 +7,11 @@ export default async function CategoryPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams?: Promise<{ cursor?: string }>;
+  searchParams?: Promise<{ cursor?: string; trail?: string }>;
 }) {
   const { slug } = await params;
   const page = getBlogService().list({ publishedOnly: true, category: slug });
   if (!page.items.length) notFound();
-  return <BlogIndex category={slug} cursor={(await searchParams)?.cursor} />;
+  const query = (await searchParams) ?? {};
+  return <BlogIndex category={slug} cursor={query.cursor} trail={query.trail} />;
 }
