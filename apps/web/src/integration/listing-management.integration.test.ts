@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContainer } from "@/infrastructure/container";
-import type { ObjectStorageProvider } from "@/modules/listing-media/storage";
+import type { ObjectStorageProvider } from "@/modules/storage/object-storage";
 import {
   ListingTransferService,
   parseTransfer,

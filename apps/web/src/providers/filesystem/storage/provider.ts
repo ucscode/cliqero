@@ -1,13 +1,13 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import type { ObjectLocator, ObjectStorageProvider } from "@/modules/listing-media/storage";
+import type { ObjectLocator, ObjectStorageProvider } from "@/modules/storage/object-storage";
 export class FilesystemObjectStorageProvider implements ObjectStorageProvider {
   readonly name = "filesystem";
   private root: string;
   constructor(
     root: string,
     private publicBaseUrl: string,
-    private container = "listing-media",
+    private container = "media",
   ) {
     this.root = resolve(root);
   }

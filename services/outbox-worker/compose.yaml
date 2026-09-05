@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
     volumes:
       - ../../config:/workspace/config:ro
-      - listing-media-data:/var/lib/cliqero/listing-media
+      - media-data:/var/lib/cliqero/media
 
 volumes:
-  listing-media-data:
+  media-data:

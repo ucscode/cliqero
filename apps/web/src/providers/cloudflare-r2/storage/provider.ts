@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import type { ObjectLocator, ObjectStorageProvider } from "@/modules/listing-media/storage";
+import type { ObjectLocator, ObjectStorageProvider } from "@/modules/storage/object-storage";
 
 export class CloudflareR2ObjectStorageProvider implements ObjectStorageProvider {
   readonly name = "cloudflare-r2";

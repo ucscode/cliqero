@@ -1,0 +1,31 @@
+# Platform-wide object storage for uploaded media and files.
+# Listing media is one consumer; its keys use the listings/ prefix.
+# Existing records retain their persisted provider/container identity.
+default_provider: filesystem
+
+providers:
+  filesystem:
+    enabled: true
+    # Absolute writable directory outside source control.
+    root: /var/lib/cliqero/media
+    # Provider container identity stored with new objects.
+    container: media
+    # Browser-facing origin served by Cliqero's filesystem media route.
+    public_base_url: "%env(APP_URL)%/media/filesystem"
+
+  supabase:
+    enabled: false
+    endpoint: https://project-ref.supabase.co
+    bucket: media
+    # Sensitive server-side service-role key; use a real value only locally.
+    service_key: supabase_service_role_example
+
+  cloudflare-r2:
+    enabled: false
+    endpoint: https://account-id.r2.cloudflarestorage.com
+    bucket: media
+    # Public R2 bucket/custom-domain origin.
+    public_base_url: https://media.example.com
+    access_key_id: r2_access_key_example
+    # Sensitive S3-compatible secret; use a real value only locally.
+    secret_access_key: r2_secret_key_example

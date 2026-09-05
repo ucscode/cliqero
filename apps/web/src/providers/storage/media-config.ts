@@ -1,14 +1,20 @@
 import { z } from "zod";
-import { parseYamlConfiguration, resolveEnvironmentPlaceholders } from "@/config/yaml";
-import { ObjectStorageRegistry } from "@/modules/listing-media/storage";
+import { loadYamlConfiguration } from "@/config/yaml";
+import { ObjectStorageRegistry } from "@/modules/storage/object-storage";
 import { FilesystemObjectStorageProvider } from "@/providers/filesystem/storage/provider";
 import { SupabaseObjectStorageProvider } from "@/providers/supabase/storage/provider";
 import { CloudflareR2ObjectStorageProvider } from "@/providers/cloudflare-r2/storage/provider";
+
 const schema = z.object({
   default_provider: z.enum(["filesystem", "supabase", "cloudflare-r2"]),
   providers: z.object({
     filesystem: z
-      .object({ enabled: z.boolean(), root: z.string().min(1), public_base_url: z.url() })
+      .object({
+        enabled: z.boolean(),
+        root: z.string().min(1),
+        container: z.string().min(1).default("media"),
+        public_base_url: z.url(),
+      })
       .optional(),
     supabase: z
       .object({
@@ -30,28 +36,19 @@ const schema = z.object({
       .optional(),
   }),
 });
-export function loadListingMediaStorage() {
-  const path = "config/modules/storage/listing-media.yaml";
-  const raw = parseYamlConfiguration(path);
-  const publicOrigin = process.env.APP_URL ?? "http://localhost:3000";
-  const config =
-    raw === null
-      ? {
-          default_provider: "filesystem" as const,
-          providers: {
-            filesystem: {
-              enabled: true,
-              root: "/var/lib/cliqero/listing-media",
-              public_base_url: `${publicOrigin.replace(/\/$/, "")}/media/filesystem`,
-            },
-          },
-        }
-      : schema.parse(resolveEnvironmentPlaceholders(raw, process.env, path));
+
+export function loadMediaStorage() {
+  const path = "config/storage/media.yaml";
+  const config = schema.parse(loadYamlConfiguration(path, process.env, { required: true }));
   const registry = new ObjectStorageRegistry(config.default_provider);
   const filesystem = config.providers.filesystem;
   if (filesystem?.enabled)
     registry.register(
-      new FilesystemObjectStorageProvider(filesystem.root, filesystem.public_base_url),
+      new FilesystemObjectStorageProvider(
+        filesystem.root,
+        filesystem.public_base_url,
+        filesystem.container,
+      ),
     );
   const supabase = config.providers.supabase;
   if (supabase?.enabled)

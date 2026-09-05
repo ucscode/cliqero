@@ -67,6 +67,18 @@ Provider/capability configuration lives under `config/`. Real `*.yaml` and `*.ym
 
 A provider is configured by copying the relevant example and supplying local credentials/settings. Do not commit real provider secrets.
 
+The platform media registry is configured in
+`config/storage/media.yaml`; initialize a local filesystem setup with:
+
+```bash
+mkdir -p config/storage
+cp config/storage/media.example.yaml config/storage/media.yaml
+```
+
+The default Docker filesystem root is `/var/lib/cliqero/media` and is persisted
+by the `media-data` volume. Listing media is one consumer of this shared
+registry. The real media YAML is required at runtime and remains ignored.
+
 YAML may reference an environment value explicitly:
 
 ```yaml

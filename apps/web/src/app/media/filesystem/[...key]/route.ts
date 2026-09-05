@@ -3,11 +3,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ key: strin
   const key = (await params).key.join("/"),
     container = getContainer();
   try {
-    const record = await container.listingMediaRepository.findByStorageIdentity(
-      "filesystem",
-      "listing-media",
-      key,
-    );
+    const record =
+      (await container.listingMediaRepository.findByStorageIdentity("filesystem", "media", key)) ??
+      // Preserve access to records created before the platform-wide media
+      // container was introduced. New objects always use the generic name.
+      (await container.listingMediaRepository.findByStorageIdentity(
+        "filesystem",
+        "listing-media",
+        key,
+      ));
     if (!record || record.state !== "active") return new Response("Not found", { status: 404 });
     const provider = container.objectStorage.get("filesystem"),
       object = await provider.read!({

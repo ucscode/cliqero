@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilesystemObjectStorageProvider } from "@/providers/filesystem/storage/provider";
 import { SupabaseObjectStorageProvider } from "@/providers/supabase/storage/provider";
 import { CloudflareR2ObjectStorageProvider } from "@/providers/cloudflare-r2/storage/provider";
-import { ObjectStorageRegistry } from "./storage";
-describe("listing media storage providers", () => {
+import { ObjectStorageRegistry } from "@/modules/storage/object-storage";
+describe("object storage providers used by listing media", () => {
   const roots: string[] = [];
   afterEach(async () => {
     for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });

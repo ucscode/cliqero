@@ -2,7 +2,8 @@ import { newId } from "@/kernel/ids";
 import type { Account } from "@/modules/identity/account";
 import type { ListingRepository } from "@/modules/listing/listing";
 import type { ListingMedia, ListingMediaRepository } from "@/modules/listing-media/media";
-import { generatedObjectKey, ObjectStorageRegistry } from "@/modules/listing-media/storage";
+import { generatedObjectKey } from "@/modules/listing-media/object-key";
+import type { ObjectStorageRegistry } from "@/modules/storage/object-storage";
 import { inspectImage } from "@/modules/listing-media/image";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 

@@ -1,4 +1,4 @@
-import type { ObjectLocator, ObjectStorageProvider } from "@/modules/listing-media/storage";
+import type { ObjectLocator, ObjectStorageProvider } from "@/modules/storage/object-storage";
 export class SupabaseObjectStorageProvider implements ObjectStorageProvider {
   readonly name = "supabase";
   constructor(

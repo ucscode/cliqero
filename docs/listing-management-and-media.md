@@ -35,7 +35,30 @@ Uploads accept PNG, JPEG, GIF, and WebP up to 10 MiB. Content signatures and dim
 
 Deletion first commits `deletion_pending` and immediately reindexes the remaining active gallery. Workers claim due rows with PostgreSQL `SKIP LOCKED` and a five-minute lease; an expired lease is reclaimable after a crash. Failures retain a safe error, increment the durable attempt count, and schedule exponential retry at 1, 2, 4, … minutes capped at 24 hours. Provider not-found responses converge to `deleted`, so a crash after remote deletion but before the database update remains safe to retry.
 
-Configuration is in `config/modules/storage/listing-media.yaml`; copy the tracked example. Supported providers are `filesystem`, `supabase`, and `cloudflare-r2`. Supabase uses its Storage REST API and public bucket URL. R2 uses signed S3-compatible requests and a configured browser-facing bucket/custom-domain URL. Credentials never enter media records or API responses.
+Media storage is platform-wide infrastructure configured in
+`config/storage/media.yaml`; copy the tracked `config/storage/media.example.yaml`
+template. Listing media is one consumer of the shared object-storage registry;
+future file-based capabilities should use the same registry rather than adding
+another provider configuration. Supported providers are `filesystem`,
+`supabase`, and `cloudflare-r2`. Supabase uses its Storage REST API and public
+bucket URL. R2 uses signed S3-compatible requests and a configured
+browser-facing bucket/custom-domain URL. Credentials never enter media records
+or API responses.
+
+The default filesystem root is `/var/lib/cliqero/media`, mounted as the
+persistent `media-data` Compose volume. New filesystem objects use the
+configured `media` container identity, while listing object keys remain
+namespaced under `listings/<listing-id>/...`. The real YAML file is ignored and
+must be provisioned per environment; the example is the tracked schema
+template. The application requires the real configuration at runtime rather
+than silently substituting provider credentials or paths in TypeScript.
+
+Existing development databases may contain listing-media records with the old
+`listing-media` container identity. The filesystem route continues to resolve
+those persisted identities during the transition. Renaming the Compose volume
+does not copy the old local Docker volume; for a pre-production checkout,
+rerun the development catalogue seed (or copy the old volume contents into the
+new media volume) after this change.
 
 ## Import/export
 

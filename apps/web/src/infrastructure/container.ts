@@ -86,7 +86,7 @@ import {
   EntitlementIssuanceProcessor,
 } from "@/processors/wallet-commerce";
 import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing-media";
-import { loadListingMediaStorage } from "@/providers/listing-media/config";
+import { loadMediaStorage } from "@/providers/storage/media-config";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing-media";
 import { ListingTransferService } from "@/application/listing-transfer";
 import { ProfileService } from "@/application/profile";
@@ -114,7 +114,7 @@ export function createContainer(databaseUrl: string) {
   const accounts = new PostgresAccountRepository(database);
   const listings = new PostgresListingRepository(database);
   const listingMediaRepository = new PostgresListingMediaRepository(database);
-  const objectStorage = loadListingMediaStorage();
+  const objectStorage = loadMediaStorage();
   const listingMedia = new ListingMediaService(
     listings,
     listingMediaRepository,
