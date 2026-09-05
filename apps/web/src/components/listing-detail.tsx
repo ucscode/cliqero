@@ -17,14 +17,14 @@ import { Toast } from "./toast";
 import { Money } from "./money";
 import { canShowPromote, postAuthBuyPath } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
-import { siteConfig } from "@/config/site";
-import { ListingDescription } from "./listing-description";
+import { ListingMarkdown } from "./listing-markdown";
 import { TextLink } from "./text-link";
 
 export function ListingDetail({ id }: { id: string }) {
   const router = useRouter();
   const session = authClient.useSession();
   const [listing, setListing] = useState<Listing | null>(null);
+  const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [promoteMessage, setPromoteMessage] = useState<string | null>(null);
@@ -32,7 +32,10 @@ export function ListingDetail({ id }: { id: string }) {
   const [promoting, setPromoting] = useState(false);
   useEffect(() => {
     void apiFetch<Listing>(`/api/listings/${id}`)
-      .then(setListing)
+      .then((nextListing) => {
+        setListing(nextListing);
+        setSelectedMediaId(null);
+      })
       .catch((error: unknown) =>
         setMessage(
           error instanceof ApiClientError && error.status === 404
@@ -61,7 +64,12 @@ export function ListingDetail({ id }: { id: string }) {
       </main>
     );
   const currentListing = listing;
-  const image = currentListing.media[0];
+  const image =
+    currentListing.media.find((media) => media.id === selectedMediaId) ?? currentListing.media[0];
+  const category =
+    typeof currentListing.metadata.category === "string" && currentListing.metadata.category.trim()
+      ? currentListing.metadata.category
+      : null;
   function buy() {
     if (!session.data?.user) {
       router.push(`/login?next=${encodeURIComponent(postAuthBuyPath(currentListing.id))}`);
@@ -94,47 +102,61 @@ export function ListingDetail({ id }: { id: string }) {
         <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
         Back to catalogue
       </TextLink>
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-        <div className="grid content-start gap-3">
+      <section
+        aria-labelledby="listing-title"
+        className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]"
+      >
+        <div className="grid content-start gap-4">
           {image ? (
-            <img
-              src={image.url}
-              alt={image.alt_text || currentListing.title}
-              className="block max-h-[620px] w-full rounded-xl border border-slate-200 object-cover"
-            />
+            <div className="flex aspect-[4/3] max-h-[620px] items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+              <img
+                src={image.url}
+                alt={image.alt_text || currentListing.title}
+                className="block max-h-full w-full object-contain"
+              />
+            </div>
           ) : (
-            <div className="grid aspect-[1.34] place-items-center rounded-xl bg-slate-100 text-5xl font-bold text-slate-400">
+            <div className="grid aspect-[4/3] max-h-[620px] place-items-center rounded-xl bg-slate-100 text-5xl font-bold text-slate-400">
               <span>{currentListing.title.slice(0, 1).toUpperCase()}</span>
             </div>
           )}
           {currentListing.media.length > 1 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" aria-label="Listing media">
               {currentListing.media.map((media) => (
-                <img
-                  src={media.url}
-                  alt={media.alt_text || ""}
+                <button
+                  type="button"
                   key={media.id}
-                  className="h-16 w-16 rounded-md border border-slate-200 object-cover"
-                />
+                  className={`h-16 w-16 overflow-hidden rounded-md border bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${image?.id === media.id ? "border-emerald-700 ring-2 ring-emerald-200" : "border-slate-200"}`}
+                  onClick={() => setSelectedMediaId(media.id)}
+                  aria-label={`View ${media.alt_text || currentListing.title}`}
+                  aria-pressed={image?.id === media.id}
+                >
+                  <img
+                    src={media.url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    aria-hidden="true"
+                  />
+                </button>
               ))}
             </div>
           )}
         </div>
-        <Card className="h-fit p-6 sm:p-8">
-          <div className="mb-5">
-            <Badge variant="secondary">In the catalogue</Badge>
-          </div>
-          <h1 className="!mb-4 !text-4xl !leading-tight sm:!text-5xl">{currentListing.title}</h1>
+        <Card className="h-fit p-6 sm:p-8 lg:sticky lg:top-24">
+          {category && (
+            <Badge variant="secondary" className="mb-5 w-fit">
+              {category}
+            </Badge>
+          )}
+          <h1 id="listing-title" className="!mb-4 !text-4xl !leading-tight sm:!text-5xl">
+            {currentListing.title}
+          </h1>
           <div className="mb-5 text-2xl font-bold tracking-tight">
             <Money
               minor={currentListing.price.minor_amount}
               currency={currentListing.price.currency}
             />
           </div>
-          <ListingDescription
-            className="mb-8 text-base leading-relaxed text-slate-600"
-            description={currentListing.description}
-          />
           <div className="grid gap-3">
             <Button onClick={buy}>Buy now</Button>
             {canShowPromote(Boolean(session.data?.user)) && (
@@ -145,9 +167,19 @@ export function ListingDetail({ id }: { id: string }) {
             {promoteMessage && <Toast tone="success">{promoteMessage}</Toast>}
             {referralUrl && <ReferralShareActions url={referralUrl} />}
           </div>
-          <p className="mt-6 text-xs text-slate-500">Secure access through {siteConfig.name}</p>
         </Card>
-      </div>
+      </section>
+      {currentListing.description.trim() && (
+        <section
+          className="mx-auto mt-16 max-w-3xl border-t border-slate-200 pt-10"
+          aria-labelledby="about-listing"
+        >
+          <h2 id="about-listing" className="!mb-6 !text-3xl !leading-tight">
+            About this listing
+          </h2>
+          <ListingMarkdown content={currentListing.description} />
+        </section>
+      )}
     </main>
   );
 }

@@ -14,7 +14,7 @@ const records = [
   [
     "toolkit-01",
     "Focus workspace starter",
-    "A compact digital workspace for planning a calmer week.\n\nMap the work that matters, keep notes beside decisions, and give each day a clear next step. The starter includes focused planning templates and a lightweight review ritual for busy teams.\n\nIt is designed for people who want useful structure without another complicated project-management system.",
+    "# Focus workspace starter\n\nA compact digital workspace for planning a **calmer week**. Map the work that matters, keep notes beside decisions, and give each day a clear next step.\n\n## What is included\n\n- focused planning templates for a busy week\n- a lightweight review ritual for decisions\n- prompts for turning intentions into next actions\n\nIt is designed for people who want useful structure without another complicated project-management system. Start with the [weekly planning guide](https://example.test/guides/weekly-planning), then adapt the templates to your own rhythm.",
     "1200",
   ],
   [
@@ -93,7 +93,7 @@ try {
   for (const [key, title, description, price] of records) {
     const state = key === "toolkit-16" ? "archived" : key === "toolkit-15" ? "draft" : "published";
     await pool.query(
-      `insert into listing_capability.listings(id,seller_id,title,description,price_minor,price_currency,destination_url,state,metadata,external_key) values($1,$2,$3,$4,$5,'USD',$6,$7,$8::jsonb,$9) on conflict (seller_id,external_key) do update set title=excluded.title,description=excluded.description,price_minor=excluded.price_minor,state=excluded.state,metadata=excluded.metadata,updated_at=now()`,
+      `insert into listing_capability.listings(id,seller_id,title,description,price_minor,price_currency,destination_url,state,metadata,external_key) values($1,$2,$3,$4,$5,'USD',$6,$7,$8::jsonb,$9) on conflict (seller_id,external_key) do update set title=excluded.title,description=excluded.description,price_minor=excluded.price_minor,state=excluded.state,metadata=excluded.metadata,created_at=case when excluded.external_key in ('toolkit-01','toolkit-02') then now() else listing_capability.listings.created_at end,updated_at=now()`,
       [
         newId(),
         ownerId,

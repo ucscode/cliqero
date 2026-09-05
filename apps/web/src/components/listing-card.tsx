@@ -7,14 +7,12 @@ import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import type { Listing } from "@/lib/api-client";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Toast } from "./toast";
 import { Money } from "./money";
 import { canShowPromote } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
-import { siteConfig } from "@/config/site";
 import { ListingDescription } from "./listing-description";
 
 export function ListingCard({ listing }: { listing: Listing }) {
@@ -41,7 +39,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
       .finally(() => setPromoting(false));
   }
   return (
-    <Card className="overflow-hidden transition-transform hover:-translate-y-0.5 hover:border-emerald-300">
+    <Card className="flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5 hover:border-emerald-300">
       <Link href={`/listings/${listing.id}`} className="block">
         {image ? (
           <img
@@ -55,19 +53,20 @@ export function ListingCard({ listing }: { listing: Listing }) {
           </div>
         )}
       </Link>
-      <div className="grid gap-4 p-5">
-        <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
-          <Badge variant="secondary">Featured</Badge>
-          <span>{siteConfig.name} catalogue</span>
-        </div>
-        <h3 className="!mb-0 !text-lg">
+      <div className="flex flex-1 flex-col gap-4 p-5">
+        {typeof listing.metadata.category === "string" && listing.metadata.category.trim() && (
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {listing.metadata.category}
+          </p>
+        )}
+        <h3 className="!mb-0 line-clamp-2 break-words !text-lg">
           <Link href={`/listings/${listing.id}`}>{listing.title}</Link>
         </h3>
         <ListingDescription
-          className="min-h-0 text-sm leading-relaxed text-slate-500"
+          className="min-h-[4.35rem] text-sm leading-relaxed text-slate-500"
           description={listing.description}
         />
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
           <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
           <div className="flex flex-wrap gap-2">
             <Button asChild size="sm">
