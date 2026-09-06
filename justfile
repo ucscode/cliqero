@@ -68,6 +68,10 @@ worker-shell:
 db-shell:
 	docker compose exec postgres psql -U "$${POSTGRES_USER:-cliqero}" -d "$${POSTGRES_DB:-cliqero}"
 
+# Run npm inside the development main container
+npm *args:
+	docker compose exec main npm {{args}}
+
 # Run the web application's full test command
 test:
 	npm test --workspace @cliqero/web
