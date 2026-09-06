@@ -71,13 +71,13 @@ export class AuthenticationService {
     try {
       await this.transaction(async () => {
         await this.sql.query(
-          `insert into identity_capability.accounts (id,email,handle,metadata)
+          `insert into identity_capability.accounts (uuid,email,handle,metadata)
            values ($1,$2,$3,$4::jsonb)`,
           [account.id, account.email, account.handle, JSON.stringify(country ? { country } : {})],
         );
         const linked = await this.sql.query(
           `update identity_capability.auth_account_links
-           set account_id=$2,onboarding_state='complete',updated_at=now()
+           set account_id=(select id from identity_capability.accounts where uuid=$2),onboarding_state='complete',updated_at=now()
            where auth_user_id=$1 and onboarding_state='incomplete'`,
           [result.user.id, account.id],
         );
@@ -128,7 +128,7 @@ export class AuthenticationService {
   async accountForAuthUser(authUserId: string): Promise<Account | null> {
     const row = (
       await this.sql.query<AccountRow>(
-        `select a.id,a.email,a.handle,a.metadata->>'country' as country
+        `select a.uuid as id,a.email,a.handle,a.metadata->>'country' as country
        from identity_capability.auth_account_links l
        join identity_capability.accounts a on a.id=l.account_id
        where l.auth_user_id=$1 and l.onboarding_state='complete'`,
@@ -179,13 +179,13 @@ export class AuthenticationService {
     );
     await this.transaction(async () => {
       await this.sql.query(
-        `insert into identity_capability.accounts (id,email,handle,metadata)
+        `insert into identity_capability.accounts (uuid,email,handle,metadata)
          values ($1,$2,$3,$4::jsonb)`,
         [account.id, account.email, account.handle, JSON.stringify(country ? { country } : {})],
       );
       const updated = await this.sql.query(
         `update identity_capability.auth_account_links
-         set account_id=$2,onboarding_state='complete',updated_at=now()
+         set account_id=(select id from identity_capability.accounts where uuid=$2),onboarding_state='complete',updated_at=now()
          where auth_user_id=$1 and onboarding_state='incomplete'`,
         [authUserId, account.id],
       );

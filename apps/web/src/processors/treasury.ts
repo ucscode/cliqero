@@ -9,7 +9,7 @@ export class TreasuryProcessor {
   async findWork(limit = 50) {
     return (
       await this.sql.query<{ id: string }>(
-        `select d.id from ledger_capability.purchase_distributions d left join treasury_capability.entries t on t.source_kind='distribution' and t.source_id=d.id where d.platform_amount_minor>0 and t.id is null order by d.completed_at,d.id limit $1`,
+        `select d.uuid as id from ledger_capability.purchase_distributions d left join treasury_capability.entries t on t.source_kind='distribution' and t.source_id=d.uuid where d.platform_amount_minor>0 and t.id is null order by d.completed_at,d.id limit $1`,
         [limit],
       )
     ).rows;
@@ -17,7 +17,7 @@ export class TreasuryProcessor {
   async process(distributionId: string) {
     const row = (
       await this.sql.query<{ id: string; amount: string }>(
-        `select id,platform_amount_minor amount from ledger_capability.purchase_distributions where id=$1`,
+        `select uuid as id,platform_amount_minor amount from ledger_capability.purchase_distributions where uuid=$1`,
         [distributionId],
       )
     ).rows[0];

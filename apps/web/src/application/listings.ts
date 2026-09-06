@@ -263,7 +263,7 @@ export class ListingService {
   ) {
     await this.sql?.query(
       `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
-       values($1,$2,'listing',$3,$4::jsonb,$5::jsonb,gen_random_uuid())`,
+       values((select id from identity_capability.accounts where uuid=$1),$2,'listing',$3,$4::jsonb,$5::jsonb,gen_random_uuid())`,
       [
         actorId,
         action,

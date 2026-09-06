@@ -36,7 +36,7 @@ export class ApiPrincipalResolver {
     } else account = await this.authentication.authenticateRequest(request);
     if (!account) return null;
     const rows = await this.sql.query<{ capability: string }>(
-      `select capability from identity_capability.account_capabilities where account_id=$1`,
+      `select capability from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1)`,
       [account.id],
     );
     return {
@@ -50,7 +50,7 @@ export class ApiPrincipalResolver {
   private async authenticationAccount(id: string) {
     const row = (
       await this.sql.query<{ id: string; email: string; handle: string; country: string | null }>(
-        `select id,email,handle,metadata->>'country' country from identity_capability.accounts where id=$1`,
+        `select uuid as id,email,handle,metadata->>'country' country from identity_capability.accounts where uuid=$1`,
         [id],
       )
     ).rows[0];

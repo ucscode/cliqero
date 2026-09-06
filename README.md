@@ -127,7 +127,7 @@ Referral commission policy is provider-independent and loaded from `config/hiera
 ## Structure
 
 - `apps/web` — Next.js application and modular-monolith capabilities
-- `database/migrations` — PostgreSQL capability-owned schemas and kernel infrastructure
+- `database/migrations/001_initial_schema.sql` — the canonical PostgreSQL bootstrap schema for all capability-owned schemas and kernel infrastructure
 - `services/*/compose*.yaml` — service-owned Compose definitions
 - `compose*.yaml` — root composition
 - `config/` — platform/capability/provider configuration and examples

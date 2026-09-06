@@ -119,7 +119,7 @@ describe("operator distribution and earnings read models", () => {
   it("projects referral ledger entries and exact pending/available totals", async () => {
     const service = new OperatorEarningsService({
       query: async <T extends object>(sql: string) => {
-        if (sql.includes("select e.id,e.account_id"))
+        if (sql.includes("select e.uuid as id"))
           return result<T>([
             {
               id: ids.entry,

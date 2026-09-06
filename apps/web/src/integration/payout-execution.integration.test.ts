@@ -64,7 +64,7 @@ suite("provider-neutral payout execution", () => {
       correlationId: newId(),
     });
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [seller.id],
     );
     await app.withdrawals.approve(seller.id, withdrawal.id);
@@ -91,7 +91,7 @@ suite("provider-neutral payout execution", () => {
     expect((await app.withdrawalRepository.findById(retry.withdrawal.id))?.state).toBe("approved");
     expect((await app.fundsReservation.summarize(retry.seller.id))[0].reservedMinor).toBe(5000n);
     await app.database.query(
-      `update payout_capability.executions set next_attempt_at=now()-interval '1 second' where withdrawal_id=$1`,
+      `update payout_capability.executions set next_attempt_at=now()-interval '1 second' where withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)`,
       [retry.withdrawal.id],
     );
     await expect(app.payoutExecution.execute(retry.withdrawal.id, newId())).resolves.toMatchObject({
@@ -142,7 +142,7 @@ suite("provider-neutral payout execution", () => {
     const submitted = await setup("dev:retry");
     await app.payoutExecution.execute(submitted.withdrawal.id, newId());
     await app.database.query(
-      `update payout_capability.executions set state='submitted' where withdrawal_id=$1`,
+      `update payout_capability.executions set state='submitted' where withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)`,
       [submitted.withdrawal.id],
     );
     await expect(

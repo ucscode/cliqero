@@ -24,16 +24,18 @@ interface Row {
 export class PostgresWithdrawalRepository implements WithdrawalRepository {
   constructor(private readonly sql: SqlExecutor) {}
   async findById(id: string) {
-    return this.find("id=$1", [id]);
+    return this.find("w.uuid=$1", [id]);
   }
   async findByIdForUpdate(id: string) {
-    return this.find("id=$1", [id], true);
+    return this.find("w.uuid=$1", [id], true);
   }
   async findByIdempotencyKey(key: string) {
     return this.find("idempotency_key=$1", [key]);
   }
   async listForAccount(accountId: string) {
-    return this.list("account_id=$1", [accountId]);
+    return this.list("account_id=(select id from identity_capability.accounts where uuid=$1)", [
+      accountId,
+    ]);
   }
   async listForOperator(filter: { state?: WithdrawalState; limit?: number } = {}) {
     return this.list(
@@ -44,7 +46,7 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
   }
   async create(value: Withdrawal) {
     await this.sql.query(
-      `insert into withdrawal_capability.withdrawals(id,account_id,amount_minor,currency,destination_type,destination_reference,state,idempotency_key,correlation_id,reason,created_at,updated_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
+      `insert into withdrawal_capability.withdrawals(uuid,account_id,amount_minor,currency,destination_type,destination_reference,state,idempotency_key,correlation_id,reason,created_at,updated_at) values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
       [
         value.id,
         value.accountId,
@@ -62,7 +64,7 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
   }
   async transition(id: string, from: WithdrawalState, to: WithdrawalState, reason?: string) {
     const result = await this.sql.query(
-      `update withdrawal_capability.withdrawals set state=$3,reason=coalesce($4,reason),updated_at=now(),approved_at=case when $3='approved' then now() else approved_at end,completed_at=case when $3='completed' then now() else completed_at end where id=$1 and state=$2`,
+      `update withdrawal_capability.withdrawals set state=$3,reason=coalesce($4,reason),updated_at=now(),approved_at=case when $3='approved' then now() else approved_at end,completed_at=case when $3='completed' then now() else completed_at end where uuid=$1 and state=$2`,
       [id, from, to, reason ?? null],
     );
     if (result.rowCount !== 1) throw new Error(`Invalid withdrawal transition from ${from}`);
@@ -70,7 +72,7 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
   private async find(where: string, values: readonly unknown[], lock = false) {
     const row = (
       await this.sql.query<Row>(
-        `select id,account_id,amount_minor,currency,destination_type,destination_reference,state,idempotency_key,correlation_id,reason,created_at,updated_at from withdrawal_capability.withdrawals where ${where}${lock ? " for update" : ""}`,
+        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.idempotency_key,w.correlation_id,w.reason,w.created_at,w.updated_at from withdrawal_capability.withdrawals w where ${where}${lock ? " for update" : ""}`,
         values,
       )
     ).rows[0];
@@ -79,7 +81,7 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
   private async list(where: string, values: readonly unknown[], limit = 100) {
     const rows = (
       await this.sql.query<Row>(
-        `select id,account_id,amount_minor,currency,destination_type,destination_reference,state,idempotency_key,correlation_id,reason,created_at,updated_at from withdrawal_capability.withdrawals where ${where} order by created_at desc,id desc limit $${values.length + 1}`,
+        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.idempotency_key,w.correlation_id,w.reason,w.created_at,w.updated_at from withdrawal_capability.withdrawals w where ${where} order by w.created_at desc,w.id desc limit $${values.length + 1}`,
         [...values, limit],
       )
     ).rows;

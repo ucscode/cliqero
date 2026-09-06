@@ -104,14 +104,14 @@ suite("wallet-first durable commerce", () => {
       listingId: listing.id,
     });
     await app.database.query(
-      `update entitlement_capability.entitlements set expires_at=now()-interval '1 second' where purchase_id=$1`,
+      `update entitlement_capability.entitlements set expires_at=now()-interval '1 second' where purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
       [checkout.purchaseId],
     );
     expect(
       (await app.accountProjections.purchase(buyer.id, checkout.purchaseId)).access_available,
     ).toBe(false);
     await app.database.query(
-      `update entitlement_capability.entitlements set state='revoked',expires_at=null where purchase_id=$1`,
+      `update entitlement_capability.entitlements set state='revoked',expires_at=null where purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
       [checkout.purchaseId],
     );
     expect(
@@ -132,15 +132,16 @@ suite("wallet-first durable commerce", () => {
     ]);
     expect(
       (
-        await app.database.query(`select 1 from wallet_capability.debits where checkout_id=$1`, [
-          checkout.id,
-        ])
+        await app.database.query(
+          `select 1 from wallet_capability.debits where checkout_id=(select id from checkout_capability.checkouts where uuid=$1)`,
+          [checkout.id],
+        )
       ).rowCount,
     ).toBe(1);
     expect(
       (
         await app.database.query(
-          `select 1 from entitlement_capability.entitlements where purchase_id=$1`,
+          `select 1 from entitlement_capability.entitlements where purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
           [checkout.purchaseId],
         )
       ).rowCount,
@@ -328,7 +329,7 @@ suite("wallet-first durable commerce", () => {
       expect(result?.state).toBe(expectedState);
       const operation = (
         await app.database.query<any>(
-          `select outcome,provider_code from payment_capability.provider_operations where funding_id=$1 and operation='transaction.verify' order by occurred_at desc limit 1`,
+          `select outcome,provider_code from payment_capability.provider_operations where funding_id=(select id from funding_capability.funding_transactions where uuid=$1) and operation='transaction.verify' order by occurred_at desc limit 1`,
           [funding.id],
         )
       ).rows[0];
@@ -410,7 +411,7 @@ suite("wallet-first durable commerce", () => {
     expect(
       (
         await app.database.query(
-          `select id from funding_capability.funding_transactions where id=$1`,
+          `select id from funding_capability.funding_transactions where uuid=$1`,
           [funding.id],
         )
       ).rowCount,
@@ -436,7 +437,7 @@ suite("wallet-first durable commerce", () => {
     expect(await app.entitlements.findActive(buyer.id, listing.id)).toBeNull();
     const before = (
       await app.database.query(
-        `select id from access_capability.access_grants where entitlement_id=$1`,
+        `select id from access_capability.access_grants where entitlement_id=(select id from entitlement_capability.entitlements where uuid=$1)`,
         [expired.id],
       )
     ).rowCount;
@@ -445,7 +446,7 @@ suite("wallet-first durable commerce", () => {
     );
     const after = (
       await app.database.query(
-        `select id from access_capability.access_grants where entitlement_id=$1`,
+        `select id from access_capability.access_grants where entitlement_id=(select id from entitlement_capability.entitlements where uuid=$1)`,
         [expired.id],
       )
     ).rowCount;

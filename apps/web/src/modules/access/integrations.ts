@@ -37,12 +37,14 @@ export class IntegrationService {
     const secret = randomBytes(32).toString("base64url");
     const salt = randomBytes(16);
     await this.sql.query(
-      `insert into access_capability.integrations (id,owner_id,name,credential_hash,credential_salt)
-       values ($1,$2,$3,$4,$5)`,
+      `insert into access_capability.integrations (uuid,owner_id,name,credential_hash,credential_salt)
+       values ($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5)`,
       [id, ownerId, name.trim(), hashCredential(salt, secret), salt],
     );
     await this.sql.query(
-      `insert into access_capability.integration_listings (integration_id,listing_id) values ($1,$2)`,
+      `insert into access_capability.integration_listings (integration_id,listing_id)
+       values ((select id from access_capability.integrations where uuid=$1),
+               (select id from listing_capability.listings where uuid=$2))`,
       [id, listingId],
     );
     return { id, credential: `cli_int_${id}.${secret}` };
@@ -63,7 +65,10 @@ export class IntegrationService {
     if (!match) return null;
     const row = (
       await this.sql.query<IntegrationRow>(
-        `select id,owner_id,credential_hash,credential_salt,state from access_capability.integrations where id=$1`,
+        `select i.uuid as id,a.uuid as owner_id,i.credential_hash,i.credential_salt,i.state
+           from access_capability.integrations i
+           join identity_capability.accounts a on a.id=i.owner_id
+          where i.uuid=$1`,
         [match[1]],
       )
     ).rows[0];
@@ -76,7 +81,10 @@ export class IntegrationService {
       return null;
     const listingRows = (
       await this.sql.query<{ listing_id: string }>(
-        `select listing_id from access_capability.integration_listings where integration_id=$1`,
+        `select l.uuid as listing_id
+           from access_capability.integration_listings il
+           join listing_capability.listings l on l.id=il.listing_id
+          where il.integration_id=(select id from access_capability.integrations where uuid=$1)`,
         [row.id],
       )
     ).rows;
@@ -89,7 +97,13 @@ export class IntegrationService {
   async list(ownerId: Id) {
     return (
       await this.sql.query<any>(
-        `select i.id,i.name,i.state,i.created_at,coalesce(array_agg(il.listing_id) filter(where il.listing_id is not null),'{}') listing_ids from access_capability.integrations i left join access_capability.integration_listings il on il.integration_id=i.id where i.owner_id=$1 group by i.id order by i.created_at desc,i.id`,
+        `select i.uuid as id,i.name,i.state,i.created_at,
+                coalesce(array_agg(l.uuid) filter(where l.uuid is not null),'{}') listing_ids
+           from access_capability.integrations i
+           left join access_capability.integration_listings il on il.integration_id=i.id
+           left join listing_capability.listings l on l.id=il.listing_id
+          where i.owner_id=(select id from identity_capability.accounts where uuid=$1)
+          group by i.id order by i.created_at desc,i.id`,
         [ownerId],
       )
     ).rows.map(view);
@@ -97,7 +111,13 @@ export class IntegrationService {
   async listForListing(listingId: Id) {
     return (
       await this.sql.query<any>(
-        `select i.id,i.name,i.state,i.created_at,coalesce(array_agg(il.listing_id) filter(where il.listing_id is not null),'{}') listing_ids from access_capability.integrations i join access_capability.integration_listings il on il.integration_id=i.id where il.listing_id=$1 group by i.id order by i.created_at desc,i.id`,
+        `select i.uuid as id,i.name,i.state,i.created_at,
+                coalesce(array_agg(l.uuid) filter(where l.uuid is not null),'{}') listing_ids
+           from access_capability.integrations i
+           join access_capability.integration_listings il on il.integration_id=i.id
+           join listing_capability.listings l on l.id=il.listing_id
+          where il.listing_id=(select id from listing_capability.listings where uuid=$1)
+          group by i.id order by i.created_at desc,i.id`,
         [listingId],
       )
     ).rows.map(view);
@@ -105,7 +125,13 @@ export class IntegrationService {
   async find(ownerId: Id, id: Id) {
     const row = (
       await this.sql.query<any>(
-        `select i.id,i.name,i.state,i.created_at,coalesce(array_agg(il.listing_id) filter(where il.listing_id is not null),'{}') listing_ids from access_capability.integrations i left join access_capability.integration_listings il on il.integration_id=i.id where i.owner_id=$1 and i.id=$2 group by i.id`,
+        `select i.uuid as id,i.name,i.state,i.created_at,
+                coalesce(array_agg(l.uuid) filter(where l.uuid is not null),'{}') listing_ids
+           from access_capability.integrations i
+           left join access_capability.integration_listings il on il.integration_id=i.id
+           left join listing_capability.listings l on l.id=il.listing_id
+          where i.owner_id=(select id from identity_capability.accounts where uuid=$1)
+            and i.uuid=$2 group by i.id`,
         [ownerId, id],
       )
     ).rows[0];
@@ -114,7 +140,9 @@ export class IntegrationService {
   }
   async update(ownerId: Id, id: Id, name: string) {
     const result = await this.sql.query(
-      `update access_capability.integrations set name=$3,updated_at=now() where owner_id=$1 and id=$2 returning id`,
+      `update access_capability.integrations set name=$3,updated_at=now()
+        where owner_id=(select id from identity_capability.accounts where uuid=$1)
+          and uuid=$2 returning uuid as id`,
       [ownerId, id, name.trim()],
     );
     if (result.rowCount !== 1) throw new Error("Integration not found");
@@ -122,7 +150,9 @@ export class IntegrationService {
   }
   async revoke(ownerId: Id, id: Id) {
     const result = await this.sql.query(
-      `update access_capability.integrations set state='revoked',updated_at=now() where owner_id=$1 and id=$2 returning id`,
+      `update access_capability.integrations set state='revoked',updated_at=now()
+        where owner_id=(select id from identity_capability.accounts where uuid=$1)
+          and uuid=$2 returning uuid as id`,
       [ownerId, id],
     );
     if (result.rowCount !== 1) throw new Error("Integration not found");
@@ -132,14 +162,19 @@ export class IntegrationService {
     return this.managedMutation(async () => {
       const current = (
         await this.sql.query<{ state: "active" | "revoked" }>(
-          `select i.state from access_capability.integrations i join access_capability.integration_listings il on il.integration_id=i.id where i.id=$1 and il.listing_id=$2 for update`,
+          `select i.state from access_capability.integrations i
+            join access_capability.integration_listings il on il.integration_id=i.id
+           where i.uuid=$1 and il.listing_id=(select id from listing_capability.listings where uuid=$2) for update`,
           [id, listingId],
         )
       ).rows[0];
       if (!current) throw new Error("Integration not found");
       if (current.state === "revoked") return this.listForListing(listingId);
       const result = await this.sql.query(
-        `update access_capability.integrations i set state='revoked',updated_at=now() where i.id=$1 and exists (select 1 from access_capability.integration_listings il where il.integration_id=i.id and il.listing_id=$2) returning i.id`,
+        `update access_capability.integrations i set state='revoked',updated_at=now()
+          where i.uuid=$1 and exists (select 1 from access_capability.integration_listings il
+            where il.integration_id=i.id and il.listing_id=(select id from listing_capability.listings where uuid=$2))
+          returning i.uuid as id`,
         [id, listingId],
       );
       if (result.rowCount !== 1) return this.listForListing(listingId);
@@ -158,7 +193,9 @@ export class IntegrationService {
     const secret = randomBytes(32).toString("base64url"),
       salt = randomBytes(16);
     const result = await this.sql.query(
-      `update access_capability.integrations set credential_hash=$3,credential_salt=$4,state='active',updated_at=now() where owner_id=$1 and id=$2 returning id`,
+      `update access_capability.integrations set credential_hash=$3,credential_salt=$4,state='active',updated_at=now()
+        where owner_id=(select id from identity_capability.accounts where uuid=$1)
+          and uuid=$2 returning uuid as id`,
       [ownerId, id, hashCredential(salt, secret), salt],
     );
     if (result.rowCount !== 1) throw new Error("Integration not found");
@@ -170,13 +207,17 @@ export class IntegrationService {
         salt = randomBytes(16);
       const current = (
         await this.sql.query<{ state: "active" | "revoked" }>(
-          `select i.state from access_capability.integrations i join access_capability.integration_listings il on il.integration_id=i.id where i.id=$1 and il.listing_id=$2 for update`,
+          `select i.state from access_capability.integrations i join access_capability.integration_listings il on il.integration_id=i.id
+            where i.uuid=$1 and il.listing_id=(select id from listing_capability.listings where uuid=$2) for update`,
           [id, listingId],
         )
       ).rows[0];
       if (!current) throw new Error("Integration not found");
       const result = await this.sql.query(
-        `update access_capability.integrations i set credential_hash=$3,credential_salt=$4,state='active',updated_at=now() where i.id=$1 and exists (select 1 from access_capability.integration_listings il where il.integration_id=i.id and il.listing_id=$2) returning i.id`,
+        `update access_capability.integrations i set credential_hash=$3,credential_salt=$4,state='active',updated_at=now()
+          where i.uuid=$1 and exists (select 1 from access_capability.integration_listings il
+            where il.integration_id=i.id and il.listing_id=(select id from listing_capability.listings where uuid=$2))
+          returning i.uuid as id`,
         [id, listingId, hashCredential(salt, secret), salt],
       );
       if (result.rowCount !== 1) throw new Error("Integration not found");
@@ -203,7 +244,14 @@ export class IntegrationService {
       `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
        values($1,$2,'integration',$3,$4::jsonb,$5::jsonb,gen_random_uuid())`,
       [
-        actorId ?? null,
+        actorId
+          ? ((
+              await this.sql.query<{ id: number }>(
+                `select id from identity_capability.accounts where uuid=$1`,
+                [actorId],
+              )
+            ).rows[0]?.id ?? null)
+          : null,
         action,
         subjectId,
         previousState === null ? null : JSON.stringify({ listing_id: listingId, ...previousState }),

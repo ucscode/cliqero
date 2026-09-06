@@ -252,7 +252,7 @@ suite("Paystack webhook to commerce consequence", () => {
   it("reconciles an eligible pending payment through authoritative verification and is repeat-safe", async () => {
     const { buyer, checkout } = await setup();
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [buyer.id],
     );
     const input = {
@@ -284,7 +284,7 @@ suite("Paystack webhook to commerce consequence", () => {
   it("surfaces reconciliation mismatches and network failures without local completion", async () => {
     const { buyer, checkout } = await setup();
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [buyer.id],
     );
     verification.amount = 9999;
@@ -310,7 +310,7 @@ suite("Paystack webhook to commerce consequence", () => {
   it("keeps a payment pending when reconciliation cannot reach Paystack", async () => {
     const { buyer, checkout } = await setup();
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [buyer.id],
     );
     networkFailure = true;
@@ -334,7 +334,7 @@ suite("Paystack webhook to commerce consequence", () => {
   it("translates an authenticated full Paystack refund into one historical reversal", async () => {
     const { buyer, checkout } = await setup();
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [buyer.id],
     );
     await app.legacyPaymentCompletion.complete({
@@ -360,9 +360,10 @@ suite("Paystack webhook to commerce consequence", () => {
     ).toBe("processed");
     expect(
       (
-        await app.database.query(`select 1 from ledger_capability.reversals where purchase_id=$1`, [
-          checkout.purchaseId,
-        ])
+        await app.database.query(
+          `select 1 from ledger_capability.reversals where purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
+          [checkout.purchaseId],
+        )
       ).rowCount,
     ).toBe(1);
     expect((await app.entitlements.findByPurchaseId(checkout.purchaseId!))?.isActive).toBe(false);
@@ -371,7 +372,7 @@ suite("Paystack webhook to commerce consequence", () => {
     const { buyer } = await setup();
     await expect(app.paystackInspection.listEvents(buyer.id, 10)).rejects.toThrow("Forbidden");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [buyer.id],
     );
     const rows = await app.paystackInspection.listEvents(buyer.id, 10);

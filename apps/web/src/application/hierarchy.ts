@@ -69,15 +69,16 @@ export class HierarchyService {
   }
   async isDescendantOrSelf(ancestor: string, candidate: string) {
     const r = await this.sql.query(
-      `with recursive tree(id,path) as (select $1::uuid,array[$1::uuid] union all select ar.child_account_id,tree.path||ar.child_account_id from tree join referral_capability.account_referrals ar on ar.parent_account_id=tree.id where not ar.child_account_id=any(tree.path)) select 1 from tree where id=$2`,
+      `with recursive tree(id,path) as (select (select id from identity_capability.accounts where uuid=$1),array[(select id from identity_capability.accounts where uuid=$1)] union all select ar.child_account_id,tree.path||ar.child_account_id from tree join referral_capability.account_referrals ar on ar.parent_account_id=tree.id where not ar.child_account_id=any(tree.path)) select 1 from tree where id=(select id from identity_capability.accounts where uuid=$2)`,
       [ancestor, candidate],
     );
     return r.rowCount === 1;
   }
   private async assertRoot(requester: string, root: string, admin: boolean) {
-    const exists = await this.sql.query(`select 1 from identity_capability.accounts where id=$1`, [
-      root,
-    ]);
+    const exists = await this.sql.query(
+      `select 1 from identity_capability.accounts where uuid=$1`,
+      [root],
+    );
     if (exists.rowCount !== 1) throw new Error("Hierarchy account not found");
     if (!admin && !(await this.isDescendantOrSelf(requester, root))) throw new Error("Forbidden");
   }
@@ -85,22 +86,22 @@ export class HierarchyService {
     await this.assertRoot(requester, root, admin);
     const rows = await this.sql.query<any>(
       `with recursive tree(id,parent_id,depth,path) as (
-      select $1::uuid,null::uuid,0,array[$1::uuid]
+      select (select id from identity_capability.accounts where uuid=$1),null::bigint,0,array[(select id from identity_capability.accounts where uuid=$1)]
       union all
       select r.child_account_id,r.parent_account_id,tree.depth+1,tree.path||r.child_account_id
       from tree join lateral (select child_account_id,parent_account_id from referral_capability.account_referrals where parent_account_id=tree.id order by child_account_id limit $2) r on true
       where tree.depth < $3 and not r.child_account_id=any(tree.path)
     )
-    select tree.id,tree.parent_id,tree.depth,a.handle,a.display_name,
+    select a.uuid id,parent.uuid parent_id,tree.depth,a.handle,a.display_name,
       (select count(*)::int from referral_capability.account_referrals x where x.parent_account_id=tree.id) direct_child_count,
       exists(select 1 from referral_capability.account_referrals x where x.parent_account_id=tree.id) has_children,
       (select count(*) from referral_capability.account_referrals x where x.parent_account_id=tree.id) > $2 has_more_children,
-      (select x.child_account_id from referral_capability.account_referrals x where x.parent_account_id=tree.id order by x.child_account_id offset ($2 - 1) limit 1) next_child_cursor
-    from tree join identity_capability.accounts a on a.id=tree.id order by tree.depth,tree.id`,
+      (select child.uuid from referral_capability.account_referrals x join identity_capability.accounts child on child.id=x.child_account_id where x.parent_account_id=tree.id order by x.child_account_id offset ($2 - 1) limit 1) next_child_cursor
+    from tree join identity_capability.accounts a on a.id=tree.id left join identity_capability.accounts parent on parent.id=tree.parent_id order by tree.depth,tree.id`,
       [root, this.config.childLimit, this.config.depth],
     );
     const parentRow = await this.sql.query<any>(
-      `select a.id,a.handle,a.display_name from referral_capability.account_referrals r join identity_capability.accounts a on a.id=r.parent_account_id where r.child_account_id=$1`,
+      `select a.uuid id,a.handle,a.display_name from referral_capability.account_referrals r join identity_capability.accounts a on a.id=r.parent_account_id where r.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
       [root],
     );
     const parent = parentRow.rows[0]
@@ -140,13 +141,13 @@ export class HierarchyService {
   ): Promise<HierarchyChildren> {
     await this.assertRoot(requester, parentId, admin);
     const rows = await this.sql.query<any>(
-      `select a.id,a.handle,a.display_name,1::int depth,
+      `select a.uuid id,a.handle,a.display_name,1::int depth,
       (select count(*)::int from referral_capability.account_referrals x where x.parent_account_id=a.id) direct_child_count,
       exists(select 1 from referral_capability.account_referrals x where x.parent_account_id=a.id) has_children,
       (select count(*) from referral_capability.account_referrals x where x.parent_account_id=a.id) > $3 has_more_children,
-      (select x.child_account_id from referral_capability.account_referrals x where x.parent_account_id=a.id order by x.child_account_id offset ($3 - 1) limit 1) next_child_cursor
+      (select child.uuid from referral_capability.account_referrals x join identity_capability.accounts child on child.id=x.child_account_id where x.parent_account_id=a.id order by x.child_account_id offset ($3 - 1) limit 1) next_child_cursor
       from referral_capability.account_referrals r join identity_capability.accounts a on a.id=r.child_account_id
-      where r.parent_account_id=$1 and ($2::uuid is null or r.child_account_id>$2::uuid)
+      where r.parent_account_id=(select id from identity_capability.accounts where uuid=$1) and ($2::uuid is null or r.child_account_id>(select id from identity_capability.accounts where uuid=$2))
       order by r.child_account_id limit $4`,
       [parentId, cursor ?? null, this.config.childLimit, this.config.childLimit + 1],
     );
@@ -172,10 +173,10 @@ export class HierarchyService {
     let scope = "";
     if (!admin) {
       params.push(requester);
-      scope = `and a.id in (with recursive tree(id,path) as (select $3::uuid,array[$3::uuid] union all select ar.child_account_id,tree.path||ar.child_account_id from tree join referral_capability.account_referrals ar on ar.parent_account_id=tree.id where not ar.child_account_id=any(tree.path)) select id from tree)`;
+      scope = `and a.id in (with recursive tree(id,path) as (select (select id from identity_capability.accounts where uuid=$3),array[(select id from identity_capability.accounts where uuid=$3)] union all select ar.child_account_id,tree.path||ar.child_account_id from tree join referral_capability.account_referrals ar on ar.parent_account_id=tree.id where not ar.child_account_id=any(tree.path)) select id from tree)`;
     }
     const rows = await this.sql.query<any>(
-      `select a.id,a.handle,a.display_name from identity_capability.accounts a where (a.id::text=$1 or a.handle ilike '%'||$1||'%' or a.email ilike '%'||$1||'%') ${scope} order by a.handle limit $2`,
+      `select a.uuid id,a.handle,a.display_name from identity_capability.accounts a where (a.uuid::text=$1 or a.handle ilike '%'||$1||'%' or a.email ilike '%'||$1||'%') ${scope} order by a.handle limit $2`,
       params,
     );
     return rows.rows.map((r) => ({

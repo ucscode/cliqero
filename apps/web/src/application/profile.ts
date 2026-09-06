@@ -5,7 +5,7 @@ export class ProfileService {
   async update(id: string, input: { email?: string; handle?: string; country?: string | null }) {
     const current = (
       await this.sql.query<any>(
-        `select email,handle,metadata->>'country' country from identity_capability.accounts where id=$1`,
+        `select email,handle,metadata->>'country' country from identity_capability.accounts where uuid=$1`,
         [id],
       )
     ).rows[0];
@@ -22,7 +22,7 @@ export class ProfileService {
     );
     try {
       await this.sql.query(
-        `update identity_capability.accounts set email=$2,handle=$3,metadata=case when $4::text is null then metadata-'country' else jsonb_set(metadata,'{country}',to_jsonb($4::text),true) end,updated_at=now() where id=$1`,
+        `update identity_capability.accounts set email=$2,handle=$3,metadata=case when $4::text is null then metadata-'country' else jsonb_set(metadata,'{country}',to_jsonb($4::text),true) end,updated_at=now() where uuid=$1`,
         [id, account.email, account.handle, account.country],
       );
     } catch (error) {

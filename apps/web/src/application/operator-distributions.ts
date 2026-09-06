@@ -87,18 +87,19 @@ export class OperatorDistributionService {
     const search = cleanSearch(input.search);
     const rows = (
       await this.sql.query<any>(
-        `select d.id,d.purchase_id,d.gross_minor,d.currency,d.platform_amount_minor,d.completed_at,
-              p.listing_id,p.listing_title_snapshot,p.buyer_id,b.handle buyer_handle,b.email buyer_email,
+        `select d.uuid as id,p.uuid as purchase_id,d.gross_minor,d.currency,d.platform_amount_minor,d.completed_at,
+              l.uuid as listing_id,p.listing_title_snapshot,b.uuid as buyer_id,b.handle buyer_handle,b.email buyer_email,
               coalesce(sum(case when e.recipient_role='referral' and e.direction='credit' and e.reversal_id is null then e.amount_minor else 0 end),0)::bigint referral_allocated_minor,
               count(distinct case when e.recipient_role='referral' and e.direction='credit' and e.reversal_id is null then e.account_id end)::int beneficiary_count
          from ledger_capability.purchase_distributions d
          join purchase_capability.purchases p on p.id=d.purchase_id
          join identity_capability.accounts b on b.id=p.buyer_id
          left join ledger_capability.entries e on e.distribution_id=d.id
+         join listing_capability.listings l on l.id=p.listing_id
         where p.checkout_id is not null
-          and ($1::text is null or d.id::text=$1 or d.purchase_id::text=$1 or p.listing_title_snapshot ilike '%'||$1||'%' escape '\\' or b.handle ilike '%'||$1||'%' escape '\\' or b.email ilike '%'||$1||'%' escape '\\' or exists(select 1 from ledger_capability.entries se join identity_capability.accounts sa on sa.id=se.account_id where se.distribution_id=d.id and se.recipient_role='referral' and (sa.handle ilike '%'||$1||'%' escape '\\' or sa.email ilike '%'||$1||'%' escape '\\')))
-          and ($2::timestamptz is null or (d.completed_at,d.id)<($2::timestamptz,$3::uuid))
-        group by d.id,p.id,b.id
+          and ($1::text is null or d.uuid::text=$1 or p.uuid::text=$1 or p.listing_title_snapshot ilike '%'||$1||'%' escape '\\' or b.handle ilike '%'||$1||'%' escape '\\' or b.email ilike '%'||$1||'%' escape '\\' or exists(select 1 from ledger_capability.entries se join identity_capability.accounts sa on sa.id=se.account_id where se.distribution_id=d.id and se.recipient_role='referral' and (sa.handle ilike '%'||$1||'%' escape '\\' or sa.email ilike '%'||$1||'%' escape '\\')))
+          and ($2::timestamptz is null or (d.completed_at,d.id)<($2::timestamptz,(select id from ledger_capability.purchase_distributions where uuid=$3)))
+        group by d.id,p.id,b.id,l.id
         order by d.completed_at desc,d.id desc
         limit $4`,
         [search, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
@@ -117,37 +118,43 @@ export class OperatorDistributionService {
   async get(id: string): Promise<OperatorDistributionDetail> {
     const row = (
       await this.sql.query<any>(
-        `select d.id,d.purchase_id,d.gross_minor,d.currency,d.platform_amount_minor,d.completed_at,d.policy_snapshot,
-              p.listing_id,p.listing_title_snapshot,p.buyer_id,b.handle buyer_handle,b.email buyer_email,p.state purchase_state,p.created_at purchase_created_at,
-              p.referral_attribution_id,p.referral_link_id,p.referral_referrer_account_id,
+        `select d.uuid as id,p.uuid as purchase_id,d.gross_minor,d.currency,d.platform_amount_minor,d.completed_at,d.policy_snapshot,
+              l.uuid as listing_id,p.listing_title_snapshot,b.uuid as buyer_id,b.handle buyer_handle,b.email buyer_email,p.state purchase_state,p.created_at purchase_created_at,
+              a.uuid referral_attribution_id,rl.uuid referral_link_id,ra.uuid referral_referrer_account_id,
               ra.handle referrer_handle,ra.email referrer_email,
-              a.id attribution_id
+              a.uuid attribution_id
          from ledger_capability.purchase_distributions d
          join purchase_capability.purchases p on p.id=d.purchase_id
          join identity_capability.accounts b on b.id=p.buyer_id
+         join listing_capability.listings l on l.id=p.listing_id
          left join identity_capability.accounts ra on ra.id=p.referral_referrer_account_id
          left join referral_capability.listing_attributions a on a.id=p.referral_attribution_id
-        where d.id=$1 and p.checkout_id is not null`,
+         left join referral_capability.listing_referral_links rl on rl.id=p.referral_link_id
+        where d.uuid=$1 and p.checkout_id is not null`,
         [id],
       )
     ).rows[0];
     if (!row) throw new Error("Distribution not found");
     const entries = (
       await this.sql.query<any>(
-        `select e.id,e.account_id,a.handle,a.email,e.referral_level,e.amount_minor,e.currency,e.direction,e.entry_type,e.balance_state,e.maturity_at,e.original_entry_id,e.reversal_id,e.created_at,s.settled_at,
-              r.id reversal_record_id,r.reason reversal_reason,r.source reversal_source,r.state reversal_state,r.processed_at reversal_processed_at
+        `select e.uuid as id,aa.uuid as account_id,a.handle,a.email,e.referral_level,e.amount_minor,e.currency,e.direction,e.entry_type,e.balance_state,e.maturity_at,
+              oe.uuid original_entry_id,rv.uuid reversal_id,e.created_at,s.settled_at,
+              r.uuid reversal_record_id,r.reason reversal_reason,r.source reversal_source,r.state reversal_state,r.processed_at reversal_processed_at
          from ledger_capability.entries e
          join identity_capability.accounts a on a.id=e.account_id
+         join identity_capability.accounts aa on aa.id=e.account_id
+         left join ledger_capability.entries oe on oe.id=e.original_entry_id
+         left join ledger_capability.reversals rv on rv.id=e.reversal_id
          left join ledger_capability.entry_settlements s on s.original_entry_id=e.id
          left join ledger_capability.reversals r on r.id=e.reversal_id
-        where e.distribution_id=$1 and e.recipient_role='referral'
+        where e.distribution_id=(select id from ledger_capability.purchase_distributions where uuid=$1) and e.recipient_role='referral'
         order by e.created_at asc,e.id asc limit 200`,
         [id],
       )
     ).rows;
     const reversal = (
       await this.sql.query<any>(
-        `select id,reason,source,state,processed_at from ledger_capability.reversals where distribution_id=$1 limit 1`,
+        `select uuid as id,reason,source,state,processed_at from ledger_capability.reversals where distribution_id=(select id from ledger_capability.purchase_distributions where uuid=$1) limit 1`,
         [id],
       )
     ).rows[0];
@@ -245,15 +252,17 @@ export class OperatorEarningsService {
     const state = input.state ?? null;
     const rows = (
       await this.sql.query<any>(
-        `select e.id,e.account_id,a.handle,a.email,e.purchase_id,e.distribution_id,e.entry_type,e.direction,e.amount_minor,e.currency,e.referral_level,e.balance_state,e.created_at,s.settled_at,
+        `select e.uuid as id,a.uuid as account_id,a.handle,a.email,p.uuid as purchase_id,d.uuid as distribution_id,e.entry_type,e.direction,e.amount_minor,e.currency,e.referral_level,e.balance_state,e.created_at,s.settled_at,
               case when e.reversal_id is not null or exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then 'reversed' when s.id is not null then 'available' else e.balance_state end effective_state
          from ledger_capability.entries e
          join identity_capability.accounts a on a.id=e.account_id
+         left join purchase_capability.purchases p on p.id=e.purchase_id
+         left join ledger_capability.purchase_distributions d on d.id=e.distribution_id
          left join ledger_capability.entry_settlements s on s.original_entry_id=e.id
         where e.recipient_role='referral'
-          and ($1::text is null or a.handle ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or e.account_id::text=$1 or e.id::text=$1 or e.purchase_id::text=$1)
+          and ($1::text is null or a.handle ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1 or e.uuid::text=$1 or p.uuid::text=$1)
           and ($2::text is null or (case when e.reversal_id is not null or exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then 'reversed' when s.id is not null then 'available' else e.balance_state end)=$2)
-          and ($3::timestamptz is null or (e.created_at,e.id)<($3::timestamptz,$4::uuid))
+          and ($3::timestamptz is null or (e.created_at,e.id)<($3::timestamptz,(select id from ledger_capability.entries where uuid=$4)))
         order by e.created_at desc,e.id desc limit $5`,
         [search, state, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
       )

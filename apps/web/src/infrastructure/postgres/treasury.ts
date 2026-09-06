@@ -4,7 +4,10 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
   constructor(private sql: SqlExecutor) {}
   async create(v: TreasuryEntry) {
     const result = await this.sql.query(
-      `insert into treasury_capability.entries(id,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict(idempotency_key) do nothing returning id,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,created_at`,
+      `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,created_at)
+       values($1,$2,$3,$4,$5,$6,$7,$8,(select id from identity_capability.accounts where uuid=$9),$10)
+       on conflict(idempotency_key) do nothing returning uuid as id,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,
+       (select uuid from identity_capability.accounts where id=actor_id) as actor_id,created_at`,
       [
         v.id,
         v.direction,
@@ -23,14 +26,17 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
   }
   async findById(id: string) {
     const row = (
-      await this.sql.query<any>(`select * from treasury_capability.entries where id=$1`, [id])
+      await this.sql.query<any>(
+        `select e.*, e.uuid as id, a.uuid as actor_id from treasury_capability.entries e left join identity_capability.accounts a on a.id=e.actor_id where e.uuid=$1`,
+        [id],
+      )
     ).rows[0];
     return row ? map(row) : null;
   }
   async findByIdempotencyKey(key: string) {
     const row = (
       await this.sql.query<any>(
-        `select * from treasury_capability.entries where idempotency_key=$1`,
+        `select e.*, e.uuid as id, a.uuid as actor_id from treasury_capability.entries e left join identity_capability.accounts a on a.id=e.actor_id where e.idempotency_key=$1`,
         [key],
       )
     ).rows[0];
@@ -46,13 +52,17 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
     if (input.cursor) {
       values.push(input.cursor);
       where.push(
-        `(created_at,id)<(select created_at,id from treasury_capability.entries where id=$${values.length})`,
+        `(e.created_at,e.id)<(select created_at,id from treasury_capability.entries where uuid=$${values.length})`,
       );
     }
     values.push(input.limit + 1);
     const rows = (
       await this.sql.query<any>(
-        `select * from treasury_capability.entries ${where.length ? `where ${where.join(" and ")}` : ""} order by created_at desc,id desc limit $${values.length}`,
+        `select e.*, e.uuid as id, e.id as relational_id, a.uuid as actor_id
+           from treasury_capability.entries e
+           left join identity_capability.accounts a on a.id=e.actor_id
+          ${where.length ? `where ${where.join(" and ")}` : ""}
+          order by e.created_at desc,e.id desc limit $${values.length}`,
         values,
       )
     ).rows;

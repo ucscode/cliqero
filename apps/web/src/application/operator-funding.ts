@@ -142,18 +142,20 @@ export class OperatorFundingService {
     const search = rawSearch ? rawSearch.replace(/[\\%_]/g, "\\$&") : null;
     const values: unknown[] = [search, input.state ?? null, input.provider ?? null];
     const conditions = [
-      "($1::text is null or f.id::text=$1 or f.provider_reference ilike '%'||$1||'%' escape '\\' or a.handle ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\')",
+      "($1::text is null or f.uuid::text=$1 or f.provider_reference ilike '%'||$1||'%' escape '\\' or a.handle ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\')",
       "($2::text is null or f.state=$2)",
       "($3::text is null or f.provider_name=$3)",
     ];
     values.push(cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1);
-    conditions.push("($4::timestamptz is null or (f.created_at,f.id)<($4::timestamptz,$5::uuid))");
+    conditions.push(
+      "($4::timestamptz is null or (f.created_at,f.id)<($4::timestamptz,(select id from funding_capability.funding_transactions where uuid=$5)))",
+    );
     const rows = (
       await this.sql.query<any>(
-        `select f.id,f.account_id,a.handle,a.email,f.provider_name,f.provider_reference,
+        `select f.uuid as id,a.uuid as account_id,a.handle,a.email,f.provider_name,f.provider_reference,
                 f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
                 f.state,f.created_at,f.updated_at,f.confirmed_at,
-                c.id credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
+                c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
                 c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at
            from funding_capability.funding_transactions f
            join identity_capability.accounts a on a.id=f.account_id
@@ -176,26 +178,26 @@ export class OperatorFundingService {
   async get(id: string): Promise<OperatorFundingDetail> {
     const row = (
       await this.sql.query<any>(
-        `select f.id,f.account_id,a.handle,a.email,f.provider_name,f.provider_reference,
+        `select f.uuid as id,a.uuid as account_id,a.handle,a.email,f.provider_name,f.provider_reference,
                 f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
                 f.state,f.created_at,f.updated_at,f.confirmed_at,f.conversion_snapshot,
                 case when f.provider_initialization is null then null
                      else jsonb_build_object('authorizationUrl', f.provider_initialization->>'authorizationUrl') end provider_initialization,
-                c.id credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
+                c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
                 c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at
            from funding_capability.funding_transactions f
            join identity_capability.accounts a on a.id=f.account_id
            left join wallet_capability.credits c on c.funding_id=f.id
-          where f.id=$1`,
+          where f.uuid=$1`,
         [id],
       )
     ).rows[0];
     if (!row) throw new Error("Funding not found");
     const operations = (
       await this.sql.query<any>(
-        `select id,operation,outcome,http_status,provider_status,provider_message,provider_code,failure_kind,occurred_at
+        `select uuid as id,operation,outcome,http_status,provider_status,provider_message,provider_code,failure_kind,occurred_at
            from payment_capability.provider_operations
-          where funding_id=$1 order by occurred_at desc,id desc limit 50`,
+          where funding_id=(select id from funding_capability.funding_transactions where uuid=$1) order by occurred_at desc,id desc limit 50`,
         [id],
       )
     ).rows;

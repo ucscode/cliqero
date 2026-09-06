@@ -201,7 +201,7 @@ suite("purchase financial distribution", () => {
     expect(
       (
         await app.database.query(
-          `select 1 from ledger_capability.purchase_distributions where purchase_id=$1`,
+          `select 1 from ledger_capability.purchase_distributions where purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
           [value.purchaseId],
         )
       ).rowCount,
@@ -215,7 +215,7 @@ suite("purchase financial distribution", () => {
     });
     await expect(
       app.database.query(
-        `update ledger_capability.entries set amount_minor=1 where purchase_id=$1`,
+        `update ledger_capability.entries set amount_minor=1 where purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
         [value.purchaseId],
       ),
     ).rejects.toThrow(/append-only/);
@@ -224,8 +224,8 @@ suite("purchase financial distribution", () => {
     const first = (await app.ledger.findEntriesByPurchaseId(value.purchaseId))[0];
     await expect(
       app.database.query(
-        `insert into ledger_capability.entries(id,account_id,purchase_id,entry_type,direction,amount_minor,currency,idempotency_key,correlation_id)
-       values($1,$2,$3,'purchase-earnings','credit',1,'USD',$4,$5)`,
+        `insert into ledger_capability.entries(uuid,account_id,purchase_id,entry_type,direction,amount_minor,currency,idempotency_key,correlation_id)
+       values($1,(select id from identity_capability.accounts where uuid=$2),(select id from purchase_capability.purchases where uuid=$3),'purchase-earnings','credit',1,'USD',$4,$5)`,
         [newId(), value.seller.id, value.purchaseId, first.idempotencyKey, newId()],
       ),
     ).rejects.toThrow(/duplicate key/);

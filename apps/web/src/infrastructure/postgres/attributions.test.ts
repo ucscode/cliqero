@@ -31,7 +31,9 @@ describe("referral-link listing projection", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].values).toEqual(["account-a"]);
     expect(calls[0].sql).toContain("left join listing_capability.listings");
-    expect(calls[0].sql).toContain("where links.referrer_account_id=$1");
+    expect(calls[0].sql).toContain(
+      "where links.referrer_account_id=(select id from identity_capability.accounts where uuid=$1)",
+    );
     expect(links[0]).toMatchObject({
       listingId: "listing-a",
       listingTitle: "A useful listing",

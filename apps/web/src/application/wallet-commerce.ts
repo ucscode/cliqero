@@ -316,6 +316,10 @@ export class WalletCheckoutService {
         input.idempotencyKey,
         checkoutId,
       );
+      await this.purchases.save(purchase);
+      // The migrated relational key on checkouts.purchase_id references the
+      // purchase row, so persist the two sides of this nullable cycle in
+      // dependency order and link the purchase once the checkout exists.
       await this.checkouts.save(checkout);
       await this.purchases.save(purchase);
       return checkout;

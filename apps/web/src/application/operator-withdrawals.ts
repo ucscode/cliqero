@@ -116,10 +116,10 @@ function map(row: any): OperatorWithdrawal {
 }
 
 const projection = `
-  select w.id,w.account_id,a.handle,a.email,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.reason,w.created_at,w.updated_at,
-    r.id reservation_id,r.amount_minor reservation_amount_minor,r.currency reservation_currency,
+  select w.uuid as id,a.uuid as account_id,a.handle,a.email,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.reason,w.created_at,w.updated_at,
+    r.uuid reservation_id,r.amount_minor reservation_amount_minor,r.currency reservation_currency,
     (select e.kind from ledger_capability.withdrawal_reservation_events e where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) reservation_state,
-    p.id payout_id,p.provider_name,p.state payout_state,p.attempt_count,p.next_attempt_at,p.last_error,
+    p.uuid payout_id,p.provider_name,p.state payout_state,p.attempt_count,p.next_attempt_at,p.last_error,
     (select a.state from payout_capability.attempts a where a.execution_id=p.id order by a.attempt_number desc limit 1) attempt_state,
     (select a.provider_reference from payout_capability.attempts a where a.execution_id=p.id order by a.attempt_number desc limit 1) provider_reference
    from withdrawal_capability.withdrawals w
@@ -153,7 +153,7 @@ export class OperatorWithdrawalService {
           where ($1::text is null or q.id::text=$1 or q.destination_reference ilike '%'||$1||'%' escape '\\' or q.provider_reference ilike '%'||$1||'%' escape '\\' or q.handle ilike '%'||$1||'%' escape '\\' or q.email ilike '%'||$1||'%' escape '\\')
             and ($2::text is null or q.state=$2)
             and ($3::text is null or case when q.state='requested' then 'review' when q.state='approved' and q.payout_state is null then 'payout' when q.payout_state='unknown' or q.attempt_state in ('unknown','pending') then 'reconciliation' when q.payout_state='failed' and q.next_attempt_at > now() then 'retry_wait' when q.payout_state='failed' then 'retry' else 'none' end=$3::text)
-            and ($4::timestamptz is null or (q.created_at,q.id)<($4::timestamptz,$5::uuid))
+            and ($4::timestamptz is null or (q.created_at,(select id from withdrawal_capability.withdrawals where uuid=q.id))<($4::timestamptz,(select id from withdrawal_capability.withdrawals where uuid=$5)))
           order by q.created_at desc,q.id desc limit $6`,
         values,
       )
@@ -171,11 +171,14 @@ export class OperatorWithdrawalService {
     };
   }
   async get(id: string): Promise<OperatorWithdrawalDetail> {
-    const row = (await this.sql.query<any>(`${projection} where w.id=$1`, [id])).rows[0];
+    const row = (await this.sql.query<any>(`${projection} where w.uuid=$1`, [id])).rows[0];
     if (!row) throw new Error("Withdrawal not found");
     const attempts = (
       await this.sql.query<any>(
-        `select id,attempt_number,provider_name,state,provider_reference,failure_category,failure_reason,created_at,completed_at from payout_capability.attempts where withdrawal_id=$1 order by attempt_number desc limit 100`,
+        `select a.uuid as id,a.attempt_number,a.provider_name,a.state,a.provider_reference,a.failure_category,a.failure_reason,a.created_at,a.completed_at
+           from payout_capability.attempts a
+          where a.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
+          order by a.attempt_number desc limit 100`,
         [id],
       )
     ).rows;

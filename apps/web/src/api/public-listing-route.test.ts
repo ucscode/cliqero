@@ -32,6 +32,7 @@ function configure(principal: any, ownerError = true) {
     },
     listingMediaRepository: { listByListing: vi.fn(async () => []) },
     listingMedia: { publicUrl: vi.fn() },
+    listingReviews: { summariesForListings: vi.fn(async () => new Map()) },
   };
 }
 

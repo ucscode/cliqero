@@ -26,7 +26,7 @@ export class PostgresApiKeyRepository {
   }) {
     const id = (
       await this.sql.query<{ id: string }>(
-        `insert into identity_capability.api_keys(account_id,name,key_prefix,secret_hash,scopes,created_by,expires_at) values($1,$2,$3,$4,$5::jsonb,$6,$7) returning id`,
+        `insert into identity_capability.api_keys(account_id,name,key_prefix,secret_hash,scopes,created_by,expires_at) values((select id from identity_capability.accounts where uuid=$1),$2,$3,$4,$5::jsonb,(select id from identity_capability.accounts where uuid=$6),$7) returning uuid as id`,
         [
           input.accountId,
           input.name,
@@ -54,27 +54,28 @@ export class PostgresApiKeyRepository {
         expires_at: Date | null;
         revoked_at: Date | null;
       }>(
-        `select id,account_id,name,key_prefix,secret_hash,scopes,created_at,last_used_at,expires_at,revoked_at from identity_capability.api_keys where key_prefix=$1 and revoked_at is null and (expires_at is null or expires_at>now())`,
+        `select k.uuid as id,(select uuid from identity_capability.accounts where id=k.account_id) as account_id,k.name,k.key_prefix,k.secret_hash,k.scopes,k.created_at,k.last_used_at,k.expires_at,k.revoked_at from identity_capability.api_keys k where k.key_prefix=$1 and k.revoked_at is null and (k.expires_at is null or k.expires_at>now())`,
         [prefix],
       )
     ).rows[0];
     return row;
   }
   async touch(id: string) {
-    await this.sql.query(`update identity_capability.api_keys set last_used_at=now() where id=$1`, [
-      id,
-    ]);
+    await this.sql.query(
+      `update identity_capability.api_keys set last_used_at=now() where uuid=$1`,
+      [id],
+    );
   }
   async list(accountId?: string) {
     const rows = await this.sql.query<ApiKeyRecord>(
-      `select id,account_id as "accountId",name,key_prefix as "keyPrefix",scopes,created_at as "createdAt",last_used_at as "lastUsedAt",expires_at as "expiresAt",revoked_at as "revokedAt" from identity_capability.api_keys where ($1::uuid is null or account_id=$1) order by created_at desc,id desc`,
+      `select k.uuid as id,(select uuid from identity_capability.accounts where id=k.account_id) as "accountId",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt" from identity_capability.api_keys k where ($1::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$1)) order by k.created_at desc,k.id desc`,
       [accountId ?? null],
     );
     return rows.rows;
   }
   async revoke(id: string, accountId?: string) {
     const result = await this.sql.query(
-      `update identity_capability.api_keys set revoked_at=coalesce(revoked_at,now()) where id=$1 and ($2::uuid is null or account_id=$2)`,
+      `update identity_capability.api_keys set revoked_at=coalesce(revoked_at,now()) where uuid=$1 and ($2::uuid is null or account_id=(select id from identity_capability.accounts where uuid=$2))`,
       [id, accountId ?? null],
     );
     return (result.rowCount ?? 0) > 0;

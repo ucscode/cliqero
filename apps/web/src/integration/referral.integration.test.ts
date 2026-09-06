@@ -53,20 +53,20 @@ suite("referral graph and trusted purchase attribution", () => {
       "Self-referral",
     );
     await app.database.query(
-      `update referral_capability.account_referrals set parent_account_id=$2 where child_account_id=$1`,
+      `update referral_capability.account_referrals set parent_account_id=(select id from identity_capability.accounts where uuid=$2) where child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
       [child.id, other.id],
     );
     expect(
       (
         await app.database.query<{ parent_account_id: string }>(
-          `select parent_account_id from referral_capability.account_referrals where child_account_id=$1`,
+          `select parent.uuid parent_account_id from referral_capability.account_referrals r join identity_capability.accounts child on child.id=r.child_account_id join identity_capability.accounts parent on parent.id=r.parent_account_id where child.uuid=$1`,
           [child.id],
         )
       ).rows[0].parent_account_id,
     ).toBe(other.id);
     await expect(
       app.database.query(
-        `delete from referral_capability.account_referrals where child_account_id=$1`,
+        `delete from referral_capability.account_referrals where child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
         [child.id],
       ),
     ).rejects.toThrow("deletion");
@@ -157,7 +157,7 @@ suite("referral graph and trusted purchase attribution", () => {
     ).toBe(auditBefore);
     const audit = (
       await app.database.query<{ actor_id: string; previous_state: any; new_state: any }>(
-        `select actor_id,previous_state,new_state from kernel.audit_records where action='referral.parent_reassigned' and subject_id=$1`,
+        `select actor.uuid actor_id,previous_state,new_state from kernel.audit_records audit left join identity_capability.accounts actor on actor.id=audit.actor_id where action='referral.parent_reassigned' and subject_id=$1`,
         [a.id],
       )
     ).rows[0];
@@ -191,14 +191,14 @@ suite("referral graph and trusted purchase attribution", () => {
     );
     await expect(
       app.database.query(
-        `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values($1,$2)`,
-        [missing, b.id],
+        `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values($1,(select id from identity_capability.accounts where uuid=$2))`,
+        [0, b.id],
       ),
     ).rejects.toThrow("foreign key");
     await expect(
       app.database.query(
-        `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values($1,$2)`,
-        [newId(), missing],
+        `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values((select id from identity_capability.accounts where uuid=$1),$2)`,
+        [b.id, 0],
       ),
     ).rejects.toThrow("foreign key");
   });
@@ -206,7 +206,7 @@ suite("referral graph and trusted purchase attribution", () => {
     const ids = Array.from({ length: 41 }, () => newId());
     for (let i = 0; i < ids.length; i++)
       await app.database.query(
-        `insert into identity_capability.accounts(id,email,handle) values($1,$2,$3)`,
+        `insert into identity_capability.accounts(uuid,email,handle) values($1,$2,$3)`,
         [ids[i], `reassign${i}@example.com`, `reassign${i}`],
       );
     for (let i = 1; i < ids.length; i++)
@@ -229,7 +229,7 @@ suite("referral graph and trusted purchase attribution", () => {
         .map((result) => String((result as PromiseRejectedResult).reason)),
     ).toEqual([expect.stringContaining("cycle")]);
     const rows = await app.database.query<{ child_account_id: string; parent_account_id: string }>(
-      `select child_account_id,parent_account_id from referral_capability.account_referrals where child_account_id in ($1,$2)`,
+      `select child.uuid child_account_id,parent.uuid parent_account_id from referral_capability.account_referrals r join identity_capability.accounts child on child.id=r.child_account_id join identity_capability.accounts parent on parent.id=r.parent_account_id where child.uuid in ($1,$2)`,
       [a.id, b.id],
     );
     expect(rows.rowCount).toBe(1);
@@ -277,27 +277,29 @@ suite("referral graph and trusted purchase attribution", () => {
     const children = Array.from({ length: 600 }, () => newId());
     const grandchildren = Array.from({ length: 300 }, () => newId());
     await app.database.query(
-      `insert into identity_capability.accounts(id,email,handle) values($1,'wide-root@example.com','wide_root')`,
+      `insert into identity_capability.accounts(uuid,email,handle) values($1,'wide-root@example.com','wide_root')`,
       [root],
     );
     await app.database.query(
-      `insert into identity_capability.accounts(id,email,handle)
+      `insert into identity_capability.accounts(uuid,email,handle)
       select id,'wide-'||ord||'@example.com','wide_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,
       [children],
     );
     await app.database.query(
-      `insert into referral_capability.account_referrals(child_account_id,parent_account_id) select id,$1 from unnest($2::uuid[]) as item(id)`,
+      `insert into referral_capability.account_referrals(child_account_id,parent_account_id) select account.id,(select id from identity_capability.accounts where uuid=$1) from unnest($2::uuid[]) as item(uuid) join identity_capability.accounts account on account.uuid=item.uuid`,
       [root, children],
     );
     await app.database.query(
-      `insert into identity_capability.accounts(id,email,handle)
+      `insert into identity_capability.accounts(uuid,email,handle)
       select id,'grand-'||ord||'@example.com','grand_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,
       [grandchildren],
     );
     await app.database.query(
       `insert into referral_capability.account_referrals(child_account_id,parent_account_id)
-      select child.id,parent.id from unnest($1::uuid[]) with ordinality as child(id,ord)
-      join unnest($2::uuid[]) with ordinality as parent(id,ord) on parent.ord=child.ord`,
+      select child_account.id,parent_account.id from unnest($1::uuid[]) with ordinality as child_item(uuid,ord)
+      join unnest($2::uuid[]) with ordinality as parent_item(uuid,ord) on parent_item.ord=child_item.ord
+      join identity_capability.accounts child_account on child_account.uuid=child_item.uuid
+      join identity_capability.accounts parent_account on parent_account.uuid=parent_item.uuid`,
       [grandchildren, children],
     );
     class CountingExecutor implements SqlExecutor {
@@ -389,7 +391,7 @@ suite("referral graph and trusted purchase attribution", () => {
     });
     expect(purchase?.terms.referralReferrerAccountId).not.toBe(accountParent.id);
     await app.database.query(
-      `update referral_capability.listing_referral_links set state='revoked' where id=$1`,
+      `update referral_capability.listing_referral_links set state='revoked' where uuid=$1`,
       [link.id],
     );
     await app.listingService.update(seller, listing.id, {

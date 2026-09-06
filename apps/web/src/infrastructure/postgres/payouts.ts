@@ -31,7 +31,7 @@ export class PostgresPayoutRepository {
   async getExecutionForUpdate(withdrawalId: string) {
     const row = (
       await this.sql.query<any>(
-        `select id,withdrawal_id,provider_name,idempotency_key,state,attempt_count,next_attempt_at,last_error from payout_capability.executions where withdrawal_id=$1 for update`,
+        `select e.uuid as id,(select uuid from withdrawal_capability.withdrawals where id=e.withdrawal_id) as withdrawal_id,e.provider_name,e.idempotency_key,e.state,e.attempt_count,e.next_attempt_at,e.last_error from payout_capability.executions e where e.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1) for update`,
         [withdrawalId],
       )
     ).rows[0];
@@ -44,7 +44,7 @@ export class PostgresPayoutRepository {
     idempotencyKey: string;
   }): Promise<PayoutExecution> {
     await this.sql.query(
-      `insert into payout_capability.executions(id,withdrawal_id,provider_name,idempotency_key) values($1,$2,$3,$4)`,
+      `insert into payout_capability.executions(uuid,withdrawal_id,provider_name,idempotency_key) values($1,(select id from withdrawal_capability.withdrawals where uuid=$2),$3,$4)`,
       [value.id, value.withdrawalId, value.providerName, value.idempotencyKey],
     );
     return { ...value, state: "ready", attemptCount: 0, nextAttemptAt: null, lastError: null };
@@ -61,7 +61,7 @@ export class PostgresPayoutRepository {
     attemptNumber: number;
   }): Promise<void> {
     await this.sql.query(
-      `insert into payout_capability.attempts(id,execution_id,withdrawal_id,provider_name,provider_request_key,amount_minor,currency,state,attempt_number,correlation_id) values($1,$2,$3,$4,$5,$6,$7,'submitted',$8,$9)`,
+      `insert into payout_capability.attempts(uuid,execution_id,withdrawal_id,provider_name,provider_request_key,amount_minor,currency,state,attempt_number,correlation_id) values($1,(select id from payout_capability.executions where uuid=$2),(select id from withdrawal_capability.withdrawals where uuid=$3),$4,$5,$6,$7,'submitted',$8,$9)`,
       [
         value.id,
         value.executionId,
@@ -75,7 +75,7 @@ export class PostgresPayoutRepository {
       ],
     );
     await this.sql.query(
-      `update payout_capability.executions set state='submitted',attempt_count=$2,updated_at=now() where id=$1`,
+      `update payout_capability.executions set state='submitted',attempt_count=$2,updated_at=now() where uuid=$1`,
       [value.executionId, value.attemptNumber],
     );
   }
@@ -90,7 +90,7 @@ export class PostgresPayoutRepository {
           : null;
     const reason = result.kind === "succeeded" ? null : result.reason;
     await this.sql.query(
-      `update payout_capability.attempts set state=$2,provider_reference=$3,failure_category=$4,failure_reason=$5,provider_metadata=$6::jsonb,completed_at=now() where id=$1`,
+      `update payout_capability.attempts set state=$2,provider_reference=$3,failure_category=$4,failure_reason=$5,provider_metadata=$6::jsonb,completed_at=now() where uuid=$1`,
       [
         attemptId,
         state,
@@ -101,14 +101,14 @@ export class PostgresPayoutRepository {
       ],
     );
     await this.sql.query(
-      `update payout_capability.executions set state=$2,last_error=$3,next_attempt_at=case when $2='failed' then now()+interval '30 seconds' else null end,updated_at=now() where id=$1`,
+      `update payout_capability.executions set state=$2,last_error=$3,next_attempt_at=case when $2='failed' then now()+interval '30 seconds' else null end,updated_at=now() where uuid=$1`,
       [executionId, state, reason],
     );
   }
   async latestAttempt(executionId: string) {
     const row = (
       await this.sql.query<any>(
-        `select id,execution_id,withdrawal_id,provider_name,provider_request_key,provider_reference,amount_minor,currency,state,failure_category,failure_reason,provider_metadata,correlation_id,attempt_number from payout_capability.attempts where execution_id=$1 order by attempt_number desc limit 1`,
+        `select a.uuid as id,(select uuid from payout_capability.executions where id=a.execution_id) as execution_id,(select uuid from withdrawal_capability.withdrawals where id=a.withdrawal_id) as withdrawal_id,a.provider_name,a.provider_request_key,a.provider_reference,a.amount_minor,a.currency,a.state,a.failure_category,a.failure_reason,a.provider_metadata,a.correlation_id,a.attempt_number from payout_capability.attempts a where a.execution_id=(select id from payout_capability.executions where uuid=$1) order by a.attempt_number desc limit 1`,
         [executionId],
       )
     ).rows[0];
@@ -117,7 +117,7 @@ export class PostgresPayoutRepository {
   async findAttemptByProviderReference(providerName: string, providerReference: string) {
     const row = (
       await this.sql.query<any>(
-        `select id,execution_id,withdrawal_id,provider_name,provider_request_key,provider_reference,amount_minor,currency,state,failure_category,failure_reason,provider_metadata,correlation_id,attempt_number from payout_capability.attempts where provider_name=$1 and provider_reference=$2 order by attempt_number desc limit 1`,
+        `select a.uuid as id,(select uuid from payout_capability.executions where id=a.execution_id) as execution_id,(select uuid from withdrawal_capability.withdrawals where id=a.withdrawal_id) as withdrawal_id,a.provider_name,a.provider_request_key,a.provider_reference,a.amount_minor,a.currency,a.state,a.failure_category,a.failure_reason,a.provider_metadata,a.correlation_id,a.attempt_number from payout_capability.attempts a where a.provider_name=$1 and a.provider_reference=$2 order by a.attempt_number desc limit 1`,
         [providerName, providerReference],
       )
     ).rows[0];
@@ -126,7 +126,7 @@ export class PostgresPayoutRepository {
   async listAttempts(withdrawalId: string) {
     const rows = (
       await this.sql.query<any>(
-        `select id,execution_id,withdrawal_id,provider_name,provider_request_key,provider_reference,amount_minor,currency,state,failure_category,failure_reason,provider_metadata,correlation_id,attempt_number from payout_capability.attempts where withdrawal_id=$1 order by attempt_number desc`,
+        `select a.uuid as id,(select uuid from payout_capability.executions where id=a.execution_id) as execution_id,(select uuid from withdrawal_capability.withdrawals where id=a.withdrawal_id) as withdrawal_id,a.provider_name,a.provider_request_key,a.provider_reference,a.amount_minor,a.currency,a.state,a.failure_category,a.failure_reason,a.provider_metadata,a.correlation_id,a.attempt_number from payout_capability.attempts a where a.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1) order by a.attempt_number desc`,
         [withdrawalId],
       )
     ).rows;

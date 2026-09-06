@@ -83,10 +83,10 @@ async function findAccount(
 ): Promise<AccountRow & { authUserId: string }> {
   const row = (
     await context.database.query<AccountRow & { auth_user_id: string }>(
-      `select a.id,a.email,a.handle,a.metadata->>'country' as country,l.auth_user_id
+      `select a.uuid as id,a.email,a.handle,a.metadata->>'country' as country,l.auth_user_id
        from identity_capability.accounts a
        join identity_capability.auth_account_links l on l.account_id=a.id
-       where a.id::text=$1 or lower(a.email)=lower($1) or lower(a.handle)=lower($1)
+       where a.uuid::text=$1 or lower(a.email)=lower($1) or lower(a.handle)=lower($1)
        limit 1`,
       [identifier.trim()],
     )
@@ -177,7 +177,7 @@ program
         const hasOperator =
           (
             await context.database.query(
-              `select 1 from identity_capability.account_capabilities where account_id=$1 and capability='operator'`,
+              `select 1 from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) and capability='operator'`,
               [account.id],
             )
           ).rowCount === 1;
@@ -191,7 +191,7 @@ program
             throw new Error("Cannot revoke the last operator capability");
         }
         await context.database.query(
-          `delete from identity_capability.account_capabilities where account_id=$1`,
+          `delete from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1)`,
           [account.id],
         );
         console.log(`Revoked privileged capabilities from ${account.email}`);
@@ -211,13 +211,13 @@ program
             throw new Error("Cannot revoke the last operator capability");
         }
         await context.database.query(
-          `delete from identity_capability.account_capabilities where account_id=$1 and capability=$2`,
+          `delete from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) and capability=$2`,
           [account.id, value],
         );
         console.log(`Revoked ${value} from ${account.email}`);
       } else {
         await context.database.query(
-          `insert into identity_capability.account_capabilities(account_id,capability) values($1,$2) on conflict do nothing`,
+          `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),$2) on conflict do nothing`,
           [account.id, value],
         );
         console.log(`Granted ${value} to ${account.email}`);
@@ -237,7 +237,7 @@ program
       const limit = Math.min(200, Math.max(1, Number.parseInt(options.limit, 10) || 50));
       const rows = (
         await context.database.query<AccountRow & { capabilities: string[] }>(
-          `select a.id,a.email,a.handle,a.metadata->>'country' as country,
+          `select a.uuid as id,a.email,a.handle,a.metadata->>'country' as country,
              coalesce(array_agg(ac.capability) filter(where ac.capability is not null),'{}') capabilities
            from identity_capability.accounts a
            left join identity_capability.account_capabilities ac on ac.account_id=a.id
@@ -261,7 +261,7 @@ program
       const account = await findAccount(context, identifier);
       const roles = (
         await context.database.query<{ capability: string }>(
-          `select capability from identity_capability.account_capabilities where account_id=$1 order by capability`,
+          `select capability from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) order by capability`,
           [account.id],
         )
       ).rows.map((row) => row.capability);

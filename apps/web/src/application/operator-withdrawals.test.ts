@@ -5,7 +5,7 @@ describe("operator withdrawal projection", () => {
   it("masks destinations and exposes reservation, payout, and attention facts", async () => {
     const sql = {
       query: async (text: string) => {
-        if (text.includes("select id,attempt_number"))
+        if (text.includes("select a.uuid as id"))
           return {
             rows: [
               {

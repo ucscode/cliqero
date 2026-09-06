@@ -12,7 +12,7 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
   constructor(private readonly sql: SqlExecutor) {}
   async assignParent(childAccountId: string, parentAccountId: string): Promise<void> {
     await this.sql.query(
-      `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values($1,$2)`,
+      `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2))`,
       [childAccountId, parentAccountId],
     );
   }
@@ -26,13 +26,13 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
     );
     const current = (
       await this.sql.query<{ parent_account_id: string }>(
-        `select parent_account_id from referral_capability.account_referrals where child_account_id=$1 for update`,
+        `select parent.uuid as parent_account_id from referral_capability.account_referrals r join identity_capability.accounts parent on parent.id=r.parent_account_id where r.child_account_id=(select id from identity_capability.accounts where uuid=$1) for update`,
         [childAccountId],
       )
     ).rows[0];
     if (!current) {
       await this.sql.query(
-        `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values($1,$2)`,
+        `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2))`,
         [childAccountId, parentAccountId],
       );
       return { changed: true, previousParentId: null };
@@ -40,7 +40,7 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
     if (current.parent_account_id === parentAccountId)
       return { changed: false, previousParentId: current.parent_account_id };
     await this.sql.query(
-      `update referral_capability.account_referrals set parent_account_id=$2 where child_account_id=$1`,
+      `update referral_capability.account_referrals set parent_account_id=(select id from identity_capability.accounts where uuid=$2) where child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
       [childAccountId, parentAccountId],
     );
     return { changed: true, previousParentId: current.parent_account_id };
@@ -49,14 +49,14 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
     assertTraversalDepth(maxDepth);
     const result = await this.sql.query<{ account_id: string; depth: number }>(
       `with recursive uplines(account_id,depth,path) as (
-         select parent_account_id,1,array[$1::uuid,parent_account_id]
-         from referral_capability.account_referrals where child_account_id=$1
+         select parent_account_id,1,array[(select id from identity_capability.accounts where uuid=$1),parent_account_id]
+         from referral_capability.account_referrals where child_account_id=(select id from identity_capability.accounts where uuid=$1)
          union all
          select relationship.parent_account_id,upline.depth+1,upline.path||relationship.parent_account_id
          from uplines upline
          join referral_capability.account_referrals relationship on relationship.child_account_id=upline.account_id
          where upline.depth<$2 and not relationship.parent_account_id=any(upline.path)
-       ) select account_id,depth from uplines order by depth`,
+       ) select accounts.uuid account_id,depth from uplines join identity_capability.accounts on accounts.id=uplines.account_id order by depth`,
       [accountId, maxDepth],
     );
     return result.rows.map((row) => ({ accountId: row.account_id, depth: row.depth }));
@@ -67,9 +67,9 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
   ): Promise<ReferralPage> {
     assertPageLimit(page.limit);
     const result = await this.sql.query<{ account_id: string }>(
-      `select child_account_id account_id from referral_capability.account_referrals
-       where parent_account_id=$1 and ($2::uuid is null or child_account_id>$2::uuid)
-       order by child_account_id limit $3`,
+      `select child.uuid account_id from referral_capability.account_referrals r join identity_capability.accounts child on child.id=r.child_account_id
+       where r.parent_account_id=(select id from identity_capability.accounts where uuid=$1) and ($2::uuid is null or r.child_account_id>(select id from identity_capability.accounts where uuid=$2))
+       order by r.child_account_id limit $3`,
       [accountId, page.after ?? null, page.limit + 1],
     );
     return paginate(result.rows, page.limit);
@@ -83,16 +83,16 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
     assertPageLimit(page.limit);
     const result = await this.sql.query<{ account_id: string }>(
       `with recursive downline(account_id,depth,path) as (
-         select child_account_id,1,array[$1::uuid,child_account_id]
-         from referral_capability.account_referrals where parent_account_id=$1
+         select child_account_id,1,array[(select id from identity_capability.accounts where uuid=$1),child_account_id]
+         from referral_capability.account_referrals where parent_account_id=(select id from identity_capability.accounts where uuid=$1)
          union all
          select relationship.child_account_id,downline.depth+1,downline.path||relationship.child_account_id
          from downline
          join referral_capability.account_referrals relationship on relationship.parent_account_id=downline.account_id
          where downline.depth<$2 and not relationship.child_account_id=any(downline.path)
-       ) select account_id from downline
-       where depth=$2 and ($3::uuid is null or account_id>$3::uuid)
-       order by account_id limit $4`,
+       ) select accounts.uuid account_id from downline join identity_capability.accounts on accounts.id=downline.account_id
+       where depth=$2 and ($3::uuid is null or downline.account_id>(select id from identity_capability.accounts where uuid=$3))
+       order by downline.account_id limit $4`,
       [accountId, depth, page.after ?? null, page.limit + 1],
     );
     return paginate(result.rows, page.limit);
@@ -105,13 +105,13 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
     assertTraversalDepth(maxDepth);
     const result = await this.sql.query<{ depth: number }>(
       `with recursive uplines(account_id,depth,path) as (
-         select parent_account_id,1,array[$2::uuid,parent_account_id]
-         from referral_capability.account_referrals where child_account_id=$2
+         select parent_account_id,1,array[(select id from identity_capability.accounts where uuid=$2),parent_account_id]
+         from referral_capability.account_referrals where child_account_id=(select id from identity_capability.accounts where uuid=$2)
          union all
          select relationship.parent_account_id,upline.depth+1,upline.path||relationship.parent_account_id
          from uplines upline join referral_capability.account_referrals relationship on relationship.child_account_id=upline.account_id
          where upline.depth<$3 and not relationship.parent_account_id=any(upline.path)
-       ) select depth from uplines where account_id=$1 order by depth limit 1`,
+       ) select depth from uplines where account_id=(select id from identity_capability.accounts where uuid=$1) order by depth limit 1`,
       [ancestorId, descendantId, maxDepth],
     );
     return result.rows[0]?.depth ?? null;

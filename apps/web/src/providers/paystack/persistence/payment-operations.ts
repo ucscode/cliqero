@@ -37,7 +37,7 @@ export class PostgresPaymentOperationsRepository {
     };
   }): Promise<void> {
     await this.sql.query(
-      `insert into payment_capability.provider_operations(id,payment_id,provider,operation,outcome,http_status,provider_status,provider_message,provider_code,failure_kind) values($1,$2,$3,$4,'failed',$5,$6,$7,$8,$9)`,
+      `insert into payment_capability.provider_operations(uuid,payment_id,provider,operation,outcome,http_status,provider_status,provider_message,provider_code,failure_kind) values($1,(select id from payment_capability.payments where uuid=$2),$3,$4,'failed',$5,$6,$7,$8,$9)`,
       [
         newId(),
         input.paymentId,
@@ -58,7 +58,7 @@ export class PostgresPaymentOperationsRepository {
     providerMessage?: string;
   }) {
     await this.sql.query(
-      `insert into payment_capability.provider_operations(id,funding_id,provider,operation,outcome,provider_message) values($1,$2,$3,$4,'succeeded',$5)`,
+      `insert into payment_capability.provider_operations(uuid,funding_id,provider,operation,outcome,provider_message) values($1,(select id from funding_capability.funding_transactions where uuid=$2),$3,$4,'succeeded',$5)`,
       [newId(), input.fundingId, input.provider, input.operation, input.providerMessage ?? null],
     );
   }
@@ -75,7 +75,7 @@ export class PostgresPaymentOperationsRepository {
     };
   }) {
     await this.sql.query(
-      `insert into payment_capability.provider_operations(id,funding_id,provider,operation,outcome,http_status,provider_status,provider_message,provider_code,failure_kind) values($1,$2,$3,$4,'failed',$5,$6,$7,$8,$9)`,
+      `insert into payment_capability.provider_operations(uuid,funding_id,provider,operation,outcome,http_status,provider_status,provider_message,provider_code,failure_kind) values($1,(select id from funding_capability.funding_transactions where uuid=$2),$3,$4,'failed',$5,$6,$7,$8,$9)`,
       [
         newId(),
         input.fundingId,
@@ -96,9 +96,9 @@ export class PostgresPaymentOperationsRepository {
     correlationId: string;
   }): Promise<{ attempt: ReconciliationAttempt; created: boolean }> {
     const result = await this.sql.query<AttemptRow>(
-      `insert into payment_capability.reconciliation_attempts(id,payment_id,idempotency_key,state,actor_id,correlation_id)
-      values($1,$2,$3,'started',$4,$5) on conflict(payment_id,idempotency_key) do nothing
-      returning id,payment_id,idempotency_key,state,result,last_error,actor_id,correlation_id`,
+      `insert into payment_capability.reconciliation_attempts(uuid,payment_id,idempotency_key,state,actor_id,correlation_id)
+      values($1,(select id from payment_capability.payments where uuid=$2),$3,'started',(select id from identity_capability.accounts where uuid=$4),$5) on conflict(payment_id,idempotency_key) do nothing
+      returning uuid as id,(select uuid from payment_capability.payments where id=reconciliation_attempts.payment_id) as payment_id,idempotency_key,state,result,last_error,(select uuid from identity_capability.accounts where id=reconciliation_attempts.actor_id) as actor_id,correlation_id`,
       [newId(), input.paymentId, input.idempotencyKey, input.actorId, input.correlationId],
     );
     if (result.rows[0]) return { attempt: this.map(result.rows[0]), created: true };
@@ -113,7 +113,7 @@ export class PostgresPaymentOperationsRepository {
     error?: string,
   ): Promise<void> {
     await this.sql.query(
-      `update payment_capability.reconciliation_attempts set state=$2,result=$3::jsonb,last_error=$4,completed_at=now() where id=$1`,
+      `update payment_capability.reconciliation_attempts set state=$2,result=$3::jsonb,last_error=$4,completed_at=now() where uuid=$1`,
       [id, state, JSON.stringify(result), error?.slice(0, 4000) ?? null],
     );
   }
@@ -121,7 +121,7 @@ export class PostgresPaymentOperationsRepository {
     return (
       await this.sql.query(
         `select event.id,event.event_type,event.provider_reference,event.amount_minor,event.currency,event.state,event.last_error,event.received_at,event.processed_at,
-            payment.id payment_id,payment.state payment_state,payment.provider_transaction_id,payment.provider_fee_minor,payment.provider_fee_currency,
+            payment.uuid payment_id,payment.state payment_state,payment.provider_transaction_id,payment.provider_fee_minor,payment.provider_fee_currency,
             outbox.state outbox_state,outbox.last_error outbox_last_error
      from payment_capability.provider_events event
      left join payment_capability.payments payment on payment.provider_name=event.provider_name and payment.provider_reference=event.provider_reference
@@ -134,7 +134,7 @@ export class PostgresPaymentOperationsRepository {
   private async find(paymentId: string, key: string) {
     const row = (
       await this.sql.query<AttemptRow>(
-        `select id,payment_id,idempotency_key,state,result,last_error,actor_id,correlation_id from payment_capability.reconciliation_attempts where payment_id=$1 and idempotency_key=$2`,
+        `select a.uuid as id,(select uuid from payment_capability.payments where id=a.payment_id) as payment_id,a.idempotency_key,a.state,a.result,a.last_error,(select uuid from identity_capability.accounts where id=a.actor_id) as actor_id,a.correlation_id from payment_capability.reconciliation_attempts a where a.payment_id=(select id from payment_capability.payments where uuid=$1) and a.idempotency_key=$2`,
         [paymentId, key],
       )
     ).rows[0];

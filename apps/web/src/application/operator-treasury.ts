@@ -86,7 +86,7 @@ export class OperatorTreasuryService {
       sourceKind === undefined ? null : sourceKind,
     ];
     const conditions = [
-      `($1::text is null or e.id::text=$1 or e.title ilike '%'||$1||'%' escape '\\' or e.note ilike '%'||$1||'%' escape '\\' or e.source_id::text=$1)`,
+      `($1::text is null or e.uuid::text=$1 or e.title ilike '%'||$1||'%' escape '\\' or e.note ilike '%'||$1||'%' escape '\\' or e.source_id::text=$1)`,
       `($2::text is null or e.direction=$2)`,
       `($3::text is null or ($3::text='distribution' and e.source_kind='distribution') or ($3::text is null and e.source_kind is null))`,
     ];
@@ -95,11 +95,11 @@ export class OperatorTreasuryService {
     const rows = (
       await this.sql.query<any>(
         `select e.id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
-                a.id actor_id,a.handle actor_handle,a.email actor_email
+                a.uuid actor_id,a.handle actor_handle,a.email actor_email
            from treasury_capability.entries e
            left join identity_capability.accounts a on a.id=e.actor_id
           where ${conditions.join(" and ")}
-            and ($4::timestamptz is null or (e.created_at,e.id)<($4::timestamptz,$5::uuid))
+            and ($4::timestamptz is null or (e.created_at,e.id)<($4::timestamptz,(select id from treasury_capability.entries where uuid=$5)))
           order by e.created_at desc,e.id desc limit $6`,
         values,
       )
@@ -117,11 +117,11 @@ export class OperatorTreasuryService {
   async get(id: string): Promise<OperatorTreasuryEntry> {
     const row = (
       await this.sql.query<any>(
-        `select e.id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
-                a.id actor_id,a.handle actor_handle,a.email actor_email
+        `select e.uuid as id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
+                a.uuid actor_id,a.handle actor_handle,a.email actor_email
            from treasury_capability.entries e
            left join identity_capability.accounts a on a.id=e.actor_id
-          where e.id=$1`,
+          where e.uuid=$1`,
         [id],
       )
     ).rows[0];

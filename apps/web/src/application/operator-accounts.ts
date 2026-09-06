@@ -56,12 +56,12 @@ export class OperatorAccountService {
     const search = rawSearch ? rawSearch.replace(/[\\%_]/g, "\\$&") : null;
     const rows = (
       await this.sql.query<any>(
-        `select a.id,a.email,a.handle,a.display_name,a.metadata->>'country' country,a.created_at,
+        `select a.uuid id,a.email,a.handle,a.display_name,a.metadata->>'country' country,a.created_at,
           coalesce((select array_agg(ac.capability order by ac.capability) from identity_capability.account_capabilities ac where ac.account_id=a.id), '{}') roles,
           (select count(*)::int from referral_capability.account_referrals r where r.parent_account_id=a.id) direct_referral_count
          from identity_capability.accounts a
-         where ($1::text is null or a.handle ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.id::text=$1)
-           and ($2::timestamptz is null or (a.created_at,a.id)<($2::timestamptz,$3::uuid))
+         where ($1::text is null or a.handle ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1)
+           and ($2::timestamptz is null or (a.created_at,a.id)<($2::timestamptz,(select id from identity_capability.accounts where uuid=$3)))
          order by a.created_at desc,a.id desc limit $4`,
         [search, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
       )
@@ -79,26 +79,26 @@ export class OperatorAccountService {
   async get(accountId: string): Promise<OperatorAccountDetail> {
     const row = (
       await this.sql.query<any>(
-        `select a.id,a.email,a.handle,a.display_name,a.metadata->>'country' country,a.created_at,
+        `select a.uuid id,a.email,a.handle,a.display_name,a.metadata->>'country' country,a.created_at,
           coalesce((select array_agg(ac.capability order by ac.capability) from identity_capability.account_capabilities ac where ac.account_id=a.id), '{}') roles,
           (select count(*)::int from referral_capability.account_referrals r where r.parent_account_id=a.id) direct_referral_count,
-          p.id parent_id,p.handle parent_handle,p.display_name parent_display_name,
+          p.uuid parent_id,p.handle parent_handle,p.display_name parent_display_name,
           (select count(*)::int from purchase_capability.purchases purchase where purchase.buyer_id=a.id) purchase_count
          from identity_capability.accounts a
          left join referral_capability.account_referrals ar on ar.child_account_id=a.id
          left join identity_capability.accounts p on p.id=ar.parent_account_id
-         where a.id=$1`,
+         where a.uuid=$1`,
         [accountId],
       )
     ).rows[0];
     if (!row) throw new Error("Account not found");
     const audit = (
       await this.sql.query<any>(
-        `select actor_id,previous_state->>'parent_account_id' previous_parent_id,
+        `select actor.uuid actor_id,previous_state->>'parent_account_id' previous_parent_id,
                 new_state->>'parent_account_id' parent_id,occurred_at
-           from kernel.audit_records
+           from kernel.audit_records audit left join identity_capability.accounts actor on actor.id=audit.actor_id
           where action='referral.parent_reassigned' and subject_type='account_referral' and subject_id=$1
-          order by occurred_at desc,id desc limit 1`,
+          order by audit.occurred_at desc,audit.id desc limit 1`,
         [accountId],
       )
     ).rows[0];

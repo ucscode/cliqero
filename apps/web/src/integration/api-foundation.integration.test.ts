@@ -26,7 +26,7 @@ suite("headless API principal and hierarchy read model", () => {
   it("creates hashed API keys and resolves the same Cliqero account", async () => {
     const owner = await account("key");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [owner.id],
     );
     const created = await app.apiKeys.create({
@@ -40,13 +40,13 @@ suite("headless API principal and hierarchy read model", () => {
     expect(
       (
         await app.database.query(
-          `select last_used_at from identity_capability.api_keys where id=$1`,
+          `select last_used_at from identity_capability.api_keys where uuid=$1`,
           [created.id],
         )
       ).rows[0].last_used_at,
     ).not.toBeNull();
     const row = await app.database.query<{ secret_hash: Buffer }>(
-      `select secret_hash from identity_capability.api_keys where id=$1`,
+      `select secret_hash from identity_capability.api_keys where uuid=$1`,
       [created.id],
     );
     expect(row.rows[0].secret_hash.toString()).not.toContain(created.secret);
@@ -130,7 +130,7 @@ suite("headless API principal and hierarchy read model", () => {
       operator = await account("overviewoperator"),
       ordinary = await account("overviewordinary");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'catalogue_manager'),($2,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'catalogue_manager'),((select id from identity_capability.accounts where uuid=$2),'operator')`,
       [catalogueManager.id, operator.id],
     );
     const forPrincipal = (accountId: string, roles: string[]) =>
@@ -165,7 +165,7 @@ suite("headless API principal and hierarchy read model", () => {
     const operator = await account("accountoperator");
     const child = await account("accountchild");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [operator.id],
     );
     await app.referralGraphService.establish(child.id, operator.id);
@@ -236,7 +236,7 @@ suite("headless API principal and hierarchy read model", () => {
     await expect(app.hierarchy.tree(root.id, outsider.id, false)).rejects.toThrow("Forbidden");
     const admin = await account("admin");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [admin.id],
     );
     expect((await app.hierarchy.tree(admin.id, outsider.id, true)).root).toBe(outsider.id);
@@ -245,7 +245,7 @@ suite("headless API principal and hierarchy read model", () => {
     const ids = Array.from({ length: 41 }, () => newId());
     for (let i = 0; i < ids.length; i++)
       await app.database.query(
-        `insert into identity_capability.accounts(id,email,handle) values($1,$2,$3)`,
+        `insert into identity_capability.accounts(uuid,email,handle) values($1,$2,$3)`,
         [ids[i], `deep${i}@example.com`, `deep${i}`],
       );
     for (let i = 1; i < ids.length; i++)
@@ -259,13 +259,13 @@ suite("headless API principal and hierarchy read model", () => {
     const children = Array.from({ length: 125 }, () => newId());
     for (let i = 0; i < children.length; i++)
       await app.database.query(
-        `insert into identity_capability.accounts(id,email,handle) values($1,$2,$3)`,
+        `insert into identity_capability.accounts(uuid,email,handle) values($1,$2,$3)`,
         [children[i], `wide${i}@example.com`, `wide${i}`],
       );
     for (const child of children) await app.referralGraphService.establish(child, wideParent);
     const boundedTree = await app.hierarchy.tree(ids[0], wideParent, false);
     expect(boundedTree.nodes.find((node) => node.id === wideParent)?.nextChildCursor).toBe(
-      [...children].sort()[49],
+      children[49],
     );
     const seen: string[] = [];
     let cursor: string | undefined;
@@ -276,7 +276,7 @@ suite("headless API principal and hierarchy read model", () => {
     } while (cursor);
     expect(seen).toHaveLength(125);
     expect(new Set(seen).size).toBe(125);
-    expect(seen).toEqual([...children].sort());
+    expect(seen).toEqual(children);
   });
   it("searches only the authorized descendant closure for normal users", async () => {
     const root = await account("searchroot"),
@@ -289,7 +289,7 @@ suite("headless API principal and hierarchy read model", () => {
     expect(await app.hierarchy.search(root.id, other.handle, false, 20)).toEqual([]);
     const operator = await account("searchoperator");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [operator.id],
     );
     expect(
@@ -303,7 +303,7 @@ suite("headless API principal and hierarchy read model", () => {
       newParent = await account("new_parent"),
       normal = await account("normal");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [operator.id],
     );
     await app.referralGraphService.establish(child.id, oldParent.id);

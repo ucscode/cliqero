@@ -127,7 +127,7 @@ export class WithdrawalService {
                select state from payout_capability.attempts
                 where execution_id=e.id order by attempt_number desc limit 1
              ) a on true
-            where e.withdrawal_id=$1
+            where e.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
             for update of e`,
           [id],
         )

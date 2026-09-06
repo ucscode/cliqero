@@ -5,7 +5,7 @@ export class PostgresPaystackRecipientStore implements PaystackRecipientStore {
   async find(accountId: string, fingerprint: string) {
     const row = (
       await this.sql.query<{ recipient_code: string }>(
-        `select recipient_code from payout_capability.paystack_recipients where account_id=$1 and destination_fingerprint=$2 and active=true`,
+        `select recipient_code from payout_capability.paystack_recipients where account_id=(select id from identity_capability.accounts where uuid=$1) and destination_fingerprint=$2 and active=true`,
         [accountId, fingerprint],
       )
     ).rows[0];
@@ -20,7 +20,7 @@ export class PostgresPaystackRecipientStore implements PaystackRecipientStore {
     accountName: string;
   }) {
     await this.sql.query(
-      `insert into payout_capability.paystack_recipients(account_id,destination_fingerprint,recipient_code,bank_code,account_last4,account_name) values($1,$2,$3,$4,$5,$6) on conflict(account_id,destination_fingerprint) do update set recipient_code=excluded.recipient_code,active=true`,
+      `insert into payout_capability.paystack_recipients(account_id,destination_fingerprint,recipient_code,bank_code,account_last4,account_name) values((select id from identity_capability.accounts where uuid=$1),$2,$3,$4,$5,$6) on conflict(account_id,destination_fingerprint) do update set recipient_code=excluded.recipient_code,active=true`,
       [
         input.accountId,
         input.fingerprint,

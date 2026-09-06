@@ -6,7 +6,7 @@ export class OperatorAuthorizationService {
     const allowed =
       (
         await this.sql.query(
-          `select 1 from identity_capability.account_capabilities where account_id=$1 and capability='operator'`,
+          `select 1 from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) and capability='operator'`,
           [accountId],
         )
       ).rowCount === 1;
@@ -16,7 +16,7 @@ export class OperatorAuthorizationService {
     const allowed =
       (
         await this.sql.query(
-          `select 1 from identity_capability.account_capabilities where account_id=$1 and capability in ('operator','catalogue_manager')`,
+          `select 1 from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) and capability in ('operator','catalogue_manager')`,
           [accountId],
         )
       ).rowCount === 1;

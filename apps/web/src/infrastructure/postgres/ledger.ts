@@ -20,7 +20,7 @@ export class PostgresFinancialDistributionPolicyRepository implements FinancialD
         initial_balance_state: "pending" | "available";
         settlement_delay_seconds: number;
       }>(
-        `select platform_account_id,platform_rate_basis_points,remainder_recipient,initial_balance_state,settlement_delay_seconds from ledger_capability.distribution_policy where singleton=true`,
+        `select platform_account_uuid as platform_account_id,platform_rate_basis_points,remainder_recipient,initial_balance_state,settlement_delay_seconds from ledger_capability.distribution_policy where singleton=true`,
       )
     ).rows[0];
     if (!row) throw new Error("Financial distribution policy is not configured");
@@ -47,7 +47,7 @@ interface DistributionRow {
 interface EntryRow {
   id: string;
   distribution_id: string;
-  account_id: string;
+  account_id: string | null;
   purchase_id: string;
   entry_type: "purchase-earnings" | "purchase-reversal";
   direction: "credit" | "debit";
@@ -69,7 +69,7 @@ export class PostgresLedgerRepository implements LedgerRepository {
   async findDistributionByPurchaseId(purchaseId: string): Promise<PurchaseDistribution | null> {
     const row = (
       await this.sql.query<DistributionRow>(
-        `select id,purchase_id,gross_minor,currency,policy_snapshot,correlation_id,completed_at,platform_amount_minor from ledger_capability.purchase_distributions where purchase_id=$1`,
+        `select d.uuid as id,(select uuid from purchase_capability.purchases where id=d.purchase_id) as purchase_id,d.gross_minor,d.currency,d.policy_snapshot,d.correlation_id,d.completed_at,d.platform_amount_minor from ledger_capability.purchase_distributions d where d.purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
         [purchaseId],
       )
     ).rows[0];
@@ -87,7 +87,7 @@ export class PostgresLedgerRepository implements LedgerRepository {
   }
   async createDistribution(value: Omit<PurchaseDistribution, "completedAt">): Promise<void> {
     await this.sql.query(
-      `insert into ledger_capability.purchase_distributions(id,purchase_id,gross_minor,currency,policy_snapshot,correlation_id,platform_amount_minor) values($1,$2,$3,$4,$5::jsonb,$6,$7)`,
+      `insert into ledger_capability.purchase_distributions(uuid,purchase_id,gross_minor,currency,policy_snapshot,correlation_id,platform_amount_minor) values($1,(select id from purchase_capability.purchases where uuid=$2),$3,$4,$5::jsonb,$6,$7)`,
       [
         value.id,
         value.purchaseId,
@@ -102,8 +102,8 @@ export class PostgresLedgerRepository implements LedgerRepository {
   async append(entries: readonly LedgerEntryDraft[]): Promise<void> {
     for (const entry of entries)
       await this.sql.query(
-        `insert into ledger_capability.entries(id,distribution_id,account_id,purchase_id,entry_type,direction,amount_minor,currency,idempotency_key,correlation_id,recipient_role,basis,referral_level,balance_state,maturity_at,original_entry_id,reversal_id)
-     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+        `insert into ledger_capability.entries(uuid,distribution_id,account_id,purchase_id,entry_type,direction,amount_minor,currency,idempotency_key,correlation_id,recipient_role,basis,referral_level,balance_state,maturity_at,original_entry_id,reversal_id)
+     values($1,(select id from ledger_capability.purchase_distributions where uuid=$2),case when $11='platform' then null else (select id from identity_capability.accounts where uuid=$3) end,(select id from purchase_capability.purchases where uuid=$4),$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,(select id from ledger_capability.entries where uuid=$16),(select id from ledger_capability.reversals where uuid=$17))`,
         [
           entry.id,
           entry.distributionId,
@@ -128,9 +128,14 @@ export class PostgresLedgerRepository implements LedgerRepository {
   async findEntriesByPurchaseId(purchaseId: string): Promise<readonly LedgerEntry[]> {
     const rows = (
       await this.sql.query<EntryRow>(
-        `select id,distribution_id,account_id,purchase_id,entry_type,direction,amount_minor,currency,idempotency_key,correlation_id,recipient_role,basis,referral_level,balance_state,created_at,
-      maturity_at,original_entry_id,reversal_id
-     from ledger_capability.entries where purchase_id=$1 order by created_at,id`,
+        `select e.uuid as id,
+      (select uuid from ledger_capability.purchase_distributions where id=e.distribution_id) as distribution_id,
+      (select uuid from identity_capability.accounts where id=e.account_id) as account_id,
+      (select uuid from purchase_capability.purchases where id=e.purchase_id) as purchase_id,
+      e.entry_type,e.direction,e.amount_minor,e.currency,e.idempotency_key,e.correlation_id,e.recipient_role,e.basis,e.referral_level,e.balance_state,e.created_at,
+      (select uuid from ledger_capability.entries where id=e.original_entry_id) as original_entry_id,
+      (select uuid from ledger_capability.reversals where id=e.reversal_id) as reversal_id,e.maturity_at
+     from ledger_capability.entries e where e.purchase_id=(select id from purchase_capability.purchases where uuid=$1) order by e.created_at,e.id`,
         [purchaseId],
       )
     ).rows;
@@ -160,7 +165,7 @@ export class PostgresLedgerRepository implements LedgerRepository {
         `select entry.currency,case when entry.reversal_id is not null or exists(select 1 from ledger_capability.entries compensation where compensation.original_entry_id=entry.id) then 'reversed' when settlement.id is not null then 'available' when entry.balance_state='pending' then 'pending' else entry.balance_state end balance_state,
       sum(case entry.direction when 'credit' then entry.amount_minor else -entry.amount_minor end)::bigint amount_minor
      from ledger_capability.entries entry left join ledger_capability.entry_settlements settlement on settlement.original_entry_id=entry.id
-     where entry.account_id=$1 group by entry.currency,case when entry.reversal_id is not null or exists(select 1 from ledger_capability.entries compensation where compensation.original_entry_id=entry.id) then 'reversed' when settlement.id is not null then 'available' when entry.balance_state='pending' then 'pending' else entry.balance_state end order by entry.currency,balance_state`,
+     where entry.account_id=(select id from identity_capability.accounts where uuid=$1) group by entry.currency,case when entry.reversal_id is not null or exists(select 1 from ledger_capability.entries compensation where compensation.original_entry_id=entry.id) then 'reversed' when settlement.id is not null then 'available' when entry.balance_state='pending' then 'pending' else entry.balance_state end order by entry.currency,balance_state`,
         [accountId],
       )
     ).rows;

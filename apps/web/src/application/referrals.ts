@@ -43,7 +43,7 @@ export class ReferralGraphService {
       if (result.changed) {
         await this.sql!.query(
           `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
-          values($1,'referral.parent_reassigned','account_referral',$2,$3::jsonb,$4::jsonb,gen_random_uuid())`,
+          values((select id from identity_capability.accounts where uuid=$1),'referral.parent_reassigned','account_referral',$2,$3::jsonb,$4::jsonb,gen_random_uuid())`,
           [
             actorAccountId,
             childAccountId,

@@ -24,9 +24,9 @@ export class LedgerFundsReservationService {
         `select (
       coalesce((select sum(case when entry.direction='credit' then entry.amount_minor else -entry.amount_minor end)
         from ledger_capability.entries entry left join ledger_capability.entry_settlements settlement on settlement.original_entry_id=entry.id
-        where entry.account_id=$1 and entry.currency=$2 and entry.entry_type='purchase-earnings'
+        where entry.account_id=(select id from identity_capability.accounts where uuid=$1) and entry.currency=$2 and entry.entry_type='purchase-earnings'
           and (entry.balance_state='available' or settlement.id is not null)),0)
-      - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=$1 and res.currency=$2
+      - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
         and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
       )::bigint as minor`,
         [input.accountId, input.amount.currency],
@@ -36,7 +36,7 @@ export class LedgerFundsReservationService {
       throw new Error("Insufficient available funds");
     const reservationId = newId();
     await this.sql.query(
-      `insert into ledger_capability.withdrawal_reservations(id,withdrawal_id,account_id,amount_minor,currency) values($1,$2,$3,$4,$5)`,
+      `insert into ledger_capability.withdrawal_reservations(uuid,withdrawal_id,account_id,amount_minor,currency) values($1,(select id from withdrawal_capability.withdrawals where uuid=$2),(select id from identity_capability.accounts where uuid=$3),$4,$5)`,
       [
         reservationId,
         input.withdrawalId,
@@ -46,7 +46,7 @@ export class LedgerFundsReservationService {
       ],
     );
     await this.sql.query(
-      `insert into ledger_capability.withdrawal_reservation_events(id,reservation_id,withdrawal_id,account_id,kind,amount_minor,currency,idempotency_key,correlation_id) values($1,$2,$3,$4,'reserved',$5,$6,$7,$8)`,
+      `insert into ledger_capability.withdrawal_reservation_events(uuid,reservation_id,withdrawal_id,account_id,kind,amount_minor,currency,idempotency_key,correlation_id) values($1,(select id from ledger_capability.withdrawal_reservations where uuid=$2),(select id from withdrawal_capability.withdrawals where uuid=$3),(select id from identity_capability.accounts where uuid=$4),'reserved',$5,$6,$7,$8)`,
       [
         newId(),
         reservationId,
@@ -71,9 +71,9 @@ export class LedgerFundsReservationService {
         `select (
       coalesce((select sum(case when entry.direction='credit' then entry.amount_minor else -entry.amount_minor end)
         from ledger_capability.entries entry left join ledger_capability.entry_settlements settlement on settlement.original_entry_id=entry.id
-        where entry.account_id=$1 and entry.currency=$2 and entry.entry_type='purchase-earnings'
+        where entry.account_id=(select id from identity_capability.accounts where uuid=$1) and entry.currency=$2 and entry.entry_type='purchase-earnings'
           and (entry.balance_state='available' or settlement.id is not null)),0)
-      - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=$1 and res.currency=$2
+      - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
         and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
       )::bigint as minor`,
         [accountId, currency],
@@ -92,20 +92,20 @@ export class LedgerFundsReservationService {
     ]);
     const row = (
       await this.sql.query<{ id: string; amount_minor: string; currency: string }>(
-        `select id,amount_minor,currency from ledger_capability.withdrawal_reservations where withdrawal_id=$1 and account_id=$2`,
+        `select r.uuid as id,r.amount_minor,r.currency from ledger_capability.withdrawal_reservations r where r.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1) and r.account_id=(select id from identity_capability.accounts where uuid=$2)`,
         [input.withdrawalId, input.accountId],
       )
     ).rows[0];
     if (!row) throw new Error("Withdrawal reservation not found");
     const latest = (
       await this.sql.query<{ kind: string }>(
-        `select kind from ledger_capability.withdrawal_reservation_events where reservation_id=$1 order by created_at desc,id desc limit 1`,
+        `select kind from ledger_capability.withdrawal_reservation_events where reservation_id=(select id from ledger_capability.withdrawal_reservations where uuid=$1) order by created_at desc,id desc limit 1`,
         [row.id],
       )
     ).rows[0]?.kind;
     if (latest !== "reserved") return;
     await this.sql.query(
-      `insert into ledger_capability.withdrawal_reservation_events(id,reservation_id,withdrawal_id,account_id,kind,amount_minor,currency,idempotency_key,correlation_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      `insert into ledger_capability.withdrawal_reservation_events(uuid,reservation_id,withdrawal_id,account_id,kind,amount_minor,currency,idempotency_key,correlation_id) values($1,(select id from ledger_capability.withdrawal_reservations where uuid=$2),(select id from withdrawal_capability.withdrawals where uuid=$3),(select id from identity_capability.accounts where uuid=$4),$5,$6,$7,$8,$9)`,
       [
         newId(),
         row.id,
@@ -125,7 +125,7 @@ export class LedgerFundsReservationService {
         `select currency,
     sum(case when event.kind='reserved' then event.amount_minor when event.kind in ('released','completed') then -event.amount_minor else 0 end)::bigint reserved_minor,
     sum(case when event.kind='completed' then event.amount_minor else 0 end)::bigint completed_minor
-    from ledger_capability.withdrawal_reservation_events event where event.account_id=$1 group by currency`,
+    from ledger_capability.withdrawal_reservation_events event where event.account_id=(select id from identity_capability.accounts where uuid=$1) group by currency`,
         [accountId],
       )
     ).rows;

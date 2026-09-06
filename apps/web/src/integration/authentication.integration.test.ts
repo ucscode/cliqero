@@ -29,14 +29,16 @@ suite("Better Auth and Cliqero identity boundary", () => {
       account_id: string;
       onboarding_state: string;
     }>(
-      `select auth_user_id,account_id,onboarding_state from identity_capability.auth_account_links`,
+      `select links.auth_user_id,a.uuid as account_id,links.onboarding_state
+       from identity_capability.auth_account_links links
+       join identity_capability.accounts a on a.id=links.account_id`,
     );
     expect(rows.rowCount).toBe(1);
     expect(rows.rows[0]).toMatchObject({ account_id: account.id, onboarding_state: "complete" });
     expect(
       (
         await app.database.query(
-          `select password_salt,password_hash from identity_capability.accounts where id=$1`,
+          `select password_salt,password_hash from identity_capability.accounts where uuid=$1`,
           [account.id],
         )
       ).rows[0],
@@ -68,7 +70,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
     });
     const authUserId = (
       await app.database.query<{ auth_user_id: string }>(
-        `select auth_user_id from identity_capability.auth_account_links where account_id=$1`,
+        `select auth_user_id from identity_capability.auth_account_links where account_id=(select id from identity_capability.accounts where uuid=$1)`,
         [account.id],
       )
     ).rows[0].auth_user_id;

@@ -128,6 +128,15 @@ Percentages are integer percentages, not basis points. Levels are contiguous fro
 
 PostgreSQL stores the commercial/accounting/identity domain. The blog uses a separate SQLite database and must remain isolated from PostgreSQL.
 
+## PostgreSQL initialization
+
+An empty PostgreSQL volume is initialized directly from the single canonical
+`database/migrations/001_initial_schema.sql` file mounted by Compose. The
+development database is intentionally resettable before launch; recreating the
+PostgreSQL volume applies this baseline without replaying historical migration
+steps. Blog content has its own independent SQLite migration under the web
+application and is never part of this PostgreSQL bootstrap.
+
 Normal `just dev-down` / `just prod-down` stops containers without deleting persistent volumes. `just dev-clean` runs volume removal and is destructive.
 
 ## Blog initialization

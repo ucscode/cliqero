@@ -233,12 +233,12 @@ suite("listing management and media", () => {
     );
     expect(await app.listingMediaDeletion.findWork()).toHaveLength(0);
     await app.database.query(
-      `update listing_capability.media set deletion_next_attempt_at=now()-interval '1 second',deletion_lease_until=now()+interval '5 minutes' where id=$1`,
+      `update listing_capability.media set deletion_next_attempt_at=now()-interval '1 second',deletion_lease_until=now()+interval '5 minutes' where uuid=$1`,
       [one.id],
     );
     expect(await app.listingMediaDeletion.findWork()).toHaveLength(0);
     await app.database.query(
-      `update listing_capability.media set deletion_lease_until=now()-interval '1 second' where id=$1`,
+      `update listing_capability.media set deletion_lease_until=now()-interval '1 second' where uuid=$1`,
       [one.id],
     );
     const competing = await Promise.all([
@@ -278,7 +278,7 @@ suite("listing management and media", () => {
         previous_state: unknown;
         new_state: unknown;
       }>(
-        `select action,actor_id,previous_state,new_state from kernel.audit_records where subject_type='integration' and subject_id=$1 order by id`,
+        `select action,actor.uuid actor_id,previous_state,new_state from kernel.audit_records audit left join identity_capability.accounts actor on actor.id=audit.actor_id where subject_type='integration' and subject_id=$1 order by audit.id`,
         [created.id],
       )
     ).rows;
@@ -316,7 +316,7 @@ suite("listing management and media", () => {
         country: "NG",
       });
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values($1,'catalogue_manager'),($2,'catalogue_manager')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'catalogue_manager'),((select id from identity_capability.accounts where uuid=$2),'catalogue_manager')`,
       [managerA.id, managerB.id],
     );
     const listing = await app.listingService.createCatalogue(managerA, {
@@ -333,7 +333,7 @@ suite("listing management and media", () => {
         previous_state: unknown;
         new_state: unknown;
       }>(
-        `select action,actor_id,previous_state,new_state from kernel.audit_records where subject_type='listing' and subject_id=$1 order by id`,
+        `select action,actor.uuid actor_id,previous_state,new_state from kernel.audit_records audit left join identity_capability.accounts actor on actor.id=audit.actor_id where subject_type='listing' and subject_id=$1 order by audit.id`,
         [listing.id],
       )
     ).rows;
@@ -356,7 +356,7 @@ suite("listing management and media", () => {
         previous_state: unknown;
         new_state: unknown;
       }>(
-        `select action,actor_id,previous_state,new_state from kernel.audit_records where subject_type='listing' and subject_id=$1 order by id`,
+        `select action,actor.uuid actor_id,previous_state,new_state from kernel.audit_records audit left join identity_capability.accounts actor on actor.id=audit.actor_id where subject_type='listing' and subject_id=$1 order by audit.id`,
         [listing.id],
       )
     ).rows;

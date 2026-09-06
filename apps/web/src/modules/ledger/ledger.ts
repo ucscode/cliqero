@@ -4,7 +4,7 @@ export type RecipientRole = "seller" | "referral" | "platform";
 export interface LedgerEntryDraft {
   id: string;
   distributionId: string;
-  accountId: string;
+  accountId: string | null;
   purchaseId: string;
   entryType: "purchase-earnings" | "purchase-reversal";
   direction: "credit" | "debit";

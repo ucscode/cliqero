@@ -165,7 +165,7 @@ const records = [
 try {
   await pool.query("begin");
   await pool.query(
-    `insert into identity_capability.accounts(id,email,handle,display_name) values($1,$2,$3,$4) on conflict (id) do nothing`,
+    `insert into identity_capability.accounts(uuid,email,handle,display_name) values($1,$2,$3,$4) on conflict (uuid) do nothing`,
     [ownerId, "fixtures.catalogue@example.test", "fixture_catalogue", "Development Catalogue"],
   );
   for (const [key, title, description, price] of records) {
@@ -174,7 +174,7 @@ try {
     const featuredPosition = [1, 2, 3, 6, 11, 18].indexOf(numericKey) + 1 || null;
     const createdAt = new Date(Date.UTC(2025, 0, 1 + numericKey)).toISOString();
     await pool.query(
-      `insert into listing_capability.listings(id,seller_id,title,description,price_minor,price_currency,destination_url,state,metadata,external_key,featured_position,created_at,updated_at) values($1,$2,$3,$4,$5,'USD',$6,$7,$8::jsonb,$9,$10,$11,$11) on conflict (seller_id,external_key) do update set title=excluded.title,description=excluded.description,price_minor=excluded.price_minor,state=excluded.state,metadata=excluded.metadata,featured_position=excluded.featured_position,created_at=excluded.created_at,updated_at=excluded.updated_at`,
+      `insert into listing_capability.listings(uuid,seller_id,title,description,price_minor,price_currency,destination_url,state,metadata,external_key,featured_position,created_at,updated_at) values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,'USD',$6,$7,$8::jsonb,$9,$10,$11,$11) on conflict (seller_id,external_key) do update set title=excluded.title,description=excluded.description,price_minor=excluded.price_minor,state=excluded.state,metadata=excluded.metadata,featured_position=excluded.featured_position,created_at=excluded.created_at,updated_at=excluded.updated_at`,
       [
         newId(),
         ownerId,
@@ -205,7 +205,7 @@ try {
   ] as const;
   for (const [id, email, handle] of reviewers)
     await pool.query(
-      `insert into identity_capability.accounts(id,email,handle,display_name) values($1,$2,$3,$3) on conflict(id) do update set handle=excluded.handle`,
+      `insert into identity_capability.accounts(uuid,email,handle,display_name) values($1,$2,$3,$3) on conflict(uuid) do update set handle=excluded.handle`,
       [id, email, handle],
     );
   const reviewFixtures = [
@@ -250,14 +250,14 @@ try {
   for (const [key, accountId, rating, body, status] of reviewFixtures) {
     const listing = (
       await pool.query<{ id: string }>(
-        `select id from listing_capability.listings where seller_id=$1 and external_key=$2`,
+        `select uuid as id from listing_capability.listings where seller_id=(select id from identity_capability.accounts where uuid=$1) and external_key=$2`,
         [ownerId, key],
       )
     ).rows[0];
     if (!listing) continue;
     await pool.query(
-      `insert into listing_capability.reviews(id,listing_id,account_id,rating,body,status,moderated_at,moderated_by)
-       values(gen_random_uuid(),$1::uuid,$2::uuid,$3,$4,$5,case when $5='pending' then null else '2025-02-01T00:00:00.000Z'::timestamptz end,case when $5='pending' then null else $2::uuid end)
+      `insert into listing_capability.reviews(uuid,listing_id,account_id,rating,body,status,moderated_at,moderated_by)
+       values(gen_random_uuid(),(select id from listing_capability.listings where uuid=$1),(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,case when $5='pending' then null else '2025-02-01T00:00:00.000Z'::timestamptz end,case when $5='pending' then null else (select id from identity_capability.accounts where uuid=$2) end)
        on conflict(listing_id,account_id) do update set rating=excluded.rating,body=excluded.body,status=excluded.status,moderated_at=excluded.moderated_at,moderated_by=excluded.moderated_by,updated_at=now()`,
       [listing.id, accountId, rating, body, status],
     );
@@ -276,7 +276,7 @@ try {
   for (const [key, filename, altText, color] of mediaFixtures) {
     const listing = (
       await pool.query<{ id: string }>(
-        `select id from listing_capability.listings where seller_id=$1 and external_key=$2`,
+        `select uuid as id from listing_capability.listings where seller_id=(select id from identity_capability.accounts where uuid=$1) and external_key=$2`,
         [ownerId, key],
       )
     ).rows[0];
