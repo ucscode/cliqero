@@ -12,17 +12,16 @@ services:
       # Mount the repository in development so source, content, package manifests,
       # lockfile, and repository scripts stay live and host-authoritative.
       - ../..:/workspace
-      # Keep installed dependencies across container recreation without writing
-      # Linux container node_modules into the host checkout. npm workspaces may
-      # install packages at both the repository root and workspace level, so mask
-      # both locations from the host bind mount.
+      # Keep repository-level installed dependencies across container recreation
+      # without writing Linux container node_modules into the host checkout.
       - node-modules:/workspace/node_modules
-      - web-node-modules:/workspace/apps/web/node_modules
+      # Mask workspace-local host dependencies with a Docker-managed anonymous
+      # volume. This path does not need independent persistence or sharing.
+      - /workspace/apps/web/node_modules
       # Keep Next.js dev/build output in a disposable Docker volume instead of
       # creating container-owned files in the host source tree.
       - web-next:/workspace/apps/web/.next
 
 volumes:
   node-modules:
-  web-node-modules:
   web-next:
