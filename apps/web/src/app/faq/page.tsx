@@ -1,44 +1,15 @@
 import type { Metadata } from "next";
-import { PublicPage } from "@/components/public-page";
+import { InformationalContentPage } from "@/components/informational-content-page";
 import { siteConfig } from "@/config/site";
+import { loadInformationalPage } from "@/content/informational-pages";
+
+const page = loadInformationalPage("faq");
+
 export const metadata: Metadata = {
-  title: `${siteConfig.name} FAQ`,
-  description: `Answers about buying, wallet funding and referrals on ${siteConfig.name}.`,
+  title: `${page.title} | ${siteConfig.name}`,
+  ...(page.description ? { description: page.description } : {}),
 };
+
 export default function Faq() {
-  const items = [
-    [
-      `What is ${siteConfig.name}?`,
-      `${siteConfig.name} is a catalogue and access platform. You can discover products, fund a buyer wallet, purchase access and promote listings.`,
-    ],
-    [
-      "How does funding work?",
-      `External providers fund your ${siteConfig.name} wallet. A successful funding transaction is separate from a later wallet purchase.`,
-    ],
-    [
-      "How do referrals work?",
-      "Authenticated members may create referral links and earn qualifying commissions when the existing attribution and distribution rules apply.",
-    ],
-    [
-      "Can I withdraw earnings?",
-      "Eligible earnings follow the current settlement and withdrawal policies shown in your signed-in dashboard.",
-    ],
-    [
-      "What account do I need?",
-      "Create an account and complete the required onboarding information. Your account controls the areas available to you.",
-    ],
-  ];
-  return (
-    <PublicPage
-      title="Frequently asked questions"
-      intro={`Clear answers to common ${siteConfig.name} questions.`}
-    >
-      {items.map(([q, a]) => (
-        <section key={q}>
-          <h2 className="text-xl font-semibold text-slate-900">{q}</h2>
-          <p className="mt-2">{a}</p>
-        </section>
-      ))}
-    </PublicPage>
-  );
+  return <InformationalContentPage page={page} />;
 }
