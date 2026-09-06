@@ -91,16 +91,16 @@ Compatibility operations that accept API keys apply the route's declared
 capability scope before invoking the existing account/role/ownership checks;
 session-only and integration-credential routes reject API-key principals.
 
-| Method | Path                                         | Auth                                             | Capability             | Notes                                                          |
-| ------ | -------------------------------------------- | ------------------------------------------------ | ---------------------- | -------------------------------------------------------------- |
-| GET    | `/api/openapi.json`                          | no                                               | API contract           | Generated from Hono/Zod route contracts                        |
-| GET    | `/api/hierarchy/tree`                        | account or API key (`hierarchy:read`)            | hierarchy projection   | Configured depth and child window; optional root               |
-| GET    | `/api/hierarchy/search`                      | account or API key (`hierarchy:read`)            | hierarchy search       | SQL-scoped descendant search; operators global                 |
-| GET    | `/api/hierarchy/children/{parentId}`         | account or API key (`hierarchy:read`)            | hierarchy continuation | Stable UUID cursor; server-controlled child batch size         |
-| PUT    | `/api/operator/hierarchy/{accountId}/parent` | operator or operator API key (`hierarchy:admin`) | hierarchy command      | Assign/reassign one parent; PostgreSQL rejects cycles; audited |
-| POST   | `/api/operator/api-keys`                     | operator                                         | API-key command        | Secret returned once; scopes are explicit                      |
-| GET    | `/api/operator/api-keys`                     | operator                                         | API-key projection     | Never returns secrets or hashes                                |
-| POST   | `/api/operator/api-keys/{id}/revoke`         | operator                                         | API-key command        | Revokes without deleting history                               |
+| Method | Path                                         | Auth                                             | Capability             | Notes                                                                       |
+| ------ | -------------------------------------------- | ------------------------------------------------ | ---------------------- | --------------------------------------------------------------------------- |
+| GET    | `/api/openapi.json`                          | development: no; otherwise `X-OpenAPI-Key` only  | API contract           | Generated from Hono/Zod route contracts; schema key is not an API principal |
+| GET    | `/api/hierarchy/tree`                        | account or API key (`hierarchy:read`)            | hierarchy projection   | Configured depth and child window; optional root                            |
+| GET    | `/api/hierarchy/search`                      | account or API key (`hierarchy:read`)            | hierarchy search       | SQL-scoped descendant search; operators global                              |
+| GET    | `/api/hierarchy/children/{parentId}`         | account or API key (`hierarchy:read`)            | hierarchy continuation | Stable UUID cursor; server-controlled child batch size                      |
+| PUT    | `/api/operator/hierarchy/{accountId}/parent` | operator or operator API key (`hierarchy:admin`) | hierarchy command      | Assign/reassign one parent; PostgreSQL rejects cycles; audited              |
+| POST   | `/api/operator/api-keys`                     | operator                                         | API-key command        | Secret returned once; scopes are explicit                                   |
+| GET    | `/api/operator/api-keys`                     | operator                                         | API-key projection     | Never returns secrets or hashes                                             |
+| POST   | `/api/operator/api-keys/{id}/revoke`         | operator                                         | API-key command        | Revokes without deleting history                                            |
 
 These routes use a unified `ApiPrincipal` resolved from Better Auth cookies or
 hashed database API keys. Compatibility handlers are invoked only after Hono

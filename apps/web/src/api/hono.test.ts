@@ -2,173 +2,182 @@ import { describe, expect, it } from "vitest";
 import { createApiApp } from "./hono";
 import { authorizeLegacyRequest, getLegacyRouteAccess } from "./legacy-dispatch";
 
-function appWith(principal: any = null) {
+function appWith(
+  principal: any = null,
+  schemaAccess: { environment: string | undefined; key: string | null } = {
+    environment: "development",
+    key: null,
+  },
+) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
-  return createApiApp({
-    principalResolver: { resolve: async () => principal },
-    hierarchy: {
-      tree: async () => ({
-        root: "00000000-0000-4000-8000-000000000001",
-        windowDepth: 3,
-        childLimit: 50,
-        parent: null,
-        nodes: [],
-        edges: [],
-      }),
-      search: async () => [],
-    },
-    apiKeys: { create: async () => ({}), list: async () => [], revoke: async () => {} },
-    operatorOverview: {
-      get: async (role: "operator" | "catalogue_manager") => ({
-        role,
-        catalogue: { published: 4, draft: 1, archived: 2 },
-        ...(role === "operator"
-          ? {
-              users: { total: 9 },
-              commerce: { purchases: 6 },
-              withdrawals: { requested: 1, approved: 2 },
-            }
-          : {}),
-      }),
-    },
-    operatorAccounts: {
-      list: async () => ({ items: [], nextCursor: null }),
-      get: async (id: string) => ({
-        id,
-        handle: "sample",
-        displayName: null,
-        email: "sample@example.com",
-        country: null,
-        roles: [],
-        createdAt: new Date().toISOString(),
-        directReferralCount: 0,
-        parent: null,
-        purchaseCount: 0,
-        latestParentReassignment: null,
-      }),
-    },
-    operatorFunding: {
-      list: async () => ({ items: [], nextCursor: null }),
-      get: async (id: string) => ({
-        id,
-        account: {
-          id: "00000000-0000-4000-8000-000000000001",
+  return createApiApp(
+    {
+      principalResolver: { resolve: async () => principal },
+      hierarchy: {
+        tree: async () => ({
+          root: "00000000-0000-4000-8000-000000000001",
+          windowDepth: 3,
+          childLimit: 50,
+          parent: null,
+          nodes: [],
+          edges: [],
+        }),
+        search: async () => [],
+      },
+      apiKeys: { create: async () => ({}), list: async () => [], revoke: async () => {} },
+      operatorOverview: {
+        get: async (role: "operator" | "catalogue_manager") => ({
+          role,
+          catalogue: { published: 4, draft: 1, archived: 2 },
+          ...(role === "operator"
+            ? {
+                users: { total: 9 },
+                commerce: { purchases: 6 },
+                withdrawals: { requested: 1, approved: 2 },
+              }
+            : {}),
+        }),
+      },
+      operatorAccounts: {
+        list: async () => ({ items: [], nextCursor: null }),
+        get: async (id: string) => ({
+          id,
           handle: "sample",
+          displayName: null,
           email: "sample@example.com",
-        },
-        provider: "development",
-        providerReference: "dev-reference",
-        canonicalAmountMinor: "100",
-        canonicalCurrency: "USD",
-        collectionAmountMinor: "100",
-        collectionCurrency: "USD",
-        state: "confirmed",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        confirmedAt: new Date().toISOString(),
-        walletCredit: null,
-        conversionSnapshot: null,
-        providerInitialization: null,
-        operations: [],
-        events: [],
-      }),
-    },
-    operatorDistributions: {
-      list: async () => ({ items: [], nextCursor: null }),
-      get: async (id: string) => ({
-        id,
-        purchaseId: "00000000-0000-4000-8000-000000000002",
-        listingId: "00000000-0000-4000-8000-000000000003",
-        listingTitle: "Sample",
-        buyer: { id: ordinaryId, handle: "buyer", email: "buyer@example.com" },
-        grossAmountMinor: "100",
-        currency: "USD",
-        referralAllocatedMinor: "0",
-        platformRemainderMinor: "100",
-        beneficiaryCount: 0,
-        completedAt: new Date().toISOString(),
-        purchaseState: "completed",
-        purchaseCreatedAt: new Date().toISOString(),
-        attribution: { id: null, linkId: null, referrer: null },
-        policySnapshot: {},
-        allocations: [],
-        reversal: null,
-      }),
-    },
-    operatorEarnings: {
-      list: async () => ({
-        items: [],
-        nextCursor: null,
-        totals: { pendingMinor: "0", availableMinor: "0", reservedMinor: "0" },
-      }),
-    },
-    operatorWithdrawals: {
-      list: async () => ({ items: [], nextCursor: null }),
-      get: async () => ({ items: [] }),
-    },
-    operatorTreasury: {
-      summary: async () => ({
-        balanceMinor: "0",
-        creditsMinor: "0",
-        debitsMinor: "0",
-        currency: "USD",
-      }),
-      list: async () => ({ items: [], nextCursor: null }),
-      createManual: async (input: any) => ({
-        id: "00000000-0000-4000-8000-000000000004",
-        direction: input.direction,
-        amountMinor: input.amountMinor,
-        title: input.title.trim(),
-        note: input.note ?? null,
-        sourceKind: null,
-        sourceId: null,
-        actorId: input.actorId,
-        createdAt: new Date(),
-      }),
-      get: async () => ({
-        id: "00000000-0000-4000-8000-000000000004",
-        direction: "credit",
-        amountMinor: "100",
-        title: "Sample",
-        note: null,
-        source: null,
-        actor: null,
-        createdAt: new Date().toISOString(),
-      }),
-    },
-    treasury: {
-      createManual: async (input: any) => ({
-        id: "00000000-0000-4000-8000-000000000004",
-        direction: input.direction,
-        amountMinor: input.amountMinor,
-        title: input.title.trim(),
-        note: input.note ?? null,
-        sourceKind: null,
-        sourceId: null,
-        actorId: input.actorId,
-        createdAt: new Date(),
-      }),
-    },
-    withdrawals: {
-      approve: async () => ({}),
-      reject: async () => ({}),
-    },
-    payoutExecution: {
-      execute: async () => ({}),
-      reconcile: async () => ({}),
-      manualComplete: async () => ({}),
-    },
-    blog: {
-      list: () => ({ items: [], nextCursor: null, limit: 25 }),
-      get: () => null,
-      categories: () => [],
-      tags: () => [],
-      create: () => ({}),
-      update: () => ({}),
-      publish: () => ({}),
-      delete: () => {},
-    },
-  } as any);
+          country: null,
+          roles: [],
+          createdAt: new Date().toISOString(),
+          directReferralCount: 0,
+          parent: null,
+          purchaseCount: 0,
+          latestParentReassignment: null,
+        }),
+      },
+      operatorFunding: {
+        list: async () => ({ items: [], nextCursor: null }),
+        get: async (id: string) => ({
+          id,
+          account: {
+            id: "00000000-0000-4000-8000-000000000001",
+            handle: "sample",
+            email: "sample@example.com",
+          },
+          provider: "development",
+          providerReference: "dev-reference",
+          canonicalAmountMinor: "100",
+          canonicalCurrency: "USD",
+          collectionAmountMinor: "100",
+          collectionCurrency: "USD",
+          state: "confirmed",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          confirmedAt: new Date().toISOString(),
+          walletCredit: null,
+          conversionSnapshot: null,
+          providerInitialization: null,
+          operations: [],
+          events: [],
+        }),
+      },
+      operatorDistributions: {
+        list: async () => ({ items: [], nextCursor: null }),
+        get: async (id: string) => ({
+          id,
+          purchaseId: "00000000-0000-4000-8000-000000000002",
+          listingId: "00000000-0000-4000-8000-000000000003",
+          listingTitle: "Sample",
+          buyer: { id: ordinaryId, handle: "buyer", email: "buyer@example.com" },
+          grossAmountMinor: "100",
+          currency: "USD",
+          referralAllocatedMinor: "0",
+          platformRemainderMinor: "100",
+          beneficiaryCount: 0,
+          completedAt: new Date().toISOString(),
+          purchaseState: "completed",
+          purchaseCreatedAt: new Date().toISOString(),
+          attribution: { id: null, linkId: null, referrer: null },
+          policySnapshot: {},
+          allocations: [],
+          reversal: null,
+        }),
+      },
+      operatorEarnings: {
+        list: async () => ({
+          items: [],
+          nextCursor: null,
+          totals: { pendingMinor: "0", availableMinor: "0", reservedMinor: "0" },
+        }),
+      },
+      operatorWithdrawals: {
+        list: async () => ({ items: [], nextCursor: null }),
+        get: async () => ({ items: [] }),
+      },
+      operatorTreasury: {
+        summary: async () => ({
+          balanceMinor: "0",
+          creditsMinor: "0",
+          debitsMinor: "0",
+          currency: "USD",
+        }),
+        list: async () => ({ items: [], nextCursor: null }),
+        createManual: async (input: any) => ({
+          id: "00000000-0000-4000-8000-000000000004",
+          direction: input.direction,
+          amountMinor: input.amountMinor,
+          title: input.title.trim(),
+          note: input.note ?? null,
+          sourceKind: null,
+          sourceId: null,
+          actorId: input.actorId,
+          createdAt: new Date(),
+        }),
+        get: async () => ({
+          id: "00000000-0000-4000-8000-000000000004",
+          direction: "credit",
+          amountMinor: "100",
+          title: "Sample",
+          note: null,
+          source: null,
+          actor: null,
+          createdAt: new Date().toISOString(),
+        }),
+      },
+      treasury: {
+        createManual: async (input: any) => ({
+          id: "00000000-0000-4000-8000-000000000004",
+          direction: input.direction,
+          amountMinor: input.amountMinor,
+          title: input.title.trim(),
+          note: input.note ?? null,
+          sourceKind: null,
+          sourceId: null,
+          actorId: input.actorId,
+          createdAt: new Date(),
+        }),
+      },
+      withdrawals: {
+        approve: async () => ({}),
+        reject: async () => ({}),
+      },
+      payoutExecution: {
+        execute: async () => ({}),
+        reconcile: async () => ({}),
+        manualComplete: async () => ({}),
+      },
+      blog: {
+        list: () => ({ items: [], nextCursor: null, limit: 25 }),
+        get: () => null,
+        categories: () => [],
+        tags: () => [],
+        create: () => ({}),
+        update: () => ({}),
+        publish: () => ({}),
+        delete: () => {},
+      },
+    } as any,
+    schemaAccess,
+  );
 }
 describe("Hono API foundation", () => {
   it("keeps public blog reads open and blog administration role/scope constrained", async () => {
@@ -256,6 +265,49 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "account",
       "x-required-api-scope": "wallet:read",
     });
+  });
+  it("keeps development schema discovery convenient with or without a key", async () => {
+    expect((await appWith().fetch(new Request("http://localhost/api/openapi.json"))).status).toBe(
+      200,
+    );
+    expect(
+      (
+        await appWith().fetch(
+          new Request("http://localhost/api/openapi.json", {
+            headers: { "X-OpenAPI-Key": "anything" },
+          }),
+        )
+      ).status,
+    ).toBe(200);
+  });
+  it("protects non-development schema discovery without creating an API principal", async () => {
+    const protectedAccess = { environment: "production", key: "schema-secret" } as const;
+    const request = (key?: string) =>
+      new Request("http://localhost/api/openapi.json", {
+        headers: key === undefined ? {} : { "X-OpenAPI-Key": key },
+      });
+    expect((await appWith(null, protectedAccess).fetch(request("schema-secret"))).status).toBe(200);
+    expect((await appWith(null, protectedAccess).fetch(request())).status).toBe(404);
+    expect((await appWith(null, protectedAccess).fetch(request("wrong"))).status).toBe(404);
+    expect((await appWith(null, protectedAccess).fetch(request(""))).status).toBe(404);
+    expect(
+      (
+        await appWith(null, protectedAccess).fetch(
+          new Request("http://localhost/api/api-keys", {
+            headers: { "X-OpenAPI-Key": "schema-secret" },
+          }),
+        )
+      ).status,
+    ).toBe(401);
+  });
+  it("fails closed for missing non-development schema configuration", async () => {
+    expect(
+      (
+        await appWith(null, { environment: "production", key: null }).fetch(
+          new Request("http://localhost/api/openapi.json"),
+        )
+      ).status,
+    ).toBe(404);
   });
   it("returns standardized auth errors and validates requests", async () => {
     const app = appWith();

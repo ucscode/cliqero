@@ -1,7 +1,7 @@
 # Headless API foundation
 
 Hono is the authoritative Cliqero application-API boundary mounted by Next.js
-at `/api/[[...route]]`. It provides shared Zod contracts, OpenAPI generation at
+at `/api/[[...route]]`. It provides shared Zod contracts, protected OpenAPI generation at
 `/api/openapi.json`, principal/error middleware, and one dispatch path for the
 application capabilities. Existing capability services remain authoritative;
 Hono handlers do not contain business rules.
@@ -43,6 +43,28 @@ All ordinary Cliqero application API paths (catalogue, wallet, checkout,
 purchases, referrals, earnings, withdrawals, treasury, integrations, and
 operator commands) are represented in the generated OpenAPI document and enter
 through the single Hono catch-all before the shared application handlers run.
+
+## OpenAPI schema discovery
+
+Cliqero intentionally supports production schema discovery for agents and
+automation. In development, `GET /api/openapi.json` is public. In every other
+environment it requires `X-OpenAPI-Key` with the deployment-owned
+`OPENAPI_KEY` environment secret. Missing or empty non-development
+configuration fails closed and returns `404`, as do missing or incorrect keys.
+
+The schema key authorizes **only schema retrieval**. It is not a Cliqero API
+key, does not resolve to an account/principal, and cannot call business routes.
+An n8n or agent discovery request is therefore:
+
+```http
+GET /api/openapi.json
+X-OpenAPI-Key: <schema-discovery-secret>
+```
+
+After reading the generated contract, the consumer must use its separate
+Cliqero API key or Better Auth session and the endpoint's normal scopes/roles
+for actual API requests. No interactive documentation or alternate schema
+route is registered.
 
 ## Hierarchy read model
 

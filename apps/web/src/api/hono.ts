@@ -5,6 +5,11 @@ import { apiScopeSchema } from "@/modules/identity/api-scopes";
 import { dispatchLegacyApi, legacyApiPaths } from "./legacy-dispatch";
 import { newId } from "@/kernel/ids";
 import { blogPostInputSchema } from "@/modules/blog/domain/blog";
+import {
+  canReadOpenApiSchema,
+  loadOpenApiSchemaAccess,
+  type OpenApiSchemaAccess,
+} from "@/security/openapi";
 
 type Env = { Variables: { principal: ApiPrincipal | null } };
 const errorSchema = z.object({ error: z.string(), code: z.string().optional() });
@@ -444,7 +449,10 @@ function jsonSafe(value: unknown) {
   );
 }
 
-export function createApiApp(container: ApplicationContainer) {
+export function createApiApp(
+  container: ApplicationContainer,
+  schemaAccess: OpenApiSchemaAccess = loadOpenApiSchemaAccess(),
+) {
   const app = new OpenAPIHono<Env>();
   app.onError((error, c) => domainError(c, error));
   app.use("/api/*", async (c, next) => {
@@ -461,9 +469,15 @@ export function createApiApp(container: ApplicationContainer) {
           description: "OpenAPI document",
           content: { "application/json": { schema: z.any() } },
         },
+        404: {
+          description: "Not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     (c) => {
+      if (!canReadOpenApiSchema(schemaAccess, c.req.header("x-openapi-key")))
+        return c.json({ error: "Not found", code: "not_found" }, 404);
       const document = app.getOpenAPIDocument({
         openapi: "3.0.0",
         info: { title: "Cliqero API", version: "1.0.0" },

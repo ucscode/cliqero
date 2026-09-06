@@ -83,4 +83,7 @@ Revocation, expiry, and `last_used_at` are durable. API-key requests resolve to
 the same Cliqero account and roles as browser sessions, while key scopes add a
 restriction and can never elevate the account. Invalid explicit credentials do
 not fall back to another credential. The generated Hono/OpenAPI contract is
-available at `/api/openapi.json`.
+available at `/api/openapi.json`. It is public only in development; production
+discovery requires the separate `X-OpenAPI-Key` configured in
+`OPENAPI_KEY`. That key retrieves the contract only and is
+never a business API credential.
