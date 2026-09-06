@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { InformationalContentPage } from "@/components/informational-content-page";
 import { siteConfig } from "@/config/site";
-import { loadInformationalPage } from "@/content/informational-pages";
+import FaqContent from "../../../../../content/pages/faq.mdx";
+import { loadInformationalPageMetadata } from "@/content/informational-pages";
 
-const page = loadInformationalPage("faq");
+const page = loadInformationalPageMetadata("faq");
 
 export const metadata: Metadata = {
   title: `${page.title} | ${siteConfig.name}`,
@@ -11,5 +12,9 @@ export const metadata: Metadata = {
 };
 
 export default function Faq() {
-  return <InformationalContentPage page={page} />;
+  return (
+    <InformationalContentPage page={page}>
+      <FaqContent />
+    </InformationalContentPage>
+  );
 }

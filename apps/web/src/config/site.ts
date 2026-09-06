@@ -1,38 +1,25 @@
-import { z } from "zod";
-import { loadYamlConfiguration } from "./yaml";
+import {
+  loadSiteConfiguration,
+  siteConfigurationSchema,
+  toPublicSiteConfiguration,
+} from "./site-loader";
 
 const publicConfiguration = (() => {
   try {
-    return JSON.parse(process.env.NEXT_PUBLIC_SITE_CONFIG ?? "{}") as Record<string, string>;
+    return siteConfigurationSchema.parse(JSON.parse(process.env.NEXT_PUBLIC_SITE_CONFIG ?? ""));
   } catch {
-    return {};
+    return null;
   }
 })();
+export { loadSiteConfiguration } from "./site-loader";
 
-const defaults = {
-  name: publicConfiguration.name || "Cliqero",
-  url: publicConfiguration.url || process.env.APP_URL?.trim() || "http://localhost:3000",
-  support_email: publicConfiguration.support_email || "support@cliqero.com",
-  description:
-    publicConfiguration.description || "Catalogue commerce, wallet access and referrals.",
-};
-
-const schema = z.object({
-  name: z.string().trim().min(1),
-  url: z.string().url(),
-  support_email: z.string().email(),
-  description: z.string().trim().min(1),
-});
-
-export function loadSiteConfiguration(path = "config/site.yaml") {
-  const loaded = loadYamlConfiguration(path, {
-    ...process.env,
-    APP_URL: process.env.APP_URL?.trim() || "http://localhost:3000",
-  });
-  return schema.parse(loaded ?? defaults);
+function readPublicConfiguration() {
+  if (publicConfiguration) return publicConfiguration;
+  if (typeof window === "undefined") return toPublicSiteConfiguration(loadSiteConfiguration());
+  throw new Error("NEXT_PUBLIC_SITE_CONFIG is missing; site identity was not configured");
 }
 
-const configuration = loadSiteConfiguration();
+const configuration = readPublicConfiguration();
 
 export const siteConfig = {
   name: configuration.name,

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { InformationalContentPage } from "@/components/informational-content-page";
 import { siteConfig } from "@/config/site";
-import { loadInformationalPage } from "@/content/informational-pages";
+import PrivacyContent from "../../../../../content/pages/privacy.mdx";
+import { loadInformationalPageMetadata } from "@/content/informational-pages";
 
-const page = loadInformationalPage("privacy");
+const page = loadInformationalPageMetadata("privacy");
 
 export const metadata: Metadata = {
   title: `${page.title} | ${siteConfig.name}`,
@@ -11,5 +12,9 @@ export const metadata: Metadata = {
 };
 
 export default function Privacy() {
-  return <InformationalContentPage page={page} />;
+  return (
+    <InformationalContentPage page={page}>
+      <PrivacyContent />
+    </InformationalContentPage>
+  );
 }

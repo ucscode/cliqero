@@ -14,21 +14,24 @@ const frontMatterSchema = z.object({
 
 export const informationalPageSlugs = ["about", "faq", "how-it-works", "privacy", "terms"] as const;
 export type InformationalPageSlug = (typeof informationalPageSlugs)[number];
-export type InformationalPage = Readonly<{
+export type InformationalPageMetadata = Readonly<{
   title: string;
   description?: string;
   updated?: string;
-  content: string;
 }>;
 
-export function parseInformationalPage(source: string): InformationalPage {
+export function parseInformationalPageMetadata(source: string): InformationalPageMetadata {
   const parsed = matter(source);
-  return { ...frontMatterSchema.parse(parsed.data), content: parsed.content.trim() };
+  return frontMatterSchema.parse(parsed.data);
 }
 
-export function loadInformationalPage(slug: InformationalPageSlug): InformationalPage {
+export function loadInformationalPageMetadata(
+  slug: InformationalPageSlug,
+): InformationalPageMetadata {
   const contentDirectory = resolveInformationalContentDirectory();
-  return parseInformationalPage(readFileSync(join(contentDirectory, `${slug}.md`), "utf8"));
+  return parseInformationalPageMetadata(
+    readFileSync(join(contentDirectory, `${slug}.mdx`), "utf8"),
+  );
 }
 
 function resolveInformationalContentDirectory() {
