@@ -17,6 +17,7 @@ dev-down:
 	docker compose down
 
 # Destructive: stop the development stack and delete local volumes
+# (including PostgreSQL, blog/media data, and persisted node_modules)
 dev-clean:
 	docker compose down -v --remove-orphans
 
@@ -71,6 +72,11 @@ db-shell:
 # Run npm inside the development main container
 npm *args:
 	docker compose exec main npm {{args}}
+
+# Reconcile persisted development dependencies exactly with package-lock.json
+# Useful after pulling dependency changes or when node_modules gets out of sync.
+deps:
+	docker compose exec main npm ci
 
 # Run the web application's full test command
 test:
