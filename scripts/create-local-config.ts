@@ -84,9 +84,11 @@ export async function main(args = process.argv.slice(2)) {
     throw new Error("Usage: npm run config:local -- <name> [--force]");
   }
   const { destination, files } = await createLocalConfigBundle({ name: names[0], force });
-  console.log(`Created ${relative(repositoryRoot, destination)}`);
+  console.log("Local configuration created at:");
+  console.log(`  ${resolve(destination)}${sep}`);
+  console.log("");
+  console.log(`${files.length} configuration files copied:`);
   for (const file of files) console.log(`  ${file}`);
-  console.log(`${files.length} configuration files copied.`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

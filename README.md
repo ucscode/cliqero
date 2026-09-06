@@ -52,6 +52,9 @@ For representative local-only catalogue and blog content, run `just seed` (or
 `just seed-catalogue` / `just seed-blog`). These commands are explicit and
 never run automatically; fixture scripts refuse production mode. Development
 authentication email is delivered to Mailpit at `http://localhost:8025`.
+AdminerEvo is available at `http://localhost:8080` for local PostgreSQL inspection;
+use `postgres` as the server and the same local database credentials configured for
+the PostgreSQL Compose service.
 Grouped email and CAPTCHA settings use ignored YAML files; copy
 `config/modules/email.example.yaml` and `config/security/captcha.example.yaml`
 when enabling those capabilities.

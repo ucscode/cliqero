@@ -3,6 +3,7 @@ import { newId } from "@/kernel/ids";
 import { Account } from "./account";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import { BetterAuthBoundary, type BetterAuthInstance } from "./better-auth";
+import { assertPasswordMinimum } from "./password-policy";
 
 interface AccountRow {
   id: string;
@@ -51,7 +52,7 @@ export class AuthenticationService {
     password: string;
     country?: string | null;
   }): Promise<Account> {
-    if (input.password.length < 12) throw new Error("Password must contain at least 12 characters");
+    assertPasswordMinimum(input.password);
     const email = input.email.trim().toLowerCase();
     const handle = input.handle.trim().toLowerCase();
     const country = normalizeCountry(input.country);

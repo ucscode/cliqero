@@ -17,6 +17,7 @@ import { siteConfig } from "@/config/site";
 import { Captcha, type CaptchaClientConfig } from "./captcha";
 import { AuthShell } from "./auth-shell";
 import { TextLink } from "./text-link";
+import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 
 export function AuthForm({
   mode,
@@ -172,9 +173,9 @@ export function AuthForm({
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required
-            minLength={12}
+            minLength={PASSWORD_MIN_LENGTH}
             autoComplete={mode === "login" ? "current-password" : "new-password"}
-            placeholder="At least 12 characters"
+            placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`}
             className="pr-11"
           />
           <Button
@@ -198,7 +199,7 @@ export function AuthForm({
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 required
-                minLength={12}
+                minLength={PASSWORD_MIN_LENGTH}
                 autoComplete="new-password"
                 className="pr-11"
               />

@@ -9,6 +9,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { HoneypotField } from "./honeypot-field";
 import { AuthShell } from "./auth-shell";
+import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 
 export function PasswordResetForm({ token }: { token: string }) {
   const [password, setPassword] = useState("");
@@ -59,7 +60,7 @@ export function PasswordResetForm({ token }: { token: string }) {
             <Input
               id="new-password"
               type={show ? "text" : "password"}
-              minLength={12}
+              minLength={PASSWORD_MIN_LENGTH}
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -81,7 +82,7 @@ export function PasswordResetForm({ token }: { token: string }) {
             <Input
               id="confirm-new-password"
               type={showConfirm ? "text" : "password"}
-              minLength={12}
+              minLength={PASSWORD_MIN_LENGTH}
               required
               value={confirm}
               onChange={(event) => setConfirm(event.target.value)}

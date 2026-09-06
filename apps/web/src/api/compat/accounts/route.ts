@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { apiError } from "../http";
 import { getContainer } from "@/infrastructure/container";
+import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 
 const bodySchema = z.object({
   email: z.email(),
   handle: z.string().min(3).max(32),
-  password: z.string().min(12),
+  password: z.string().min(PASSWORD_MIN_LENGTH),
   country: z
     .string()
     .regex(/^[A-Za-z]{2}$/)

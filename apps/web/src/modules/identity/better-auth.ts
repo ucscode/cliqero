@@ -6,6 +6,7 @@ import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import { sendAuthEmail, type AuthEmail } from "@/lib/email";
 import { siteConfig } from "@/config/site";
 import { getEnabledSocialProviders } from "@/config/auth";
+import { PASSWORD_MIN_LENGTH } from "./password-policy";
 
 const developmentSecret = "cliqero-development-better-auth-secret-change-me-32";
 
@@ -57,7 +58,7 @@ export class BetterAuthBoundary {
       emailAndPassword: {
         enabled: true,
         autoSignIn: false,
-        minPasswordLength: 12,
+        minPasswordLength: PASSWORD_MIN_LENGTH,
         requireEmailVerification: false,
         sendResetPassword: (message: AuthEmail) => deliverAuthenticationEmail("reset", message),
       },
