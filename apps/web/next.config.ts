@@ -18,7 +18,9 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // TypeScript 5.9 exposes the compiler API used by Next's stable checker;
   // avoid the experimental CLI parser in Next 16.3 during production builds.
-  experimental: { useTypeScriptCli: false, mdxRs: true },
+  // The JavaScript MDX pipeline is required so remark-frontmatter can remove
+  // YAML metadata before rendering; mdxRs does not run custom remark plugins.
+  experimental: { useTypeScriptCli: false },
   pageExtensions: ["js", "jsx", "ts", "tsx", "md", "mdx"],
   env: {
     NEXT_PUBLIC_SITE_CONFIG: JSON.stringify(toPublicSiteConfiguration(site)),

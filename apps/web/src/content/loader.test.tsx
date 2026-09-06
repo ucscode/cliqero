@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { compile, run } from "@mdx-js/mdx";
 import { renderToStaticMarkup } from "react-dom/server";
+import * as runtime from "react/jsx-runtime";
 import { describe, expect, it, vi } from "vitest";
+import remarkYamlFrontmatter from "../../remark-frontmatter.mjs";
 import { loadContentDocument } from "./loader";
 
 vi.mock("../../content/pages/about.mdx", () => ({
@@ -28,6 +32,24 @@ describe("web content loader", () => {
 
     expect(document.meta.title).toBe("Plain example");
     expect(output).toContain("Plain Markdown content");
+  });
+
+  it("does not render YAML front matter in compiled MDX content", async () => {
+    const source = readFileSync(new URL("../../content/pages/about.mdx", import.meta.url), "utf8");
+    const compiled = await compile(
+      { value: source, path: "about.mdx" },
+      { outputFormat: "function-body", remarkPlugins: [remarkYamlFrontmatter] },
+    );
+    const { default: Content } = await run(compiled, runtime);
+    const output = renderToStaticMarkup(
+      <Content components={{ SiteName: () => <span>Cliqero</span> }} />,
+    );
+
+    expect(output).toContain("A practical catalogue for digital products");
+    expect(output).toContain("Cliqero");
+    expect(output).not.toContain("title: About");
+    expect(output).not.toContain("description: Discover useful digital products");
+    expect(output).not.toContain("updated: 2026-09-06");
   });
 
   it("rejects unsupported extensions, traversal, and missing documents", async () => {
