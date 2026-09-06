@@ -12,7 +12,7 @@ const frontMatterSchema = z.object({
     .transform((value) => (value instanceof Date ? value.toISOString().slice(0, 10) : value)),
 });
 
-export const informationalPageSlugs = ["privacy", "terms"] as const;
+export const informationalPageSlugs = ["about", "privacy", "terms"] as const;
 export type InformationalPageSlug = (typeof informationalPageSlugs)[number];
 export type InformationalPage = Readonly<{
   title: string;
