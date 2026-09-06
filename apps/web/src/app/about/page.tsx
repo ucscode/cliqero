@@ -1,20 +1,11 @@
-import type { Metadata } from "next";
 import { InformationalContentPage } from "@/components/informational-content-page";
-import { siteConfig } from "@/config/site";
-import AboutContent from "../../../../../content/pages/about.mdx";
-import { loadInformationalPageMetadata } from "@/content/informational-pages";
+import { loadContentDocument } from "@/content/loader";
 
-const page = loadInformationalPageMetadata("about");
-
-export const metadata: Metadata = {
-  title: `${page.title} | ${siteConfig.name}`,
-  ...(page.description ? { description: page.description } : {}),
-};
-
-export default function About() {
+export default async function About() {
+  const page = await loadContentDocument("pages/about.mdx");
   return (
-    <InformationalContentPage page={page}>
-      <AboutContent />
+    <InformationalContentPage meta={page.meta}>
+      <page.Content />
     </InformationalContentPage>
   );
 }

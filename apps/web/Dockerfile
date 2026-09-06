@@ -22,8 +22,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /workspace/apps/web/.next/standalone ./
 COPY --from=build /workspace/apps/web/.next/static ./apps/web/.next/static
-# Informational Markdown is repository-owned runtime content. Bake it into the
-# production image; development bind-mounts the same directory for live edits.
-COPY --from=build /workspace/content ./content
+# Web-owned informational MDX is repository-owned runtime content. Bake it into
+# the production image; development bind-mounts the same directory for live edits.
+COPY --from=build /workspace/apps/web/content ./apps/web/content
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]

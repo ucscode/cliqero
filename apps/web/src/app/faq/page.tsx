@@ -1,20 +1,11 @@
-import type { Metadata } from "next";
 import { InformationalContentPage } from "@/components/informational-content-page";
-import { siteConfig } from "@/config/site";
-import FaqContent from "../../../../../content/pages/faq.mdx";
-import { loadInformationalPageMetadata } from "@/content/informational-pages";
+import { loadContentDocument } from "@/content/loader";
 
-const page = loadInformationalPageMetadata("faq");
-
-export const metadata: Metadata = {
-  title: `${page.title} | ${siteConfig.name}`,
-  ...(page.description ? { description: page.description } : {}),
-};
-
-export default function Faq() {
+export default async function Faq() {
+  const page = await loadContentDocument("pages/faq.mdx");
   return (
-    <InformationalContentPage page={page}>
-      <FaqContent />
+    <InformationalContentPage meta={page.meta}>
+      <page.Content />
     </InformationalContentPage>
   );
 }
