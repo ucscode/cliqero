@@ -9,7 +9,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Separator } from "./ui/separator";
-import { Eye, EyeOff, Globe2 } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { CountrySelect } from "./country-select";
 import { HoneypotField } from "./honeypot-field";
 import { siteConfig } from "@/config/site";
@@ -229,19 +229,19 @@ export function AuthForm({
         )}
         {googleEnabled && (
           <>
-            <div className="my-6 flex items-center gap-3 text-xs text-slate-500">
+            <div className="my-1 flex items-center gap-3 text-xs text-slate-500">
               <Separator className="flex-1" />
               <span>or continue with</span>
               <Separator className="flex-1" />
             </div>
             <Button
               type="button"
-              variant="secondary"
-              className="w-full"
+              variant="outline"
+              className="w-full bg-white font-medium text-slate-700"
               onClick={google}
               disabled={busy}
             >
-              <Globe2 className="h-4 w-4" aria-hidden="true" /> Google
+              Google
             </Button>
           </>
         )}
