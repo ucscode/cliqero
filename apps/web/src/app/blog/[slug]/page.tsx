@@ -37,7 +37,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto max-w-3xl px-4 py-12 sm:px-8">
+      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-8">
         <Link
           href="/blog"
           className="inline-flex items-center gap-1 text-sm text-emerald-700 underline"
