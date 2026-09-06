@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // TypeScript 5.9 exposes the compiler API used by Next's stable checker;
   // avoid the experimental CLI parser in Next 16.3 during production builds.
-  experimental: { useTypeScriptCli: false },
+  experimental: { useTypeScriptCli: false, mdxRs: true },
   pageExtensions: ["js", "jsx", "ts", "tsx", "md", "mdx"],
   env: {
     NEXT_PUBLIC_SITE_CONFIG: JSON.stringify(toPublicSiteConfiguration(site)),
