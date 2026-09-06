@@ -15,8 +15,23 @@ export type Listing = {
   price: { minor_amount: string; currency: string };
   metadata: Record<string, unknown>;
   state?: "draft" | "published" | "archived";
+  featured_position?: number | null;
+  rating: { average: number; count: number } | null;
   media: ListingMedia[];
 };
+
+export type ListingReview = {
+  id: string;
+  listing_id: string;
+  rating: number;
+  body: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  updated_at: string;
+  moderated_at: string | null;
+  reviewer?: string;
+};
+export type ListingReviewPage = { items: ListingReview[]; next_cursor: string | null };
 
 export type ListingPage = { items: Listing[]; next_cursor: string | null };
 

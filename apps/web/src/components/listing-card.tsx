@@ -14,8 +14,15 @@ import { Money } from "./money";
 import { canShowPromote } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
 import { ListingDescription } from "./listing-description";
+import { Star } from "lucide-react";
 
-export function ListingCard({ listing }: { listing: Listing }) {
+export function ListingCard({
+  listing,
+  reviewsVisible,
+}: {
+  listing: Listing;
+  reviewsVisible: boolean;
+}) {
   const image = listing.media[0];
   const session = authClient.useSession();
   const [promoting, setPromoting] = useState(false);
@@ -62,6 +69,22 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <h3 className="!mb-0 line-clamp-2 break-words !text-lg">
           <Link href={`/listings/${listing.id}`}>{listing.title}</Link>
         </h3>
+        {reviewsVisible && (
+          <p
+            className="flex items-center gap-1 text-sm text-slate-600"
+            aria-label={
+              listing.rating ? `${listing.rating.average} out of 5 stars` : "No ratings yet"
+            }
+          >
+            <Star
+              className={`h-4 w-4 ${listing.rating ? "fill-amber-400 text-amber-500" : "text-slate-300"}`}
+              aria-hidden="true"
+            />
+            {listing.rating && (
+              <span className="font-medium">{listing.rating.average.toFixed(1)}</span>
+            )}
+          </p>
+        )}
         <ListingDescription
           className="min-h-[4.35rem] text-sm leading-relaxed text-slate-500"
           description={listing.description}
@@ -70,7 +93,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
           <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
           <div className="flex flex-wrap gap-2">
             <Button asChild size="sm">
-              <Link href={`/listings/${listing.id}`}>Buy</Link>
+              <Link href={`/listings/${listing.id}`}>View details</Link>
             </Button>
             {canShowPromote(Boolean(session.data?.user)) && (
               <Button variant="secondary" size="sm" onClick={promote} disabled={promoting}>

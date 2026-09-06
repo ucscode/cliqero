@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { apiError, authenticatedAccount } from "../http";
 import { getContainer } from "@/infrastructure/container";
-import { listingView, listingWithMediaView } from "@/application/listings";
+import { listingWithMediaView } from "@/application/listings";
+import { storefrontConfig } from "@/config/storefront";
+
+const sorts = ["newest", "oldest", "price_asc", "price_desc", "title_asc"] as const;
 
 const listingSchema = z
   .object({
@@ -40,18 +43,38 @@ export async function POST(request: Request) {
 }
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const limit = Math.min(Number(url.searchParams.get("limit") ?? 20), 100);
+  const featuredOnly = url.searchParams.get("featured") === "true";
+  const configuredLimit = featuredOnly
+    ? storefrontConfig.home.featured_limit
+    : storefrontConfig.catalogue.page_size;
+  const requestedLimit = Number(url.searchParams.get("limit") ?? configuredLimit);
+  const limit = Math.max(
+    1,
+    Math.min(Number.isFinite(requestedLimit) ? requestedLimit : configuredLimit, configuredLimit),
+  );
+  const sort = sorts.includes(url.searchParams.get("sort") as (typeof sorts)[number])
+    ? (url.searchParams.get("sort") as (typeof sorts)[number])
+    : "newest";
   try {
     const c = getContainer(),
       page = await c.listingService.queryPublic({
         search: url.searchParams.get("search") ?? undefined,
         cursor: url.searchParams.get("cursor") ?? undefined,
         limit,
+        sort,
+        featuredOnly,
       }),
-      media = await c.listingMediaRepository.listByListings(page.items.map((item) => item.id));
+      media = await c.listingMediaRepository.listByListings(page.items.map((item) => item.id)),
+      ratings = await c.listingReviews.summariesForListings(page.items.map((item) => item.id));
     return Response.json({
       items: page.items.map((item) =>
-        listingWithMediaView(item, media.get(item.id) ?? [], c.listingMedia),
+        listingWithMediaView(
+          item,
+          media.get(item.id) ?? [],
+          c.listingMedia,
+          false,
+          ratings.get(item.id) ?? null,
+        ),
       ),
       next_cursor: page.nextCursor,
     });

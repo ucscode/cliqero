@@ -315,6 +315,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
     price: "",
     destination: "",
     externalKey: "",
+    featuredPosition: "",
   });
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
@@ -332,6 +333,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           price: minorToUsdInput(value.price.minor_amount),
           destination: value.destination,
           externalKey: value.external_key ?? "",
+          featuredPosition: value.featured_position?.toString() ?? "",
         });
       })
       .catch((cause) => setError(errorMessage(cause)))
@@ -355,6 +357,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             price_minor: priceMinor,
             currency: "USD",
             destination: form.destination.trim(),
+            featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
           }),
         });
         setListing(next);
@@ -370,6 +373,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             currency: "USD",
             destination: form.destination.trim(),
             external_key: form.externalKey.trim() || undefined,
+            featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
           }),
         });
         router.replace(`/operator/catalogue/${next.id}`);
@@ -456,6 +460,18 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
               </span>
             </label>
           )}
+          <label>
+            Featured home position (optional)
+            <Input
+              type="number"
+              min="1"
+              value={form.featuredPosition}
+              onChange={(event) => setForm({ ...form, featuredPosition: event.target.value })}
+            />
+            <span className="field-help">
+              Published listings with a position appear on Home in ascending order.
+            </span>
+          </label>
           <Button type="submit" disabled={saving}>
             {saving ? "Saving…" : editing ? "Save changes" : "Create listing"}
           </Button>

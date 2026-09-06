@@ -350,6 +350,20 @@ function requireBlogScope(c: any, p: ApiPrincipal, scope: string) {
     return c.json({ error: "Forbidden", code: "forbidden" }, 403);
   return requireScope(c, p, scope);
 }
+function reviewJson(review: any) {
+  return {
+    id: review.id,
+    listing_id: review.listingId,
+    rating: review.rating,
+    body: review.body,
+    status: review.status,
+    created_at: review.createdAt.toISOString(),
+    updated_at: review.updatedAt.toISOString(),
+    moderated_at: review.moderatedAt?.toISOString() ?? null,
+    ...(review.reviewer ? { reviewer: review.reviewer } : {}),
+    ...(review.listingTitle ? { listing_title: review.listingTitle } : {}),
+  };
+}
 function blogJson(post: any) {
   if (!post) return null;
   return {
@@ -2029,6 +2043,71 @@ export function createApiApp(container: ApplicationContainer) {
       return c.body(null, 204);
     },
   );
+
+  // Listing reviews are a first-class Hono boundary. Public projections are
+  // deliberately approved-only; author and moderation views have separate routes.
+  app.get("/api/listings/:listingId/reviews", async (c) => {
+    const listingId = c.req.param("listingId");
+    if (!z.uuid().safeParse(listingId).success)
+      return c.json({ error: "Listing not found", code: "not_found" }, 404);
+    const requested = Number(c.req.query("limit") ?? 10);
+    const page = await container.listingReviews.public({
+      listingId,
+      cursor: c.req.query("cursor") || undefined,
+      limit: Math.max(1, Math.min(Number.isFinite(requested) ? requested : 10, 50)),
+    });
+    return c.json({
+      items: page.items.map((review) => reviewJson(review)),
+      next_cursor: page.nextCursor,
+    });
+  });
+  app.get("/api/listings/:listingId/reviews/me", async (c) => {
+    const p = requirePrincipal(c);
+    if (!(p instanceof Object) || !("accountId" in p)) return p;
+    const review = await container.listingReviews.mine(p.account, c.req.param("listingId"));
+    return c.json({ item: review ? reviewJson(review) : null });
+  });
+  app.put("/api/listings/:listingId/reviews/me", async (c) => {
+    const p = requirePrincipal(c);
+    if (!(p instanceof Object) || !("accountId" in p)) return p;
+    const body = z
+      .object({ rating: z.number().int().min(1).max(5), body: z.string().max(2000).optional() })
+      .parse(await c.req.json());
+    const review = await container.listingReviews.submit(p.account, c.req.param("listingId"), body);
+    return c.json({ item: reviewJson(review) });
+  });
+  app.get("/api/operator/reviews", async (c) => {
+    const p = requirePrincipal(c);
+    if (!(p instanceof Object) || !("accountId" in p)) return p;
+    const status = z
+      .enum(["pending", "approved", "rejected"])
+      .optional()
+      .parse(c.req.query("status"));
+    const page = await container.listingReviews.operatorQueue(p.account, {
+      status,
+      cursor: c.req.query("cursor") || undefined,
+      limit: 25,
+    });
+    return c.json({
+      items: page.items.map((review) => reviewJson(review)),
+      next_cursor: page.nextCursor,
+    });
+  });
+  for (const [verb, status] of [
+    ["approve", "approved"],
+    ["reject", "rejected"],
+  ] as const) {
+    app.post(`/api/operator/reviews/:reviewId/${verb}`, async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const review = await container.listingReviews.moderate(
+        p.account,
+        c.req.param("reviewId"),
+        status,
+      );
+      return c.json({ item: reviewJson(review) });
+    });
+  }
 
   // Compatibility handlers are internal adapters around the same application
   // services. This fallback keeps one authoritative HTTP router while legacy

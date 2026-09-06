@@ -7,6 +7,7 @@ import type { ListingMedia } from "@/modules/listing-media/media";
 import type { ListingMediaService } from "@/application/listing-media";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
+import type { RatingSummary } from "@/modules/listing-review/review";
 
 export class ListingService {
   constructor(
@@ -25,6 +26,7 @@ export class ListingService {
       destination: string;
       metadata?: ListingMetadata;
       externalKey?: string | null;
+      featuredPosition?: number | null;
     },
   ) {
     if (input.currency.trim().toUpperCase() !== "USD")
@@ -38,6 +40,7 @@ export class ListingService {
       destination: input.destination,
       metadata: input.metadata,
       externalKey: input.externalKey,
+      featuredPosition: input.featuredPosition,
     });
     await this.listings.save(listing);
     return listing;
@@ -51,6 +54,7 @@ export class ListingService {
       currency: string;
       destination: string;
       metadata?: ListingMetadata;
+      featuredPosition?: number | null;
       externalKey?: string | null;
     },
   ) {
@@ -80,6 +84,7 @@ export class ListingService {
       currency?: string;
       destination?: string;
       metadata?: ListingMetadata;
+      featuredPosition?: number | null;
     },
   ) {
     const listing = await this.listings.findById(id);
@@ -96,6 +101,7 @@ export class ListingService {
       ),
       destination: input.destination ?? listing.destination,
       metadata: input.metadata ?? listing.metadata,
+      featuredPosition: input.featuredPosition ?? listing.featuredPosition,
     });
     await this.listings.save(listing);
     return listing;
@@ -121,6 +127,7 @@ export class ListingService {
         ),
         destination: input.destination ?? listing.destination,
         metadata: input.metadata ?? listing.metadata,
+        featuredPosition: input.featuredPosition ?? listing.featuredPosition,
       });
       await this.listings.save(listing);
       await this.audit(_actor.id, "listing.updated", listing.id, previous, {
@@ -198,7 +205,14 @@ export class ListingService {
   async getOwner(actor: Account, id: Id) {
     return this.owned(actor, id);
   }
-  queryPublic(input: { state?: never; search?: string; cursor?: string; limit: number }) {
+  queryPublic(input: {
+    state?: never;
+    search?: string;
+    cursor?: string;
+    limit: number;
+    sort?: import("@/modules/listing/listing").ListingSort;
+    featuredOnly?: boolean;
+  }) {
     return this.listings.query({ ...input, publicOnly: true });
   }
   queryOwner(
@@ -208,6 +222,7 @@ export class ListingService {
       search?: string;
       cursor?: string;
       limit: number;
+      sort?: import("@/modules/listing/listing").ListingSort;
     },
   ) {
     return this.listings.query({ ...input, sellerId: actor.id });
@@ -217,6 +232,7 @@ export class ListingService {
     search?: string;
     cursor?: string;
     limit: number;
+    sort?: import("@/modules/listing/listing").ListingSort;
   }) {
     return this.listings.query(input);
   }
@@ -271,6 +287,7 @@ export function listingView(listing: Listing) {
     price: { minor_amount: listing.price.minorAmount.toString(), currency: listing.price.currency },
     metadata: listing.metadata,
     state: listing.state,
+    featured_position: listing.featuredPosition,
   };
 }
 export function ownerListingView(listing: Listing) {
@@ -285,6 +302,7 @@ export function listingWithMediaView(
   media: readonly ListingMedia[],
   service: ListingMediaService,
   owner = false,
+  rating: RatingSummary | null = null,
 ) {
   return {
     ...(owner ? ownerListingView(listing) : listingView(listing)),
@@ -299,5 +317,6 @@ export function listingWithMediaView(
         position: item.position,
         alt_text: item.altText,
       })),
+    rating,
   };
 }

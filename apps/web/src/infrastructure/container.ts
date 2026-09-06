@@ -86,9 +86,11 @@ import {
   EntitlementIssuanceProcessor,
 } from "@/processors/wallet-commerce";
 import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing-media";
+import { PostgresListingReviewRepository } from "@/infrastructure/postgres/listing-reviews";
 import { loadMediaStorage } from "@/providers/storage/media-config";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing-media";
 import { ListingTransferService } from "@/application/listing-transfer";
+import { ListingReviewService } from "@/application/listing-reviews";
 import { ProfileService } from "@/application/profile";
 import { AccountProjectionService } from "@/application/account-projections";
 import { loadYamlCommissionPolicy } from "@/modules/referral/yaml-policy";
@@ -113,6 +115,7 @@ export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
   const accounts = new PostgresAccountRepository(database);
   const listings = new PostgresListingRepository(database);
+  const reviews = new PostgresListingReviewRepository(database);
   const listingMediaRepository = new PostgresListingMediaRepository(database);
   const objectStorage = loadMediaStorage();
   const listingMedia = new ListingMediaService(
@@ -130,6 +133,11 @@ export function createContainer(databaseUrl: string) {
     new AuthorizationPolicy(),
     database,
     database,
+  );
+  const listingReviews = new ListingReviewService(
+    reviews,
+    listings,
+    new OperatorAuthorizationService(database),
   );
   const listingTransfer = new ListingTransferService(
     listingService,
@@ -275,6 +283,8 @@ export function createContainer(databaseUrl: string) {
     database,
     accounts,
     listings,
+    reviews,
+    listingReviews,
     listingMediaRepository,
     objectStorage,
     listingMedia,

@@ -3,6 +3,7 @@ import type { Id } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
 
 export type ListingState = "draft" | "published" | "archived";
+export type ListingSort = "newest" | "oldest" | "price_asc" | "price_desc" | "title_asc";
 export type ListingMetadata = Readonly<Record<string, string | number | boolean | null>>;
 
 export class Listing {
@@ -16,6 +17,7 @@ export class Listing {
     private metadataValue: ListingMetadata,
     private stateValue: ListingState,
     readonly externalKey: string | null,
+    private featuredPositionValue: number | null,
   ) {}
 
   static create(input: {
@@ -27,6 +29,7 @@ export class Listing {
     destination: string;
     metadata?: ListingMetadata;
     externalKey?: string | null;
+    featuredPosition?: number | null;
   }): Listing {
     const title = input.title.trim();
     if (!title) throw new DomainInvariantError("Listing title is required");
@@ -43,6 +46,7 @@ export class Listing {
       input.metadata ?? {},
       "draft",
       validateExternalKey(input.externalKey ?? null),
+      validateFeaturedPosition(input.featuredPosition ?? null),
     );
   }
 
@@ -56,6 +60,7 @@ export class Listing {
     metadata: ListingMetadata;
     state: ListingState;
     externalKey?: string | null;
+    featuredPosition?: number | null;
   }): Listing {
     return new Listing(
       input.id,
@@ -67,6 +72,7 @@ export class Listing {
       input.metadata,
       input.state,
       validateExternalKey(input.externalKey ?? null),
+      validateFeaturedPosition(input.featuredPosition ?? null),
     );
   }
 
@@ -92,6 +98,7 @@ export class Listing {
     price: Money;
     destination: string;
     metadata: ListingMetadata;
+    featuredPosition?: number | null;
   }): void {
     const title = input.title.trim();
     if (!title) throw new DomainInvariantError("Listing title is required");
@@ -103,6 +110,7 @@ export class Listing {
     this.priceValue = input.price;
     this.destinationValue = destination;
     this.metadataValue = input.metadata;
+    this.featuredPositionValue = validateFeaturedPosition(input.featuredPosition ?? null);
   }
 
   get state() {
@@ -122,6 +130,9 @@ export class Listing {
   }
   get metadata() {
     return this.metadataValue;
+  }
+  get featuredPosition() {
+    return this.featuredPositionValue;
   }
 
   commercialSnapshot() {
@@ -146,6 +157,8 @@ export interface ListingRepository {
     state?: ListingState;
     search?: string;
     cursor?: string;
+    sort?: ListingSort;
+    featuredOnly?: boolean;
     limit: number;
   }): Promise<{ items: readonly Listing[]; nextCursor: string | null }>;
   save(listing: Listing): Promise<void>;
@@ -154,5 +167,12 @@ export interface ListingRepository {
 function validateExternalKey(value: string | null) {
   if (value !== null && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value))
     throw new DomainInvariantError("Listing external key is invalid");
+  return value;
+}
+
+function validateFeaturedPosition(value: number | null) {
+  if (value === null) return null;
+  if (!Number.isInteger(value) || value <= 0)
+    throw new DomainInvariantError("Featured position must be a positive integer");
   return value;
 }

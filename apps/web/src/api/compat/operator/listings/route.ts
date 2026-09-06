@@ -14,6 +14,7 @@ const schema = z
       .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
       .optional(),
     external_key: z.string().max(128).optional(),
+    featured_position: z.number().int().positive().nullable().optional(),
   })
   .strict();
 export async function POST(request: Request) {
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
       destination: b.destination,
       metadata: b.metadata,
       externalKey: b.external_key,
+      featuredPosition: b.featured_position,
     });
     return Response.json(ownerListingView(l), { status: 201 });
   } catch (e) {

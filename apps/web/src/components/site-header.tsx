@@ -32,7 +32,8 @@ export function SiteHeader() {
           className="ml-auto hidden items-center gap-6 text-sm text-slate-500 md:flex"
           aria-label="Primary navigation"
         >
-          <Link href="/">Catalogue</Link>
+          <Link href="/">Home</Link>
+          <Link href="/catalogue">Catalogue</Link>
           <Link href="/how-it-works">How it works</Link>
           <Link href="/blog">Blog</Link>
           <Link href="/about">About</Link>
@@ -97,7 +98,8 @@ export function SiteHeader() {
             </SheetTitle>
             <nav className="mt-6 grid gap-1 text-base" aria-label="Mobile navigation">
               {[
-                ["Catalogue", "/"],
+                ["Home", "/"],
+                ["Catalogue", "/catalogue"],
                 ["How it works", "/how-it-works"],
                 ["Blog", "/blog"],
                 ["About", "/about"],

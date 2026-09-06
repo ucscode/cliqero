@@ -1,0 +1,7 @@
+home:
+  featured_limit: 6
+catalogue:
+  page_size: 12
+reviews:
+  visible: true
+  page_size: 10

@@ -3,14 +3,13 @@
 /* eslint-disable @next/next/no-img-element -- storage provider URLs are runtime-configured. */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch, type Listing, ApiClientError } from "@/lib/api-client";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Card } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
@@ -19,8 +18,46 @@ import { canShowPromote, postAuthBuyPath } from "./interaction-model";
 import { ReferralShareActions } from "./referral-share-actions";
 import { ListingMarkdown } from "./listing-markdown";
 import { TextLink } from "./text-link";
+import { ListingReviews } from "./listing-reviews";
+import { Star } from "lucide-react";
 
-export function ListingDetail({ id }: { id: string }) {
+export function shouldRenderListingReviews(reviewsVisible: boolean, rating: Listing["rating"]) {
+  return reviewsVisible && (rating?.count ?? 0) > 0;
+}
+
+export function ListingReviewSection({
+  reviewsVisible,
+  rating,
+  children,
+}: {
+  reviewsVisible: boolean;
+  rating: Listing["rating"];
+  children?: ReactNode;
+}) {
+  if (!shouldRenderListingReviews(reviewsVisible, rating) || !rating) return null;
+  return (
+    <section
+      className="mx-auto mt-14 max-w-3xl border-t border-slate-200 pt-10"
+      aria-labelledby="reviews-heading"
+      data-testid="listing-reviews"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 id="reviews-heading" className="!mb-0 !text-3xl">
+          Reviews
+        </h2>
+        <p className="flex items-center gap-1 text-slate-600">
+          <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
+          <span aria-label={`${rating.average} out of 5 from ${rating.count} reviews`}>
+            {rating.average.toFixed(1)} · {rating.count} {rating.count === 1 ? "review" : "reviews"}
+          </span>
+        </p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisible: boolean }) {
   const router = useRouter();
   const session = authClient.useSession();
   const [listing, setListing] = useState<Listing | null>(null);
@@ -70,6 +107,8 @@ export function ListingDetail({ id }: { id: string }) {
     typeof currentListing.metadata.category === "string" && currentListing.metadata.category.trim()
       ? currentListing.metadata.category
       : null;
+  const hasApprovedReviews = shouldRenderListingReviews(reviewsVisible, currentListing.rating);
+  const approvedRating = hasApprovedReviews ? currentListing.rating! : null;
   function buy() {
     if (!session.data?.user) {
       router.push(`/login?next=${encodeURIComponent(postAuthBuyPath(currentListing.id))}`);
@@ -98,7 +137,7 @@ export function ListingDetail({ id }: { id: string }) {
   }
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-8 sm:py-12">
-      <TextLink href="/" className="mb-8 inline-flex text-sm">
+      <TextLink href="/catalogue" className="mb-8 inline-flex text-sm">
         <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
         Back to catalogue
       </TextLink>
@@ -142,7 +181,7 @@ export function ListingDetail({ id }: { id: string }) {
             </div>
           )}
         </div>
-        <Card className="h-fit p-6 sm:p-8 lg:sticky lg:top-24">
+        <aside className="h-fit py-2 lg:sticky lg:top-24">
           {category && (
             <Badge variant="secondary" className="mb-5 w-fit">
               {category}
@@ -151,6 +190,18 @@ export function ListingDetail({ id }: { id: string }) {
           <h1 id="listing-title" className="!mb-4 !text-4xl !leading-tight sm:!text-5xl">
             {currentListing.title}
           </h1>
+          {approvedRating && (
+            <p
+              className="mb-5 flex items-center gap-1 text-sm text-slate-600"
+              aria-label={`${approvedRating.average} out of 5 from ${approvedRating.count} reviews`}
+            >
+              <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
+              <span className="font-medium">{approvedRating.average.toFixed(1)}</span>
+              <span>
+                · {approvedRating.count} {approvedRating.count === 1 ? "review" : "reviews"}
+              </span>
+            </p>
+          )}
           <div className="mb-5 text-2xl font-bold tracking-tight">
             <Money
               minor={currentListing.price.minor_amount}
@@ -167,7 +218,7 @@ export function ListingDetail({ id }: { id: string }) {
             {promoteMessage && <Toast tone="success">{promoteMessage}</Toast>}
             {referralUrl && <ReferralShareActions url={referralUrl} />}
           </div>
-        </Card>
+        </aside>
       </section>
       {currentListing.description.trim() && (
         <section
@@ -178,8 +229,14 @@ export function ListingDetail({ id }: { id: string }) {
             About this listing
           </h2>
           <ListingMarkdown content={currentListing.description} />
+          <Button className="mt-8" onClick={buy}>
+            Buy now
+          </Button>
         </section>
       )}
+      <ListingReviewSection reviewsVisible={reviewsVisible} rating={currentListing.rating}>
+        <ListingReviews listingId={currentListing.id} />
+      </ListingReviewSection>
     </main>
   );
 }

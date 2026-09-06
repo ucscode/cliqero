@@ -1,145 +1,220 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { apiFetch, type Listing, type ListingPage, ApiClientError } from "@/lib/api-client";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
+import { Select } from "./ui/select";
 import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { ListingCard } from "./listing-card";
-import { siteConfig } from "@/config/site";
 import { HoneypotField } from "./honeypot-field";
 
-export function Storefront() {
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [query, setQuery] = useState("");
-  const [submittedQuery, setSubmittedQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+const sortOptions = [
+  ["newest", "Newest"],
+  ["oldest", "Oldest"],
+  ["price_asc", "Price: low to high"],
+  ["price_desc", "Price: high to low"],
+  ["title_asc", "Title: A–Z"],
+] as const;
+
+export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const query = searchParams.get("q") ?? "";
+  const sort = searchParams.get("sort") ?? "newest";
+  const cursor = searchParams.get("cursor") ?? "";
+  const trail = searchParams.get("trail")?.split(",").filter(Boolean) ?? [];
+  const [draft, setDraft] = useState(query);
+  const [page, setPage] = useState<ListingPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    // Loading/error state is synchronized with the requested API query.
+    // The address bar is the catalogue state authority after navigation.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    setError(null);
-    const params = submittedQuery ? `?search=${encodeURIComponent(submittedQuery)}` : "";
-    void apiFetch<ListingPage>(`/api/listings${params}`)
-      .then((page) => {
-        if (!cancelled) setListings(page.items);
+    setDraft(query);
+  }, [query]);
+  useEffect(() => {
+    let active = true;
+    const params = new URLSearchParams();
+    if (query) params.set("search", query);
+    if (sort !== "newest") params.set("sort", sort);
+    if (cursor) params.set("cursor", cursor);
+    void apiFetch<ListingPage>(`/api/listings?${params}`)
+      .then((result) => {
+        if (active) setPage(result);
       })
       .catch((cause: unknown) => {
-        if (!cancelled)
+        if (active)
           setError(
             cause instanceof ApiClientError ? cause.message : "We couldn't load the catalogue.",
           );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
     return () => {
-      cancelled = true;
+      active = false;
     };
-  }, [submittedQuery]);
+  }, [query, sort, cursor]);
+  function navigate(next: Record<string, string | null>) {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(next)) {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    }
+    router.push(`${pathname}?${params}`);
+  }
+  function next() {
+    if (!page?.next_cursor) return;
+    navigate({ cursor: page.next_cursor, trail: cursor ? [...trail, cursor].join(",") : null });
+  }
+  function previous() {
+    navigate({ cursor: trail.at(-1) ?? null, trail: trail.slice(0, -1).join(",") || null });
+  }
   return (
-    <>
-      <section className="grid items-end gap-10 border-b border-slate-200 py-16 sm:py-24 lg:grid-cols-[minmax(0,1fr)_220px] lg:gap-12">
+    <section className="grid gap-8" aria-labelledby="catalogue-heading">
+      <div className="flex flex-col gap-5 border-b border-slate-200 pb-8 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="eyebrow">The {siteConfig.name} catalogue</p>
-          <h1 className="!mb-6 !max-w-4xl !text-5xl !leading-[0.95] sm:!text-7xl">
-            Find something worth
-            <br />
-            <em>making yours.</em>
+          <p className="eyebrow">Catalogue</p>
+          <h1 id="catalogue-heading" className="!mb-0 !text-4xl sm:!text-5xl">
+            Explore useful things.
           </h1>
-          <p className="max-w-xl text-lg leading-relaxed text-slate-500">
-            Thoughtful digital experiences, gathered in one clear place. Browse the catalogue and
-            choose your next useful thing.
-          </p>
         </div>
-        <div className="border-t-2 border-emerald-700 pt-4 text-slate-500 lg:justify-self-end lg:w-[170px]">
-          <span className="block h-2.5 w-2.5 rounded-full bg-emerald-700" aria-hidden="true" />
-          <p className="mt-3 text-sm leading-relaxed">
-            One wallet.
-            <br />
-            Every possibility.
-          </p>
-        </div>
-      </section>
-      <section className="grid gap-8 pt-12 sm:pt-16" aria-labelledby="catalogue-heading">
-        <div className="flex flex-col items-stretch justify-between gap-6 lg:flex-row lg:items-end">
-          <div>
-            <p className="eyebrow">Explore</p>
-            <h2 id="catalogue-heading" className="!text-3xl sm:!text-4xl">
-              Latest from the catalogue
-            </h2>
-          </div>
-          <form
-            className="flex w-full max-w-md gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setSubmittedQuery(query.trim());
-            }}
-          >
-            <HoneypotField />
-            <label className="sr-only" htmlFor="catalogue-search">
-              Search catalogue
-            </label>
-            <Input
-              id="catalogue-search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search listings"
-            />
-            <Button type="submit" variant="secondary" className="shrink-0">
-              Search
-            </Button>
-          </form>
-        </div>
-        {error && (
-          <Toast>
-            <span>{error}</span>
-            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-              Try again
-            </Button>
-          </Toast>
-        )}
-        {loading ? (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }, (_, index) => (
-              <CardSkeleton key={index} />
-            ))}
-          </div>
-        ) : listings.length ? (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {listings.map((listing) => (
-              <ListingCard listing={listing} key={listing.id} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="Nothing here yet"
-            description={
-              submittedQuery
-                ? "Try a different search term."
-                : "The catalogue is being prepared. Check back soon."
-            }
+        <form
+          className="flex w-full max-w-md gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            navigate({ q: draft.trim() || null, cursor: null, trail: null });
+          }}
+        >
+          <HoneypotField />
+          <label className="sr-only" htmlFor="catalogue-search">
+            Search catalogue
+          </label>
+          <Input
+            id="catalogue-search"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="Search listings"
           />
-        )}
-      </section>
-    </>
+          <Button type="submit" variant="secondary">
+            Search
+          </Button>
+        </form>
+      </div>
+      <div className="flex justify-end">
+        <Select
+          value={sort}
+          onChange={(event) =>
+            navigate({
+              sort: event.target.value === "newest" ? null : event.target.value,
+              cursor: null,
+              trail: null,
+            })
+          }
+          className="w-[210px]"
+          aria-label="Sort catalogue"
+        >
+          {sortOptions.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {error && <Toast>{error}</Toast>}
+      {!page ? (
+        <LoadingGrid />
+      ) : page.items.length ? (
+        <>
+          <ListingGrid listings={page.items} reviewsVisible={reviewsVisible} />
+          <nav
+            className="flex items-center justify-between border-t border-slate-200 pt-6"
+            aria-label="Catalogue pages"
+          >
+            <Button variant="secondary" disabled={!cursor} onClick={previous}>
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              Previous
+            </Button>
+            <span className="text-sm text-slate-600">Page {trail.length + (cursor ? 2 : 1)}</span>
+            <Button variant="secondary" disabled={!page.next_cursor} onClick={next}>
+              Next
+              <ArrowRight className="ml-1 h-4 w-4" />
+            </Button>
+          </nav>
+        </>
+      ) : (
+        <EmptyState
+          title="Nothing here yet"
+          description={
+            query
+              ? "Try a different search term."
+              : "The catalogue is being prepared. Check back soon."
+          }
+        />
+      )}
+    </section>
   );
 }
 
-function CardSkeleton() {
+export function FeaturedStorefront({ reviewsVisible }: { reviewsVisible: boolean }) {
+  const [page, setPage] = useState<ListingPage | null>(null);
+  useEffect(() => {
+    void apiFetch<ListingPage>("/api/listings?featured=true").then(setPage);
+  }, []);
   return (
-    <Card className="overflow-hidden">
-      <Skeleton className="aspect-[1.34] rounded-none" />
-      <div className="grid gap-3 p-5">
-        <Skeleton className="h-4 w-1/3" />
-        <Skeleton className="h-4 w-5/6" />
-        <Skeleton className="h-4 w-2/3" />
+    <section className="mt-12 border-t border-slate-200 pt-10" aria-labelledby="featured-listings">
+      <div className="mb-7 flex items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">Selected catalogue</p>
+          <h2 id="featured-listings" className="!mb-0 !text-3xl">
+            Featured listings
+          </h2>
+        </div>
+        <Button asChild variant="secondary">
+          <Link href="/catalogue">View all</Link>
+        </Button>
       </div>
-    </Card>
+      {!page ? (
+        <LoadingGrid />
+      ) : page.items.length ? (
+        <ListingGrid listings={page.items} reviewsVisible={reviewsVisible} />
+      ) : (
+        <p className="text-slate-600">New catalogue selections are coming soon.</p>
+      )}
+    </section>
+  );
+}
+function ListingGrid({
+  listings,
+  reviewsVisible,
+}: {
+  listings: Listing[];
+  reviewsVisible: boolean;
+}) {
+  return (
+    <div className="grid max-w-6xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {listings.map((listing) => (
+        <ListingCard listing={listing} key={listing.id} reviewsVisible={reviewsVisible} />
+      ))}
+    </div>
+  );
+}
+function LoadingGrid() {
+  return (
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }, (_, index) => (
+        <Card key={index} className="overflow-hidden">
+          <Skeleton className="aspect-[1.34] rounded-none" />
+          <div className="grid gap-3 p-5">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
+        </Card>
+      ))}
+    </div>
   );
 }

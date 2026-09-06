@@ -82,6 +82,84 @@ const records = [
     "A fixture that demonstrates archived catalogue state.",
     "1000",
   ],
+  [
+    "toolkit-17",
+    "Customer research board",
+    "A structured board for turning interview notes into useful product decisions.",
+    "1900",
+  ],
+  [
+    "toolkit-18",
+    "Independent consultant kit",
+    "A practical set of proposal, discovery and handover resources for independent consultants.",
+    "2900",
+  ],
+  [
+    "toolkit-19",
+    "Team retro cards",
+    "Prompts that help teams discuss what changed, what helped and what to try next.",
+    "800",
+  ],
+  [
+    "toolkit-20",
+    "Analytics question bank",
+    "A focused reference for asking better questions before opening a dashboard.",
+    "1700",
+  ],
+  [
+    "toolkit-21",
+    "Product narrative workshop",
+    "A guided workshop for connecting customer context, product choices and launch communication.",
+    "3400",
+  ],
+  [
+    "toolkit-22",
+    "Practical accessibility review",
+    "A clear checklist and examples for reviewing everyday interface decisions.",
+    "1600",
+  ],
+  [
+    "toolkit-23",
+    "Founder operating notes",
+    "Planning notes for small teams building an intentional operating rhythm.",
+    "2200",
+  ],
+  [
+    "toolkit-24",
+    "Service blueprint starter",
+    "Maps and facilitation prompts for understanding a service from end to end.",
+    "2600",
+  ],
+  [
+    "toolkit-25",
+    "Writing system templates",
+    "Templates for content planning, review and publication workflows.",
+    "1400",
+  ],
+  [
+    "toolkit-26",
+    "Customer support playbook",
+    "A lightweight support playbook for early product teams.",
+    "3100",
+  ],
+  [
+    "toolkit-27",
+    "Strategy memo collection",
+    "Examples and prompts for making decisions legible across a growing team.",
+    "3600",
+  ],
+  [
+    "toolkit-28",
+    "Better meetings guide",
+    "Practical preparation and facilitation guidance for shorter, more useful meetings.",
+    "1000",
+  ],
+  [
+    "toolkit-29",
+    "API onboarding pack",
+    "Examples and exercises for making an API easier to adopt.",
+    "2300",
+  ],
 ];
 
 try {
@@ -92,8 +170,11 @@ try {
   );
   for (const [key, title, description, price] of records) {
     const state = key === "toolkit-16" ? "archived" : key === "toolkit-15" ? "draft" : "published";
+    const numericKey = Number(key.slice(-2));
+    const featuredPosition = [1, 2, 3, 6, 11, 18].indexOf(numericKey) + 1 || null;
+    const createdAt = new Date(Date.UTC(2025, 0, 1 + numericKey)).toISOString();
     await pool.query(
-      `insert into listing_capability.listings(id,seller_id,title,description,price_minor,price_currency,destination_url,state,metadata,external_key) values($1,$2,$3,$4,$5,'USD',$6,$7,$8::jsonb,$9) on conflict (seller_id,external_key) do update set title=excluded.title,description=excluded.description,price_minor=excluded.price_minor,state=excluded.state,metadata=excluded.metadata,created_at=case when excluded.external_key in ('toolkit-01','toolkit-02') then now() else listing_capability.listings.created_at end,updated_at=now()`,
+      `insert into listing_capability.listings(id,seller_id,title,description,price_minor,price_currency,destination_url,state,metadata,external_key,featured_position,created_at,updated_at) values($1,$2,$3,$4,$5,'USD',$6,$7,$8::jsonb,$9,$10,$11,$11) on conflict (seller_id,external_key) do update set title=excluded.title,description=excluded.description,price_minor=excluded.price_minor,state=excluded.state,metadata=excluded.metadata,featured_position=excluded.featured_position,created_at=excluded.created_at,updated_at=excluded.updated_at`,
       [
         newId(),
         ownerId,
@@ -107,10 +188,80 @@ try {
           fixture: true,
         }),
         key,
+        featuredPosition,
+        createdAt,
       ],
     );
   }
   await pool.query("commit");
+  const reviewers = [
+    ["00000000-0000-4000-8000-000000000011", "fixtures.reviewer.one@example.test", "reviewer_one"],
+    ["00000000-0000-4000-8000-000000000012", "fixtures.reviewer.two@example.test", "reviewer_two"],
+    [
+      "00000000-0000-4000-8000-000000000013",
+      "fixtures.reviewer.three@example.test",
+      "reviewer_three",
+    ],
+  ] as const;
+  for (const [id, email, handle] of reviewers)
+    await pool.query(
+      `insert into identity_capability.accounts(id,email,handle,display_name) values($1,$2,$3,$3) on conflict(id) do update set handle=excluded.handle`,
+      [id, email, handle],
+    );
+  const reviewFixtures = [
+    [
+      "toolkit-01",
+      reviewers[0][0],
+      5,
+      "A calm, useful workspace that was easy to adapt.",
+      "approved",
+    ],
+    [
+      "toolkit-01",
+      reviewers[1][0],
+      4,
+      "Helpful prompts without unnecessary complexity.",
+      "approved",
+    ],
+    [
+      "toolkit-02",
+      reviewers[2][0],
+      5,
+      "The examples made the ideas immediately practical.",
+      "approved",
+    ],
+    [
+      "toolkit-03",
+      reviewers[0][0],
+      4,
+      "A concise reference for our API design review.",
+      "approved",
+    ],
+    ["toolkit-06", reviewers[1][0], 5, "", "approved"],
+    [
+      "toolkit-11",
+      reviewers[2][0],
+      3,
+      "Useful material, still working through the exercises.",
+      "pending",
+    ],
+    ["toolkit-18", reviewers[0][0], 2, "Not the right fit for my team.", "rejected"],
+  ] as const;
+  for (const [key, accountId, rating, body, status] of reviewFixtures) {
+    const listing = (
+      await pool.query<{ id: string }>(
+        `select id from listing_capability.listings where seller_id=$1 and external_key=$2`,
+        [ownerId, key],
+      )
+    ).rows[0];
+    if (!listing) continue;
+    await pool.query(
+      `insert into listing_capability.reviews(id,listing_id,account_id,rating,body,status,moderated_at,moderated_by)
+       values(gen_random_uuid(),$1::uuid,$2::uuid,$3,$4,$5,case when $5='pending' then null else '2025-02-01T00:00:00.000Z'::timestamptz end,case when $5='pending' then null else $2::uuid end)
+       on conflict(listing_id,account_id) do update set rating=excluded.rating,body=excluded.body,status=excluded.status,moderated_at=excluded.moderated_at,moderated_by=excluded.moderated_by,updated_at=now()`,
+      [listing.id, accountId, rating, body, status],
+    );
+  }
   const mediaFixtures = [
     ["toolkit-01", "workspace-cover.png", "Workspace starter cover", [35, 120, 95]],
     ["toolkit-02", "api-patterns-cover.png", "API patterns cover", [40, 90, 160]],

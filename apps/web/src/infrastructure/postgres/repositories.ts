@@ -55,13 +55,14 @@ interface ListingRow {
   metadata: ListingMetadata;
   state: ListingState;
   external_key: string | null;
+  featured_position: number | null;
 }
 export class PostgresListingRepository implements ListingRepository {
   constructor(private readonly sql: SqlExecutor) {}
   async findById(id: string): Promise<Listing | null> {
     const row = (
       await this.sql.query<ListingRow>(
-        `select id, seller_id, title, description, price_minor, price_currency, destination_url, metadata, state, external_key
+        `select id, seller_id, title, description, price_minor, price_currency, destination_url, metadata, state, external_key, featured_position
        from listing_capability.listings where id = $1`,
         [id],
       )
@@ -83,7 +84,7 @@ export class PostgresListingRepository implements ListingRepository {
   async findByExternalKey(sellerId: string, key: string) {
     const row = (
       await this.sql.query<ListingRow>(
-        `select id,seller_id,title,description,price_minor,price_currency,destination_url,metadata,state,external_key from listing_capability.listings where seller_id=$1 and external_key=$2`,
+        `select id,seller_id,title,description,price_minor,price_currency,destination_url,metadata,state,external_key,featured_position from listing_capability.listings where seller_id=$1 and external_key=$2`,
         [sellerId, key],
       )
     ).rows[0];
@@ -92,7 +93,7 @@ export class PostgresListingRepository implements ListingRepository {
   async findAnyByExternalKey(key: string) {
     const row = (
       await this.sql.query<ListingRow>(
-        `select id,seller_id,title,description,price_minor,price_currency,destination_url,metadata,state,external_key from listing_capability.listings where external_key=$1`,
+        `select id,seller_id,title,description,price_minor,price_currency,destination_url,metadata,state,external_key,featured_position from listing_capability.listings where external_key=$1`,
         [key],
       )
     ).rows[0];
@@ -104,6 +105,8 @@ export class PostgresListingRepository implements ListingRepository {
     state?: ListingState;
     search?: string;
     cursor?: string;
+    sort?: import("@/modules/listing/listing").ListingSort;
+    featuredOnly?: boolean;
     limit: number;
   }) {
     const values: unknown[] = [];
@@ -119,14 +122,42 @@ export class PostgresListingRepository implements ListingRepository {
       where.push(
         `to_tsvector('simple',title||' '||description) @@ plainto_tsquery('simple',${add(input.search)})`,
       );
-    if (input.cursor)
-      where.push(
-        `(created_at,id)<(select created_at,id from listing_capability.listings where id=${add(input.cursor)})`,
-      );
+    if (input.featuredOnly) where.push("featured_position is not null");
+    const sort = input.featuredOnly ? "featured" : (input.sort ?? "newest");
+    const ordering: Record<string, { order: string; after: string }> = {
+      newest: {
+        order: "created_at desc,id desc",
+        after: "(created_at,id)<(select created_at,id from listing_capability.listings where id=",
+      },
+      oldest: {
+        order: "created_at asc,id asc",
+        after: "(created_at,id)>(select created_at,id from listing_capability.listings where id=",
+      },
+      price_asc: {
+        order: "price_minor asc,id asc",
+        after: "(price_minor,id)>(select price_minor,id from listing_capability.listings where id=",
+      },
+      price_desc: {
+        order: "price_minor desc,id desc",
+        after: "(price_minor,id)<(select price_minor,id from listing_capability.listings where id=",
+      },
+      title_asc: {
+        order: "lower(title) asc,id asc",
+        after:
+          "(lower(title),id)>(select lower(title),id from listing_capability.listings where id=",
+      },
+      featured: {
+        order: "featured_position asc,id asc",
+        after:
+          "(featured_position,id)>(select featured_position,id from listing_capability.listings where id=",
+      },
+    };
+    const order = ordering[sort] ?? ordering.newest;
+    if (input.cursor) where.push(`${order.after}${add(input.cursor)})`);
     values.push(input.limit + 1);
     const rows = (
       await this.sql.query<ListingRow>(
-        `select id,seller_id,title,description,price_minor,price_currency,destination_url,metadata,state,external_key from listing_capability.listings ${where.length ? `where ${where.join(" and ")}` : ""} order by created_at desc,id desc limit $${values.length}`,
+        `select id,seller_id,title,description,price_minor,price_currency,destination_url,metadata,state,external_key,featured_position from listing_capability.listings ${where.length ? `where ${where.join(" and ")}` : ""} order by ${order.order} limit $${values.length}`,
         values,
       )
     ).rows;
@@ -139,11 +170,11 @@ export class PostgresListingRepository implements ListingRepository {
   async save(listing: Listing): Promise<void> {
     await this.sql.query(
       `insert into listing_capability.listings
-        (id, seller_id, title, description, price_minor, price_currency, destination_url, metadata, state, external_key)
-       values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10)
+        (id, seller_id, title, description, price_minor, price_currency, destination_url, metadata, state, external_key, featured_position)
+       values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)
        on conflict (id) do update set title=excluded.title, description=excluded.description,
          price_minor=excluded.price_minor, price_currency=excluded.price_currency,
-         destination_url=excluded.destination_url, metadata=excluded.metadata, state=excluded.state, external_key=excluded.external_key, updated_at=now()`,
+         destination_url=excluded.destination_url, metadata=excluded.metadata, state=excluded.state, external_key=excluded.external_key, featured_position=excluded.featured_position, updated_at=now()`,
       [
         listing.id,
         listing.sellerId,
@@ -155,6 +186,7 @@ export class PostgresListingRepository implements ListingRepository {
         JSON.stringify(listing.metadata),
         listing.state,
         listing.externalKey,
+        listing.featuredPosition,
       ],
     );
   }
@@ -169,6 +201,7 @@ export class PostgresListingRepository implements ListingRepository {
       metadata: row.metadata,
       state: row.state,
       externalKey: row.external_key,
+      featuredPosition: row.featured_position,
     });
   }
 }

@@ -29,6 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           await c.listingMediaRepository.listByListing(id),
           c.listingMedia,
           true,
+          (await c.listingReviews.summariesForListings([listing.id])).get(listing.id) ?? null,
         ),
       );
     } catch {
@@ -42,6 +43,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           listing,
           await c.listingMediaRepository.listByListing(id),
           c.listingMedia,
+          false,
+          (await c.listingReviews.summariesForListings([listing.id])).get(listing.id) ?? null,
         ),
       )
     : Response.json({ error: "Not found" }, { status: 404 });

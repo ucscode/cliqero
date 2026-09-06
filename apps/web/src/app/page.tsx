@@ -1,7 +1,8 @@
 import { SiteHeader } from "@/components/site-header";
-import { Storefront } from "@/components/storefront";
+import { FeaturedStorefront } from "@/components/storefront";
 import { SiteFooter } from "@/components/site-footer";
 import { siteConfig } from "@/config/site";
+import { storefrontConfig } from "@/config/storefront";
 
 export default function Home() {
   return (
@@ -13,14 +14,14 @@ export default function Home() {
             Discover and access
           </p>
           <h1 className="mt-2 max-w-2xl text-4xl font-semibold tracking-tight text-slate-900">
-            Find something useful, fund your wallet, and get access.
+            Discover useful things worth making yours.
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-slate-600">
-            Browse the {siteConfig.name} catalogue. Members can also promote listings and earn
-            qualifying referral commissions.
+            Browse practical digital resources from the {siteConfig.name} catalogue, then purchase
+            and access what helps you move forward.
           </p>
         </section>
-        <Storefront />
+        <FeaturedStorefront reviewsVisible={storefrontConfig.reviews.visible} />
       </main>
       <SiteFooter />
     </>

@@ -10,6 +10,7 @@ const schema = z
     currency: z.string().length(3),
     destination: z.url(),
     metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+    featured_position: z.number().int().positive().nullable(),
   })
   .partial()
   .strict();
@@ -47,6 +48,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         currency: b.currency,
         destination: b.destination,
         metadata: b.metadata,
+        featuredPosition: b.featured_position,
       });
     return Response.json(ownerListingView(l));
   } catch (e) {

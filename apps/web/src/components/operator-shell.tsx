@@ -56,7 +56,8 @@ export function OperatorShell({
     | "earnings"
     | "withdrawals"
     | "treasury"
-    | "blog";
+    | "blog"
+    | "reviews";
   title?: string;
   children?: ReactNode;
 }) {
@@ -135,6 +136,7 @@ export function OperatorShell({
       label: "Blog",
       visible: role === "operator" || role === "blog_manager",
     },
+    { key: "reviews", href: "/operator/reviews", label: "Reviews", visible: role === "operator" },
   ];
 
   return (
