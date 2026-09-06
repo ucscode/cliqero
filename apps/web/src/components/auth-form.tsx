@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { GoogleLogoIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
 import { safeContinuation } from "@/lib/api-client";
 import { Alert } from "./ui/alert";
@@ -241,6 +242,7 @@ export function AuthForm({
               onClick={google}
               disabled={busy}
             >
+              <GoogleLogoIcon className="h-4 w-4" weight="bold" aria-hidden="true" />
               Google
             </Button>
           </>
