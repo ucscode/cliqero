@@ -10,6 +10,9 @@ services:
       NODE_ENV: development
     volumes:
       - ../../apps/web:/workspace/apps/web
+      # Repository-owned Markdown content is read directly by the web app in
+      # development, so mount it alongside the application source.
+      - ../../content:/workspace/content
       # Keep Next.js dev/build output in a disposable Docker volume instead of
       # creating container-owned files in the host source tree.
       - web-next:/workspace/apps/web/.next
