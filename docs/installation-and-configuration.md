@@ -67,6 +67,20 @@ Provider/capability configuration lives under `config/`. Real `*.yaml` and `*.ym
 
 A provider is configured by copying the relevant example and supplying local credentials/settings. Do not commit real provider secrets.
 
+### Portable local configuration bundles
+
+Create an ignored, editable copy of every tracked configuration example with:
+
+```bash
+npm run config:local -- workstation
+```
+
+This creates `local.workstation/` as a miniature project-root configuration tree. For example, `.env.example` becomes `.env`, and `config/security/auth.example.yaml` becomes `config/security/auth.yaml` within the bundle. The generator discovers examples recursively, so new `*.example.yaml` and `*.example.yml` files are included automatically.
+
+Bundles copy **only** tracked examples; they never copy `.env` or real YAML files and therefore never harvest local secrets. Git ignores `local.*`. Existing bundles are protected from overwrite; use `--force` only when deliberately replacing a generated bundle.
+
+Suggested workflow: generate a named bundle, edit values in that ignored directory, then use its preserved relative paths while preparing configuration for another checkout or deployment. The generator does not sync a bundle into the project root.
+
 The platform media registry is configured in
 `config/storage/media.yaml`; initialize a local filesystem setup with:
 
