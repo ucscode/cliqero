@@ -96,7 +96,7 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
           description={message ?? "This listing could not be found."}
         />
         <Button asChild variant="secondary">
-          <Link href="/">Back to catalogue</Link>
+          <Link href="/catalogue">Back to catalogue</Link>
         </Button>
       </main>
     );
@@ -119,18 +119,14 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
   function promote() {
     setPromoting(true);
     setPromoteMessage(null);
-    void apiFetch<{ url: string }>(`/api/listings/${currentListing.id}/referral-link`, {
-      method: "POST",
-    })
-      .then(async (result) => {
+    void apiFetch<{ url: string }>(`/api/listings/${currentListing.id}/referral-url`)
+      .then((result) => {
         setReferralUrl(result.url);
-        setPromoteMessage("Your referral link is ready to share.");
+        setPromoteMessage("Your referral URL is ready to share.");
       })
       .catch((cause: unknown) => {
         setPromoteMessage(
-          cause instanceof ApiClientError
-            ? cause.message
-            : "We couldn’t create your referral link.",
+          cause instanceof ApiClientError ? cause.message : "We couldn’t load your referral URL.",
         );
       })
       .finally(() => setPromoting(false));
@@ -210,9 +206,9 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
           </div>
           <div className="grid gap-3">
             <Button onClick={buy}>Buy now</Button>
-            {canShowPromote(Boolean(session.data?.user)) && (
+            {canShowPromote(Boolean(session.data?.user)) && !referralUrl && (
               <Button variant="secondary" onClick={promote} disabled={promoting}>
-                {promoting ? "Preparing link…" : referralUrl ? "Refresh link" : "Promote"}
+                Promote
               </Button>
             )}
             {promoteMessage && <Toast tone="success">{promoteMessage}</Toast>}

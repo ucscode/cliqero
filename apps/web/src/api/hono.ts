@@ -15,7 +15,7 @@ type Env = { Variables: { principal: ApiPrincipal | null } };
 const errorSchema = z.object({ error: z.string(), code: z.string().optional() });
 const nodeSchema = z.object({
   id: z.string(),
-  handle: z.string(),
+  username: z.string(),
   displayName: z.string().nullable(),
   depth: z.number(),
   directChildCount: z.number(),
@@ -25,7 +25,7 @@ const nodeSchema = z.object({
 });
 const parentSchema = z.object({
   id: z.string(),
-  handle: z.string(),
+  username: z.string(),
   displayName: z.string().nullable(),
   canNavigate: z.boolean(),
 });
@@ -71,7 +71,7 @@ const operatorOverviewSchema = z.object({
 });
 const operatorAccountSummarySchema = z.object({
   id: z.string().uuid(),
-  handle: z.string(),
+  username: z.string(),
   displayName: z.string().nullable(),
   email: z.string(),
   country: z.string().nullable(),
@@ -81,7 +81,7 @@ const operatorAccountSummarySchema = z.object({
 });
 const operatorAccountDetailSchema = operatorAccountSummarySchema.extend({
   parent: z
-    .object({ id: z.string().uuid(), handle: z.string(), displayName: z.string().nullable() })
+    .object({ id: z.string().uuid(), username: z.string(), displayName: z.string().nullable() })
     .nullable(),
   purchaseCount: z.number().int().nonnegative(),
   latestParentReassignment: z
@@ -113,7 +113,7 @@ const operatorFundingWalletCreditSchema = z.object({
 });
 const operatorFundingSummarySchema = z.object({
   id: z.string().uuid(),
-  account: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+  account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
   provider: z.string(),
   providerReference: z.string(),
   canonicalAmountMinor: z.string(),
@@ -172,7 +172,7 @@ const operatorDistributionSummarySchema = z.object({
   purchaseId: z.string().uuid(),
   listingId: z.string().uuid(),
   listingTitle: z.string(),
-  buyer: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+  buyer: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
   grossAmountMinor: z.string(),
   currency: z.string(),
   referralAllocatedMinor: z.string(),
@@ -185,14 +185,15 @@ const operatorDistributionDetailSchema = operatorDistributionSummarySchema.exten
   purchaseCreatedAt: z.string(),
   attribution: z.object({
     id: z.string().uuid().nullable(),
-    linkId: z.string().uuid().nullable(),
-    referrer: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }).nullable(),
+    referrer: z
+      .object({ id: z.string().uuid(), username: z.string(), email: z.string() })
+      .nullable(),
   }),
   policySnapshot: z.unknown(),
   allocations: z.array(
     z.object({
       id: z.string().uuid(),
-      account: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+      account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
       level: z.number().int().positive().nullable(),
       amountMinor: z.string(),
       currency: z.string(),
@@ -218,7 +219,7 @@ const operatorDistributionDetailSchema = operatorDistributionSummarySchema.exten
 });
 const operatorEarningsEntrySchema = z.object({
   id: z.string().uuid(),
-  account: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+  account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
   purchaseId: z.string().uuid().nullable(),
   distributionId: z.string().uuid().nullable(),
   entryType: z.string(),
@@ -248,7 +249,7 @@ const operatorWithdrawalAttentionSchema = z.enum([
 ]);
 const operatorWithdrawalSchema = z.object({
   id: z.string().uuid(),
-  account: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }),
+  account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
   amountMinor: z.string(),
   currency: z.string(),
   destination: z.object({ type: z.enum(["bank", "manual"]), summary: z.string() }),
@@ -297,7 +298,7 @@ const operatorTreasuryEntrySchema = z.object({
   title: z.string(),
   note: z.string().nullable(),
   source: z.object({ kind: z.string(), id: z.string().uuid() }).nullable(),
-  actor: z.object({ id: z.string().uuid(), handle: z.string(), email: z.string() }).nullable(),
+  actor: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }).nullable(),
   createdAt: z.string(),
 });
 const operatorTreasurySummarySchema = z.object({
@@ -1576,7 +1577,7 @@ export function createApiApp(
             title: entry.title,
             note: entry.note,
             source: null,
-            actor: { id: p.accountId, handle: p.account.handle, email: p.account.email },
+            actor: { id: p.accountId, username: p.account.username, email: p.account.email },
             createdAt: entry.createdAt.toISOString(),
           }),
           201,
@@ -1681,7 +1682,7 @@ export function createApiApp(
                 items: z.array(
                   z.object({
                     id: z.string(),
-                    handle: z.string(),
+                    username: z.string(),
                     displayName: z.string().nullable(),
                   }),
                 ),

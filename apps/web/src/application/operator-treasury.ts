@@ -37,7 +37,7 @@ export type OperatorTreasuryEntry = {
   title: string;
   note: string | null;
   source: { kind: string; id: string } | null;
-  actor: { id: string; handle: string; email: string } | null;
+  actor: { id: string; username: string; email: string } | null;
   createdAt: string;
 };
 
@@ -95,7 +95,7 @@ export class OperatorTreasuryService {
     const rows = (
       await this.sql.query<any>(
         `select e.id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
-                a.uuid actor_id,a.handle actor_handle,a.email actor_email
+                a.uuid actor_id,a.username actor_username,a.email actor_email
            from treasury_capability.entries e
            left join identity_capability.accounts a on a.id=e.actor_id
           where ${conditions.join(" and ")}
@@ -118,7 +118,7 @@ export class OperatorTreasuryService {
     const row = (
       await this.sql.query<any>(
         `select e.uuid as id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
-                a.uuid actor_id,a.handle actor_handle,a.email actor_email
+                a.uuid actor_id,a.username actor_username,a.email actor_email
            from treasury_capability.entries e
            left join identity_capability.accounts a on a.id=e.actor_id
           where e.uuid=$1`,
@@ -139,7 +139,7 @@ export class OperatorTreasuryService {
       source:
         row.source_kind && row.source_id ? { kind: row.source_kind, id: row.source_id } : null,
       actor: row.actor_id
-        ? { id: row.actor_id, handle: row.actor_handle, email: row.actor_email }
+        ? { id: row.actor_id, username: row.actor_username, email: row.actor_email }
         : null,
       createdAt: new Date(row.created_at).toISOString(),
     };

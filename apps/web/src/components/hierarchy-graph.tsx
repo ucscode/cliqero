@@ -45,7 +45,7 @@ function CliqeroHierarchyNode({ data }: NodeProps<FlowNode>) {
         </span>
         <div className="hierarchy-node-copy">
           <strong title={data.label}>{data.label}</strong>
-          <span>@{data.handle}</span>
+          <span>@{data.username}</span>
         </div>
       </div>
       <div className="hierarchy-node-meta">
@@ -222,7 +222,7 @@ export function HierarchyGraph({
           role="status"
         >
           <span>Parent context</span>
-          <strong>{tree.parent.displayName || tree.parent.handle}</strong>
+          <strong>{tree.parent.displayName || tree.parent.username}</strong>
           {!tree.parent.canNavigate && <small>Navigation stops at your account.</small>}
         </div>
       )}

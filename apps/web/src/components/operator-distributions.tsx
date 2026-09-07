@@ -135,7 +135,7 @@ function DistributionRow({ distribution }: { distribution: OperatorDistribution 
             Purchase <span className="break-value">{distribution.purchaseId}</span>
           </span>
           <Link href={`/operator/users/${distribution.buyer.id}`}>
-            @{distribution.buyer.handle}
+            @{distribution.buyer.username}
           </Link>
         </div>
         <div className="operator-distribution-amounts">
@@ -218,7 +218,7 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
               <dt>Buyer</dt>
               <dd>
                 <Link href={`/operator/users/${distribution.buyer.id}`}>
-                  @{distribution.buyer.handle}
+                  @{distribution.buyer.username}
                 </Link>
                 <br />
                 <small className="break-value">{distribution.buyer.email}</small>
@@ -276,9 +276,8 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
           <p className="panel-intro">
             Promoted by{" "}
             <Link href={`/operator/users/${distribution.attribution.referrer.id}`}>
-              @{distribution.attribution.referrer.handle}
+              @{distribution.attribution.referrer.username}
             </Link>{" "}
-            · link {distribution.attribution.linkId || "not recorded"}
           </p>
         ) : (
           <p className="panel-intro">No referral attribution was recorded for this purchase.</p>
@@ -299,7 +298,7 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
                 <div>
                   <strong>
                     <Link href={`/operator/users/${allocation.account.id}`}>
-                      @{allocation.account.handle}
+                      @{allocation.account.username}
                     </Link>
                   </strong>
                   <span>

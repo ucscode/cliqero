@@ -36,7 +36,7 @@ export function AuthForm({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [handle, setHandle] = useState("");
+  const [username, setUsername] = useState("");
   const [country, setCountry] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +69,9 @@ export function AuthForm({
           : await authClient.signUp.email({
               email,
               password,
-              name: handle,
+              // Better Auth's name is a provider-owned display name. The
+              // Cliqero username is submitted separately during onboarding.
+              name: "",
               callbackURL: `/email-verified?next=${encodeURIComponent(next)}`,
               fetchOptions: captchaToken
                 ? { headers: { "x-cliqero-captcha-token": captchaToken } }
@@ -91,7 +93,7 @@ export function AuthForm({
           method: "POST",
           credentials: "include",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ handle, country: country || null, website }),
+          body: JSON.stringify({ username, country: country || null, website }),
         });
         if (!onboarding.ok) {
           setError("Your account was created, but onboarding needs another step.");
@@ -141,16 +143,17 @@ export function AuthForm({
         <HoneypotField />
         {mode === "register" && (
           <>
-            <Label htmlFor="handle">Username</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
-              id="handle"
-              value={handle}
-              onChange={(event) => setHandle(event.target.value)}
+              id="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value.toLowerCase())}
               required
               minLength={3}
               maxLength={32}
               autoComplete="username"
               placeholder="username"
+              pattern="[a-z0-9][a-z0-9_-]{2,31}"
             />
             <CountrySelect value={country} onChange={setCountry} />
           </>

@@ -55,10 +55,10 @@ await call("POST", "/api/accounts", { body: {} });
 const sellerEmail = `seller.${suffix}@example.com`,
   buyerEmail = `buyer.${suffix}@example.com`;
 const sellerAccount = await call("POST", "/api/accounts", {
-  body: { email: sellerEmail, handle: `s${suffix}`.slice(0, 31), password, country: "NG" },
+  body: { email: sellerEmail, username: `s${suffix}`.slice(0, 31), password, country: "NG" },
 });
 await call("POST", "/api/accounts", {
-  body: { email: buyerEmail, handle: `b${suffix}`.slice(0, 31), password, country: "NG" },
+  body: { email: buyerEmail, username: `b${suffix}`.slice(0, 31), password, country: "NG" },
 });
 await call("POST", "/api/auth/sign-in/email", { body: { email: buyerEmail, password: "wrong" } });
 const sellerLogin = await call("POST", "/api/auth/sign-in/email", {
@@ -204,7 +204,6 @@ await call("PATCH", `/api/integrations/${integration.value.integration_id}`, {
 await call("POST", `/api/integrations/${integration.value.integration_id}/rotate`, {
   token: seller,
 });
-await call("POST", `/api/listings/${listing}/referral-link`, { token: seller });
 await call("GET", "/api/referrals/direct", { token: buyer });
 await call("GET", "/api/referrals/downline?depth=1", { token: buyer });
 await call("GET", "/api/referrals/uplines", { token: buyer });
@@ -212,7 +211,6 @@ await call("POST", "/api/referrals/parent", {
   token: buyer,
   body: { parent_account_id: sellerAccount.value.id },
 });
-await call("GET", "/api/referral-links", { token: seller });
 await call("GET", "/api/purchases", { token: buyer });
 await call("GET", "/api/earnings", { token: seller });
 await call("GET", "/api/earnings/entries", { token: seller });

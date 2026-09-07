@@ -32,19 +32,20 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "./ui/sidebar";
+import { BrandLink } from "./brand-identity";
 
 type OperatorRole = "operator" | "catalogue_manager" | "blog_manager";
 
 export function OperatorShell({
   role,
-  handle,
+  username,
   email,
   activeSection = "overview",
   title = "Overview",
   children,
 }: {
   role: OperatorRole;
-  handle: string;
+  username: string;
   email: string;
   activeSection?:
     | "overview"
@@ -144,12 +145,7 @@ export function OperatorShell({
       <div className="flex min-h-screen w-full bg-slate-50">
         <Sidebar>
           <SidebarHeader>
-            <Link href="/" className="flex items-center gap-2 font-semibold text-slate-900">
-              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-700 text-white">
-                C
-              </span>
-              <span>cliqero</span>
-            </Link>
+            <BrandLink className="text-slate-900" />
           </SidebarHeader>
           <SidebarContent>
             <div className="grid gap-2 px-2">
@@ -204,9 +200,9 @@ export function OperatorShell({
                   aria-label="Open operator account menu"
                 >
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-800">
-                    {handle.slice(0, 1).toUpperCase()}
+                    {username.slice(0, 1).toUpperCase()}
                   </span>
-                  <span className="hidden sm:inline">{handle}</span>
+                  <span className="hidden sm:inline">{username}</span>
                   <ChevronDown className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>

@@ -42,7 +42,7 @@ prompt is safer.
 User identifiers accepted by account-oriented commands are:
 
 - email address (case-insensitive)
-- username (the internal account field is `handle`)
+- username (the canonical account field is `username`)
 - canonical Cliqero account ID
 
 ## `user:create`

@@ -20,7 +20,7 @@ describe("operator treasury read model", () => {
               source_id: "00000000-0000-4000-8000-000000000002",
               created_at: "2026-01-01T00:00:00.000Z",
               actor_id: null,
-              actor_handle: null,
+              actor_username: null,
               actor_email: null,
             },
           ],

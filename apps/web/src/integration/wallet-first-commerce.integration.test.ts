@@ -20,12 +20,12 @@ suite("wallet-first durable commerce", () => {
   async function setup() {
     const seller = await app.authentication.register({
       email: "wallet.seller@example.com",
-      handle: "walletseller",
+      username: "walletseller",
       password: "correct-horse-battery",
     });
     const buyer = await app.authentication.register({
       email: "wallet.buyer@example.com",
-      handle: "walletbuyer",
+      username: "walletbuyer",
       password: "correct-horse-staple",
       country: "NG",
     });
@@ -151,12 +151,12 @@ suite("wallet-first durable commerce", () => {
     const { seller, buyer } = await setup();
     const parent = await app.authentication.register({
       email: `policy-parent-${newId()}@example.com`,
-      handle: `pp${newId().slice(0, 8)}`,
+      username: `pp${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
     });
     const promoter = await app.authentication.register({
       email: `policy-promoter-${newId()}@example.com`,
-      handle: `pr${newId().slice(0, 8)}`,
+      username: `pr${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
     });
     await app.referralGraphService.establish(promoter.id, parent.id);
@@ -167,8 +167,7 @@ suite("wallet-first durable commerce", () => {
       currency: "USD",
       destination: "https://destination.example/policy",
     });
-    const link = await app.referralAttribution.createLink(promoter.id, listing.id);
-    const visit = await app.referralAttribution.visit(link.code);
+    const visit = await app.referralAttribution.visit(promoter.id, listing.id);
     const checkout = await app.walletCheckout.initiate({
       buyerId: buyer.id,
       listingId: listing.id,

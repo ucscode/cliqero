@@ -22,8 +22,9 @@ import type { SqlExecutor } from "./database";
 interface AccountRow {
   id: string;
   email: string;
-  handle: string;
+  username: string;
   country: string | null;
+  display_name: string | null;
 }
 export class PostgresAccountRepository implements AccountReader {
   constructor(private readonly sql: SqlExecutor) {}
@@ -36,11 +37,11 @@ export class PostgresAccountRepository implements AccountReader {
   async findById(id: string): Promise<Account | null> {
     const row = (
       await this.sql.query<AccountRow>(
-        "select uuid as id, email, handle, metadata->>'country' as country from identity_capability.accounts where uuid = $1",
+        "select uuid as id, email, username, metadata->>'country' as country, display_name from identity_capability.accounts where uuid = $1",
         [id],
       )
     ).rows[0];
-    return row ? new Account(row.id, row.email, row.handle, row.country) : null;
+    return row ? new Account(row.id, row.email, row.username, row.country, row.display_name) : null;
   }
 }
 
@@ -228,7 +229,6 @@ interface PurchaseRow {
   canonical_currency_snapshot: "USD";
   referral_attribution_id: string | null;
   state: PurchaseState;
-  referral_link_id: string | null;
   referral_referrer_account_id: string | null;
 }
 export class PostgresPurchaseRepository implements PurchaseRepository {
@@ -246,7 +246,6 @@ export class PostgresPurchaseRepository implements PurchaseRepository {
               p.idempotency_key,p.listing_title_snapshot,p.price_minor_snapshot,p.price_currency_snapshot,
               p.canonical_minor_snapshot,p.canonical_currency_snapshot,
               (select uuid from referral_capability.listing_attributions where id=p.referral_attribution_id) as referral_attribution_id,
-              (select uuid from referral_capability.listing_referral_links where id=p.referral_link_id) as referral_link_id,
               (select uuid from identity_capability.accounts where id=p.referral_referrer_account_id) as referral_referrer_account_id,
               p.state from purchase_capability.purchases p where p.uuid=$1${lock}`,
         [id],
@@ -266,7 +265,6 @@ export class PostgresPurchaseRepository implements PurchaseRepository {
               p.idempotency_key,p.listing_title_snapshot,p.price_minor_snapshot,p.price_currency_snapshot,
               p.canonical_minor_snapshot,p.canonical_currency_snapshot,
               (select uuid from referral_capability.listing_attributions where id=p.referral_attribution_id) as referral_attribution_id,
-              (select uuid from referral_capability.listing_referral_links where id=p.referral_link_id) as referral_link_id,
               (select uuid from identity_capability.accounts where id=p.referral_referrer_account_id) as referral_referrer_account_id,
               p.state from purchase_capability.purchases p where p.idempotency_key=$1`,
         [key],
@@ -301,7 +299,7 @@ export class PostgresPurchaseRepository implements PurchaseRepository {
       `insert into purchase_capability.purchases
         (uuid,buyer_id,seller_id,listing_id,payment_id,checkout_id,idempotency_key,listing_title_snapshot,
          price_minor_snapshot,price_currency_snapshot,canonical_minor_snapshot,canonical_currency_snapshot,
-         referral_attribution_id,referral_link_id,referral_referrer_account_id,state)
+         referral_attribution_id,referral_referrer_account_id,state)
        values ($1,
          (select id from identity_capability.accounts where uuid=$2),
          (select id from identity_capability.accounts where uuid=$3),
@@ -310,8 +308,7 @@ export class PostgresPurchaseRepository implements PurchaseRepository {
          (select id from checkout_capability.checkouts where uuid=$6),
          $7,$8,$9,$10,$11,$12,
          (select id from referral_capability.listing_attributions where uuid=$13),
-         (select id from referral_capability.listing_referral_links where uuid=$14),
-         (select id from identity_capability.accounts where uuid=$15),$16)
+         (select id from identity_capability.accounts where uuid=$14),$15)
        on conflict (uuid) do update set state=excluded.state,checkout_id=coalesce(excluded.checkout_id,purchase_capability.purchases.checkout_id), updated_at=now()`,
       [
         purchase.id,
@@ -327,7 +324,6 @@ export class PostgresPurchaseRepository implements PurchaseRepository {
         purchase.terms.canonicalPrice.minorAmount,
         purchase.terms.canonicalPrice.currency,
         purchase.terms.referralAttributionId,
-        purchase.terms.referralLinkId,
         purchase.terms.referralReferrerAccountId,
         purchase.state,
       ],
@@ -351,7 +347,6 @@ export class PostgresPurchaseRepository implements PurchaseRepository {
           currency: row.canonical_currency_snapshot,
         },
         referralAttributionId: row.referral_attribution_id,
-        referralLinkId: row.referral_link_id,
         referralReferrerAccountId: row.referral_referrer_account_id,
       },
     });

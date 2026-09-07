@@ -149,7 +149,7 @@ export function OperatorNetwork() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Handle, email, or account ID"
+              placeholder="Username, email, or account ID"
             />
           </label>
           <Button type="submit" variant="secondary">
@@ -161,7 +161,7 @@ export function OperatorNetwork() {
             {results.map((result) => (
               <li key={result.id}>
                 <button type="button" onClick={() => openRoot(result.id)}>
-                  <strong>@{result.handle}</strong>
+                  <strong>@{result.username}</strong>
                   <span>{result.displayName || result.email}</span>
                 </button>
               </li>

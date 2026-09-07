@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { authClient } from "@/lib/auth-client";
+import { authClient, authDisplayName } from "@/lib/auth-client";
 import { ChevronDown, Menu } from "lucide-react";
 import {
   DropdownMenu,
@@ -53,7 +53,7 @@ export function SiteHeader() {
                   className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium hover:bg-slate-100"
                   aria-label="Open account menu"
                 >
-                  {user.name || "Account"}
+                  {authDisplayName(user)}
                   <ChevronDown className="h-4 w-4" aria-hidden="true" />
                 </button>
               </DropdownMenuTrigger>

@@ -6,7 +6,7 @@ Cliqero uses one canonical account identity with capability-based authorization.
 
 ## Visitor
 
-A visitor can browse the public catalogue and inspect listing details without authentication. A visitor may arrive organically or through an attributed referral link. Authentication is required when an account-specific action needs durable identity.
+A visitor can browse the public catalogue and inspect listing details without authentication. A visitor may arrive organically or through a deterministic attributed referral URL. Authentication is required when an account-specific action needs durable identity.
 
 ## Buyer / member
 

@@ -90,7 +90,7 @@ export function OperatorWithdrawalList() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ID, handle, email, reference"
+              placeholder="ID, username, email, reference"
             />
           </label>
           <label>
@@ -162,7 +162,7 @@ function WithdrawalRow({ item }: { item: OperatorWithdrawal }) {
   return (
     <Card className="operator-withdrawal-row">
       <div>
-        <strong>@{item.account.handle}</strong>
+        <strong>@{item.account.username}</strong>
         <span className="operator-withdrawal-email">{item.account.email}</span>
         <Link href={`/operator/users/${item.account.id}`}>View account</Link>
       </div>
@@ -253,7 +253,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
         <Card>
           <h3>Account</h3>
           <p>
-            <strong>@{item.account.handle}</strong>
+            <strong>@{item.account.username}</strong>
             <br />
             {item.account.email}
           </p>

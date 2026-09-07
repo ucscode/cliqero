@@ -16,7 +16,7 @@ export function OnboardingForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeContinuation(params.get("next"), "/dashboard");
-  const [handle, setHandle] = useState("");
+  const [username, setUsername] = useState("");
   const [country, setCountry] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -54,7 +54,7 @@ export function OnboardingForm() {
       await apiFetch("/api/me/onboarding", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ handle, country: country || null }),
+        body: JSON.stringify({ username, country: country || null }),
       });
       router.replace(next);
       router.refresh();
@@ -86,16 +86,17 @@ export function OnboardingForm() {
       )}
       <form onSubmit={submit} className="grid gap-4">
         <HoneypotField />
-        <Label htmlFor="onboarding-handle">Username</Label>
+        <Label htmlFor="onboarding-username">Username</Label>
         <Input
-          id="onboarding-handle"
-          value={handle}
-          onChange={(event) => setHandle(event.target.value)}
+          id="onboarding-username"
+          value={username}
+          onChange={(event) => setUsername(event.target.value.toLowerCase())}
           required
           minLength={3}
           maxLength={32}
           autoComplete="username"
           placeholder="username"
+          pattern="[a-z0-9][a-z0-9_-]{2,31}"
         />
         <CountrySelect value={country} onChange={setCountry} />
         <Button type="submit" disabled={busy}>

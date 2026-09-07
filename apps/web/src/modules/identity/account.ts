@@ -1,17 +1,23 @@
 import { DomainInvariantError } from "@/kernel/errors";
 import type { Id } from "@/kernel/ids";
+import { isValidUsername, normalizeUsername } from "./username";
 
 export class Account {
   constructor(
     readonly id: Id,
     readonly email: string,
-    readonly handle: string,
+    username: string,
     readonly country: string | null = null,
+    readonly displayName: string | null = null,
   ) {
     if (!email.includes("@")) throw new DomainInvariantError("A valid account email is required");
-    if (!/^[a-z0-9][a-z0-9_-]{2,31}$/.test(handle))
-      throw new DomainInvariantError("Account handle is invalid");
+    const normalizedUsername = normalizeUsername(username);
+    if (!isValidUsername(normalizedUsername))
+      throw new DomainInvariantError("Account username is invalid");
+    this.username = normalizedUsername;
   }
+
+  readonly username: string;
 }
 
 export interface AccountReader {

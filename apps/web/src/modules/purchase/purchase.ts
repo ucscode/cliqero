@@ -9,7 +9,6 @@ export interface PurchaseTerms {
   readonly price: { readonly minorAmount: string; readonly currency: string };
   readonly canonicalPrice: { readonly minorAmount: string; readonly currency: "USD" };
   readonly referralAttributionId: Id | null;
-  readonly referralLinkId: Id | null;
   readonly referralReferrerAccountId: Id | null;
 }
 

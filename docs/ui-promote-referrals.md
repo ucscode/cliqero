@@ -2,13 +2,11 @@
 
 The authenticated dashboard now exposes three account-owned views:
 
-- **Promote** loads the account's existing listing referral links, including
-  the joined `listing_title` projection, from `GET /api/referral-links`. A
-  link is created only when the user chooses Promote on a published listing
-  (`POST /api/listings/{id}/referral-link`). The API-generated `/r/{code}` URL
-  is the only shareable referral artifact; the browser never invents codes or
-  attribution tokens. The list is owner-scoped and produced by one backend
-  projection query, so the browser does not fetch each listing separately.
+- **Promote** is available on an authenticated published listing. The server
+  returns a deterministic `/r/{account-uuid}/{listing-uuid}` URL; no referral
+  link row, generated code, rotation, or revocation lifecycle is required.
+  Visits still create an opaque, hashed attribution token in the database for
+  the existing 30-day purchase attribution window.
 - **Referrals** combines an accessible network summary with the graphical
   React Flow/Dagre explorer. The hierarchy API remains the authorization
   boundary; the browser does not fetch a global graph or infer relationships.
@@ -25,8 +23,9 @@ The authenticated dashboard now exposes three account-owned views:
   commission.
 
 All amounts are rendered from canonical USD minor units. Referral attribution
-continues to use `/r/{code}` and the existing `cliqero_attribution` cookie, and
-is resolved by checkout rather than by the UI. Pagination for time-ordered
+continues to use the deterministic `/r/{referrer}/{listing}` URL and the
+existing `cliqero_attribution` cookie, and is resolved by checkout rather than
+by the UI. Pagination for time-ordered
 purchase and earnings projections uses an opaque `(created_at, id)` keyset
 cursor so records are not skipped when UUID order differs from creation order.
 

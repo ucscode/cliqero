@@ -6,11 +6,11 @@ const tree: HierarchyTree = {
   root: "root",
   windowDepth: 3,
   childLimit: 2,
-  parent: { id: "outside", handle: "outside", displayName: null, canNavigate: false },
+  parent: { id: "outside", username: "outside", displayName: null, canNavigate: false },
   nodes: [
     {
       id: "child",
-      handle: "child",
+      username: "child",
       displayName: "Child",
       depth: 1,
       directChildCount: 1,
@@ -20,7 +20,7 @@ const tree: HierarchyTree = {
     },
     {
       id: "root",
-      handle: "root",
+      username: "root",
       displayName: null,
       depth: 0,
       directChildCount: 1,
@@ -49,7 +49,7 @@ describe("hierarchy graph view model", () => {
       items: [
         {
           id: "grandchild",
-          handle: "grandchild",
+          username: "grandchild",
           displayName: null,
           depth: 1,
           directChildCount: 0,

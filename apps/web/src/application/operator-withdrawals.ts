@@ -31,7 +31,7 @@ function mask(value: string) {
 
 export type OperatorWithdrawal = {
   id: string;
-  account: { id: string; handle: string; email: string };
+  account: { id: string; username: string; email: string };
   amountMinor: string;
   currency: string;
   destination: { type: "bank" | "manual"; summary: string };
@@ -86,7 +86,7 @@ function map(row: any): OperatorWithdrawal {
             : "none";
   return {
     id: row.id,
-    account: { id: row.account_id, handle: row.handle, email: row.email },
+    account: { id: row.account_id, username: row.username, email: row.email },
     amountMinor: String(row.amount_minor),
     currency: row.currency,
     destination: { type: row.destination_type, summary: mask(row.destination_reference) },
@@ -116,7 +116,7 @@ function map(row: any): OperatorWithdrawal {
 }
 
 const projection = `
-  select w.uuid as id,a.uuid as account_id,a.handle,a.email,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.reason,w.created_at,w.updated_at,
+  select w.uuid as id,a.uuid as account_id,a.username,a.email,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.reason,w.created_at,w.updated_at,
     r.uuid reservation_id,r.amount_minor reservation_amount_minor,r.currency reservation_currency,
     (select e.kind from ledger_capability.withdrawal_reservation_events e where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) reservation_state,
     p.uuid payout_id,p.provider_name,p.state payout_state,p.attempt_count,p.next_attempt_at,p.last_error,
@@ -150,7 +150,7 @@ export class OperatorWithdrawalService {
     const rows = (
       await this.sql.query<any>(
         `select * from (${projection}) q
-          where ($1::text is null or q.id::text=$1 or q.destination_reference ilike '%'||$1||'%' escape '\\' or q.provider_reference ilike '%'||$1||'%' escape '\\' or q.handle ilike '%'||$1||'%' escape '\\' or q.email ilike '%'||$1||'%' escape '\\')
+          where ($1::text is null or q.id::text=$1 or q.destination_reference ilike '%'||$1||'%' escape '\\' or q.provider_reference ilike '%'||$1||'%' escape '\\' or q.username ilike '%'||$1||'%' escape '\\' or q.email ilike '%'||$1||'%' escape '\\')
             and ($2::text is null or q.state=$2)
             and ($3::text is null or case when q.state='requested' then 'review' when q.state='approved' and q.payout_state is null then 'payout' when q.payout_state='unknown' or q.attempt_state in ('unknown','pending') then 'reconciliation' when q.payout_state='failed' and q.next_attempt_at > now() then 'retry_wait' when q.payout_state='failed' then 'retry' else 'none' end=$3::text)
             and ($4::timestamptz is null or (q.created_at,(select id from withdrawal_capability.withdrawals where uuid=q.id))<($4::timestamptz,(select id from withdrawal_capability.withdrawals where uuid=$5)))

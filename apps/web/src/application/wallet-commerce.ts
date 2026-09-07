@@ -287,7 +287,9 @@ export class WalletCheckoutService {
     if (!listing || listing.state !== "published") throw new Error("Listing not found");
     if (listing.price.currency !== "USD") throw new Error("Listings must use canonical USD");
     const snapshot = listing.commercialSnapshot();
-    const attribution = await this.attribution.resolve(input.attributionSource, listing.id);
+    const resolvedAttribution = await this.attribution.resolve(input.attributionSource, listing.id);
+    const attribution =
+      resolvedAttribution?.referrerAccountId === input.buyerId ? null : resolvedAttribution;
     const checkoutId = newId(),
       purchaseId = newId();
     return this.uow.transaction(async () => {
@@ -310,7 +312,6 @@ export class WalletCheckoutService {
           ...snapshot,
           canonicalPrice: { minorAmount: listing.price.minorAmount.toString(), currency: "USD" },
           referralAttributionId: attribution?.attributionId ?? null,
-          referralLinkId: attribution?.referralLinkId ?? null,
           referralReferrerAccountId: attribution?.referrerAccountId ?? null,
         },
         input.idempotencyKey,

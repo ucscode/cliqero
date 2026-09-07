@@ -72,7 +72,7 @@ export type OperatorFundingEvent = {
 
 export type OperatorFundingSummary = {
   id: string;
-  account: { id: string; handle: string; email: string };
+  account: { id: string; username: string; email: string };
   provider: string;
   providerReference: string;
   canonicalAmountMinor: string;
@@ -103,7 +103,7 @@ export type OperatorFundingDetail = OperatorFundingSummary & {
 function summary(row: any): OperatorFundingSummary {
   return {
     id: row.id,
-    account: { id: row.account_id, handle: row.handle, email: row.email },
+    account: { id: row.account_id, username: row.username, email: row.email },
     provider: row.provider_name,
     providerReference: row.provider_reference,
     canonicalAmountMinor: String(row.canonical_amount_minor),
@@ -142,7 +142,7 @@ export class OperatorFundingService {
     const search = rawSearch ? rawSearch.replace(/[\\%_]/g, "\\$&") : null;
     const values: unknown[] = [search, input.state ?? null, input.provider ?? null];
     const conditions = [
-      "($1::text is null or f.uuid::text=$1 or f.provider_reference ilike '%'||$1||'%' escape '\\' or a.handle ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\')",
+      "($1::text is null or f.uuid::text=$1 or f.provider_reference ilike '%'||$1||'%' escape '\\' or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\')",
       "($2::text is null or f.state=$2)",
       "($3::text is null or f.provider_name=$3)",
     ];
@@ -152,7 +152,7 @@ export class OperatorFundingService {
     );
     const rows = (
       await this.sql.query<any>(
-        `select f.uuid as id,a.uuid as account_id,a.handle,a.email,f.provider_name,f.provider_reference,
+        `select f.uuid as id,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,
                 f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
                 f.state,f.created_at,f.updated_at,f.confirmed_at,
                 c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
@@ -178,7 +178,7 @@ export class OperatorFundingService {
   async get(id: string): Promise<OperatorFundingDetail> {
     const row = (
       await this.sql.query<any>(
-        `select f.uuid as id,a.uuid as account_id,a.handle,a.email,f.provider_name,f.provider_reference,
+        `select f.uuid as id,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,
                 f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
                 f.state,f.created_at,f.updated_at,f.confirmed_at,f.conversion_snapshot,
                 case when f.provider_initialization is null then null

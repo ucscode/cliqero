@@ -4,12 +4,14 @@ import { Account } from "./account";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import { BetterAuthBoundary, type BetterAuthInstance } from "./better-auth";
 import { assertPasswordMinimum } from "./password-policy";
+import { normalizeUsername } from "./username";
 
 interface AccountRow {
   id: string;
   email: string;
-  handle: string;
+  username: string;
   country: string | null;
+  display_name: string | null;
 }
 
 function normalizeCountry(country: string | null | undefined): string | null {
@@ -20,7 +22,7 @@ function normalizeCountry(country: string | null | undefined): string | null {
 }
 
 function accountFromRow(row: AccountRow): Account {
-  return new Account(row.id, row.email, row.handle, row.country);
+  return new Account(row.id, row.email, row.username, row.country, row.display_name);
 }
 function authHeaders(token: string): Headers {
   return new Headers({ authorization: `Bearer ${token}` });
@@ -48,13 +50,13 @@ export class AuthenticationService {
 
   async register(input: {
     email: string;
-    handle: string;
+    username: string;
     password: string;
     country?: string | null;
   }): Promise<Account> {
     assertPasswordMinimum(input.password);
     const email = input.email.trim().toLowerCase();
-    const handle = input.handle.trim().toLowerCase();
+    const username = normalizeUsername(input.username);
     const country = normalizeCountry(input.country);
     // A prior test/development reset may have deleted the Cliqero account but
     // left its unlinked Better Auth user. It is safe to clean only such rows;
@@ -65,15 +67,24 @@ export class AuthenticationService {
       [email],
     );
     const result = await this.auth.api.signUpEmail({
-      body: { name: handle, email, password: input.password },
+      // Better Auth requires the field structurally, but Cliqero collects no
+      // display name during email registration. Keep it empty rather than
+      // misrepresenting the username as a provider-owned display name.
+      body: { name: "", email, password: input.password },
     });
-    const account = new Account(newId(), email, handle, country);
+    const account = new Account(newId(), email, username, country);
     try {
       await this.transaction(async () => {
         await this.sql.query(
-          `insert into identity_capability.accounts (uuid,email,handle,metadata)
-           values ($1,$2,$3,$4::jsonb)`,
-          [account.id, account.email, account.handle, JSON.stringify(country ? { country } : {})],
+          `insert into identity_capability.accounts (uuid,email,username,display_name,metadata)
+           values ($1,$2,$3,$4,$5::jsonb)`,
+          [
+            account.id,
+            account.email,
+            account.username,
+            result.user.name?.trim() || null,
+            JSON.stringify(country ? { country } : {}),
+          ],
         );
         const linked = await this.sql.query(
           `update identity_capability.auth_account_links
@@ -128,7 +139,7 @@ export class AuthenticationService {
   async accountForAuthUser(authUserId: string): Promise<Account | null> {
     const row = (
       await this.sql.query<AccountRow>(
-        `select a.uuid as id,a.email,a.handle,a.metadata->>'country' as country
+        `select a.uuid as id,a.email,a.username,a.display_name,a.metadata->>'country' as country
        from identity_capability.auth_account_links l
        join identity_capability.accounts a on a.id=l.account_id
        where l.auth_user_id=$1 and l.onboarding_state='complete'`,
@@ -168,20 +179,26 @@ export class AuthenticationService {
 
   async completeOnboarding(
     authUserId: string,
-    input: { email: string; handle: string; country?: string | null },
+    input: { email: string; username: string; country?: string | null },
   ): Promise<Account> {
     const country = normalizeCountry(input.country);
     const account = new Account(
       newId(),
       input.email.trim().toLowerCase(),
-      input.handle.trim().toLowerCase(),
+      normalizeUsername(input.username),
       country,
     );
     await this.transaction(async () => {
       await this.sql.query(
-        `insert into identity_capability.accounts (uuid,email,handle,metadata)
-         values ($1,$2,$3,$4::jsonb)`,
-        [account.id, account.email, account.handle, JSON.stringify(country ? { country } : {})],
+        `insert into identity_capability.accounts (uuid,email,username,display_name,metadata)
+         values ($1,$2,$3,(select nullif(trim(name),'') from better_auth."user" where id=$5),$4::jsonb)`,
+        [
+          account.id,
+          account.email,
+          account.username,
+          JSON.stringify(country ? { country } : {}),
+          authUserId,
+        ],
       );
       const updated = await this.sql.query(
         `update identity_capability.auth_account_links

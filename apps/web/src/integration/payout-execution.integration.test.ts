@@ -23,12 +23,12 @@ suite("provider-neutral payout execution", () => {
   async function setup(destinationReference = "normal") {
     const seller = await app.authentication.register({
       email: `seller-${newId().slice(0, 6)}@example.com`,
-      handle: `sell${newId().slice(0, 8)}`,
+      username: `sell${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
     });
     const buyer = await app.authentication.register({
       email: `buyer-${newId().slice(0, 6)}@example.com`,
-      handle: `buy${newId().slice(0, 8)}`,
+      username: `buy${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
     });
     const listing = await app.listingService.createPublished(seller, {

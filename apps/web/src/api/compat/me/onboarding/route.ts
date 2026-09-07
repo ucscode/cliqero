@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { apiError } from "../../http";
 import { getContainer } from "@/infrastructure/container";
+import { usernameSchema } from "@/modules/identity/username";
 
 const bodySchema = z.object({
-  handle: z.string().min(3).max(32),
+  username: usernameSchema,
   country: z
     .string()
     .regex(/^[A-Za-z]{2}$/)
@@ -24,7 +25,12 @@ export async function POST(request: Request) {
       ...bodySchema.parse(await request.json()),
     });
     return Response.json(
-      { id: account.id, email: account.email, handle: account.handle, country: account.country },
+      {
+        id: account.id,
+        email: account.email,
+        username: account.username,
+        country: account.country,
+      },
       { status: 201 },
     );
   } catch (error) {

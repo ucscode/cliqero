@@ -1,4 +1,4 @@
-FROM node:22-alpine AS base
+FROM node:22-slim AS base
 WORKDIR /workspace
 COPY package.json package-lock.json* ./
 COPY apps/web/package.json apps/web/package.json
@@ -17,7 +17,7 @@ FROM base AS worker
 COPY . .
 CMD ["npm", "run", "worker:outbox", "--workspace", "@cliqero/web"]
 
-FROM node:22-alpine AS production
+FROM node:22-slim AS production
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /workspace/apps/web/.next/standalone ./

@@ -76,7 +76,7 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
     const rows = (
       await this.sql.query<ReviewRow>(
         `select r.uuid as id,l.uuid as listing_id,a.uuid as account_id,r.rating,r.body,r.status,r.created_at,r.updated_at,r.moderated_at,moderator.uuid as moderated_by,
-                a.handle as reviewer
+                a.username as reviewer
          from listing_capability.reviews r join identity_capability.accounts a on a.id=r.account_id
          join listing_capability.listings l on l.id=r.listing_id left join identity_capability.accounts moderator on moderator.id=r.moderated_by
          where r.listing_id=(select id from listing_capability.listings where uuid=$1) and r.status='approved'${cursor}
@@ -107,7 +107,7 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
     const rows = (
       await this.sql.query<ReviewRow>(
         `select r.uuid as id,l.uuid as listing_id,a.uuid as account_id,r.rating,r.body,r.status,r.created_at,r.updated_at,r.moderated_at,moderator.uuid as moderated_by,
-                a.handle as reviewer,l.title as listing_title
+                a.username as reviewer,l.title as listing_title
          from listing_capability.reviews r join identity_capability.accounts a on a.id=r.account_id
          join listing_capability.listings l on l.id=r.listing_id left join identity_capability.accounts moderator on moderator.id=r.moderated_by ${where.length ? `where ${where.join(" and ")}` : ""}
          order by r.created_at asc,r.id asc limit $${values.length}`,

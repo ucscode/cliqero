@@ -165,7 +165,7 @@ const records = [
 try {
   await pool.query("begin");
   await pool.query(
-    `insert into identity_capability.accounts(uuid,email,handle,display_name) values($1,$2,$3,$4) on conflict (uuid) do nothing`,
+    `insert into identity_capability.accounts(uuid,email,username,display_name) values($1,$2,$3,$4) on conflict (uuid) do nothing`,
     [ownerId, "fixtures.catalogue@example.test", "fixture_catalogue", "Development Catalogue"],
   );
   for (const [key, title, description, price] of records) {
@@ -203,10 +203,10 @@ try {
       "reviewer_three",
     ],
   ] as const;
-  for (const [id, email, handle] of reviewers)
+  for (const [id, email, username] of reviewers)
     await pool.query(
-      `insert into identity_capability.accounts(uuid,email,handle,display_name) values($1,$2,$3,$3) on conflict(uuid) do update set handle=excluded.handle`,
-      [id, email, handle],
+      `insert into identity_capability.accounts(uuid,email,username,display_name) values($1,$2,$3,$3) on conflict(uuid) do update set username=excluded.username`,
+      [id, email, username],
     );
   const reviewFixtures = [
     [

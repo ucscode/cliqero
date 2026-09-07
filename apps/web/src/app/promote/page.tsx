@@ -14,9 +14,9 @@ export default function PromotePage() {
       <section>
         <h2 className="text-2xl font-semibold text-slate-900">How it works</h2>
         <p className="mt-2">
-          Eligible members create attributed referral links for catalogue listings. When a referred
-          buyer completes a valid purchase, the existing commission policy may create an earnings
-          entry.
+          Eligible members share deterministic attributed URLs for catalogue listings. When a
+          referred buyer completes a valid purchase, the existing commission policy may create an
+          earnings entry.
         </p>
       </section>
       <section>

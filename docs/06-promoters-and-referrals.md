@@ -4,7 +4,7 @@
 
 ## Referrer purpose
 
-Referrers distribute attributed Cliqero listing links and earn when buyers they bring complete valid purchases.
+Referrers share attributed catalogue URLs and earn when buyers they bring complete valid purchases.
 
 Their economic role is distribution. They do not need to host the product, process the payment, or implement the destination.
 
@@ -14,15 +14,14 @@ Referrer/promoter behavior is a capability of a normal Cliqero account.
 
 The same account may also be a seller and buyer.
 
-Referrer identity should remain stable even if individual listings, links, collections, or public handles change.
+Referrer identity should remain stable even if individual listings, links, collections, or public usernames change.
 
 ## Promotion links
 
-Cliqero may support specific listing links, seller-focused links, collections, or versatile public referral pages where useful.
-
-A specific listing referral link is the most important primitive because it can unambiguously preserve attribution to a purchasable listing.
-
-The exact route shape can evolve without changing the attribution model.
+Each published listing can be shared with a deterministic URL containing the
+immutable referrer-account UUID and listing UUID (`/r/{referrer}/{listing}`).
+The URL is derived at request time; it has no generated code or persisted link
+record and remains valid when a username changes.
 
 ## Attribution
 
@@ -31,7 +30,7 @@ Referral/promotion attribution should be owned by a dedicated capability.
 It determines facts such as:
 
 - referring account;
-- originating link;
+- originating listing URL;
 - listing/seller context;
 - session/click identity;
 - attribution window;

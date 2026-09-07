@@ -26,7 +26,15 @@ credentials in `config/security/auth.yaml`. Better Auth's account-linking policy
 identity can be safely linked; a local password identity must have a verified
 email before implicit linking. A Google-first user is authenticated but has an
 incomplete Cliqero mapping until `POST /api/me/onboarding` supplies a unique
-handle and country. Business endpoints requiring an account reject that state.
+username and country. Business endpoints requiring an account reject that state.
+
+Better Auth's `user.name` is the display/full name supplied by an email or OAuth
+identity provider. Cliqero's `accounts.username` is the separate, mutable username
+used by the application. The username is never used as a permanent referral
+identifier. The nullable `accounts.display_name` is an application presentation
+snapshot: OAuth onboarding copies the provider's display name when available,
+while email registration leaves it empty. It is not an alias for `username` and
+is never used for authentication or referral identity.
 
 ## Transport and configuration
 

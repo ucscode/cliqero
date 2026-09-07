@@ -18,7 +18,7 @@ suite("headless API principal and hierarchy read model", () => {
     n++;
     return app.authentication.register({
       email: `${prefix}${n}@example.com`,
-      handle: `${prefix}${n}`,
+      username: `${prefix}${n}`,
       password: "correct-horse-battery",
       country: "NG",
     });
@@ -185,7 +185,10 @@ suite("headless API principal and hierarchy read model", () => {
     expect(list.status).toBe(200);
     const listBody = await list.json();
     expect(listBody.items).toHaveLength(1);
-    expect(listBody.items[0]).toMatchObject({ id: expect.any(String), handle: expect.any(String) });
+    expect(listBody.items[0]).toMatchObject({
+      id: expect.any(String),
+      username: expect.any(String),
+    });
     expect(listBody.items[0].password_hash).toBeUndefined();
     const detail = await api.fetch(
       new Request(`http://localhost/api/operator/accounts/${child.id}`),
@@ -201,17 +204,17 @@ suite("headless API principal and hierarchy read model", () => {
     );
     expect(unrelated.status).toBe(404);
   });
-  it("keeps normalized profile handles unique under concurrent updates", async () => {
-    const first = await account("handlefirst"),
-      second = await account("handlesecond");
+  it("keeps normalized profile usernames unique under concurrent updates", async () => {
+    const first = await account("usernamefirst"),
+      second = await account("usernamesecond");
     const results = await Promise.allSettled([
-      app.profiles.update(first.id, { handle: "SharedHandle" }),
-      app.profiles.update(second.id, { handle: "sharedhandle" }),
+      app.profiles.update(first.id, { username: "SharedUsername" }),
+      app.profiles.update(second.id, { username: "sharedusername" }),
     ]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
     const rows = await app.database.query<{ count: string }>(
-      `select count(*) count from identity_capability.accounts where handle='sharedhandle'`,
+      `select count(*) count from identity_capability.accounts where username='sharedusername'`,
     );
     expect(rows.rows[0].count).toBe("1");
   });
@@ -245,7 +248,7 @@ suite("headless API principal and hierarchy read model", () => {
     const ids = Array.from({ length: 41 }, () => newId());
     for (let i = 0; i < ids.length; i++)
       await app.database.query(
-        `insert into identity_capability.accounts(uuid,email,handle) values($1,$2,$3)`,
+        `insert into identity_capability.accounts(uuid,email,username) values($1,$2,$3)`,
         [ids[i], `deep${i}@example.com`, `deep${i}`],
       );
     for (let i = 1; i < ids.length; i++)
@@ -259,7 +262,7 @@ suite("headless API principal and hierarchy read model", () => {
     const children = Array.from({ length: 125 }, () => newId());
     for (let i = 0; i < children.length; i++)
       await app.database.query(
-        `insert into identity_capability.accounts(uuid,email,handle) values($1,$2,$3)`,
+        `insert into identity_capability.accounts(uuid,email,username) values($1,$2,$3)`,
         [children[i], `wide${i}@example.com`, `wide${i}`],
       );
     for (const child of children) await app.referralGraphService.establish(child, wideParent);
@@ -284,16 +287,16 @@ suite("headless API principal and hierarchy read model", () => {
       other = await account("searchother");
     await app.referralGraphService.establish(child.id, root.id);
     expect(
-      (await app.hierarchy.search(root.id, child.handle, false, 20)).map((x) => x.id),
+      (await app.hierarchy.search(root.id, child.username, false, 20)).map((x) => x.id),
     ).toContain(child.id);
-    expect(await app.hierarchy.search(root.id, other.handle, false, 20)).toEqual([]);
+    expect(await app.hierarchy.search(root.id, other.username, false, 20)).toEqual([]);
     const operator = await account("searchoperator");
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
       [operator.id],
     );
     expect(
-      (await app.hierarchy.search(operator.id, other.handle, true, 20)).map((item) => item.id),
+      (await app.hierarchy.search(operator.id, other.username, true, 20)).map((item) => item.id),
     ).toContain(other.id);
   });
   it("allows only an operator-scoped principal to reassign a parent through Hono", async () => {

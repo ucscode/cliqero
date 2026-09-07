@@ -150,7 +150,7 @@ Authenticated management belongs on the main application surface:
 - listing management;
 - purchases;
 - buyer entitlements/access history;
-- referral links and earnings;
+- referral URLs and earnings;
 - wallet/ledger views where applicable;
 - withdrawals;
 - administration.

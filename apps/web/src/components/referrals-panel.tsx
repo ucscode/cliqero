@@ -194,12 +194,14 @@ export function ReferralsPanel() {
                         key={id}
                       >
                         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-50 text-sm font-semibold text-emerald-800">
-                          {(node?.handle ?? id).slice(0, 1).toUpperCase()}
+                          {(node?.username ?? id).slice(0, 1).toUpperCase()}
                         </span>
                         <span className="grid min-w-0 gap-1">
-                          <strong>{node?.displayName || node?.handle || "Cliqero account"}</strong>
+                          <strong>
+                            {node?.displayName || node?.username || "Cliqero account"}
+                          </strong>
                           <small className="break-all text-xs text-slate-500">
-                            {node?.handle ?? id}
+                            {node?.username ?? id}
                           </small>
                         </span>
                       </li>
@@ -239,10 +241,12 @@ export function ReferralsPanel() {
                         key={upline.accountId}
                       >
                         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-50 text-sm font-semibold text-emerald-800">
-                          {(node?.handle ?? upline.accountId).slice(0, 1).toUpperCase()}
+                          {(node?.username ?? upline.accountId).slice(0, 1).toUpperCase()}
                         </span>
                         <span className="grid min-w-0 gap-1">
-                          <strong>{node?.displayName || node?.handle || "Cliqero account"}</strong>
+                          <strong>
+                            {node?.displayName || node?.username || "Cliqero account"}
+                          </strong>
                           <small className="text-xs text-slate-500">Level {upline.depth}</small>
                         </span>
                       </li>
@@ -281,12 +285,12 @@ export function ReferralsPanel() {
                             key={node.id}
                           >
                             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-50 text-sm font-semibold text-emerald-800">
-                              {node.handle.slice(0, 1).toUpperCase()}
+                              {node.username.slice(0, 1).toUpperCase()}
                             </span>
                             <span className="grid min-w-0 gap-1">
-                              <strong>{node.displayName || node.handle}</strong>
+                              <strong>{node.displayName || node.username}</strong>
                               <small className="break-all text-xs text-slate-500">
-                                {node.handle}
+                                {node.username}
                               </small>
                             </span>
                             {node.hasMoreChildren && <Badge>More below</Badge>}

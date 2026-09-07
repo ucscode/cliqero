@@ -42,7 +42,7 @@ function appWith(
         list: async () => ({ items: [], nextCursor: null }),
         get: async (id: string) => ({
           id,
-          handle: "sample",
+          username: "sample",
           displayName: null,
           email: "sample@example.com",
           country: null,
@@ -60,7 +60,7 @@ function appWith(
           id,
           account: {
             id: "00000000-0000-4000-8000-000000000001",
-            handle: "sample",
+            username: "sample",
             email: "sample@example.com",
           },
           provider: "development",
@@ -87,7 +87,7 @@ function appWith(
           purchaseId: "00000000-0000-4000-8000-000000000002",
           listingId: "00000000-0000-4000-8000-000000000003",
           listingTitle: "Sample",
-          buyer: { id: ordinaryId, handle: "buyer", email: "buyer@example.com" },
+          buyer: { id: ordinaryId, username: "buyer", email: "buyer@example.com" },
           grossAmountMinor: "100",
           currency: "USD",
           referralAllocatedMinor: "0",
@@ -96,7 +96,7 @@ function appWith(
           completedAt: new Date().toISOString(),
           purchaseState: "completed",
           purchaseCreatedAt: new Date().toISOString(),
-          attribution: { id: null, linkId: null, referrer: null },
+          attribution: { id: null, referrer: null },
           policySnapshot: {},
           allocations: [],
           reversal: null,
@@ -678,19 +678,21 @@ describe("Hono API foundation", () => {
       mode: "account",
       scope: "catalogue:manage",
     });
+    const referralUrlAccess = getLegacyRouteAccess(
+      "/api/listings/00000000-0000-4000-8000-000000000001/referral-url",
+      "GET",
+    );
+    expect(referralUrlAccess).toEqual({
+      mode: "session_only",
+      apiKey: "reject",
+    });
     expect(
-      getLegacyRouteAccess(
-        "/api/listings/00000000-0000-4000-8000-000000000001/referral-link",
-        "POST",
-      ),
-    ).toEqual({
-      mode: "account",
-      scope: "referrals:manage",
-    });
-    expect(getLegacyRouteAccess("/api/referral-links", "GET")).toEqual({
-      mode: "account",
-      scope: "referrals:read",
-    });
+      authorizeLegacyRequest(
+        new Request("http://localhost/api/listings/id/referral-url", { method: "GET" }),
+        operatorKey,
+        referralUrlAccess!,
+      )?.status,
+    ).toBe(403);
     expect(
       authorizeLegacyRequest(
         new Request("http://localhost/api/listings/00000000-0000-4000-8000-000000000001", {
@@ -840,7 +842,7 @@ describe("Hono API foundation", () => {
   it("protects treasury APIs by both operator role and treasury scope", async () => {
     const base = {
       accountId: "00000000-0000-4000-8000-000000000001",
-      account: { handle: "operator", email: "operator@example.com" },
+      account: { username: "operator", email: "operator@example.com" },
       kind: "user_session" as const,
       roles: [] as string[],
       scopes: new Set<string>(),
@@ -894,7 +896,7 @@ describe("Hono API foundation", () => {
   it("keeps treasury facts append-only and rejects source/actor overrides", async () => {
     const principal = {
       accountId: "00000000-0000-4000-8000-000000000001",
-      account: { handle: "operator", email: "operator@example.com" },
+      account: { username: "operator", email: "operator@example.com" },
       kind: "user_session" as const,
       roles: ["operator"],
       scopes: new Set<string>(),

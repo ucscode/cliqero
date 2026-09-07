@@ -229,6 +229,7 @@ export function createContainer(databaseUrl: string) {
   const referralAttribution = new ReferralAttributionService(
     referralAttributionRepository,
     listings,
+    accounts,
   );
   const paymentCompletion = new PaymentCompletionService(
     payments,

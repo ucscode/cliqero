@@ -3,16 +3,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { authClient } from "@/lib/auth-client";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
 import type { Listing } from "@/lib/api-client";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
-import { Toast } from "./toast";
 import { Money } from "./money";
-import { canShowPromote } from "./interaction-model";
-import { ReferralShareActions } from "./referral-share-actions";
 import { ListingDescription } from "./listing-description";
 import { Star } from "lucide-react";
 
@@ -24,27 +18,6 @@ export function ListingCard({
   reviewsVisible: boolean;
 }) {
   const image = listing.media[0];
-  const session = authClient.useSession();
-  const [promoting, setPromoting] = useState(false);
-  const [promoteMessage, setPromoteMessage] = useState<string | null>(null);
-  const [referralUrl, setReferralUrl] = useState<string | null>(null);
-  function promote() {
-    setPromoting(true);
-    setPromoteMessage(null);
-    void apiFetch<{ url: string }>(`/api/listings/${listing.id}/referral-link`, { method: "POST" })
-      .then((result) => {
-        setReferralUrl(result.url);
-        setPromoteMessage("Your referral link is ready to share.");
-      })
-      .catch((cause: unknown) => {
-        setPromoteMessage(
-          cause instanceof ApiClientError
-            ? cause.message
-            : "We couldn’t create your referral link.",
-        );
-      })
-      .finally(() => setPromoting(false));
-  }
   return (
     <Card className="flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5 hover:border-emerald-300">
       <Link href={`/listings/${listing.id}`} className="block">
@@ -91,19 +64,10 @@ export function ListingCard({
         />
         <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
           <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
-          <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm">
-              <Link href={`/listings/${listing.id}`}>View details</Link>
-            </Button>
-            {canShowPromote(Boolean(session.data?.user)) && (
-              <Button variant="secondary" size="sm" onClick={promote} disabled={promoting}>
-                {promoting ? "Preparing…" : referralUrl ? "Refresh link" : "Promote"}
-              </Button>
-            )}
-          </div>
+          <Button asChild size="sm">
+            <Link href={`/listings/${listing.id}`}>View details</Link>
+          </Button>
         </div>
-        {promoteMessage && <Toast tone="success">{promoteMessage}</Toast>}
-        {referralUrl && <ReferralShareActions url={referralUrl} />}
       </div>
     </Card>
   );

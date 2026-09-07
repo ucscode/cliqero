@@ -49,11 +49,17 @@ export class ApiPrincipalResolver {
   }
   private async authenticationAccount(id: string) {
     const row = (
-      await this.sql.query<{ id: string; email: string; handle: string; country: string | null }>(
-        `select uuid as id,email,handle,metadata->>'country' country from identity_capability.accounts where uuid=$1`,
+      await this.sql.query<{
+        id: string;
+        email: string;
+        username: string;
+        country: string | null;
+        display_name: string | null;
+      }>(
+        `select uuid as id,email,username,metadata->>'country' country,display_name from identity_capability.accounts where uuid=$1`,
         [id],
       )
     ).rows[0];
-    return row ? new Account(row.id, row.email, row.handle, row.country) : null;
+    return row ? new Account(row.id, row.email, row.username, row.country, row.display_name) : null;
   }
 }

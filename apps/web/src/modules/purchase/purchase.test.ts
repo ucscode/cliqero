@@ -10,7 +10,6 @@ describe("Purchase", () => {
       price: { minorAmount: "2000", currency: "NGN" },
       canonicalPrice: { minorAmount: "125", currency: "USD" as const },
       referralAttributionId: null,
-      referralLinkId: null,
       referralReferrerAccountId: null,
     };
     const purchase = new Purchase("purchase-1", "buyer-1", "payment-1", terms, "provider:event-1");
@@ -32,7 +31,6 @@ describe("Purchase", () => {
         price: { minorAmount: "100", currency: "USD" },
         canonicalPrice: { minorAmount: "100", currency: "USD" },
         referralAttributionId: null,
-        referralLinkId: null,
         referralReferrerAccountId: null,
       },
       "provider:event-1",

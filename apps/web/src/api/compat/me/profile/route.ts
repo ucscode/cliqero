@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { authenticatedAccount, apiError } from "../../http";
 import { getContainer } from "@/infrastructure/container";
+import { usernameSchema } from "@/modules/identity/username";
 const schema = z
   .object({
-    handle: z.string().min(3).max(32).optional(),
+    username: usernameSchema.optional(),
     country: z
       .string()
       .regex(/^[A-Z]{2}$/)
@@ -12,10 +13,10 @@ const schema = z
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, "At least one profile field is required");
-const view = (a: { id: string; email: string; handle: string; country: string | null }) => ({
+const view = (a: { id: string; email: string; username: string; country: string | null }) => ({
   id: a.id,
   email: a.email,
-  handle: a.handle,
+  username: a.username,
   country: a.country,
 });
 export async function GET(request: Request) {

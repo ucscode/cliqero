@@ -9,7 +9,7 @@ function result<T extends object>(rows: T[]): QueryResult<T> {
 const baseRow = {
   id: "00000000-0000-4000-8000-000000000010",
   account_id: "00000000-0000-4000-8000-000000000001",
-  handle: "buyer",
+  username: "buyer",
   email: "buyer@example.com",
   provider_name: "development",
   provider_reference: "dev-ref-1",

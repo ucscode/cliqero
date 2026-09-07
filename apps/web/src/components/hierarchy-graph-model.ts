@@ -5,7 +5,7 @@ export type HierarchyGraphNode = {
   parentId: string | null;
   depth: number;
   label: string;
-  handle: string;
+  username: string;
   displayName: string | null;
   isSelf: boolean;
   isRoot: boolean;
@@ -42,8 +42,8 @@ function toGraphNode(
     id: node.id,
     parentId: parentMap.get(node.id) ?? null,
     depth: node.depth,
-    label: node.displayName || node.handle,
-    handle: node.handle,
+    label: node.displayName || node.username,
+    username: node.username,
     displayName: node.displayName,
     isSelf: node.id === selfAccountId,
     isRoot: node.id === tree.root,

@@ -60,7 +60,12 @@ export class CheckoutService {
     const listing = await this.listings.findById(input.listingId);
     if (!listing) throw new Error("Listing not found");
     const snapshot = listing.commercialSnapshot();
-    const attribution = await this.attribution.resolve(input.attributionSource, listing.id);
+    const resolvedAttribution = await this.attribution.resolve(input.attributionSource, listing.id);
+    // A customer cannot earn referral credit for their own purchase. The
+    // attribution remains available for other buyers, but it is not attached
+    // to a purchase made by the referrer themselves.
+    const attribution =
+      resolvedAttribution?.referrerAccountId === input.buyerId ? null : resolvedAttribution;
     if (snapshot.price.currency !== "USD")
       throw new Error("A currency provider is required for non-USD checkout");
     const paymentId = newId();
@@ -139,7 +144,6 @@ export class CheckoutService {
             currency: "USD",
           },
           referralAttributionId: attribution?.attributionId ?? null,
-          referralLinkId: attribution?.referralLinkId ?? null,
           referralReferrerAccountId: attribution?.referrerAccountId ?? null,
         },
         input.idempotencyKey,

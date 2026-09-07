@@ -2,13 +2,13 @@
 
 Cliqero settings keep authentication infrastructure separate from business
 identity. Better Auth owns sessions and provider credentials; the Cliqero
-account owns the handle, country, profile, integrations, roles, and economic
+account owns the username, country, profile, integrations, roles, and economic
 identity.
 
 ## Profile and account
 
-The profile panel reads `/api/me/profile` and can update the account handle and
-country. Handles are normalized to lowercase and remain unique. Email is shown
+The profile panel reads `/api/me/profile` and can update the account username and
+country. Usernames are normalized to lowercase and remain unique. Email is shown
 as authentication context and is read-only here; changing it requires a
 Better Auth-supported flow so the auth mapping cannot drift from the Cliqero
 account.

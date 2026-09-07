@@ -106,19 +106,6 @@ export type CheckoutStatus = {
   currency: string;
 };
 
-export type ReferralLink = {
-  id: string;
-  listing_id: string;
-  listing_title: string | null;
-  state: "active" | "revoked";
-  created_at?: string;
-  url: string;
-};
-
-export type ReferralLinkPage = {
-  items: ReferralLink[];
-};
-
 export type ReferralPage = {
   accounts: string[];
   nextCursor: string | null;
@@ -135,7 +122,7 @@ export type UplinePage = {
 
 export type HierarchyNode = {
   id: string;
-  handle: string;
+  username: string;
   displayName: string | null;
   depth: number;
   directChildCount: number;
@@ -150,7 +137,7 @@ export type HierarchyTree = {
   childLimit: number;
   parent: {
     id: string;
-    handle: string;
+    username: string;
     displayName: string | null;
     canNavigate: boolean;
   } | null;
@@ -194,7 +181,7 @@ export type EarningsEntryPage = {
 export type Profile = {
   id: string;
   email: string;
-  handle: string;
+  username: string;
   country: string | null;
 };
 
@@ -214,7 +201,7 @@ export type OperatorOverview = {
 
 export type OperatorAccountSummary = {
   id: string;
-  handle: string;
+  username: string;
   displayName: string | null;
   email: string;
   country: string | null;
@@ -224,7 +211,7 @@ export type OperatorAccountSummary = {
 };
 
 export type OperatorAccountDetail = OperatorAccountSummary & {
-  parent: { id: string; handle: string; displayName: string | null } | null;
+  parent: { id: string; username: string; displayName: string | null } | null;
   purchaseCount: number;
   latestParentReassignment: {
     actorId: string | null;
@@ -255,7 +242,7 @@ export type OperatorFundingWalletCredit = {
 
 export type OperatorFunding = {
   id: string;
-  account: { id: string; handle: string; email: string };
+  account: { id: string; username: string; email: string };
   provider: string;
   providerReference: string;
   canonicalAmountMinor: string;
@@ -312,7 +299,7 @@ export type OperatorDistribution = {
   purchaseId: string;
   listingId: string;
   listingTitle: string;
-  buyer: { id: string; handle: string; email: string };
+  buyer: { id: string; username: string; email: string };
   grossAmountMinor: string;
   currency: string;
   referralAllocatedMinor: string;
@@ -329,13 +316,12 @@ export type OperatorDistributionDetail = OperatorDistribution & {
   purchaseCreatedAt: string;
   attribution: {
     id: string | null;
-    linkId: string | null;
-    referrer: { id: string; handle: string; email: string } | null;
+    referrer: { id: string; username: string; email: string } | null;
   };
   policySnapshot: unknown;
   allocations: Array<{
     id: string;
-    account: { id: string; handle: string; email: string };
+    account: { id: string; username: string; email: string };
     level: number | null;
     amountMinor: string;
     currency: string;
@@ -358,7 +344,7 @@ export type OperatorDistributionDetail = OperatorDistribution & {
 };
 export type OperatorEarningsEntry = {
   id: string;
-  account: { id: string; handle: string; email: string };
+  account: { id: string; username: string; email: string };
   purchaseId: string | null;
   distributionId: string | null;
   entryType: string;
@@ -390,7 +376,7 @@ export type OperatorTreasuryEntry = {
   title: string;
   note: string | null;
   source: { kind: string; id: string } | null;
-  actor: { id: string; handle: string; email: string } | null;
+  actor: { id: string; username: string; email: string } | null;
   createdAt: string;
 };
 
@@ -473,7 +459,7 @@ export type OperatorWithdrawalAttention =
   "review" | "payout" | "reconciliation" | "retry" | "retry_wait" | "none";
 export type OperatorWithdrawal = {
   id: string;
-  account: { id: string; handle: string; email: string };
+  account: { id: string; username: string; email: string };
   amountMinor: string;
   currency: string;
   destination: { type: "bank" | "manual"; summary: string };

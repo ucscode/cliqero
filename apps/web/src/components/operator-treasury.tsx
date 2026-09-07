@@ -304,7 +304,7 @@ function TreasuryRow({ entry }: { entry: OperatorTreasuryEntry }) {
       <div className="operator-treasury-row-meta">
         <span>{new Date(entry.createdAt).toLocaleString()}</span>
         <span>{automatic ? "Automatic platform allocation" : "Manual operator entry"}</span>
-        {entry.actor && <span>Actor: @{entry.actor.handle}</span>}
+        {entry.actor && <span>Actor: @{entry.actor.username}</span>}
         {automatic && entry.source && (
           <Link href={`/operator/distributions/${entry.source.id}`}>View distribution</Link>
         )}

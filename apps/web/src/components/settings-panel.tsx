@@ -90,7 +90,7 @@ export function SettingsPanel() {
 
 function ProfileSettings() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [handle, setHandle] = useState("");
+  const [username, setUsername] = useState("");
   const [country, setCountry] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -103,7 +103,7 @@ function ProfileSettings() {
     try {
       const value = await apiFetch<Profile>("/api/me/profile");
       setProfile(value);
-      setHandle(value.handle);
+      setUsername(value.username);
       setCountry(value.country ?? "");
     } catch (cause) {
       setError(errorMessage(cause, "We couldn’t load your profile."));
@@ -125,10 +125,10 @@ function ProfileSettings() {
       const value = await apiFetch<Profile>("/api/me/profile", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ handle, country: country || null }),
+        body: JSON.stringify({ username, country: country || null }),
       });
       setProfile(value);
-      setHandle(value.handle);
+      setUsername(value.username);
       setCountry(value.country ?? "");
       setMessage("Profile saved.");
     } catch (cause) {
@@ -158,11 +158,12 @@ function ProfileSettings() {
       {message && <Toast tone="success">{message}</Toast>}
       <form className="grid max-w-2xl gap-3" onSubmit={save}>
         <HoneypotField />
-        <Label htmlFor="settings-handle">Username</Label>
+        <Label htmlFor="settings-username">Username</Label>
         <Input
-          id="settings-handle"
-          value={handle}
-          onChange={(event) => setHandle(event.target.value)}
+          id="settings-username"
+          value={username}
+          pattern="[a-z0-9][a-z0-9_-]{2,31}"
+          onChange={(event) => setUsername(event.target.value.toLowerCase())}
           minLength={3}
           maxLength={32}
           autoComplete="username"

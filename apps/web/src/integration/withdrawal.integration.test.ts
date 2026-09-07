@@ -23,12 +23,12 @@ suite("withdrawal lifecycle", () => {
   async function setup() {
     const seller = await app.authentication.register({
       email: `seller-${newId().slice(0, 5)}@example.com`,
-      handle: `sell${newId().slice(0, 8)}`,
+      username: `sell${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
     });
     const buyer = await app.authentication.register({
       email: `buyer-${newId().slice(0, 5)}@example.com`,
-      handle: `buy${newId().slice(0, 8)}`,
+      username: `buy${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
     });
     const listing = await app.listingService.createPublished(seller, {
@@ -240,7 +240,7 @@ suite("withdrawal lifecycle", () => {
         (
           await app.authentication.register({
             email: `other-${newId().slice(0, 5)}@example.com`,
-            handle: `oth${newId().slice(0, 8)}`,
+            username: `oth${newId().slice(0, 8)}`,
             password: "correct-horse-battery",
           })
         ).id,

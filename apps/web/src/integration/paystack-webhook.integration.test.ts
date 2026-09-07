@@ -90,12 +90,12 @@ suite("Paystack webhook to commerce consequence", () => {
   async function setup() {
     const seller = await app.authentication.register({
       email: "paystack-seller@example.com",
-      handle: "paystack_seller",
+      username: "paystack_seller",
       password: "correct-horse-battery",
     });
     const buyer = await app.authentication.register({
       email: "paystack-buyer@example.com",
-      handle: "paystack_buyer",
+      username: "paystack_buyer",
       password: "correct-horse-staple",
     });
     const listing = await app.listingService.createPublished(seller, {

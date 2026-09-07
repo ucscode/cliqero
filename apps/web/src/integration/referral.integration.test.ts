@@ -12,7 +12,7 @@ suite("referral graph and trusted purchase attribution", () => {
   beforeEach(() =>
     app.database.query(`truncate table
     ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.reversals,ledger_capability.purchase_distributions,payment_capability.reconciliation_attempts,
-    referral_capability.listing_attributions,referral_capability.listing_referral_links,referral_capability.account_referrals,
+    referral_capability.listing_attributions,referral_capability.account_referrals,
     payment_capability.provider_events,access_capability.integration_listings,access_capability.integrations,access_capability.access_grants,
     entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,
     identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records,kernel.audit_records restart identity cascade`),
@@ -23,7 +23,7 @@ suite("referral graph and trusted purchase attribution", () => {
     sequence++;
     return app.authentication.register({
       email: `${prefix}-${sequence}@example.com`,
-      handle: `${prefix}_${sequence}`,
+      username: `${prefix}_${sequence}`,
       password: "correct-horse-battery",
     });
   }
@@ -72,12 +72,12 @@ suite("referral graph and trusted purchase attribution", () => {
     ).rejects.toThrow("deletion");
   });
 
-  it("projects owner-scoped referral links with listing context in one query", async () => {
+  it("creates deterministic referral URLs without link records", async () => {
     const promoter = await account("promoter"),
       other = await account("other");
     const listing = await app.listingService.create(promoter, {
       title: "Promotable catalogue item",
-      description: "A listing for referral-link projection",
+      description: "A listing for deterministic referral projection",
       priceMinor: "1000",
       currency: "USD",
       destination: "https://example.com/promotable",
@@ -91,19 +91,16 @@ suite("referral graph and trusted purchase attribution", () => {
       destination: "https://example.com/other",
     });
     await app.listingService.publish(other, otherListing.id);
-    await app.referralAttribution.createLink(promoter.id, listing.id);
-    await app.referralAttribution.createLink(other.id, otherListing.id);
-
-    const links = await app.referralAttribution.listLinks(promoter.id);
-
-    expect(links).toHaveLength(1);
-    expect(links[0]).toMatchObject({
-      listingId: listing.id,
-      listingTitle: "Promotable catalogue item",
-    });
-    expect(links).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ listingId: otherListing.id })]),
+    const url = await app.referralAttribution.urlFor(other.id, listing.id);
+    expect(url).toContain(`/r/${other.id}/${listing.id}`);
+    await app.profiles.update(other.id, { username: "renamed_promoter" });
+    await expect(app.referralAttribution.urlFor(other.id, listing.id)).resolves.toBe(url);
+    await expect(app.referralAttribution.urlFor(promoter.id, otherListing.id)).resolves.toContain(
+      `/r/${promoter.id}/${otherListing.id}`,
     );
+    await expect(
+      app.database.query("select 1 from referral_capability.listing_referral_links"),
+    ).rejects.toThrow();
   });
 
   it("rejects indirect cycles inside PostgreSQL", async () => {
@@ -206,7 +203,7 @@ suite("referral graph and trusted purchase attribution", () => {
     const ids = Array.from({ length: 41 }, () => newId());
     for (let i = 0; i < ids.length; i++)
       await app.database.query(
-        `insert into identity_capability.accounts(uuid,email,handle) values($1,$2,$3)`,
+        `insert into identity_capability.accounts(uuid,email,username) values($1,$2,$3)`,
         [ids[i], `reassign${i}@example.com`, `reassign${i}`],
       );
     for (let i = 1; i < ids.length; i++)
@@ -277,11 +274,11 @@ suite("referral graph and trusted purchase attribution", () => {
     const children = Array.from({ length: 600 }, () => newId());
     const grandchildren = Array.from({ length: 300 }, () => newId());
     await app.database.query(
-      `insert into identity_capability.accounts(uuid,email,handle) values($1,'wide-root@example.com','wide_root')`,
+      `insert into identity_capability.accounts(uuid,email,username) values($1,'wide-root@example.com','wide_root')`,
       [root],
     );
     await app.database.query(
-      `insert into identity_capability.accounts(uuid,email,handle)
+      `insert into identity_capability.accounts(uuid,email,username)
       select id,'wide-'||ord||'@example.com','wide_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,
       [children],
     );
@@ -290,7 +287,7 @@ suite("referral graph and trusted purchase attribution", () => {
       [root, children],
     );
     await app.database.query(
-      `insert into identity_capability.accounts(uuid,email,handle)
+      `insert into identity_capability.accounts(uuid,email,username)
       select id,'grand-'||ord||'@example.com','grand_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,
       [grandchildren],
     );
@@ -346,7 +343,6 @@ suite("referral graph and trusted purchase attribution", () => {
     });
     expect((await app.purchases.findById(organic.purchaseId!))?.terms).toMatchObject({
       referralAttributionId: null,
-      referralLinkId: null,
       referralReferrerAccountId: null,
     });
     const forged = await app.legacyProviderCheckout.initiate({
@@ -365,8 +361,7 @@ suite("referral graph and trusted purchase attribution", () => {
     const { seller, buyer, referrer, listing } = await commerce();
     const accountParent = await account("buyer_parent");
     await app.referralGraphService.establish(buyer.id, accountParent.id);
-    const link = await app.referralAttribution.createLink(referrer.id, listing.id);
-    const visit = await app.referralAttribution.visit(link.code);
+    const visit = await app.referralAttribution.visit(referrer.id, listing.id);
     expect(visit).not.toBeNull();
     const storedToken = (
       await app.database.query<{ token_hash: Buffer }>(
@@ -386,14 +381,9 @@ suite("referral graph and trusted purchase attribution", () => {
     const purchase = await app.purchases.findById(checkout.purchaseId!);
     expect(purchase?.terms).toMatchObject({
       referralAttributionId: expect.any(String),
-      referralLinkId: link.id,
       referralReferrerAccountId: referrer.id,
     });
     expect(purchase?.terms.referralReferrerAccountId).not.toBe(accountParent.id);
-    await app.database.query(
-      `update referral_capability.listing_referral_links set state='revoked' where uuid=$1`,
-      [link.id],
-    );
     await app.listingService.update(seller, listing.id, {
       title: "Changed",
       description: "",
@@ -405,7 +395,6 @@ suite("referral graph and trusted purchase attribution", () => {
     const historical = await app.purchases.findById(checkout.purchaseId!);
     expect(historical?.terms).toMatchObject({
       title: "Referral listing",
-      referralLinkId: link.id,
       referralReferrerAccountId: referrer.id,
     });
   });
@@ -417,8 +406,7 @@ suite("referral graph and trusted purchase attribution", () => {
     await app.referralGraphService.establish(referrer.id, level2.id);
     await app.referralGraphService.establish(level2.id, level3.id);
     await app.referralGraphService.establish(level3.id, level4.id);
-    const link = await app.referralAttribution.createLink(referrer.id, listing.id);
-    const visit = await app.referralAttribution.visit(link.code);
+    const visit = await app.referralAttribution.visit(referrer.id, listing.id);
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
       buyerEmail: buyer.email,

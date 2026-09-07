@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
-import { authClient } from "@/lib/auth-client";
+import { authClient, authDisplayName } from "@/lib/auth-client";
 import {
   apiFetch,
   ApiClientError,
@@ -31,6 +31,8 @@ import { ReferralsPanel } from "./referrals-panel";
 import { EarningsPanel } from "./earnings-panel";
 import { WithdrawalsPanel } from "./withdrawals-panel";
 import { SettingsPanel } from "./settings-panel";
+import { BrandLink } from "./brand-identity";
+import { siteConfig } from "@/config/site";
 import {
   Sidebar,
   SidebarContent,
@@ -48,7 +50,7 @@ import {
 
 const navigation = [
   { label: "Overview", href: "/dashboard", section: "overview" },
-  { label: "Catalogue", href: "/", section: "catalogue" },
+  { label: "Catalogue", href: "/catalogue", section: "catalogue" },
   { label: "Wallet", href: "/dashboard?section=wallet", section: "wallet" },
   { label: "Purchases", href: "/dashboard?section=purchases", section: "purchases" },
   { label: "Promote", href: "/dashboard?section=promote", section: "promote" },
@@ -65,14 +67,14 @@ export function DashboardShell() {
   const buy = params.get("buy");
   const selectedPurchase = params.get("purchase") ?? undefined;
   const returnTo = safeContinuation(params.get("return"), "");
-  const [profile, setProfile] = useState<{ handle: string; email: string } | null>(null);
+  const [profile, setProfile] = useState<{ username: string; email: string } | null>(null);
   const [accountAccess, setAccountAccess] = useState<AccountAccess | null>(null);
   const [listing, setListing] = useState<Listing | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session.data?.user) return;
-    void apiFetch<{ handle: string; email: string }>("/api/me/profile")
+    void apiFetch<{ username: string; email: string }>("/api/me/profile")
       .then(setProfile)
       .catch(() => undefined);
     void apiFetch<AccountAccess>("/api/me/access")
@@ -114,6 +116,7 @@ export function DashboardShell() {
         : section === "settings"
           ? "Settings"
           : (navigation.find((item) => item.section === section)?.label ?? "Dashboard");
+  const providerDisplayName = authDisplayName(session.data.user);
   const content =
     section === "wallet" ? (
       <WalletPanel
@@ -146,15 +149,7 @@ export function DashboardShell() {
       <div className="flex min-h-screen bg-slate-50">
         <Sidebar>
           <SidebarHeader>
-            <Link
-              href="/"
-              className="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-950"
-            >
-              <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-700 text-sm font-bold text-white">
-                C
-              </span>
-              <span>cliqero</span>
-            </Link>
+            <BrandLink className="text-lg tracking-tight text-slate-950" />
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
@@ -179,7 +174,7 @@ export function DashboardShell() {
           </SidebarContent>
           <SidebarFooter>
             <SidebarMenuButton asChild>
-              <Link href="/">
+              <Link href="/catalogue">
                 <ArrowLeft className="mr-1 inline h-4 w-4" aria-hidden="true" />
                 Browse catalogue
               </Link>
@@ -196,9 +191,9 @@ export function DashboardShell() {
               </div>
               <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-900">
-                  {(profile?.handle ?? session.data.user.name ?? "C").slice(0, 1).toUpperCase()}
+                  {(profile?.username ?? providerDisplayName).slice(0, 1).toUpperCase()}
                 </span>
-                <span>{profile?.handle ?? session.data.user.name}</span>
+                <span>{profile?.username ?? providerDisplayName}</span>
               </div>
             </header>
             {error && <Toast>{error}</Toast>}
@@ -210,7 +205,7 @@ export function DashboardShell() {
   );
 }
 
-function DashboardOverview({ profile }: { profile: { handle: string; email: string } | null }) {
+function DashboardOverview({ profile }: { profile: { username: string; email: string } | null }) {
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [purchases, setPurchases] = useState<PurchasePage | null>(null);
   const [earnings, setEarnings] = useState<EarningsSummary | null>(null);
@@ -278,12 +273,12 @@ function DashboardOverview({ profile }: { profile: { handle: string; email: stri
       </div>
       <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="eyebrow">Cliqero dashboard</p>
-          <h2>Keep exploring, {profile?.handle ?? "there"}.</h2>
+          <p className="eyebrow">{siteConfig.name} dashboard</p>
+          <h2>Keep exploring, {profile?.username ?? "there"}.</h2>
           <p>Your wallet and purchases are ready when you are.</p>
         </div>
         <Button asChild>
-          <Link href="/">Explore catalogue</Link>
+          <Link href="/catalogue">Explore catalogue</Link>
         </Button>
       </Card>
     </>

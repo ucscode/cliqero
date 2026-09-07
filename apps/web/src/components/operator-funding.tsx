@@ -108,7 +108,7 @@ export function OperatorFundingList() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Funding ID, provider reference, handle, email"
+              placeholder="Funding ID, provider reference, username, email"
             />
           </label>
           <label>
@@ -181,7 +181,7 @@ function FundingRow({ funding }: { funding: OperatorFunding }) {
     <Card className="operator-funding-row">
       <div className="operator-funding-row-main">
         <div className="operator-funding-identity">
-          <strong>@{funding.account.handle}</strong>
+          <strong>@{funding.account.username}</strong>
           <span>{funding.account.email}</span>
           <Link href={`/operator/users/${funding.account.id}`}>View account</Link>
         </div>
@@ -280,7 +280,7 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
               <dt>Account</dt>
               <dd>
                 <Link href={`/operator/users/${funding.account.id}`}>
-                  @{funding.account.handle}
+                  @{funding.account.username}
                 </Link>
               </dd>
             </div>

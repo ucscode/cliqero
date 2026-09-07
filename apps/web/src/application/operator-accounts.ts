@@ -27,7 +27,7 @@ function decodeCursor(value: string | undefined): Cursor | null {
 
 export type OperatorAccountSummary = {
   id: string;
-  handle: string;
+  username: string;
   displayName: string | null;
   email: string;
   country: string | null;
@@ -37,7 +37,7 @@ export type OperatorAccountSummary = {
 };
 
 export type OperatorAccountDetail = OperatorAccountSummary & {
-  parent: { id: string; handle: string; displayName: string | null } | null;
+  parent: { id: string; username: string; displayName: string | null } | null;
   purchaseCount: number;
   latestParentReassignment: {
     actorId: string | null;
@@ -56,11 +56,11 @@ export class OperatorAccountService {
     const search = rawSearch ? rawSearch.replace(/[\\%_]/g, "\\$&") : null;
     const rows = (
       await this.sql.query<any>(
-        `select a.uuid id,a.email,a.handle,a.display_name,a.metadata->>'country' country,a.created_at,
+        `select a.uuid id,a.email,a.username,a.display_name,a.metadata->>'country' country,a.created_at,
           coalesce((select array_agg(ac.capability order by ac.capability) from identity_capability.account_capabilities ac where ac.account_id=a.id), '{}') roles,
           (select count(*)::int from referral_capability.account_referrals r where r.parent_account_id=a.id) direct_referral_count
          from identity_capability.accounts a
-         where ($1::text is null or a.handle ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1)
+         where ($1::text is null or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1)
            and ($2::timestamptz is null or (a.created_at,a.id)<($2::timestamptz,(select id from identity_capability.accounts where uuid=$3)))
          order by a.created_at desc,a.id desc limit $4`,
         [search, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
@@ -79,10 +79,10 @@ export class OperatorAccountService {
   async get(accountId: string): Promise<OperatorAccountDetail> {
     const row = (
       await this.sql.query<any>(
-        `select a.uuid id,a.email,a.handle,a.display_name,a.metadata->>'country' country,a.created_at,
+        `select a.uuid id,a.email,a.username,a.display_name,a.metadata->>'country' country,a.created_at,
           coalesce((select array_agg(ac.capability order by ac.capability) from identity_capability.account_capabilities ac where ac.account_id=a.id), '{}') roles,
           (select count(*)::int from referral_capability.account_referrals r where r.parent_account_id=a.id) direct_referral_count,
-          p.uuid parent_id,p.handle parent_handle,p.display_name parent_display_name,
+          p.uuid parent_id,p.username parent_username,p.display_name parent_display_name,
           (select count(*)::int from purchase_capability.purchases purchase where purchase.buyer_id=a.id) purchase_count
          from identity_capability.accounts a
          left join referral_capability.account_referrals ar on ar.child_account_id=a.id
@@ -107,7 +107,7 @@ export class OperatorAccountService {
       parent: row.parent_id
         ? {
             id: row.parent_id,
-            handle: row.parent_handle,
+            username: row.parent_username,
             displayName: row.parent_display_name ?? null,
           }
         : null,
@@ -126,7 +126,7 @@ export class OperatorAccountService {
   private summary(row: any): OperatorAccountSummary {
     return {
       id: row.id,
-      handle: row.handle,
+      username: row.username,
       displayName: row.display_name ?? null,
       email: row.email,
       country: row.country ?? null,

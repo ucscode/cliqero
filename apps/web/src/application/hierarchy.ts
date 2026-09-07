@@ -16,7 +16,7 @@ export interface VisualizationConfig {
 }
 export interface HierarchyNode {
   id: string;
-  handle: string;
+  username: string;
   displayName: string | null;
   depth: number;
   directChildCount: number;
@@ -26,7 +26,7 @@ export interface HierarchyNode {
 }
 export interface HierarchyParent {
   id: string;
-  handle: string;
+  username: string;
   displayName: string | null;
   canNavigate: boolean;
 }
@@ -92,7 +92,7 @@ export class HierarchyService {
       from tree join lateral (select child_account_id,parent_account_id from referral_capability.account_referrals where parent_account_id=tree.id order by child_account_id limit $2) r on true
       where tree.depth < $3 and not r.child_account_id=any(tree.path)
     )
-    select a.uuid id,parent.uuid parent_id,tree.depth,a.handle,a.display_name,
+    select a.uuid id,parent.uuid parent_id,tree.depth,a.username,a.display_name,
       (select count(*)::int from referral_capability.account_referrals x where x.parent_account_id=tree.id) direct_child_count,
       exists(select 1 from referral_capability.account_referrals x where x.parent_account_id=tree.id) has_children,
       (select count(*) from referral_capability.account_referrals x where x.parent_account_id=tree.id) > $2 has_more_children,
@@ -101,20 +101,20 @@ export class HierarchyService {
       [root, this.config.childLimit, this.config.depth],
     );
     const parentRow = await this.sql.query<any>(
-      `select a.uuid id,a.handle,a.display_name from referral_capability.account_referrals r join identity_capability.accounts a on a.id=r.parent_account_id where r.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      `select a.uuid id,a.username,a.display_name from referral_capability.account_referrals r join identity_capability.accounts a on a.id=r.parent_account_id where r.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
       [root],
     );
     const parent = parentRow.rows[0]
       ? {
           id: parentRow.rows[0].id,
-          handle: parentRow.rows[0].handle,
+          username: parentRow.rows[0].username,
           displayName: parentRow.rows[0].display_name ?? null,
           canNavigate: admin || (await this.isDescendantOrSelf(requester, parentRow.rows[0].id)),
         }
       : null;
     const nodes = rows.rows.map((row) => ({
       id: row.id,
-      handle: row.handle,
+      username: row.username,
       displayName: row.display_name ?? null,
       depth: Number(row.depth),
       directChildCount: Number(row.direct_child_count),
@@ -141,7 +141,7 @@ export class HierarchyService {
   ): Promise<HierarchyChildren> {
     await this.assertRoot(requester, parentId, admin);
     const rows = await this.sql.query<any>(
-      `select a.uuid id,a.handle,a.display_name,1::int depth,
+      `select a.uuid id,a.username,a.display_name,1::int depth,
       (select count(*)::int from referral_capability.account_referrals x where x.parent_account_id=a.id) direct_child_count,
       exists(select 1 from referral_capability.account_referrals x where x.parent_account_id=a.id) has_children,
       (select count(*) from referral_capability.account_referrals x where x.parent_account_id=a.id) > $3 has_more_children,
@@ -157,7 +157,7 @@ export class HierarchyService {
       parentId,
       items: visible.map((row) => ({
         id: row.id,
-        handle: row.handle,
+        username: row.username,
         displayName: row.display_name ?? null,
         depth: 1,
         directChildCount: Number(row.direct_child_count),
@@ -176,12 +176,12 @@ export class HierarchyService {
       scope = `and a.id in (with recursive tree(id,path) as (select (select id from identity_capability.accounts where uuid=$3),array[(select id from identity_capability.accounts where uuid=$3)] union all select ar.child_account_id,tree.path||ar.child_account_id from tree join referral_capability.account_referrals ar on ar.parent_account_id=tree.id where not ar.child_account_id=any(tree.path)) select id from tree)`;
     }
     const rows = await this.sql.query<any>(
-      `select a.uuid id,a.handle,a.display_name from identity_capability.accounts a where (a.uuid::text=$1 or a.handle ilike '%'||$1||'%' or a.email ilike '%'||$1||'%') ${scope} order by a.handle limit $2`,
+      `select a.uuid id,a.username,a.display_name from identity_capability.accounts a where (a.uuid::text=$1 or a.username ilike '%'||$1||'%' or a.email ilike '%'||$1||'%') ${scope} order by a.username limit $2`,
       params,
     );
     return rows.rows.map((r) => ({
       id: r.id,
-      handle: r.handle,
+      username: r.username,
       displayName: r.display_name ?? null,
     }));
   }

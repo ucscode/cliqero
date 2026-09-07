@@ -8,7 +8,7 @@ suite("treasury PostgreSQL idempotency", () => {
   beforeEach(async () => {
     await app.database.query(`truncate table treasury_capability.entries`);
     await app.database.query(
-      `insert into identity_capability.accounts(uuid,email,handle)
+      `insert into identity_capability.accounts(uuid,email,username)
        values
          ('00000000-0000-0000-0000-0000000000aa','treasury-actor-a@example.com','treasury-actor-a'),
          ('00000000-0000-0000-0000-0000000000bb','treasury-actor-b@example.com','treasury-actor-b')

@@ -46,7 +46,6 @@ describe("PurchaseCompletionProcessor", () => {
           price: { minorAmount: "100", currency: "USD" },
           canonicalPrice: { minorAmount: "100", currency: "USD" },
           referralAttributionId: null,
-          referralLinkId: null,
           referralReferrerAccountId: null,
         },
         "paystack:event-1",

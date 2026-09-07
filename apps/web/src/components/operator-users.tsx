@@ -80,7 +80,7 @@ export function OperatorUsersList() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Handle, email, or account ID"
+              placeholder="Username, email, or account ID"
             />
           </label>
           <Button type="submit" variant="secondary" disabled={loading}>
@@ -114,7 +114,7 @@ export function OperatorUsersList() {
         <Card>
           <EmptyState
             title="No accounts found"
-            description="Try a different handle, email, or account ID."
+            description="Try a different username, email, or account ID."
           />
         </Card>
       )}
@@ -127,13 +127,13 @@ function AccountRow({ account }: { account: OperatorAccountSummary }) {
     <Card className="operator-user-row">
       <div className="identity-row">
         <span className="identity-avatar">
-          {(account.displayName || account.handle).slice(0, 1).toUpperCase()}
+          {(account.displayName || account.username).slice(0, 1).toUpperCase()}
         </span>
         <div className="operator-user-identity">
           <Link href={`/operator/users/${account.id}`}>
-            <strong>{account.displayName || account.handle}</strong>
+            <strong>{account.displayName || account.username}</strong>
           </Link>
-          <span>@{account.handle}</span>
+          <span>@{account.username}</span>
           <small>{account.email}</small>
         </div>
       </div>
@@ -201,7 +201,7 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
 
   async function reassign() {
     if (!selectedParent || !account) return;
-    if (!window.confirm(`Move @${account.handle} under @${selectedParent.handle}?`)) return;
+    if (!window.confirm(`Move @${account.username} under @${selectedParent.username}?`)) return;
     setSaving(true);
     setError(null);
     try {
@@ -240,9 +240,9 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
       <div className="operator-heading">
         <div>
           <p className="eyebrow">Account inspection</p>
-          <h2>{account.displayName || account.handle}</h2>
+          <h2>{account.displayName || account.username}</h2>
           <p className="panel-intro">
-            @{account.handle} · {account.email}
+            @{account.username} · {account.email}
           </p>
         </div>
         <Badge
@@ -297,7 +297,7 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
               <dd>
                 {account.parent ? (
                   <Link href={`/operator/users/${account.parent.id}`}>
-                    @{account.parent.handle}
+                    @{account.parent.username}
                   </Link>
                 ) : (
                   "No parent"
@@ -330,7 +330,7 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
         </p>
         <div className="reassignment-current">
           <span>Current parent</span>
-          <strong>{account.parent ? `@${account.parent.handle}` : "None"}</strong>
+          <strong>{account.parent ? `@${account.parent.username}` : "None"}</strong>
         </div>
         <form
           className="reassignment-search"
@@ -344,7 +344,7 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
             <Input
               value={parentSearch}
               onChange={(event) => setParentSearch(event.target.value)}
-              placeholder="Handle, email, or account ID"
+              placeholder="Username, email, or account ID"
             />
           </label>
           <Button type="submit" variant="secondary">
@@ -360,7 +360,7 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
                   className={selectedParent?.id === result.id ? "selected" : ""}
                   onClick={() => setSelectedParent(result)}
                 >
-                  <strong>@{result.handle}</strong>
+                  <strong>@{result.username}</strong>
                   <span>{result.displayName || result.email}</span>
                 </button>
               </li>
@@ -370,7 +370,7 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
         {selectedParent && (
           <div className="reassignment-confirm">
             <span>
-              New parent: <strong>@{selectedParent.handle}</strong>
+              New parent: <strong>@{selectedParent.username}</strong>
             </span>
             <Button type="button" onClick={() => void reassign()} disabled={saving}>
               {saving ? "Saving…" : "Confirm reassignment"}

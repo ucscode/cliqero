@@ -16,7 +16,7 @@ suite("purchase financial distribution", () => {
     await app.database
       .query(`truncate table treasury_capability.entries,ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.reversals,ledger_capability.purchase_distributions,
     payment_capability.reconciliation_attempts,payment_capability.provider_events,referral_capability.listing_attributions,
-    referral_capability.listing_referral_links,referral_capability.account_referrals,access_capability.access_grants,
+    referral_capability.account_referrals,access_capability.access_grants,
     entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,
     identity_capability.account_capabilities,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`);
     await app.database.query(
@@ -30,7 +30,7 @@ suite("purchase financial distribution", () => {
   async function account(label: string) {
     return app.authentication.register({
       email: `${label}@example.com`,
-      handle: label,
+      username: label,
       password: "correct-horse-battery",
     });
   }
@@ -119,8 +119,7 @@ suite("purchase financial distribution", () => {
       currency: "USD",
       destination: "https://example.test",
     });
-    const link = await app.referralAttribution.createLink(promoter.id, listing.id);
-    const visit = await app.referralAttribution.visit(link.code);
+    const visit = await app.referralAttribution.visit(promoter.id, listing.id);
     expect(visit).not.toBeNull();
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,

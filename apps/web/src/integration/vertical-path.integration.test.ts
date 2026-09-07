@@ -19,12 +19,12 @@ suite("persisted commerce and access vertical path", () => {
   async function setup() {
     const seller = await app.authentication.register({
       email: "seller@example.com",
-      handle: "seller",
+      username: "seller",
       password: "correct-horse-battery",
     });
     const buyer = await app.authentication.register({
       email: "buyer@example.com",
-      handle: "buyer",
+      username: "buyer",
       password: "correct-horse-staple",
     });
     const listing = await app.listingService.createPublished(seller, {

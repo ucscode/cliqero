@@ -548,7 +548,7 @@ CREATE TABLE identity_capability.account_capabilities (
 CREATE TABLE identity_capability.accounts (
     uuid uuid DEFAULT gen_random_uuid() NOT NULL,
     email text NOT NULL,
-    handle text NOT NULL,
+    username text NOT NULL,
     display_name text,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -556,7 +556,7 @@ CREATE TABLE identity_capability.accounts (
     password_salt bytea,
     password_hash bytea,
     id bigint NOT NULL,
-    CONSTRAINT accounts_handle_format CHECK ((handle ~ '^[a-z0-9][a-z0-9_-]{2,31}$'::text))
+    CONSTRAINT accounts_username_format CHECK ((username ~ '^[a-z0-9][a-z0-9_-]{2,31}$'::text))
 );
 
 
@@ -1471,7 +1471,6 @@ CREATE TABLE purchase_capability.purchases (
     listing_id bigint NOT NULL,
     payment_id bigint,
     referral_attribution_id bigint,
-    referral_link_id bigint,
     referral_referrer_account_id bigint,
     checkout_id bigint,
     CONSTRAINT purchases_canonical_usd CHECK ((canonical_currency_snapshot = 'USD'::text)),
@@ -1543,7 +1542,6 @@ CREATE TABLE referral_capability.listing_attributions (
     first_seen_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     id bigint NOT NULL,
-    referral_link_id bigint NOT NULL,
     listing_id bigint NOT NULL,
     referrer_account_id bigint NOT NULL,
     CONSTRAINT listing_attributions_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'revoked'::text, 'expired'::text])))
@@ -1563,36 +1561,6 @@ COMMENT ON TABLE referral_capability.listing_attributions IS 'Trusted server-res
 
 ALTER TABLE referral_capability.listing_attributions ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     SEQUENCE NAME referral_capability.listing_attributions_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
--- Name: listing_referral_links; Type: TABLE; Schema: referral_capability; Owner: -
---
-
-CREATE TABLE referral_capability.listing_referral_links (
-    uuid uuid NOT NULL,
-    code text NOT NULL,
-    state text DEFAULT 'active'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    id bigint NOT NULL,
-    listing_id bigint NOT NULL,
-    referrer_account_id bigint NOT NULL,
-    CONSTRAINT listing_referral_links_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'revoked'::text])))
-);
-
-
---
--- Name: listing_referral_links_id_seq; Type: SEQUENCE; Schema: referral_capability; Owner: -
---
-
-ALTER TABLE referral_capability.listing_referral_links ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME referral_capability.listing_referral_links_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1991,11 +1959,11 @@ ALTER TABLE ONLY identity_capability.accounts
 
 
 --
--- Name: accounts accounts_handle_unique; Type: CONSTRAINT; Schema: identity_capability; Owner: -
+-- Name: accounts accounts_username_unique; Type: CONSTRAINT; Schema: identity_capability; Owner: -
 --
 
 ALTER TABLE ONLY identity_capability.accounts
-    ADD CONSTRAINT accounts_handle_unique UNIQUE (handle);
+    ADD CONSTRAINT accounts_username_unique UNIQUE (username);
 
 
 --
@@ -2607,38 +2575,6 @@ ALTER TABLE ONLY referral_capability.listing_attributions
 
 
 --
--- Name: listing_referral_links listing_referral_links_code_key; Type: CONSTRAINT; Schema: referral_capability; Owner: -
---
-
-ALTER TABLE ONLY referral_capability.listing_referral_links
-    ADD CONSTRAINT listing_referral_links_code_key UNIQUE (code);
-
-
---
--- Name: listing_referral_links listing_referral_links_identity_unique; Type: CONSTRAINT; Schema: referral_capability; Owner: -
---
-
-ALTER TABLE ONLY referral_capability.listing_referral_links
-    ADD CONSTRAINT listing_referral_links_identity_unique UNIQUE (listing_id, referrer_account_id);
-
-
---
--- Name: listing_referral_links listing_referral_links_pkey; Type: CONSTRAINT; Schema: referral_capability; Owner: -
---
-
-ALTER TABLE ONLY referral_capability.listing_referral_links
-    ADD CONSTRAINT listing_referral_links_pkey PRIMARY KEY (id);
-
-
---
--- Name: listing_referral_links listing_referral_links_uuid_unique; Type: CONSTRAINT; Schema: referral_capability; Owner: -
---
-
-ALTER TABLE ONLY referral_capability.listing_referral_links
-    ADD CONSTRAINT listing_referral_links_uuid_unique UNIQUE (uuid);
-
-
---
 -- Name: entries entries_idempotency_key_key; Type: CONSTRAINT; Schema: treasury_capability; Owner: -
 --
 
@@ -3153,20 +3089,6 @@ CREATE INDEX account_referrals_parent_child_idx ON referral_capability.account_r
 --
 
 CREATE INDEX listing_attributions_active_expiry_idx ON referral_capability.listing_attributions USING btree (expires_at) WHERE (state = 'active'::text);
-
-
---
--- Name: listing_attributions_link_idx; Type: INDEX; Schema: referral_capability; Owner: -
---
-
-CREATE INDEX listing_attributions_link_idx ON referral_capability.listing_attributions USING btree (referral_link_id, first_seen_at DESC);
-
-
---
--- Name: referral_links_referrer_idx; Type: INDEX; Schema: referral_capability; Owner: -
---
-
-CREATE INDEX referral_links_referrer_idx ON referral_capability.listing_referral_links USING btree (referrer_account_id, created_at DESC);
 
 
 --
@@ -3700,14 +3622,6 @@ ALTER TABLE ONLY purchase_capability.purchases
 
 
 --
--- Name: purchases purchases_referral_link_fk; Type: FK CONSTRAINT; Schema: purchase_capability; Owner: -
---
-
-ALTER TABLE ONLY purchase_capability.purchases
-    ADD CONSTRAINT purchases_referral_link_fk FOREIGN KEY (referral_link_id) REFERENCES referral_capability.listing_referral_links(id);
-
-
---
 -- Name: purchases purchases_referral_referrer_fk; Type: FK CONSTRAINT; Schema: purchase_capability; Owner: -
 --
 
@@ -3740,14 +3654,6 @@ ALTER TABLE ONLY referral_capability.account_referrals
 
 
 --
--- Name: listing_attributions listing_attributions_link_fk; Type: FK CONSTRAINT; Schema: referral_capability; Owner: -
---
-
-ALTER TABLE ONLY referral_capability.listing_attributions
-    ADD CONSTRAINT listing_attributions_link_fk FOREIGN KEY (referral_link_id) REFERENCES referral_capability.listing_referral_links(id);
-
-
---
 -- Name: listing_attributions listing_attributions_listing_fk; Type: FK CONSTRAINT; Schema: referral_capability; Owner: -
 --
 
@@ -3761,22 +3667,6 @@ ALTER TABLE ONLY referral_capability.listing_attributions
 
 ALTER TABLE ONLY referral_capability.listing_attributions
     ADD CONSTRAINT listing_attributions_referrer_fk FOREIGN KEY (referrer_account_id) REFERENCES identity_capability.accounts(id);
-
-
---
--- Name: listing_referral_links listing_referral_links_listing_fk; Type: FK CONSTRAINT; Schema: referral_capability; Owner: -
---
-
-ALTER TABLE ONLY referral_capability.listing_referral_links
-    ADD CONSTRAINT listing_referral_links_listing_fk FOREIGN KEY (listing_id) REFERENCES listing_capability.listings(id);
-
-
---
--- Name: listing_referral_links listing_referral_links_referrer_fk; Type: FK CONSTRAINT; Schema: referral_capability; Owner: -
---
-
-ALTER TABLE ONLY referral_capability.listing_referral_links
-    ADD CONSTRAINT listing_referral_links_referrer_fk FOREIGN KEY (referrer_account_id) REFERENCES identity_capability.accounts(id);
 
 
 --

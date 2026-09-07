@@ -22,12 +22,12 @@ export async function requireOperatorPage(pathname: string) {
   return {
     role,
     accountId: principal.account.id,
-    handle: principal.account.handle,
+    username: principal.account.username,
     email: principal.account.email,
   } satisfies {
     role: OperatorRole;
     accountId: string;
-    handle: string;
+    username: string;
     email: string;
   };
 }

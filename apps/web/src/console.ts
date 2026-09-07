@@ -6,7 +6,7 @@ import { AuthenticationService } from "@/modules/identity/authentication";
 
 const capabilities = ["operator", "catalogue_manager", "blog_manager"] as const;
 type Capability = (typeof capabilities)[number];
-type AccountRow = { id: string; email: string; handle: string; country: string | null };
+type AccountRow = { id: string; email: string; username: string; country: string | null };
 type IdentityContext = { database: PostgresDatabase; authentication: AuthenticationService };
 
 function openContext(): IdentityContext {
@@ -83,10 +83,10 @@ async function findAccount(
 ): Promise<AccountRow & { authUserId: string }> {
   const row = (
     await context.database.query<AccountRow & { auth_user_id: string }>(
-      `select a.uuid as id,a.email,a.handle,a.metadata->>'country' as country,l.auth_user_id
+      `select a.uuid as id,a.email,a.username,a.metadata->>'country' as country,l.auth_user_id
        from identity_capability.accounts a
        join identity_capability.auth_account_links l on l.account_id=a.id
-       where a.uuid::text=$1 or lower(a.email)=lower($1) or lower(a.handle)=lower($1)
+       where a.uuid::text=$1 or lower(a.email)=lower($1) or lower(a.username)=lower($1)
        limit 1`,
       [identifier.trim()],
     )
@@ -101,7 +101,7 @@ function printAccount(account: AccountRow & { capabilities?: string[] }) {
       {
         id: account.id,
         email: account.email,
-        username: account.handle,
+        username: account.username,
         country: account.country,
         capabilities: account.capabilities ?? [],
       },
@@ -130,11 +130,11 @@ program
       try {
         const account = await context.authentication.register({
           email: options.email,
-          handle: options.username,
+          username: options.username,
           password,
           country: options.country,
         });
-        console.log(`Created account ${account.email} (${account.handle})`);
+        console.log(`Created account ${account.email} (${account.username})`);
       } finally {
         await closeContext(context);
       }
@@ -237,7 +237,7 @@ program
       const limit = Math.min(200, Math.max(1, Number.parseInt(options.limit, 10) || 50));
       const rows = (
         await context.database.query<AccountRow & { capabilities: string[] }>(
-          `select a.uuid as id,a.email,a.handle,a.metadata->>'country' as country,
+          `select a.uuid as id,a.email,a.username,a.metadata->>'country' as country,
              coalesce(array_agg(ac.capability) filter(where ac.capability is not null),'{}') capabilities
            from identity_capability.accounts a
            left join identity_capability.account_capabilities ac on ac.account_id=a.id

@@ -26,7 +26,7 @@ describe("operator withdrawal projection", () => {
             {
               id: "00000000-0000-4000-8000-000000000001",
               account_id: "00000000-0000-4000-8000-000000000002",
-              handle: "member",
+              username: "member",
               email: "member@example.com",
               amount_minor: "4000",
               currency: "USD",

@@ -19,7 +19,7 @@ The first release should be deliberately narrow, but every included capability m
 - buyer capability;
 - referrer/promoter capability;
 - account referral relationship where enabled;
-- account settings and public handle/profile management.
+- account settings and public username/profile management.
 
 ### Listings
 
@@ -53,7 +53,7 @@ The first release should be deliberately narrow, but every included capability m
 
 ### Referrals / promotion
 
-- attributed listing referral links;
+- deterministic attributed listing URLs;
 - preservation of valid attribution through checkout;
 - commission triggered by valid purchase, not clicks/views;
 - direct referral commission policy;

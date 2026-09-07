@@ -15,7 +15,7 @@ import * as listingAccess from "@/api/compat/listings/[id]/access/route";
 import * as listingMedia from "@/api/compat/listings/[id]/media/route";
 import * as listingMediaById from "@/api/compat/listings/[id]/media/[mediaId]/route";
 import * as listingPublish from "@/api/compat/listings/[id]/publish/route";
-import * as listingReferralLink from "@/api/compat/listings/[id]/referral-link/route";
+import * as listingReferralUrl from "@/api/compat/listings/[id]/referral-url/route";
 import * as listingRestore from "@/api/compat/listings/[id]/restore/route";
 import * as listingExport from "@/api/compat/listings/export/route";
 import * as listingImport from "@/api/compat/listings/import/route";
@@ -51,8 +51,6 @@ import * as operatorWithdrawalPayoutReconcile from "@/api/compat/operator/withdr
 import * as operatorWithdrawalReject from "@/api/compat/operator/withdrawals/[id]/reject/route";
 import * as purchases from "@/api/compat/purchases/route";
 import * as purchaseById from "@/api/compat/purchases/[id]/route";
-import * as referralLinks from "@/api/compat/referral-links/route";
-import * as referralLinkById from "@/api/compat/referral-links/[id]/route";
 import * as referralDirect from "@/api/compat/referrals/direct/route";
 import * as referralDownline from "@/api/compat/referrals/downline/route";
 import * as referralParent from "@/api/compat/referrals/parent/route";
@@ -100,7 +98,7 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/listings/:id/media", module: listingMedia },
   { pattern: "/api/listings/:id/access", module: listingAccess },
   { pattern: "/api/listings/:id/publish", module: listingPublish },
-  { pattern: "/api/listings/:id/referral-link", module: listingReferralLink },
+  { pattern: "/api/listings/:id/referral-url", module: listingReferralUrl },
   { pattern: "/api/listings/:id/restore", module: listingRestore },
   { pattern: "/api/listings/export", module: listingExport },
   { pattern: "/api/listings/import", module: listingImport },
@@ -147,8 +145,6 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/operator/withdrawals", module: operatorWithdrawals },
   { pattern: "/api/purchases/:id", module: purchaseById },
   { pattern: "/api/purchases", module: purchases },
-  { pattern: "/api/referral-links/:id", module: referralLinkById },
-  { pattern: "/api/referral-links", module: referralLinks },
   { pattern: "/api/referrals/direct", module: referralDirect },
   { pattern: "/api/referrals/downline", module: referralDownline },
   { pattern: "/api/referrals/parent", module: referralParent },
@@ -189,8 +185,8 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern.startsWith("/api/operator/listings"))
     return { mode: "account", scope: "catalogue:manage" };
   if (pattern.startsWith("/api/operator/")) return { mode: "account", scope: "operations:manage" };
-  if (pattern === "/api/listings/:id/referral-link")
-    return { mode: "account", scope: "referrals:manage" };
+  if (pattern === "/api/listings/:id/referral-url")
+    return { mode: "session_only", apiKey: "reject" };
   if (pattern === "/api/listings" || pattern === "/api/listings/:id")
     return { mode: "account", scope: "catalogue:manage" };
   if (pattern.startsWith("/api/listings/")) return { mode: "account", scope: "catalogue:manage" };
@@ -207,8 +203,6 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
       mode: "account",
       scope: pattern.endsWith("/parent") ? "referrals:manage" : "referrals:read",
     };
-  if (pattern.startsWith("/api/referral-links"))
-    return { mode: "account", scope: method === "GET" ? "referrals:read" : "referrals:manage" };
   if (pattern.startsWith("/api/earnings")) return { mode: "account", scope: "earnings:read" };
   if (pattern === "/api/withdrawals/policy") return { mode: "account", scope: "withdrawals:read" };
   if (pattern === "/api/withdrawals")

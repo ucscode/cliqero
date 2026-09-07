@@ -30,7 +30,7 @@ describe("operator distribution and earnings read models", () => {
               listing_id: ids.listing,
               listing_title_snapshot: "Wallet listing",
               buyer_id: ids.buyer,
-              buyer_handle: "buyer",
+              buyer_username: "buyer",
               buyer_email: "buyer@example.com",
               gross_minor: "1001",
               currency: "USD",
@@ -67,7 +67,7 @@ describe("operator distribution and earnings read models", () => {
               listing_id: ids.listing,
               listing_title_snapshot: "Historical listing",
               buyer_id: ids.buyer,
-              buyer_handle: "buyer",
+              buyer_username: "buyer",
               buyer_email: "buyer@example.com",
               gross_minor: "1001",
               currency: "USD",
@@ -79,9 +79,8 @@ describe("operator distribution and earnings read models", () => {
               purchase_created_at: "2025-12-31T00:00:00.000Z",
               policy_snapshot: { version: "yaml", levels: [{ level: 1, percentage: 70 }] },
               referral_attribution_id: null,
-              referral_link_id: "00000000-0000-4000-8000-000000000016",
               referral_referrer_account_id: ids.beneficiary,
-              referrer_handle: "promoter",
+              referrer_username: "promoter",
               referrer_email: "promoter@example.com",
               attribution_id: null,
             },
@@ -91,7 +90,7 @@ describe("operator distribution and earnings read models", () => {
             {
               id: ids.entry,
               account_id: ids.beneficiary,
-              handle: "promoter",
+              username: "promoter",
               email: "promoter@example.com",
               referral_level: 1,
               amount_minor: "700",
@@ -111,7 +110,10 @@ describe("operator distribution and earnings read models", () => {
     });
     await expect(service.get(ids.distribution)).resolves.toMatchObject({
       policySnapshot: { version: "yaml" },
-      attribution: { linkId: "00000000-0000-4000-8000-000000000016" },
+      attribution: {
+        id: null,
+        referrer: { id: ids.beneficiary, username: "promoter", email: "promoter@example.com" },
+      },
       allocations: [expect.objectContaining({ amountMinor: "700", balanceState: "pending" })],
     });
   });
@@ -124,7 +126,7 @@ describe("operator distribution and earnings read models", () => {
             {
               id: ids.entry,
               account_id: ids.beneficiary,
-              handle: "promoter",
+              username: "promoter",
               email: "promoter@example.com",
               purchase_id: ids.purchase,
               distribution_id: ids.distribution,

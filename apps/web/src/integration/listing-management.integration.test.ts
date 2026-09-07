@@ -26,13 +26,13 @@ suite("listing management and media", () => {
   async function accounts(suffix = "") {
     const owner = await app.authentication.register({
         email: `owner${suffix}.listing@example.com`,
-        handle: `owner${suffix}listing`,
+        username: `owner${suffix}listing`,
         password: "correct-horse-battery",
         country: "NG",
       }),
       other = await app.authentication.register({
         email: `other${suffix}.listing@example.com`,
-        handle: `other${suffix}listing`,
+        username: `other${suffix}listing`,
         password: "correct-horse-battery",
         country: "NG",
       });
@@ -299,19 +299,19 @@ suite("listing management and media", () => {
   it("uses catalogue capability rather than legacy seller_id for management authority", async () => {
     const managerA = await app.authentication.register({
         email: "manager-a.catalogue@example.com",
-        handle: "manageracatalogue",
+        username: "manageracatalogue",
         password: "correct-horse-battery",
         country: "NG",
       }),
       managerB = await app.authentication.register({
         email: "manager-b.catalogue@example.com",
-        handle: "managerbcatalogue",
+        username: "managerbcatalogue",
         password: "correct-horse-battery",
         country: "NG",
       }),
       ordinary = await app.authentication.register({
         email: "ordinary.catalogue@example.com",
-        handle: "ordinarycatalogue",
+        username: "ordinarycatalogue",
         password: "correct-horse-battery",
         country: "NG",
       });
@@ -567,12 +567,10 @@ suite("listing management and media", () => {
     });
     expect(forbidden.failed).toBe(1);
     expect(
-      (await app.profiles.update(owner.id, { handle: "ownerupdated", country: null })).country,
+      (await app.profiles.update(owner.id, { username: "ownerupdated", country: null })).country,
     ).toBeNull();
     const integration = await app.integrations.create(owner.id, "Delivery", listing.id);
     await app.integrations.rotate(owner.id, integration.id);
     await app.integrations.revoke(owner.id, integration.id);
-    const link = await app.referralAttribution.createLink(owner.id, listing.id);
-    await app.referralAttribution.revokeLink(owner.id, link.id);
   });
 });

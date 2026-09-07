@@ -94,7 +94,7 @@ export function OperatorEarningsList() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Handle, email, account, purchase, entry"
+              placeholder="Username, email, account, purchase, entry"
             />
           </label>
           <label>
@@ -152,7 +152,7 @@ function EarningsRow({ entry }: { entry: OperatorEarningsEntry }) {
       <div className="operator-earnings-row-main">
         <div>
           <strong>
-            <Link href={`/operator/users/${entry.account.id}`}>@{entry.account.handle}</Link>
+            <Link href={`/operator/users/${entry.account.id}`}>@{entry.account.username}</Link>
           </strong>
           <span>
             {label(entry.entryType)} · {formatDate(entry.createdAt)}
