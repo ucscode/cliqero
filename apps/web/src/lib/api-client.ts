@@ -203,7 +203,7 @@ export type OperatorAccountSummary = {
   id: string;
   username: string;
   displayName: string | null;
-  email: string;
+  email: string | null;
   country: string | null;
   roles: string[];
   createdAt: string;
@@ -242,7 +242,7 @@ export type OperatorFundingWalletCredit = {
 
 export type OperatorFunding = {
   id: string;
-  account: { id: string; username: string; email: string };
+  account: { id: string; username: string; email: string | null };
   provider: string;
   providerReference: string;
   canonicalAmountMinor: string;
@@ -299,7 +299,7 @@ export type OperatorDistribution = {
   purchaseId: string;
   listingId: string;
   listingTitle: string;
-  buyer: { id: string; username: string; email: string };
+  buyer: { id: string; username: string; email: string | null };
   grossAmountMinor: string;
   currency: string;
   referralAllocatedMinor: string;
@@ -316,12 +316,12 @@ export type OperatorDistributionDetail = OperatorDistribution & {
   purchaseCreatedAt: string;
   attribution: {
     id: string | null;
-    referrer: { id: string; username: string; email: string } | null;
+    referrer: { id: string; username: string; email: string | null } | null;
   };
   policySnapshot: unknown;
   allocations: Array<{
     id: string;
-    account: { id: string; username: string; email: string };
+    account: { id: string; username: string; email: string | null };
     level: number | null;
     amountMinor: string;
     currency: string;
@@ -344,7 +344,7 @@ export type OperatorDistributionDetail = OperatorDistribution & {
 };
 export type OperatorEarningsEntry = {
   id: string;
-  account: { id: string; username: string; email: string };
+  account: { id: string; username: string; email: string | null };
   purchaseId: string | null;
   distributionId: string | null;
   entryType: string;
@@ -376,7 +376,7 @@ export type OperatorTreasuryEntry = {
   title: string;
   note: string | null;
   source: { kind: string; id: string } | null;
-  actor: { id: string; username: string; email: string } | null;
+  actor: { id: string; username: string; email: string | null } | null;
   createdAt: string;
 };
 
@@ -459,7 +459,7 @@ export type OperatorWithdrawalAttention =
   "review" | "payout" | "reconciliation" | "retry" | "retry_wait" | "none";
 export type OperatorWithdrawal = {
   id: string;
-  account: { id: string; username: string; email: string };
+  account: { id: string; username: string; email: string | null };
   amountMinor: string;
   currency: string;
   destination: { type: "bank" | "manual"; summary: string };

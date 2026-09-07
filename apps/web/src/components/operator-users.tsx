@@ -134,7 +134,7 @@ function AccountRow({ account }: { account: OperatorAccountSummary }) {
             <strong>{account.displayName || account.username}</strong>
           </Link>
           <span>@{account.username}</span>
-          <small>{account.email}</small>
+          <small>{account.email ?? "No authentication email"}</small>
         </div>
       </div>
       <div className="operator-user-meta">
@@ -242,7 +242,7 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
           <p className="eyebrow">Account inspection</p>
           <h2>{account.displayName || account.username}</h2>
           <p className="panel-intro">
-            @{account.username} · {account.email}
+            @{account.username} · {account.email ?? "No authentication email"}
           </p>
         </div>
         <Badge

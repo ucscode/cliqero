@@ -165,8 +165,8 @@ const records = [
 try {
   await pool.query("begin");
   await pool.query(
-    `insert into identity_capability.accounts(uuid,email,username,display_name) values($1,$2,$3,$4) on conflict (uuid) do nothing`,
-    [ownerId, "fixtures.catalogue@example.test", "fixture_catalogue", "Development Catalogue"],
+    `insert into identity_capability.accounts(uuid,username) values($1,$2) on conflict (uuid) do nothing`,
+    [ownerId, "fixture_catalogue"],
   );
   for (const [key, title, description, price] of records) {
     const state = key === "toolkit-16" ? "archived" : key === "toolkit-15" ? "draft" : "published";
@@ -195,18 +195,14 @@ try {
   }
   await pool.query("commit");
   const reviewers = [
-    ["00000000-0000-4000-8000-000000000011", "fixtures.reviewer.one@example.test", "reviewer_one"],
-    ["00000000-0000-4000-8000-000000000012", "fixtures.reviewer.two@example.test", "reviewer_two"],
-    [
-      "00000000-0000-4000-8000-000000000013",
-      "fixtures.reviewer.three@example.test",
-      "reviewer_three",
-    ],
+    ["00000000-0000-4000-8000-000000000011", "reviewer_one"],
+    ["00000000-0000-4000-8000-000000000012", "reviewer_two"],
+    ["00000000-0000-4000-8000-000000000013", "reviewer_three"],
   ] as const;
-  for (const [id, email, username] of reviewers)
+  for (const [id, username] of reviewers)
     await pool.query(
-      `insert into identity_capability.accounts(uuid,email,username,display_name) values($1,$2,$3,$3) on conflict(uuid) do update set username=excluded.username`,
-      [id, email, username],
+      `insert into identity_capability.accounts(uuid,username) values($1,$2) on conflict(uuid) do update set username=excluded.username`,
+      [id, username],
     );
   const reviewFixtures = [
     [
@@ -272,7 +268,7 @@ try {
     mediaFixtures.map(([key, filename]) => `catalogue-fixture:v2:${key}:${filename}`),
   );
   const container = getContainer();
-  const owner = new Account(ownerId, "fixtures.catalogue@example.test", "fixture_catalogue");
+  const owner = new Account(ownerId, "fixture_catalogue");
   for (const [key, filename, altText, color] of mediaFixtures) {
     const listing = (
       await pool.query<{ id: string }>(

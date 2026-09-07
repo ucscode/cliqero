@@ -203,8 +203,8 @@ suite("referral graph and trusted purchase attribution", () => {
     const ids = Array.from({ length: 41 }, () => newId());
     for (let i = 0; i < ids.length; i++)
       await app.database.query(
-        `insert into identity_capability.accounts(uuid,email,username) values($1,$2,$3)`,
-        [ids[i], `reassign${i}@example.com`, `reassign${i}`],
+        `insert into identity_capability.accounts(uuid,username) values($1,$2)`,
+        [ids[i], `reassign${i}`],
       );
     for (let i = 1; i < ids.length; i++)
       await app.referralGraphService.establish(ids[i], ids[i - 1]);
@@ -274,12 +274,12 @@ suite("referral graph and trusted purchase attribution", () => {
     const children = Array.from({ length: 600 }, () => newId());
     const grandchildren = Array.from({ length: 300 }, () => newId());
     await app.database.query(
-      `insert into identity_capability.accounts(uuid,email,username) values($1,'wide-root@example.com','wide_root')`,
+      `insert into identity_capability.accounts(uuid,username) values($1,'wide_root')`,
       [root],
     );
     await app.database.query(
-      `insert into identity_capability.accounts(uuid,email,username)
-      select id,'wide-'||ord||'@example.com','wide_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,
+      `insert into identity_capability.accounts(uuid,username)
+      select id,'wide_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,
       [children],
     );
     await app.database.query(
@@ -287,8 +287,8 @@ suite("referral graph and trusted purchase attribution", () => {
       [root, children],
     );
     await app.database.query(
-      `insert into identity_capability.accounts(uuid,email,username)
-      select id,'grand-'||ord||'@example.com','grand_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,
+      `insert into identity_capability.accounts(uuid,username)
+      select id,'grand_'||ord from unnest($1::uuid[]) with ordinality as item(id,ord)`,
       [grandchildren],
     );
     await app.database.query(
@@ -336,7 +336,7 @@ suite("referral graph and trusted purchase attribution", () => {
     const { buyer, referrer, listing } = await commerce();
     const organic = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: "organic",
@@ -347,7 +347,7 @@ suite("referral graph and trusted purchase attribution", () => {
     });
     const forged = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: "forged",
@@ -372,7 +372,7 @@ suite("referral graph and trusted purchase attribution", () => {
     expect(storedToken.toString("utf8")).not.toBe(visit!.source);
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: "attributed",
@@ -409,7 +409,7 @@ suite("referral graph and trusted purchase attribution", () => {
     const visit = await app.referralAttribution.visit(referrer.id, listing.id);
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: "commission",

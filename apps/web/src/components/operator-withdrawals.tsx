@@ -163,7 +163,9 @@ function WithdrawalRow({ item }: { item: OperatorWithdrawal }) {
     <Card className="operator-withdrawal-row">
       <div>
         <strong>@{item.account.username}</strong>
-        <span className="operator-withdrawal-email">{item.account.email}</span>
+        <span className="operator-withdrawal-email">
+          {item.account.email ?? "No authentication email"}
+        </span>
         <Link href={`/operator/users/${item.account.id}`}>View account</Link>
       </div>
       <div className="operator-withdrawal-amount">
@@ -255,7 +257,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
           <p>
             <strong>@{item.account.username}</strong>
             <br />
-            {item.account.email}
+            {item.account.email ?? "No authentication email"}
           </p>
           <Link href={`/operator/users/${item.account.id}`}>View account</Link>
         </Card>

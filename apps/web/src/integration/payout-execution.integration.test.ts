@@ -40,7 +40,7 @@ suite("provider-neutral payout execution", () => {
     });
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: newId(),

@@ -46,7 +46,7 @@ suite("purchase financial distribution", () => {
     });
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: newId(),
@@ -123,7 +123,7 @@ suite("purchase financial distribution", () => {
     expect(visit).not.toBeNull();
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: newId(),

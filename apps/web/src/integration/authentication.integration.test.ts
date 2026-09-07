@@ -18,8 +18,9 @@ suite("Better Auth and Cliqero identity boundary", () => {
   });
 
   it("creates one Better Auth identity mapped to one Cliqero account", async () => {
+    const email = "auth@example.com";
     const account = await app.authentication.register({
-      email: "auth@example.com",
+      email,
       username: "authuser",
       password: "correct-horse-battery",
       country: "NG",
@@ -37,34 +38,42 @@ suite("Better Auth and Cliqero identity boundary", () => {
     expect(rows.rows[0]).toMatchObject({ account_id: account.id, onboarding_state: "complete" });
     expect(
       (
-        await app.database.query(
-          `select password_salt,password_hash from identity_capability.accounts where uuid=$1`,
-          [account.id],
+        await app.database.query<{ column_name: string }>(
+          `select column_name from information_schema.columns
+            where table_schema='identity_capability' and table_name='accounts'
+              and column_name in ('email','display_name','password_salt','password_hash')`,
         )
-      ).rows[0],
-    ).toEqual({ password_salt: null, password_hash: null });
+      ).rows,
+    ).toEqual([]);
     expect(
       (
-        await app.database.query<{ name: string; display_name: string | null }>(
-          `select u.name,a.display_name from better_auth."user" u
+        await app.database.query<{ email: string; display_name: string }>(
+          `select u.email,u.display_name from better_auth."user" u
            join identity_capability.auth_account_links links on links.auth_user_id=u.id
            join identity_capability.accounts a on a.id=links.account_id
            where a.uuid=$1`,
           [account.id],
         )
       ).rows[0],
-    ).toEqual({ name: "", display_name: null });
+    ).toEqual({ email, display_name: "" });
+    await expect(app.profiles.get(account.id)).resolves.toEqual({
+      email,
+      username: "authuser",
+      displayName: null,
+      country: "NG",
+    });
   });
 
   it("supports Better Auth credential login, bearer resolution and session revocation", async () => {
+    const email = "login@example.com";
     const account = await app.authentication.register({
-      email: "login@example.com",
+      email,
       username: "loginuser",
       password: "correct-horse-battery",
     });
-    const result = await app.authentication.login(account.email, "correct-horse-battery");
+    const result = await app.authentication.login(email, "correct-horse-battery");
     expect((await app.authentication.authenticate(result.token))?.id).toBe(account.id);
-    await expect(app.authentication.login(account.email, "wrong-password")).rejects.toThrow(
+    await expect(app.authentication.login(email, "wrong-password")).rejects.toThrow(
       "Invalid credentials",
     );
     await app.authentication.auth.api.signOut({
@@ -74,8 +83,9 @@ suite("Better Auth and Cliqero identity boundary", () => {
   });
 
   it("resets a credential without requiring the previous password", async () => {
+    const email = "console-reset@example.com";
     const account = await app.authentication.register({
-      email: "console-reset@example.com",
+      email,
       username: "console_reset",
       password: "console-reset-password-a",
     });
@@ -88,17 +98,18 @@ suite("Better Auth and Cliqero identity boundary", () => {
 
     await app.authentication.resetPassword(authUserId, "console-reset-password-b");
 
+    await expect(app.authentication.login(email, "console-reset-password-a")).rejects.toThrow(
+      "Invalid credentials",
+    );
     await expect(
-      app.authentication.login(account.email, "console-reset-password-a"),
-    ).rejects.toThrow("Invalid credentials");
-    await expect(
-      app.authentication.login(account.email, "console-reset-password-b"),
+      app.authentication.login(email, "console-reset-password-b"),
     ).resolves.toMatchObject({ account: { id: account.id } });
   });
 
   it("uses Better Auth's HTTP-only cookie response for the compatibility login endpoint", async () => {
+    const email = "cookie@example.com";
     const account = await app.authentication.register({
-      email: "cookie@example.com",
+      email,
       username: "cookieuser",
       password: "correct-horse-battery",
     });
@@ -106,7 +117,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       new Request("http://localhost:3000/api/auth/sign-in/email", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: account.email, password: "correct-horse-battery" }),
+        body: JSON.stringify({ email, password: "correct-horse-battery" }),
       }),
     );
     expect(response.ok).toBe(true);
@@ -115,7 +126,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
     const session = await app.authentication.auth.api.getSession({
       headers: new Headers({ cookie: cookie!.split(";")[0] }),
     });
-    expect(session?.user.email).toBe(account.email);
+    expect(session?.user.email).toBe(email);
     expect(
       (
         await app.authentication.authenticateRequest(
@@ -139,7 +150,6 @@ suite("Better Auth and Cliqero identity boundary", () => {
     );
     expect(principal?.account).toBeNull();
     const account = await app.authentication.completeOnboarding(result.user.id, {
-      email: result.user.email,
       username: "socialuser",
       country: "NG",
     });
@@ -150,8 +160,10 @@ suite("Better Auth and Cliqero identity boundary", () => {
     expect((await app.authentication.authenticate(repeatedLogin.token!))?.id).toBe(account.id);
     expect(
       (
-        await app.database.query<{ display_name: string | null }>(
-          `select display_name from identity_capability.accounts where uuid=$1`,
+        await app.database.query<{ display_name: string }>(
+          `select display_name from better_auth."user" u
+           join identity_capability.auth_account_links l on l.auth_user_id=u.id
+           where l.account_id=(select id from identity_capability.accounts where uuid=$1)`,
           [account.id],
         )
       ).rows[0].display_name,

@@ -9,9 +9,9 @@ Cliqero owns the business identity. `identity_capability.accounts.id` remains
 the ID referenced by wallets, referrals, purchases, entitlements, earnings,
 withdrawals and operator capabilities. The `better_auth` schema stores Better
 Auth's users, sessions and provider accounts. The
-`identity_capability.auth_account_links` table maps one Better Auth user to at
-most one Cliqero account. Business code receives an `Account`, never a Better
-Auth user or a Google profile.
+`identity_capability.auth_account_links` table is the one-to-one bridge from a
+completed Better Auth user to a Cliqero account. Business code receives an
+`Account`, never a Better Auth user or a Google profile.
 
 ## Account lifecycle
 
@@ -28,13 +28,14 @@ email before implicit linking. A Google-first user is authenticated but has an
 incomplete Cliqero mapping until `POST /api/me/onboarding` supplies a unique
 username and country. Business endpoints requiring an account reject that state.
 
-Better Auth's `user.name` is the display/full name supplied by an email or OAuth
-identity provider. Cliqero's `accounts.username` is the separate, mutable username
-used by the application. The username is never used as a permanent referral
-identifier. The nullable `accounts.display_name` is an application presentation
-snapshot: OAuth onboarding copies the provider's display name when available,
-while email registration leaves it empty. It is not an alias for `username` and
-is never used for authentication or referral identity.
+Better Auth's logical `user.name` is a display/provider-name field. Its physical
+database column is deliberately mapped to `better_auth.user.display_name`, while
+the Better Auth API continues to use its required logical `name` field. Cliqero's
+`accounts.username` is the separate, mutable username used by the application;
+it is never used as a permanent referral identifier. Authentication email,
+display/provider name, image, credentials and sessions are stored only in Better
+Auth. Operator, profile and hierarchy views join the bridge when they need those
+facts instead of copying snapshots into `identity_capability.accounts`.
 
 ## Transport and configuration
 

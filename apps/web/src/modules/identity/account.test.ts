@@ -4,18 +4,12 @@ import { usernameSchema } from "./username";
 
 describe("Cliqero account username", () => {
   it("normalizes usernames at the domain boundary", () => {
-    expect(new Account("account-1", "user@example.com", "  Example_User  ").username).toBe(
-      "example_user",
-    );
+    expect(new Account("account-1", "  Example_User  ").username).toBe("example_user");
   });
 
   it("rejects usernames with spaces or unsupported characters", () => {
-    expect(() => new Account("account-1", "user@example.com", "not valid")).toThrow(
-      "Account username is invalid",
-    );
-    expect(() => new Account("account-1", "user@example.com", "ab")).toThrow(
-      "Account username is invalid",
-    );
+    expect(() => new Account("account-1", "not valid")).toThrow("Account username is invalid");
+    expect(() => new Account("account-1", "ab")).toThrow("Account username is invalid");
   });
 
   it("normalizes username API input before applying the canonical policy", () => {

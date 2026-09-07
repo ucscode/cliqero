@@ -6,7 +6,7 @@ import { AuthenticationService } from "@/modules/identity/authentication";
 
 const capabilities = ["operator", "catalogue_manager", "blog_manager"] as const;
 type Capability = (typeof capabilities)[number];
-type AccountRow = { id: string; email: string; username: string; country: string | null };
+type AccountRow = { id: string; email: string | null; username: string; country: string | null };
 type IdentityContext = { database: PostgresDatabase; authentication: AuthenticationService };
 
 function openContext(): IdentityContext {
@@ -83,10 +83,11 @@ async function findAccount(
 ): Promise<AccountRow & { authUserId: string }> {
   const row = (
     await context.database.query<AccountRow & { auth_user_id: string }>(
-      `select a.uuid as id,a.email,a.username,a.metadata->>'country' as country,l.auth_user_id
+      `select a.uuid as id,p.email,a.username,a.metadata->>'country' as country,l.auth_user_id
        from identity_capability.accounts a
        join identity_capability.auth_account_links l on l.account_id=a.id
-       where a.uuid::text=$1 or lower(a.email)=lower($1) or lower(a.username)=lower($1)
+       join identity_capability.account_profiles p on p.id=a.id
+       where a.uuid::text=$1 or lower(p.email)=lower($1) or lower(a.username)=lower($1)
        limit 1`,
       [identifier.trim()],
     )
@@ -134,7 +135,7 @@ program
           password,
           country: options.country,
         });
-        console.log(`Created account ${account.email} (${account.username})`);
+        console.log(`Created account ${options.email.trim().toLowerCase()} (${account.username})`);
       } finally {
         await closeContext(context);
       }
@@ -152,7 +153,7 @@ program
       const account = await findAccount(context, identifier);
       const newPassword = options.newPassword ?? (await promptNewPassword("New password"));
       await context.authentication.resetPassword(account.authUserId, newPassword);
-      console.log(`Password reset for ${account.email}`);
+      console.log(`Password reset for ${account.email ?? account.username}`);
     } finally {
       await closeContext(context);
     }
@@ -194,7 +195,7 @@ program
           `delete from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1)`,
           [account.id],
         );
-        console.log(`Revoked privileged capabilities from ${account.email}`);
+        console.log(`Revoked privileged capabilities from ${account.email ?? account.username}`);
         return;
       }
       if (!(capabilities as readonly string[]).includes(normalized))
@@ -214,13 +215,13 @@ program
           `delete from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) and capability=$2`,
           [account.id, value],
         );
-        console.log(`Revoked ${value} from ${account.email}`);
+        console.log(`Revoked ${value} from ${account.email ?? account.username}`);
       } else {
         await context.database.query(
           `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),$2) on conflict do nothing`,
           [account.id, value],
         );
-        console.log(`Granted ${value} to ${account.email}`);
+        console.log(`Granted ${value} to ${account.email ?? account.username}`);
       }
     } finally {
       await closeContext(context);
@@ -239,9 +240,10 @@ program
         await context.database.query<AccountRow & { capabilities: string[] }>(
           `select a.uuid as id,a.email,a.username,a.metadata->>'country' as country,
              coalesce(array_agg(ac.capability) filter(where ac.capability is not null),'{}') capabilities
-           from identity_capability.accounts a
+           from identity_capability.account_profiles a
            left join identity_capability.account_capabilities ac on ac.account_id=a.id
-           group by a.id order by a.created_at desc,a.id desc limit $1`,
+           group by a.id,a.uuid,a.email,a.username,a.metadata,a.created_at
+           order by a.created_at desc,a.id desc limit $1`,
           [limit],
         )
       ).rows;

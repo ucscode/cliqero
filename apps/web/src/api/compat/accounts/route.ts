@@ -15,13 +15,13 @@ const bodySchema = z.object({
 });
 export async function POST(request: Request) {
   try {
-    const account = await getContainer().authentication.register(
-      bodySchema.parse(await request.json()),
-    );
+    const input = bodySchema.parse(await request.json());
+    const account = await getContainer().authentication.register(input);
+    const profile = await getContainer().profiles.get(account.id);
     return Response.json(
       {
         id: account.id,
-        email: account.email,
+        email: profile.email,
         username: account.username,
         country: account.country,
       },

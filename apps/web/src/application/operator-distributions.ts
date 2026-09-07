@@ -37,7 +37,7 @@ export type OperatorDistributionSummary = {
   purchaseId: string;
   listingId: string;
   listingTitle: string;
-  buyer: { id: string; username: string; email: string };
+  buyer: { id: string; username: string; email: string | null };
   grossAmountMinor: string;
   currency: string;
   referralAllocatedMinor: string;
@@ -51,12 +51,12 @@ export type OperatorDistributionDetail = OperatorDistributionSummary & {
   purchaseCreatedAt: string;
   attribution: {
     id: string | null;
-    referrer: { id: string; username: string; email: string } | null;
+    referrer: { id: string; username: string; email: string | null } | null;
   };
   policySnapshot: unknown;
   allocations: Array<{
     id: string;
-    account: { id: string; username: string; email: string };
+    account: { id: string; username: string; email: string | null };
     level: number | null;
     amountMinor: string;
     currency: string;
@@ -92,13 +92,13 @@ export class OperatorDistributionService {
               count(distinct case when e.recipient_role='referral' and e.direction='credit' and e.reversal_id is null then e.account_id end)::int beneficiary_count
          from ledger_capability.purchase_distributions d
          join purchase_capability.purchases p on p.id=d.purchase_id
-         join identity_capability.accounts b on b.id=p.buyer_id
+         join identity_capability.account_profiles b on b.id=p.buyer_id
          left join ledger_capability.entries e on e.distribution_id=d.id
          join listing_capability.listings l on l.id=p.listing_id
         where p.checkout_id is not null
-          and ($1::text is null or d.uuid::text=$1 or p.uuid::text=$1 or p.listing_title_snapshot ilike '%'||$1||'%' escape '\\' or b.username ilike '%'||$1||'%' escape '\\' or b.email ilike '%'||$1||'%' escape '\\' or exists(select 1 from ledger_capability.entries se join identity_capability.accounts sa on sa.id=se.account_id where se.distribution_id=d.id and se.recipient_role='referral' and (sa.username ilike '%'||$1||'%' escape '\\' or sa.email ilike '%'||$1||'%' escape '\\')))
+          and ($1::text is null or d.uuid::text=$1 or p.uuid::text=$1 or p.listing_title_snapshot ilike '%'||$1||'%' escape '\\' or b.username ilike '%'||$1||'%' escape '\\' or b.email ilike '%'||$1||'%' escape '\\' or exists(select 1 from ledger_capability.entries se join identity_capability.account_profiles sa on sa.id=se.account_id where se.distribution_id=d.id and se.recipient_role='referral' and (sa.username ilike '%'||$1||'%' escape '\\' or sa.email ilike '%'||$1||'%' escape '\\')))
           and ($2::timestamptz is null or (d.completed_at,d.id)<($2::timestamptz,(select id from ledger_capability.purchase_distributions where uuid=$3)))
-        group by d.id,p.id,b.id,l.id
+        group by d.id,p.id,b.id,b.uuid,b.username,b.email,l.id
         order by d.completed_at desc,d.id desc
         limit $4`,
         [search, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
@@ -124,9 +124,9 @@ export class OperatorDistributionService {
               a.uuid attribution_id
          from ledger_capability.purchase_distributions d
          join purchase_capability.purchases p on p.id=d.purchase_id
-         join identity_capability.accounts b on b.id=p.buyer_id
+         join identity_capability.account_profiles b on b.id=p.buyer_id
          join listing_capability.listings l on l.id=p.listing_id
-         left join identity_capability.accounts ra on ra.id=p.referral_referrer_account_id
+         left join identity_capability.account_profiles ra on ra.id=p.referral_referrer_account_id
          left join referral_capability.listing_attributions a on a.id=p.referral_attribution_id
         where d.uuid=$1 and p.checkout_id is not null`,
         [id],
@@ -139,7 +139,7 @@ export class OperatorDistributionService {
               oe.uuid original_entry_id,rv.uuid reversal_id,e.created_at,s.settled_at,
               r.uuid reversal_record_id,r.reason reversal_reason,r.source reversal_source,r.state reversal_state,r.processed_at reversal_processed_at
          from ledger_capability.entries e
-         join identity_capability.accounts a on a.id=e.account_id
+         join identity_capability.account_profiles a on a.id=e.account_id
          join identity_capability.accounts aa on aa.id=e.account_id
          left join ledger_capability.entries oe on oe.id=e.original_entry_id
          left join ledger_capability.reversals rv on rv.id=e.reversal_id
@@ -222,7 +222,7 @@ export class OperatorDistributionService {
 
 export type OperatorEarningsEntry = {
   id: string;
-  account: { id: string; username: string; email: string };
+  account: { id: string; username: string; email: string | null };
   purchaseId: string | null;
   distributionId: string | null;
   entryType: string;
@@ -252,7 +252,7 @@ export class OperatorEarningsService {
         `select e.uuid as id,a.uuid as account_id,a.username,a.email,p.uuid as purchase_id,d.uuid as distribution_id,e.entry_type,e.direction,e.amount_minor,e.currency,e.referral_level,e.balance_state,e.created_at,s.settled_at,
               case when e.reversal_id is not null or exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then 'reversed' when s.id is not null then 'available' else e.balance_state end effective_state
          from ledger_capability.entries e
-         join identity_capability.accounts a on a.id=e.account_id
+         join identity_capability.account_profiles a on a.id=e.account_id
          left join purchase_capability.purchases p on p.id=e.purchase_id
          left join ledger_capability.purchase_distributions d on d.id=e.distribution_id
          left join ledger_capability.entry_settlements s on s.original_entry_id=e.id

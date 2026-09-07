@@ -17,17 +17,14 @@ export async function POST(request: Request) {
     if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
     if (principal.account)
       return Response.json({ error: "Account onboarding is already complete" }, { status: 409 });
-    const email = await getContainer().authentication.authUserEmail(principal.authUserId);
-    if (!email)
-      return Response.json({ error: "Authenticated identity not found" }, { status: 401 });
     const account = await getContainer().authentication.completeOnboarding(principal.authUserId, {
-      email,
       ...bodySchema.parse(await request.json()),
     });
+    const profile = await getContainer().profiles.get(account.id);
     return Response.json(
       {
         id: account.id,
-        email: account.email,
+        email: profile.email,
         username: account.username,
         country: account.country,
       },

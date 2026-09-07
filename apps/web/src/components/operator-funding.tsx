@@ -182,7 +182,7 @@ function FundingRow({ funding }: { funding: OperatorFunding }) {
       <div className="operator-funding-row-main">
         <div className="operator-funding-identity">
           <strong>@{funding.account.username}</strong>
-          <span>{funding.account.email}</span>
+          <span>{funding.account.email ?? "No authentication email"}</span>
           <Link href={`/operator/users/${funding.account.id}`}>View account</Link>
         </div>
         <div className="operator-funding-amounts">
@@ -286,7 +286,7 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
             </div>
             <div>
               <dt>Email</dt>
-              <dd className="break-value">{funding.account.email}</dd>
+              <dd className="break-value">{funding.account.email ?? "No authentication email"}</dd>
             </div>
             <div>
               <dt>Provider</dt>

@@ -13,6 +13,15 @@ function appWith(
   return createApiApp(
     {
       principalResolver: { resolve: async () => principal },
+      profiles: {
+        get: async () => ({
+          email: "operator@example.com",
+          username: "operator",
+          displayName: null,
+          country: null,
+        }),
+        update: async () => ({}),
+      },
       hierarchy: {
         tree: async () => ({
           root: "00000000-0000-4000-8000-000000000001",

@@ -100,12 +100,14 @@ export class FundingInitializationProcessor {
     if (!claim) return null;
     const account = await this.accounts.findById?.(claim.accountId);
     if (!account) throw new Error("Account not found");
+    const buyerEmail = await this.accounts.findAuthenticationEmail?.(claim.accountId);
+    if (!buyerEmail) throw new Error("Authentication email not found");
     try {
       const result = await this.providers.get(claim.providerName).initiate({
         paymentId: claim.id,
         amount: claim.collectionAmount,
         idempotencyKey: claim.idempotencyKey,
-        buyerEmail: account.email,
+        buyerEmail,
       });
       if (result.reference !== claim.providerReference)
         throw new ProviderOperationError(

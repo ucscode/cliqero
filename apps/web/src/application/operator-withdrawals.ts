@@ -31,7 +31,7 @@ function mask(value: string) {
 
 export type OperatorWithdrawal = {
   id: string;
-  account: { id: string; username: string; email: string };
+  account: { id: string; username: string; email: string | null };
   amountMinor: string;
   currency: string;
   destination: { type: "bank" | "manual"; summary: string };
@@ -123,7 +123,7 @@ const projection = `
     (select a.state from payout_capability.attempts a where a.execution_id=p.id order by a.attempt_number desc limit 1) attempt_state,
     (select a.provider_reference from payout_capability.attempts a where a.execution_id=p.id order by a.attempt_number desc limit 1) provider_reference
    from withdrawal_capability.withdrawals w
-   join identity_capability.accounts a on a.id=w.account_id
+   join identity_capability.account_profiles a on a.id=w.account_id
    left join ledger_capability.withdrawal_reservations r on r.withdrawal_id=w.id
    left join payout_capability.executions p on p.withdrawal_id=w.id`;
 

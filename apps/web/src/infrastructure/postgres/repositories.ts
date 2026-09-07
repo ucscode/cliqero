@@ -21,10 +21,8 @@ import type { SqlExecutor } from "./database";
 
 interface AccountRow {
   id: string;
-  email: string;
   username: string;
   country: string | null;
-  display_name: string | null;
 }
 export class PostgresAccountRepository implements AccountReader {
   constructor(private readonly sql: SqlExecutor) {}
@@ -37,11 +35,20 @@ export class PostgresAccountRepository implements AccountReader {
   async findById(id: string): Promise<Account | null> {
     const row = (
       await this.sql.query<AccountRow>(
-        "select uuid as id, email, username, metadata->>'country' as country, display_name from identity_capability.accounts where uuid = $1",
+        "select uuid as id, username, metadata->>'country' as country from identity_capability.accounts where uuid = $1",
         [id],
       )
     ).rows[0];
-    return row ? new Account(row.id, row.email, row.username, row.country, row.display_name) : null;
+    return row ? new Account(row.id, row.username, row.country) : null;
+  }
+  async findAuthenticationEmail(id: string): Promise<string | null> {
+    const row = (
+      await this.sql.query<{ email: string | null }>(
+        "select email from identity_capability.account_profiles where uuid=$1",
+        [id],
+      )
+    ).rows[0];
+    return row?.email ?? null;
   }
 }
 

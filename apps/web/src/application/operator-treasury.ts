@@ -37,7 +37,7 @@ export type OperatorTreasuryEntry = {
   title: string;
   note: string | null;
   source: { kind: string; id: string } | null;
-  actor: { id: string; username: string; email: string } | null;
+  actor: { id: string; username: string; email: string | null } | null;
   createdAt: string;
 };
 
@@ -97,7 +97,7 @@ export class OperatorTreasuryService {
         `select e.id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
                 a.uuid actor_id,a.username actor_username,a.email actor_email
            from treasury_capability.entries e
-           left join identity_capability.accounts a on a.id=e.actor_id
+           left join identity_capability.account_profiles a on a.id=e.actor_id
           where ${conditions.join(" and ")}
             and ($4::timestamptz is null or (e.created_at,e.id)<($4::timestamptz,(select id from treasury_capability.entries where uuid=$5)))
           order by e.created_at desc,e.id desc limit $6`,
@@ -120,7 +120,7 @@ export class OperatorTreasuryService {
         `select e.uuid as id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
                 a.uuid actor_id,a.username actor_username,a.email actor_email
            from treasury_capability.entries e
-           left join identity_capability.accounts a on a.id=e.actor_id
+           left join identity_capability.account_profiles a on a.id=e.actor_id
           where e.uuid=$1`,
         [id],
       )

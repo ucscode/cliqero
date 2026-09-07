@@ -8,10 +8,8 @@ import { normalizeUsername } from "./username";
 
 interface AccountRow {
   id: string;
-  email: string;
   username: string;
   country: string | null;
-  display_name: string | null;
 }
 
 function normalizeCountry(country: string | null | undefined): string | null {
@@ -22,7 +20,7 @@ function normalizeCountry(country: string | null | undefined): string | null {
 }
 
 function accountFromRow(row: AccountRow): Account {
-  return new Account(row.id, row.email, row.username, row.country, row.display_name);
+  return new Account(row.id, row.username, row.country);
 }
 function authHeaders(token: string): Headers {
   return new Headers({ authorization: `Bearer ${token}` });
@@ -72,19 +70,13 @@ export class AuthenticationService {
       // misrepresenting the username as a provider-owned display name.
       body: { name: "", email, password: input.password },
     });
-    const account = new Account(newId(), email, username, country);
+    const account = new Account(newId(), username, country);
     try {
       await this.transaction(async () => {
         await this.sql.query(
-          `insert into identity_capability.accounts (uuid,email,username,display_name,metadata)
-           values ($1,$2,$3,$4,$5::jsonb)`,
-          [
-            account.id,
-            account.email,
-            account.username,
-            result.user.name?.trim() || null,
-            JSON.stringify(country ? { country } : {}),
-          ],
+          `insert into identity_capability.accounts (uuid,username,metadata)
+           values ($1,$2,$3::jsonb)`,
+          [account.id, account.username, JSON.stringify(country ? { country } : {})],
         );
         const linked = await this.sql.query(
           `update identity_capability.auth_account_links
@@ -139,7 +131,7 @@ export class AuthenticationService {
   async accountForAuthUser(authUserId: string): Promise<Account | null> {
     const row = (
       await this.sql.query<AccountRow>(
-        `select a.uuid as id,a.email,a.username,a.display_name,a.metadata->>'country' as country
+        `select a.uuid as id,a.username,a.metadata->>'country' as country
        from identity_capability.auth_account_links l
        join identity_capability.accounts a on a.id=l.account_id
        where l.auth_user_id=$1 and l.onboarding_state='complete'`,
@@ -179,26 +171,15 @@ export class AuthenticationService {
 
   async completeOnboarding(
     authUserId: string,
-    input: { email: string; username: string; country?: string | null },
+    input: { username: string; country?: string | null },
   ): Promise<Account> {
     const country = normalizeCountry(input.country);
-    const account = new Account(
-      newId(),
-      input.email.trim().toLowerCase(),
-      normalizeUsername(input.username),
-      country,
-    );
+    const account = new Account(newId(), normalizeUsername(input.username), country);
     await this.transaction(async () => {
       await this.sql.query(
-        `insert into identity_capability.accounts (uuid,email,username,display_name,metadata)
-         values ($1,$2,$3,(select nullif(trim(name),'') from better_auth."user" where id=$5),$4::jsonb)`,
-        [
-          account.id,
-          account.email,
-          account.username,
-          JSON.stringify(country ? { country } : {}),
-          authUserId,
-        ],
+        `insert into identity_capability.accounts (uuid,username,metadata)
+         values ($1,$2,$3::jsonb)`,
+        [account.id, account.username, JSON.stringify(country ? { country } : {})],
       );
       const updated = await this.sql.query(
         `update identity_capability.auth_account_links

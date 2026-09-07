@@ -97,11 +97,11 @@ export class HierarchyService {
       exists(select 1 from referral_capability.account_referrals x where x.parent_account_id=tree.id) has_children,
       (select count(*) from referral_capability.account_referrals x where x.parent_account_id=tree.id) > $2 has_more_children,
       (select child.uuid from referral_capability.account_referrals x join identity_capability.accounts child on child.id=x.child_account_id where x.parent_account_id=tree.id order by x.child_account_id offset ($2 - 1) limit 1) next_child_cursor
-    from tree join identity_capability.accounts a on a.id=tree.id left join identity_capability.accounts parent on parent.id=tree.parent_id order by tree.depth,tree.id`,
+    from tree join identity_capability.account_profiles a on a.id=tree.id left join identity_capability.account_profiles parent on parent.id=tree.parent_id order by tree.depth,tree.id`,
       [root, this.config.childLimit, this.config.depth],
     );
     const parentRow = await this.sql.query<any>(
-      `select a.uuid id,a.username,a.display_name from referral_capability.account_referrals r join identity_capability.accounts a on a.id=r.parent_account_id where r.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      `select a.uuid id,a.username,a.display_name from referral_capability.account_referrals r join identity_capability.account_profiles a on a.id=r.parent_account_id where r.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
       [root],
     );
     const parent = parentRow.rows[0]
@@ -146,7 +146,7 @@ export class HierarchyService {
       exists(select 1 from referral_capability.account_referrals x where x.parent_account_id=a.id) has_children,
       (select count(*) from referral_capability.account_referrals x where x.parent_account_id=a.id) > $3 has_more_children,
       (select child.uuid from referral_capability.account_referrals x join identity_capability.accounts child on child.id=x.child_account_id where x.parent_account_id=a.id order by x.child_account_id offset ($3 - 1) limit 1) next_child_cursor
-      from referral_capability.account_referrals r join identity_capability.accounts a on a.id=r.child_account_id
+      from referral_capability.account_referrals r join identity_capability.account_profiles a on a.id=r.child_account_id
       where r.parent_account_id=(select id from identity_capability.accounts where uuid=$1) and ($2::uuid is null or r.child_account_id>(select id from identity_capability.accounts where uuid=$2))
       order by r.child_account_id limit $4`,
       [parentId, cursor ?? null, this.config.childLimit, this.config.childLimit + 1],
@@ -176,7 +176,7 @@ export class HierarchyService {
       scope = `and a.id in (with recursive tree(id,path) as (select (select id from identity_capability.accounts where uuid=$3),array[(select id from identity_capability.accounts where uuid=$3)] union all select ar.child_account_id,tree.path||ar.child_account_id from tree join referral_capability.account_referrals ar on ar.parent_account_id=tree.id where not ar.child_account_id=any(tree.path)) select id from tree)`;
     }
     const rows = await this.sql.query<any>(
-      `select a.uuid id,a.username,a.display_name from identity_capability.accounts a where (a.uuid::text=$1 or a.username ilike '%'||$1||'%' or a.email ilike '%'||$1||'%') ${scope} order by a.username limit $2`,
+      `select a.uuid id,a.username,a.display_name from identity_capability.account_profiles a where (a.uuid::text=$1 or a.username ilike '%'||$1||'%' or a.email ilike '%'||$1||'%') ${scope} order by a.username limit $2`,
       params,
     );
     return rows.rows.map((r) => ({

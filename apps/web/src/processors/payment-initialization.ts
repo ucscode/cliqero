@@ -1,4 +1,3 @@
-import { newId } from "@/kernel/ids";
 import { ProviderOperationError } from "@/kernel/provider-error";
 import type { PaymentProviderRegistry, PaymentRepository } from "@/modules/payment/payment";
 import type { PostgresPaymentOperationsRepository } from "@/providers/paystack/persistence/payment-operations";
@@ -27,13 +26,15 @@ export class PaymentInitializationProcessor {
     if (!current || !this.accounts.findById) return;
     const buyer = await this.accounts.findById(current.buyerId);
     if (!buyer) return;
+    const buyerEmail = await this.accounts.findAuthenticationEmail?.(current.buyerId);
+    if (!buyerEmail) throw new Error("Authentication email not found");
     try {
       const provider = this.providers.get(current.providerName);
       const result = await provider.initiate({
         paymentId: current.id,
         amount: current.collectionAmount ?? current.amount,
         idempotencyKey: current.idempotencyKey,
-        buyerEmail: buyer.email,
+        buyerEmail,
       });
       if (result.reference !== current.providerReference)
         throw new ProviderOperationError(

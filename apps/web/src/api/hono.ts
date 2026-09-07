@@ -73,7 +73,7 @@ const operatorAccountSummarySchema = z.object({
   id: z.string().uuid(),
   username: z.string(),
   displayName: z.string().nullable(),
-  email: z.string(),
+  email: z.string().nullable(),
   country: z.string().nullable(),
   roles: z.array(z.string()),
   createdAt: z.string(),
@@ -113,7 +113,7 @@ const operatorFundingWalletCreditSchema = z.object({
 });
 const operatorFundingSummarySchema = z.object({
   id: z.string().uuid(),
-  account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
+  account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),
   provider: z.string(),
   providerReference: z.string(),
   canonicalAmountMinor: z.string(),
@@ -172,7 +172,7 @@ const operatorDistributionSummarySchema = z.object({
   purchaseId: z.string().uuid(),
   listingId: z.string().uuid(),
   listingTitle: z.string(),
-  buyer: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
+  buyer: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),
   grossAmountMinor: z.string(),
   currency: z.string(),
   referralAllocatedMinor: z.string(),
@@ -186,14 +186,18 @@ const operatorDistributionDetailSchema = operatorDistributionSummarySchema.exten
   attribution: z.object({
     id: z.string().uuid().nullable(),
     referrer: z
-      .object({ id: z.string().uuid(), username: z.string(), email: z.string() })
+      .object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() })
       .nullable(),
   }),
   policySnapshot: z.unknown(),
   allocations: z.array(
     z.object({
       id: z.string().uuid(),
-      account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
+      account: z.object({
+        id: z.string().uuid(),
+        username: z.string(),
+        email: z.string().nullable(),
+      }),
       level: z.number().int().positive().nullable(),
       amountMinor: z.string(),
       currency: z.string(),
@@ -219,7 +223,7 @@ const operatorDistributionDetailSchema = operatorDistributionSummarySchema.exten
 });
 const operatorEarningsEntrySchema = z.object({
   id: z.string().uuid(),
-  account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
+  account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),
   purchaseId: z.string().uuid().nullable(),
   distributionId: z.string().uuid().nullable(),
   entryType: z.string(),
@@ -249,7 +253,7 @@ const operatorWithdrawalAttentionSchema = z.enum([
 ]);
 const operatorWithdrawalSchema = z.object({
   id: z.string().uuid(),
-  account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }),
+  account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),
   amountMinor: z.string(),
   currency: z.string(),
   destination: z.object({ type: z.enum(["bank", "manual"]), summary: z.string() }),
@@ -298,7 +302,9 @@ const operatorTreasuryEntrySchema = z.object({
   title: z.string(),
   note: z.string().nullable(),
   source: z.object({ kind: z.string(), id: z.string().uuid() }).nullable(),
-  actor: z.object({ id: z.string().uuid(), username: z.string(), email: z.string() }).nullable(),
+  actor: z
+    .object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() })
+    .nullable(),
   createdAt: z.string(),
 });
 const operatorTreasurySummarySchema = z.object({
@@ -1569,6 +1575,7 @@ export function createApiApp(
               throw new Error("A valid Idempotency-Key is required");
             })(),
         });
+        const actor = await container.profiles.get(p.accountId);
         return c.json(
           jsonSafe({
             id: entry.id,
@@ -1577,7 +1584,7 @@ export function createApiApp(
             title: entry.title,
             note: entry.note,
             source: null,
-            actor: { id: p.accountId, username: p.account.username, email: p.account.email },
+            actor: { id: p.accountId, username: p.account.username, email: actor.email },
             createdAt: entry.createdAt.toISOString(),
           }),
           201,

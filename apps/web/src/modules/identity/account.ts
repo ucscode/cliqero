@@ -5,12 +5,9 @@ import { isValidUsername, normalizeUsername } from "./username";
 export class Account {
   constructor(
     readonly id: Id,
-    readonly email: string,
     username: string,
     readonly country: string | null = null,
-    readonly displayName: string | null = null,
   ) {
-    if (!email.includes("@")) throw new DomainInvariantError("A valid account email is required");
     const normalizedUsername = normalizeUsername(username);
     if (!isValidUsername(normalizedUsername))
       throw new DomainInvariantError("Account username is invalid");
@@ -23,4 +20,5 @@ export class Account {
 export interface AccountReader {
   exists(accountId: Id): Promise<boolean>;
   findById?(accountId: Id): Promise<Account | null>;
+  findAuthenticationEmail?(accountId: Id): Promise<string | null>;
 }

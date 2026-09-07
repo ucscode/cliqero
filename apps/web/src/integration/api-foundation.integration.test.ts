@@ -248,8 +248,8 @@ suite("headless API principal and hierarchy read model", () => {
     const ids = Array.from({ length: 41 }, () => newId());
     for (let i = 0; i < ids.length; i++)
       await app.database.query(
-        `insert into identity_capability.accounts(uuid,email,username) values($1,$2,$3)`,
-        [ids[i], `deep${i}@example.com`, `deep${i}`],
+        `insert into identity_capability.accounts(uuid,username) values($1,$2)`,
+        [ids[i], `deep${i}`],
       );
     for (let i = 1; i < ids.length; i++)
       await app.referralGraphService.establish(ids[i], ids[i - 1]);
@@ -262,8 +262,8 @@ suite("headless API principal and hierarchy read model", () => {
     const children = Array.from({ length: 125 }, () => newId());
     for (let i = 0; i < children.length; i++)
       await app.database.query(
-        `insert into identity_capability.accounts(uuid,email,username) values($1,$2,$3)`,
-        [children[i], `wide${i}@example.com`, `wide${i}`],
+        `insert into identity_capability.accounts(uuid,username) values($1,$2)`,
+        [children[i], `wide${i}`],
       );
     for (const child of children) await app.referralGraphService.establish(child, wideParent);
     const boundedTree = await app.hierarchy.tree(ids[0], wideParent, false);

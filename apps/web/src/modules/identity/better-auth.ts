@@ -55,6 +55,14 @@ export class BetterAuthBoundary {
       basePath: "/api/auth",
       secret: requiredSecret(),
       database: this.pool,
+      // Better Auth keeps its public/protocol field named `name`, but its
+      // physical column is explicitly a provider/display name. Cliqero's
+      // username lives only on identity_capability.accounts.
+      user: {
+        fields: {
+          name: "display_name",
+        },
+      },
       emailAndPassword: {
         enabled: true,
         autoSignIn: false,

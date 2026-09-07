@@ -221,7 +221,9 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
                   @{distribution.buyer.username}
                 </Link>
                 <br />
-                <small className="break-value">{distribution.buyer.email}</small>
+                <small className="break-value">
+                  {distribution.buyer.email ?? "No authentication email"}
+                </small>
               </dd>
             </div>
             <div>

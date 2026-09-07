@@ -72,7 +72,7 @@ export type OperatorFundingEvent = {
 
 export type OperatorFundingSummary = {
   id: string;
-  account: { id: string; username: string; email: string };
+  account: { id: string; username: string; email: string | null };
   provider: string;
   providerReference: string;
   canonicalAmountMinor: string;
@@ -158,7 +158,7 @@ export class OperatorFundingService {
                 c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
                 c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at
            from funding_capability.funding_transactions f
-           join identity_capability.accounts a on a.id=f.account_id
+           join identity_capability.account_profiles a on a.id=f.account_id
            left join wallet_capability.credits c on c.funding_id=f.id
           where ${conditions.join(" and ")}
           order by f.created_at desc,f.id desc limit $6`,
@@ -186,7 +186,7 @@ export class OperatorFundingService {
                 c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
                 c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at
            from funding_capability.funding_transactions f
-           join identity_capability.accounts a on a.id=f.account_id
+           join identity_capability.account_profiles a on a.id=f.account_id
            left join wallet_capability.credits c on c.funding_id=f.id
           where f.uuid=$1`,
         [id],

@@ -19,11 +19,12 @@ export async function requireOperatorPage(pathname: string) {
         : null;
   if (!role) redirect("/dashboard");
   if (role === "blog_manager" && pathname === "/operator") redirect("/operator/blog");
+  const profile = await getContainer().profiles.get(principal.account.id);
   return {
     role,
     accountId: principal.account.id,
     username: principal.account.username,
-    email: principal.account.email,
+    email: profile.email,
   } satisfies {
     role: OperatorRole;
     accountId: string;

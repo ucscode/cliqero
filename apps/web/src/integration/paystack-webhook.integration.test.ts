@@ -107,7 +107,7 @@ suite("Paystack webhook to commerce consequence", () => {
     });
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "paystack",
       idempotencyKey: "paystack-checkout",

@@ -380,7 +380,7 @@ CREATE TABLE better_auth.session (
 
 CREATE TABLE better_auth."user" (
     id text NOT NULL,
-    name text NOT NULL,
+    display_name text NOT NULL,
     email text NOT NULL,
     "emailVerified" boolean DEFAULT false NOT NULL,
     image text,
@@ -547,14 +547,10 @@ CREATE TABLE identity_capability.account_capabilities (
 
 CREATE TABLE identity_capability.accounts (
     uuid uuid DEFAULT gen_random_uuid() NOT NULL,
-    email text NOT NULL,
     username text NOT NULL,
-    display_name text,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    password_salt bytea,
-    password_hash bytea,
     id bigint NOT NULL,
     CONSTRAINT accounts_username_format CHECK ((username ~ '^[a-z0-9][a-z0-9_-]{2,31}$'::text))
 );
@@ -1951,14 +1947,6 @@ ALTER TABLE ONLY identity_capability.account_capabilities
 
 
 --
--- Name: accounts accounts_email_unique; Type: CONSTRAINT; Schema: identity_capability; Owner: -
---
-
-ALTER TABLE ONLY identity_capability.accounts
-    ADD CONSTRAINT accounts_email_unique UNIQUE (email);
-
-
---
 -- Name: accounts accounts_username_unique; Type: CONSTRAINT; Schema: identity_capability; Owner: -
 --
 
@@ -2020,6 +2008,14 @@ ALTER TABLE ONLY identity_capability.api_keys
 
 ALTER TABLE ONLY identity_capability.auth_account_links
     ADD CONSTRAINT auth_account_links_pkey PRIMARY KEY (auth_user_id);
+
+
+--
+-- Name: auth_account_links auth_account_links_account_unique; Type: CONSTRAINT; Schema: identity_capability; Owner: -
+--
+
+ALTER TABLE ONLY identity_capability.auth_account_links
+    ADD CONSTRAINT auth_account_links_account_unique UNIQUE (account_id);
 
 
 --
@@ -3715,6 +3711,25 @@ ALTER TABLE ONLY wallet_capability.debits
 
 ALTER TABLE ONLY withdrawal_capability.withdrawals
     ADD CONSTRAINT withdrawals_account_fk FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id);
+
+
+--
+-- Name: account_profiles; Type: VIEW; Schema: identity_capability; Owner: -
+--
+
+CREATE VIEW identity_capability.account_profiles AS
+ SELECT a.id,
+    a.uuid,
+    a.username,
+    a.metadata,
+    a.created_at,
+    a.updated_at,
+    u.email,
+    NULLIF(btrim(u.display_name), ''::text) AS display_name,
+    u.image
+   FROM ((identity_capability.accounts a
+     LEFT JOIN identity_capability.auth_account_links l ON ((l.account_id = a.id)))
+     LEFT JOIN better_auth."user" u ON ((u.id = l.auth_user_id)));
 
 
 --

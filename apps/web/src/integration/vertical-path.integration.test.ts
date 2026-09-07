@@ -44,7 +44,7 @@ suite("persisted commerce and access vertical path", () => {
     expect(persisted).toMatchObject({ title: "Private destination", sellerId: seller.id });
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: "checkout-snapshot",
@@ -68,7 +68,7 @@ suite("persisted commerce and access vertical path", () => {
     const { buyer, listing } = await setup();
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: "checkout-concurrent",
@@ -120,7 +120,7 @@ suite("persisted commerce and access vertical path", () => {
     const { buyer, listing } = await setup();
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: "checkout-access",
@@ -148,7 +148,7 @@ suite("persisted commerce and access vertical path", () => {
     const { seller, buyer, listing } = await setup();
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
-      buyerEmail: buyer.email,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: "checkout-verify",
