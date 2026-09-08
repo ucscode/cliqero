@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { GoogleLogoIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
@@ -18,6 +18,12 @@ import { Captcha, captchaTokenPayload, type CaptchaClientConfig } from "./captch
 import { AuthShell } from "./auth-shell";
 import { TextLink } from "./text-link";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
+import { withPendingState } from "@/lib/pending-action";
+
+/** Development-only checkpoints for diagnosing browser submit wiring. Never log credentials. */
+function traceLogin(stage: string, detail?: unknown) {
+  if (process.env.NODE_ENV === "development") console.debug(`[auth] ${stage}`, detail ?? "");
+}
 
 export function AuthForm({
   mode,
@@ -39,73 +45,107 @@ export function AuthForm({
   const [username, setUsername] = useState("");
   const [country, setCountry] = useState("");
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const onCaptchaToken = useCallback((token: string | null) => setCaptchaToken(token), []);
   async function submit(event: FormEvent<HTMLFormElement>) {
+    traceLogin("login:submit:event", { pendingRef: busyRef.current, renderedBusy: busy, mode });
     event.preventDefault();
-    setBusy(true);
+    traceLogin("login:submit:start");
+    if (busyRef.current) {
+      traceLogin("login:submit:ignored-busy");
+      return;
+    }
     setError(null);
     setFieldErrors({});
-    const website = String(new FormData(event.currentTarget).get("website") ?? "");
-    if (website.trim()) {
-      setError("Something went wrong. Please try again.");
-      setBusy(false);
-      return;
-    }
-    if (mode === "register" && password !== confirmPassword) {
-      setError("Passwords do not match.");
-      setBusy(false);
-      return;
-    }
-    if (mode === "register" && captcha.enabled && !captchaToken) {
-      setError("Please complete the CAPTCHA challenge.");
-      setBusy(false);
-      return;
-    }
     try {
-      if (mode === "register") {
-        // Registration provisions Better Auth and the Cliqero account as one
-        // server-side operation. Only a successful provision is allowed to
-        // create the browser session below.
-        await apiFetch("/api/accounts", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            email,
-            username,
-            password,
-            country: country || undefined,
-            ...captchaTokenPayload(captchaToken),
-            website,
-          }),
-        });
-        const signIn = await authClient.signIn.email({ email, password });
-        if (signIn.error) {
-          setError("Your account was created, but we couldn’t sign you in. Please sign in.");
-          return;
-        }
-      } else {
-        const result = await authClient.signIn.email({ email, password });
-        if (result.error) {
-          setError(result.error.message || "Invalid email or password.");
-          return;
-        }
-      }
-      router.push(next);
-      router.refresh();
+      await withPendingState(
+        (pending) => {
+          traceLogin(pending ? "login:pending:set" : "login:pending:cleared");
+          busyRef.current = pending;
+          setBusy(pending);
+        },
+        async () => {
+          traceLogin("login:formdata:start");
+          const website = String(new FormData(event.currentTarget).get("website") ?? "");
+          traceLogin("login:formdata:ok", { honeypotFilled: Boolean(website.trim()) });
+          if (website.trim()) {
+            traceLogin("login:error:honeypot");
+            setError("Something went wrong. Please try again.");
+            traceLogin("login:submit:return:honeypot");
+            return;
+          }
+          traceLogin("login:honeypot:ok");
+          if (mode === "register" && password !== confirmPassword) {
+            traceLogin("login:error:password-mismatch");
+            setError("Passwords do not match.");
+            traceLogin("login:submit:return:password-mismatch");
+            return;
+          }
+          if (mode === "register" && captcha.enabled && !captchaToken) {
+            traceLogin("login:error:captcha");
+            setError("Please complete the CAPTCHA challenge.");
+            traceLogin("login:submit:return:captcha");
+            return;
+          }
+          traceLogin("login:request:start");
+          if (mode === "register") {
+            // Registration provisions Better Auth and the Cliqero account as one
+            // server-side operation. Only a successful provision is allowed to
+            // create the browser session below.
+            await apiFetch("/api/accounts", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                email,
+                username,
+                password,
+                country: country || undefined,
+                ...captchaTokenPayload(captchaToken),
+                website,
+              }),
+            });
+            const signIn = await authClient.signIn.email({ email, password });
+            if (signIn.error) {
+              setError("Your account was created, but we couldn’t sign you in. Please sign in.");
+              traceLogin("login:submit:return:registration-sign-in-error");
+              return;
+            }
+          } else {
+            const result = await authClient.signIn.email({ email, password });
+            traceLogin("login:request:complete", { hasError: Boolean(result.error) });
+            if (result.error) {
+              setError(result.error.message || "Invalid email or password.");
+              traceLogin("login:submit:return:auth-error");
+              return;
+            }
+          }
+          router.push(next);
+          router.refresh();
+        },
+      );
     } catch (cause) {
       if (cause instanceof ApiClientError) {
+        traceLogin("login:error:api", { name: cause.name, message: cause.message });
         const presented = presentFormApiError(cause, ["username", "email"]);
         setFieldErrors(presented.fields);
         setError(presented.message);
-      } else setError("Authentication failed. Please try again.");
+      } else {
+        traceLogin("login:error:unexpected", {
+          name: cause instanceof Error ? cause.name : typeof cause,
+          message: cause instanceof Error ? cause.message : String(cause),
+        });
+        setError("Authentication failed. Please try again.");
+      }
     } finally {
-      setBusy(false);
+      traceLogin("login:finally", { pendingRef: busyRef.current, renderedBusy: busy });
     }
   }
   async function google() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -118,6 +158,7 @@ export function AuthForm({
     } catch {
       setError("Google sign-in is unavailable right now.");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -136,7 +177,7 @@ export function AuthForm({
           {error}
         </Alert>
       )}
-      <form onSubmit={submit} className="grid gap-4">
+      <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
         <HoneypotField />
         {mode === "register" && (
           <>

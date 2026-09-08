@@ -19,6 +19,7 @@ export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig
   const onCaptchaToken = useCallback((token: string | null) => setCaptchaToken(token), []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
     setState(null);
@@ -64,7 +65,7 @@ export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig
           {error}
         </Alert>
       )}
-      <form onSubmit={submit} className="grid gap-4">
+      <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
         <HoneypotField />
         <Label htmlFor="reset-email">Email</Label>
         <Input

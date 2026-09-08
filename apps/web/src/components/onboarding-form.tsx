@@ -43,16 +43,16 @@ export function OnboardingForm() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
     setUsernameError(null);
-    const website = String(new FormData(event.currentTarget).get("website") ?? "");
-    if (website.trim()) {
-      setError("Something went wrong. Please try again.");
-      setBusy(false);
-      return;
-    }
     try {
+      const website = String(new FormData(event.currentTarget).get("website") ?? "");
+      if (website.trim()) {
+        setError("Something went wrong. Please try again.");
+        return;
+      }
       await apiFetch("/api/me/onboarding", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -88,7 +88,7 @@ export function OnboardingForm() {
           {error}
         </Alert>
       )}
-      <form onSubmit={submit} className="grid gap-4">
+      <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
         <HoneypotField />
         <Label htmlFor="onboarding-username">Username</Label>
         <Input

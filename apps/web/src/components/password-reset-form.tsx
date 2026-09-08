@@ -22,6 +22,7 @@ export function PasswordResetForm({ token }: { token: string }) {
   const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     setError(null);
     setMessage(null);
     if (password !== confirm) {
@@ -58,7 +59,7 @@ export function PasswordResetForm({ token }: { token: string }) {
           </Link>
         </Alert>
       ) : (
-        <form onSubmit={submit} className="grid gap-4">
+        <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
           <HoneypotField />
           <Label htmlFor="new-password">New password</Label>
           <div className="relative">
