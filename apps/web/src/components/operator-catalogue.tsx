@@ -27,6 +27,7 @@ import { HoneypotField } from "./honeypot-field";
 import { Textarea } from "./ui/textarea";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -89,10 +90,7 @@ export function OperatorCatalogueList() {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
-    if (String(formData.get("website") ?? "").trim()) {
-      setImportMessage("Request rejected.");
-      return;
-    }
+    const honeypot = String(formData.get(HONEYPOT_FIELD_NAME) ?? "");
     const file = (formData.get("file") as File | null) ?? null;
     const format = (new FormData(form).get("format") as string | null) ?? "json";
     const mode = (new FormData(form).get("mode") as string | null) ?? "create";
@@ -111,7 +109,14 @@ export function OperatorCatalogueList() {
         failed: number;
       }>(
         `/api/operator/listings/import?format=${encodeURIComponent(format)}&mode=${encodeURIComponent(mode)}`,
-        { method: "POST", headers: { "content-type": "text/plain" }, body },
+        {
+          method: "POST",
+          headers: {
+            "content-type": "text/plain",
+            ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+          },
+          body,
+        },
       );
       setImportMessage(
         `Import complete: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.failed} failed.`,
@@ -645,10 +650,7 @@ function CatalogueMedia({
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
-    if (String(formData.get("website") ?? "").trim()) {
-      setError("Request rejected.");
-      return;
-    }
+    const honeypot = String(formData.get(HONEYPOT_FIELD_NAME) ?? "");
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) return;
     setBusy(true);
@@ -656,7 +658,7 @@ function CatalogueMedia({
     try {
       const body = new FormData();
       body.set("file", file);
-      body.set("website", String(formData.get("website") ?? ""));
+      body.set(HONEYPOT_FIELD_NAME, honeypot);
       const media = await apiFetch<ListingMedia>(`/api/operator/listings/${listing.id}/media`, {
         method: "POST",
         body,

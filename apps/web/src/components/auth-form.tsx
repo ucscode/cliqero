@@ -19,11 +19,7 @@ import { AuthShell } from "./auth-shell";
 import { TextLink } from "./text-link";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 import { withPendingState } from "@/lib/pending-action";
-
-/** Development-only checkpoints for diagnosing browser submit wiring. Never log credentials. */
-function traceLogin(stage: string, detail?: unknown) {
-  if (process.env.NODE_ENV === "development") console.debug(`[auth] ${stage}`, detail ?? "");
-}
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 export function AuthForm({
   mode,
@@ -51,11 +47,9 @@ export function AuthForm({
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const onCaptchaToken = useCallback((token: string | null) => setCaptchaToken(token), []);
   async function submit(event: FormEvent<HTMLFormElement>) {
-    traceLogin("login:submit:event", { pendingRef: busyRef.current, renderedBusy: busy, mode });
+    const form = event.currentTarget;
     event.preventDefault();
-    traceLogin("login:submit:start");
     if (busyRef.current) {
-      traceLogin("login:submit:ignored-busy");
       return;
     }
     setError(null);
@@ -63,34 +57,19 @@ export function AuthForm({
     try {
       await withPendingState(
         (pending) => {
-          traceLogin(pending ? "login:pending:set" : "login:pending:cleared");
           busyRef.current = pending;
           setBusy(pending);
         },
         async () => {
-          traceLogin("login:formdata:start");
-          const website = String(new FormData(event.currentTarget).get("website") ?? "");
-          traceLogin("login:formdata:ok", { honeypotFilled: Boolean(website.trim()) });
-          if (website.trim()) {
-            traceLogin("login:error:honeypot");
-            setError("Something went wrong. Please try again.");
-            traceLogin("login:submit:return:honeypot");
-            return;
-          }
-          traceLogin("login:honeypot:ok");
+          const honeypot = String(new FormData(form).get(HONEYPOT_FIELD_NAME) ?? "");
           if (mode === "register" && password !== confirmPassword) {
-            traceLogin("login:error:password-mismatch");
             setError("Passwords do not match.");
-            traceLogin("login:submit:return:password-mismatch");
             return;
           }
           if (mode === "register" && captcha.enabled && !captchaToken) {
-            traceLogin("login:error:captcha");
             setError("Please complete the CAPTCHA challenge.");
-            traceLogin("login:submit:return:captcha");
             return;
           }
-          traceLogin("login:request:start");
           if (mode === "register") {
             // Registration provisions Better Auth and the Cliqero account as one
             // server-side operation. Only a successful provision is allowed to
@@ -104,21 +83,30 @@ export function AuthForm({
                 password,
                 country: country || undefined,
                 ...captchaTokenPayload(captchaToken),
-                website,
+                [HONEYPOT_FIELD_NAME]: honeypot,
               }),
             });
-            const signIn = await authClient.signIn.email({ email, password });
+            const signIn = await authClient.signIn.email({
+              email,
+              password,
+              fetchOptions: honeypot
+                ? { headers: { [HONEYPOT_HEADER_NAME]: honeypot } }
+                : undefined,
+            });
             if (signIn.error) {
               setError("Your account was created, but we couldn’t sign you in. Please sign in.");
-              traceLogin("login:submit:return:registration-sign-in-error");
               return;
             }
           } else {
-            const result = await authClient.signIn.email({ email, password });
-            traceLogin("login:request:complete", { hasError: Boolean(result.error) });
+            const result = await authClient.signIn.email({
+              email,
+              password,
+              fetchOptions: honeypot
+                ? { headers: { [HONEYPOT_HEADER_NAME]: honeypot } }
+                : undefined,
+            });
             if (result.error) {
               setError(result.error.message || "Invalid email or password.");
-              traceLogin("login:submit:return:auth-error");
               return;
             }
           }
@@ -128,19 +116,12 @@ export function AuthForm({
       );
     } catch (cause) {
       if (cause instanceof ApiClientError) {
-        traceLogin("login:error:api", { name: cause.name, message: cause.message });
         const presented = presentFormApiError(cause, ["username", "email"]);
         setFieldErrors(presented.fields);
         setError(presented.message);
       } else {
-        traceLogin("login:error:unexpected", {
-          name: cause instanceof Error ? cause.name : typeof cause,
-          message: cause instanceof Error ? cause.message : String(cause),
-        });
         setError("Authentication failed. Please try again.");
       }
-    } finally {
-      traceLogin("login:finally", { pendingRef: busyRef.current, renderedBusy: busy });
     }
   }
   async function google() {

@@ -8,6 +8,7 @@ import {
   presentFormApiError,
   safeContinuation,
 } from "./api-client";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "./honeypot";
 
 describe("frontend API presentation helpers", () => {
   it("formats canonical USD minor units without floating point arithmetic", () => {
@@ -69,6 +70,27 @@ describe("apiFetch validation errors", () => {
       name: ApiClientError.name,
       code: "validation_error",
       fields: { username: "Username must use 3–32 lowercase letters, numbers, _ or -" },
+    });
+  });
+
+  it("forwards a populated trap to the server instead of rejecting in the browser", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("document", {
+      querySelectorAll: vi.fn().mockReturnValue([{ value: "autofilled" }]),
+    });
+
+    await apiFetch("/api/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "user@example.com" }),
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(init.headers).get(HONEYPOT_HEADER_NAME)).toBe("autofilled");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      email: "user@example.com",
+      [HONEYPOT_FIELD_NAME]: "autofilled",
     });
   });
 });

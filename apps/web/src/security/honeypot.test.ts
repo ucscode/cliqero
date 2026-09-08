@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HONEYPOT_FIELD_NAME } from "@/lib/honeypot";
 import { honeypotRejectionResponse, isHoneypotValueFilled, requestHasHoneypot } from "./honeypot";
 
 describe("form honeypot", () => {
@@ -35,7 +36,35 @@ describe("form honeypot", () => {
       await requestHasHoneypot(
         new Request("http://localhost", {
           method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ [HONEYPOT_FIELD_NAME]: "" }),
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      await requestHasHoneypot(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ [HONEYPOT_FIELD_NAME]: "autofilled" }),
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      await requestHasHoneypot(
+        new Request("http://localhost", {
+          method: "POST",
           headers: { "x-cliqero-honeypot": "bot" },
+        }),
+      ),
+    ).toBe(true);
+    const form = new FormData();
+    form.set(HONEYPOT_FIELD_NAME, "autofilled");
+    expect(
+      await requestHasHoneypot(
+        new Request("http://localhost", {
+          method: "POST",
+          body: form,
         }),
       ),
     ).toBe(true);

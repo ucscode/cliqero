@@ -1,3 +1,5 @@
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "./honeypot";
+
 export type ListingMedia = {
   id: string;
   url: string;
@@ -534,22 +536,24 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
   if (!headers.has("accept")) headers.set("accept", "application/json");
   if (
     typeof document !== "undefined" &&
-    typeof body === "string" &&
-    ["POST", "PUT", "PATCH", "DELETE"].includes((init?.method ?? "GET").toUpperCase()) &&
-    headers.get("content-type")?.includes("application/json")
+    ["POST", "PUT", "PATCH", "DELETE"].includes((init?.method ?? "GET").toUpperCase())
   ) {
-    const filled = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="website"]'))
+    const filled = Array.from(
+      document.querySelectorAll<HTMLInputElement>(`input[name="${HONEYPOT_FIELD_NAME}"]`),
+    )
       .map((input) => input.value)
       .find((value) => value.trim());
     if (filled) {
-      headers.set("x-cliqero-honeypot", filled);
-      try {
-        body = JSON.stringify({
-          ...(JSON.parse(body) as Record<string, unknown>),
-          website: filled,
-        });
-      } catch {
-        // Leave a non-JSON request body unchanged.
+      headers.set(HONEYPOT_HEADER_NAME, filled);
+      if (typeof body === "string" && headers.get("content-type")?.includes("application/json")) {
+        try {
+          body = JSON.stringify({
+            ...(JSON.parse(body) as Record<string, unknown>),
+            [HONEYPOT_FIELD_NAME]: filled,
+          });
+        } catch {
+          // Leave a non-JSON request body unchanged.
+        }
       }
     }
   }

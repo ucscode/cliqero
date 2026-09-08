@@ -13,6 +13,7 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { HoneypotField } from "./honeypot-field";
+import { HONEYPOT_FIELD_NAME } from "@/lib/honeypot";
 
 export function visibleRating(selectedRating: number, hoverRating: number) {
   return hoverRating || selectedRating;
@@ -63,13 +64,13 @@ export function ListingReviews({ listingId }: { listingId: string }) {
       return;
     }
     try {
-      const website = String(new FormData(event.currentTarget).get("website") ?? "");
+      const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
       const result = await apiFetch<{ item: ListingReview }>(
         `/api/listings/${listingId}/reviews/me`,
         {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ rating, body, website }),
+          body: JSON.stringify({ rating, body, [HONEYPOT_FIELD_NAME]: honeypot }),
         },
       );
       setReviews((current) => replaceOwnReview(current, result.item));

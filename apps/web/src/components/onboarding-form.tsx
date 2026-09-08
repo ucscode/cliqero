@@ -11,6 +11,7 @@ import { Skeleton } from "./ui/skeleton";
 import { CountrySelect } from "./country-select";
 import { HoneypotField } from "./honeypot-field";
 import { AuthShell } from "./auth-shell";
+import { HONEYPOT_FIELD_NAME } from "@/lib/honeypot";
 
 export function OnboardingForm() {
   const router = useRouter();
@@ -48,15 +49,15 @@ export function OnboardingForm() {
     setError(null);
     setUsernameError(null);
     try {
-      const website = String(new FormData(event.currentTarget).get("website") ?? "");
-      if (website.trim()) {
-        setError("Something went wrong. Please try again.");
-        return;
-      }
+      const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
       await apiFetch("/api/me/onboarding", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username, country: country || null }),
+        body: JSON.stringify({
+          username,
+          country: country || null,
+          [HONEYPOT_FIELD_NAME]: honeypot,
+        }),
       });
       router.replace(next);
       router.refresh();
