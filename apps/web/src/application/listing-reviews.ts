@@ -28,8 +28,8 @@ export class ListingReviewService {
   mine(account: Account, listingId: Id) {
     return this.reviews.findMine(listingId, account.id);
   }
-  public(input: { listingId: Id; cursor?: string; limit: number }) {
-    return this.reviews.queryPublic(input);
+  visible(input: { listingId: Id; accountId?: Id; cursor?: string; limit: number }) {
+    return this.reviews.queryVisible(input);
   }
   async moderate(account: Account, reviewId: Id, status: "approved" | "rejected") {
     await this.operators.requireOperator(account.id);

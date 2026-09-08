@@ -26,8 +26,9 @@ export interface ListingReviewRepository {
     body: string;
   }): Promise<ListingReview>;
   moderate(id: Id, status: "approved" | "rejected", moderatorId: Id): Promise<ListingReview | null>;
-  queryPublic(input: {
+  queryVisible(input: {
     listingId: Id;
+    accountId?: Id;
     cursor?: string;
     limit: number;
   }): Promise<{ items: readonly PublicListingReview[]; nextCursor: string | null }>;

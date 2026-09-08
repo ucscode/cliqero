@@ -1,5 +1,6 @@
 import { APIError } from "better-auth";
 import { newId } from "@/kernel/ids";
+import { PublicApplicationError } from "@/kernel/errors";
 import { Account } from "./account";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import { BetterAuthBoundary, type BetterAuthInstance } from "./better-auth";
@@ -56,20 +57,30 @@ export class AuthenticationService {
     const email = input.email.trim().toLowerCase();
     const username = normalizeUsername(input.username);
     const country = normalizeCountry(input.country);
-    // A prior test/development reset may have deleted the Cliqero account but
-    // left its unlinked Better Auth user. It is safe to clean only such rows;
-    // incomplete OAuth users remain mapped and are never removed here.
+    // A complete Cliqero identity always has a bridge row. An unlinked Better
+    // Auth user is therefore an abandoned pre-provisioning artifact (for
+    // example from an interrupted development attempt), never an OAuth user
+    // awaiting username onboarding. Clearing only that invariant-violating
+    // row keeps it from blocking a later legitimate registration.
     await this.sql.query(
       `delete from better_auth."user" u where lower(u.email)=lower($1)
        and not exists (select 1 from identity_capability.auth_account_links l where l.auth_user_id=u.id)`,
       [email],
     );
-    const result = await this.auth.api.signUpEmail({
-      // Better Auth requires the field structurally, but Cliqero collects no
-      // display name during email registration. Keep it empty rather than
-      // misrepresenting the username as a provider-owned display name.
-      body: { name: "", email, password: input.password },
-    });
+    let result;
+    try {
+      result = await this.auth.api.signUpEmail({
+        // Better Auth requires the field structurally, but Cliqero collects no
+        // display name during email registration. Keep it empty rather than
+        // misrepresenting the username as a provider-owned display name.
+        body: { name: "", email, password: input.password },
+      });
+    } catch {
+      throw new PublicApplicationError(
+        "We couldn’t create an account with those details.",
+        "registration_failed",
+      );
+    }
     const account = new Account(newId(), username, country);
     try {
       await this.transaction(async () => {
@@ -89,7 +100,15 @@ export class AuthenticationService {
       return account;
     } catch (error) {
       await this.sql.query(`delete from better_auth."user" where id=$1`, [result.user.id]);
-      throw error;
+      if ((error as { code?: string }).code === "23505")
+        throw new PublicApplicationError("That username is already taken.", "username_taken", 409, {
+          username: "That username is already taken.",
+        });
+      if (error instanceof PublicApplicationError) throw error;
+      throw new PublicApplicationError(
+        "We couldn’t create an account with those details.",
+        "registration_failed",
+      );
     }
   }
 

@@ -1,6 +1,7 @@
 import type { Account } from "@/modules/identity/account";
 import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import { getContainer } from "@/infrastructure/container";
+import { publicErrorPayload, validationErrorPayload } from "./error";
 
 /** Shared authentication boundary for capability routes migrating to Hono. */
 export async function authenticatedPrincipal(request: Request): Promise<ApiPrincipal | null> {
@@ -27,6 +28,10 @@ export function referralAttributionSource(request: Request): string | undefined 
 }
 
 export function apiError(error: unknown): Response {
+  const publicError = publicErrorPayload(error);
+  if (publicError) return Response.json(publicError.payload, { status: publicError.status });
+  const validation = validationErrorPayload(error);
+  if (validation) return Response.json(validation, { status: 400 });
   const message = error instanceof Error ? error.message : "Request failed";
   const status =
     message === "Forbidden"

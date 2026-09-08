@@ -9,6 +9,10 @@ export type CaptchaClientConfig = {
   siteKey: string;
 };
 
+export function captchaTokenPayload(token: string | null): { captchaToken?: string } {
+  return token ? { captchaToken: token } : {};
+}
+
 type CaptchaApi = {
   render: (element: HTMLElement, options: Record<string, unknown>) => string | number;
   reset?: (widget?: string | number) => void;

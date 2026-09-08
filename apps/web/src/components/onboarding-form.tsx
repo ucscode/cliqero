@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiFetch, ApiClientError, safeContinuation } from "@/lib/api-client";
+import { apiFetch, ApiClientError, presentFormApiError, safeContinuation } from "@/lib/api-client";
 import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -21,6 +21,7 @@ export function OnboardingForm() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,9 +45,10 @@ export function OnboardingForm() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setUsernameError(null);
     const website = String(new FormData(event.currentTarget).get("website") ?? "");
     if (website.trim()) {
-      setError("Request rejected.");
+      setError("Something went wrong. Please try again.");
       setBusy(false);
       return;
     }
@@ -59,9 +61,11 @@ export function OnboardingForm() {
       router.replace(next);
       router.refresh();
     } catch (cause) {
-      setError(
-        cause instanceof ApiClientError ? cause.message : "We couldn’t complete onboarding.",
-      );
+      if (cause instanceof ApiClientError) {
+        const presented = presentFormApiError(cause, ["username"]);
+        setUsernameError(presented.fields.username ?? null);
+        setError(presented.message);
+      } else setError("We couldn’t complete onboarding.");
     } finally {
       setBusy(false);
     }
@@ -94,10 +98,17 @@ export function OnboardingForm() {
           required
           minLength={3}
           maxLength={32}
+          aria-describedby={usernameError ? "onboarding-username-error" : undefined}
+          aria-invalid={Boolean(usernameError)}
           autoComplete="username"
           placeholder="username"
           pattern="[a-z0-9][a-z0-9_-]{2,31}"
         />
+        {usernameError && (
+          <p id="onboarding-username-error" className="text-sm text-red-700">
+            {usernameError}
+          </p>
+        )}
         <CountrySelect value={country} onChange={setCountry} />
         <Button type="submit" disabled={busy}>
           {busy ? "Saving…" : "Continue"}

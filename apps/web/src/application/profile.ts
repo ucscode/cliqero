@@ -1,5 +1,6 @@
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import { Account } from "@/modules/identity/account";
+import { PublicApplicationError } from "@/kernel/errors";
 import { normalizeUsername } from "@/modules/identity/username";
 export class ProfileService {
   constructor(private sql: SqlExecutor) {}
@@ -48,7 +49,9 @@ export class ProfileService {
       );
     } catch (error) {
       if ((error as { code?: string }).code === "23505")
-        throw new Error("That username is already in use");
+        throw new PublicApplicationError("That username is already taken.", "username_taken", 409, {
+          username: "That username is already taken.",
+        });
       throw error;
     }
     return account;

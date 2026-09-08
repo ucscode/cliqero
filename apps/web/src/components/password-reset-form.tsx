@@ -10,6 +10,7 @@ import { Label } from "./ui/label";
 import { HoneypotField } from "./honeypot-field";
 import { AuthShell } from "./auth-shell";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
 
 export function PasswordResetForm({ token }: { token: string }) {
   const [password, setPassword] = useState("");
@@ -22,6 +23,7 @@ export function PasswordResetForm({ token }: { token: string }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setMessage(null);
     if (password !== confirm) {
       setError("Passwords do not match.");
       return;
@@ -29,16 +31,19 @@ export function PasswordResetForm({ token }: { token: string }) {
     setBusy(true);
     try {
       const website = String(new FormData(event.currentTarget).get("website") ?? "");
-      if (website.trim()) throw new Error("Request rejected");
-      const response = await fetch("/api/auth/reset-password", {
+      if (website.trim()) throw new Error("Something went wrong. Please try again.");
+      await apiFetch("/api/password-reset", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ newPassword: password, token, website }),
       });
-      if (!response.ok) throw new Error("This reset link is invalid or expired.");
       setMessage("Password reset. You can now sign in.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Password reset failed.");
+      setError(
+        cause instanceof ApiClientError
+          ? cause.message
+          : "We couldn’t reset your password. Please request a new reset link.",
+      );
     } finally {
       setBusy(false);
     }
@@ -105,7 +110,7 @@ export function PasswordResetForm({ token }: { token: string }) {
             </Alert>
           )}
           <Button type="submit" disabled={busy}>
-            {busy ? "Saving…" : "Reset password"}
+            {busy ? "Resetting password…" : "Reset password"}
           </Button>
         </form>
       )}

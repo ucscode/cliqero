@@ -2,6 +2,13 @@ export function isHoneypotValueFilled(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+export function honeypotRejectionResponse(): Response {
+  return Response.json(
+    { error: "Something went wrong. Please try again.", code: "request_rejected" },
+    { status: 400 },
+  );
+}
+
 export async function requestHasHoneypot(request: Request): Promise<boolean> {
   if (!["POST", "PUT", "PATCH"].includes(request.method)) return false;
   if (isHoneypotValueFilled(request.headers.get("x-cliqero-honeypot"))) return true;

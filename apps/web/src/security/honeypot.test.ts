@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { isHoneypotValueFilled, requestHasHoneypot } from "./honeypot";
+import { honeypotRejectionResponse, isHoneypotValueFilled, requestHasHoneypot } from "./honeypot";
 
 describe("form honeypot", () => {
+  it("returns a stable public rejection without exposing guard terminology", async () => {
+    const response = honeypotRejectionResponse();
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Something went wrong. Please try again.",
+      code: "request_rejected",
+    });
+  });
+
   it("accepts an empty trap and rejects a filled trap server-side", async () => {
     expect(isHoneypotValueFilled("")).toBe(false);
     expect(

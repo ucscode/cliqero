@@ -937,4 +937,26 @@ describe("Hono API foundation", () => {
       ).status,
     ).toBe(405);
   });
+  it("serializes expected request validation as a human-readable API error", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001", username: "reviewer" },
+      kind: "user_session" as const,
+      roles: [],
+      scopes: new Set<string>(),
+    };
+    const response = await appWith(principal).fetch(
+      new Request("http://localhost/api/listings/00000000-0000-4000-8000-000000000002/reviews/me", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rating: 0 }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toMatchObject({ code: "validation_error" });
+    expect(body.fields.rating).toBe(body.error);
+    expect(body.error).not.toContain('"origin"');
+  });
 });

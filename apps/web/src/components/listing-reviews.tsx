@@ -3,49 +3,83 @@
 import { useEffect, useState } from "react";
 import { Star } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
-import { apiFetch, type ListingReview, type ListingReviewPage } from "@/lib/api-client";
+import {
+  ApiClientError,
+  apiFetch,
+  type ListingReview,
+  type ListingReviewPage,
+} from "@/lib/api-client";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { HoneypotField } from "./honeypot-field";
 
+export function visibleRating(selectedRating: number, hoverRating: number) {
+  return hoverRating || selectedRating;
+}
+
+export function replaceOwnReview(reviews: readonly ListingReview[], review: ListingReview) {
+  return [review, ...reviews.filter((item) => item.id !== review.id && !item.is_mine)];
+}
+
 export function ListingReviews({ listingId }: { listingId: string }) {
   const session = authClient.useSession();
   const [reviews, setReviews] = useState<ListingReview[]>([]);
-  const [mine, setMine] = useState<ListingReview | null>(null);
-  const [rating, setRating] = useState(5);
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
   const [body, setBody] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const displayRating = visibleRating(rating, hoverRating);
+
   useEffect(() => {
-    void apiFetch<ListingReviewPage>(`/api/listings/${listingId}/reviews`).then((page) =>
-      setReviews(page.items),
-    );
-    if (session.data?.user)
-      void apiFetch<{ item: ListingReview | null }>(`/api/listings/${listingId}/reviews/me`).then(
-        ({ item }) => {
-          setMine(item);
-          if (item) {
-            setRating(item.rating);
-            setBody(item.body);
-          }
-        },
-      );
+    let cancelled = false;
+    void apiFetch<ListingReviewPage>(`/api/listings/${listingId}/reviews`)
+      .then((page) => {
+        if (cancelled) return;
+        setReviews(page.items);
+        const mine = page.items.find((item) => item.is_mine);
+        if (mine) {
+          setRating(mine.rating);
+          setBody(mine.body);
+        } else {
+          setRating(0);
+          setBody("");
+        }
+        setHoverRating(0);
+      })
+      .catch(() => {
+        if (!cancelled) setError("We couldn’t load reviews. Please try again.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [listingId, session.data?.user]);
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage(null);
+    setError(null);
+    if (!rating) {
+      setError("Choose a rating before submitting your review.");
+      return;
+    }
     try {
       const website = String(new FormData(event.currentTarget).get("website") ?? "");
       const result = await apiFetch<{ item: ListingReview }>(
         `/api/listings/${listingId}/reviews/me`,
-        { method: "PUT", body: JSON.stringify({ rating, body, website }) },
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ rating, body, website }),
+        },
       );
-      setMine(result.item);
-      setMessage("Your review is awaiting approval.");
-    } catch {
-      setMessage("We couldn't submit your review. Please try again.");
+      setReviews((current) => replaceOwnReview(current, result.item));
+      setRating(result.item.rating);
+      setBody(result.item.body);
+    } catch (cause) {
+      setError(cause instanceof ApiClientError ? cause.message : "We couldn't submit your review.");
     }
   }
+
   return (
     <div className="mt-7 grid gap-6">
       {session.data?.user && (
@@ -53,18 +87,21 @@ export function ListingReviews({ listingId }: { listingId: string }) {
           <HoneypotField />
           <fieldset>
             <legend className="text-sm font-medium">Your rating</legend>
-            <div className="mt-2 flex gap-1">
+            <div className="mt-2 flex gap-1" onPointerLeave={() => setHoverRating(0)}>
               {[1, 2, 3, 4, 5].map((value) => (
                 <button
                   key={value}
                   type="button"
                   className="rounded p-1 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                  onBlur={() => setHoverRating(0)}
+                  onFocus={() => setHoverRating(value)}
+                  onPointerEnter={() => setHoverRating(value)}
                   onClick={() => setRating(value)}
-                  aria-label={`${value} star${value === 1 ? "" : "s"}`}
+                  aria-label={`Rate ${value} out of 5`}
                   aria-pressed={rating === value}
                 >
                   <Star
-                    className={`h-6 w-6 ${value <= rating ? "fill-amber-400 text-amber-500" : "text-slate-300"}`}
+                    className={`h-6 w-6 ${value <= displayRating ? "fill-amber-400 text-amber-500" : "text-slate-300"}`}
                     aria-hidden="true"
                   />
                 </button>
@@ -83,14 +120,9 @@ export function ListingReviews({ listingId }: { listingId: string }) {
           <Button className="w-fit" type="submit">
             Submit review
           </Button>
-          {mine && (
-            <p className="text-sm text-slate-600">
-              Current status: <span className="font-medium capitalize">{mine.status}</span>
-            </p>
-          )}
-          {message && (
-            <p role="status" className="text-sm text-slate-700">
-              {message}
+          {error && (
+            <p role="alert" className="text-sm text-red-700">
+              {error}
             </p>
           )}
         </form>

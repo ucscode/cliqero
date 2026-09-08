@@ -30,6 +30,7 @@ export type ListingReview = {
   updated_at: string;
   moderated_at: string | null;
   reviewer?: string;
+  is_mine?: boolean;
 };
 export type ListingReviewPage = { items: ListingReview[]; next_cursor: string | null };
 
@@ -502,10 +503,29 @@ export class ApiClientError extends Error {
     message: string,
     readonly status: number,
     readonly code?: string,
+    readonly fields?: Record<string, string>,
   ) {
     super(message);
     this.name = "ApiClientError";
   }
+}
+
+export function presentFormApiError(
+  error: ApiClientError,
+  visibleFields: readonly string[],
+  fallback = "Please check your details and try again.",
+): { fields: Record<string, string>; message: string | null } {
+  const sourceFields = error.fields ?? {};
+  const fields = Object.fromEntries(
+    Object.entries(sourceFields).filter(([field]) => visibleFields.includes(field)),
+  );
+  const hasUnmappedFields = Object.keys(sourceFields).some(
+    (field) => !visibleFields.includes(field),
+  );
+  return {
+    fields,
+    message: hasUnmappedFields ? fallback : Object.keys(fields).length ? null : error.message,
+  };
 }
 
 export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
@@ -540,13 +560,18 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
     headers,
   });
   if (!response.ok) {
-    let body: { error?: string; code?: string } = {};
+    let body: { error?: string; code?: string; fields?: Record<string, string> } = {};
     try {
       body = (await response.json()) as typeof body;
     } catch {
       // Keep the API error useful even when a protocol route returns no JSON.
     }
-    throw new ApiClientError(body.error ?? "Something went wrong", response.status, body.code);
+    throw new ApiClientError(
+      body.error ?? "Something went wrong",
+      response.status,
+      body.code,
+      body.fields,
+    );
   }
   return (await response.json()) as T;
 }

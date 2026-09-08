@@ -2,7 +2,7 @@ import { handle } from "hono/vercel";
 import { createApiApp } from "@/api/hono";
 import { getContainer } from "@/infrastructure/container";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import { requestHasHoneypot } from "@/security/honeypot";
+import { honeypotRejectionResponse, requestHasHoneypot } from "@/security/honeypot";
 
 export const runtime = "nodejs";
 // Keep container composition request-lazy so Next.js can collect route
@@ -16,8 +16,7 @@ export const GET = handle(app);
 export const HEAD = handle(app);
 export const OPTIONS = handle(app);
 async function guarded(request: Request) {
-  if (await requestHasHoneypot(request))
-    return Response.json({ error: "Request rejected" }, { status: 400 });
+  if (await requestHasHoneypot(request)) return honeypotRejectionResponse();
   return handle(app)(request);
 }
 export const POST = guarded;

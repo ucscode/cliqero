@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import {
   ApiClientError,
+  presentFormApiError,
   apiFetch,
   type ApiKeyCreated,
   type ApiKeyMetadata,
@@ -96,6 +97,7 @@ function ProfileSettings() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,6 +123,7 @@ function ProfileSettings() {
     setBusy(true);
     setError(null);
     setMessage(null);
+    setUsernameError(null);
     try {
       const value = await apiFetch<Profile>("/api/me/profile", {
         method: "PATCH",
@@ -132,7 +135,11 @@ function ProfileSettings() {
       setCountry(value.country ?? "");
       setMessage("Profile saved.");
     } catch (cause) {
-      setError(errorMessage(cause, "We couldn’t save your profile."));
+      if (cause instanceof ApiClientError) {
+        const presented = presentFormApiError(cause, ["username"]);
+        setUsernameError(presented.fields.username ?? null);
+        setError(presented.message);
+      } else setError("We couldn’t save your profile.");
     } finally {
       setBusy(false);
     }
@@ -168,7 +175,14 @@ function ProfileSettings() {
           maxLength={32}
           autoComplete="username"
           required
+          aria-describedby={usernameError ? "settings-username-error" : undefined}
+          aria-invalid={Boolean(usernameError)}
         />
+        {usernameError && (
+          <p id="settings-username-error" className="text-sm text-red-700">
+            {usernameError}
+          </p>
+        )}
         <p className="text-xs leading-relaxed text-slate-500">
           Lowercase letters, numbers, underscores, and hyphens. Usernames are unique.
         </p>

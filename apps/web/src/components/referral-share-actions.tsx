@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FacebookLogoIcon,
   LinkedinLogoIcon,
@@ -13,6 +13,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Toast } from "./toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { createCopyFeedbackReset } from "./referral-copy-feedback";
 
 type ReferralShareActionsProps = {
   url: string;
@@ -50,6 +51,13 @@ export function ReferralShareActions({ url, compact = false }: ReferralShareActi
   const [state, setState] = useState<"idle" | "copied" | "shared" | "fallback">("idle");
   const [busy, setBusy] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const copyFeedback = useRef<ReturnType<typeof createCopyFeedbackReset> | null>(null);
+
+  useEffect(() => {
+    const feedback = createCopyFeedbackReset(() => setState("idle"));
+    copyFeedback.current = feedback;
+    return () => feedback.dispose();
+  }, []);
 
   async function copy() {
     setBusy(true);
@@ -57,6 +65,7 @@ export function ReferralShareActions({ url, compact = false }: ReferralShareActi
       if (!navigator.clipboard) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(url);
       setState("copied");
+      copyFeedback.current?.schedule();
     } catch {
       setState("fallback");
     } finally {
@@ -107,7 +116,7 @@ export function ReferralShareActions({ url, compact = false }: ReferralShareActi
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="secondary" onClick={copy} disabled={busy}>
-          {state === "copied" ? "Copied" : "Copy link"}
+          {state === "copied" ? "Copied" : "Copy"}
         </Button>
         <Dialog open={shareOpen} onOpenChange={setShareOpen}>
           <DialogTrigger asChild>

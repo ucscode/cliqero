@@ -64,6 +64,78 @@ suite("Better Auth and Cliqero identity boundary", () => {
     });
   });
 
+  it("compensates a newly-created Better Auth identity when the username is already taken", async () => {
+    await app.authentication.register({
+      email: "first@example.com",
+      username: "claimedusername",
+      password: "correct-horse-battery",
+    });
+
+    await expect(
+      app.authentication.register({
+        email: "second@example.com",
+        username: "claimedusername",
+        password: "correct-horse-battery",
+      }),
+    ).rejects.toMatchObject({
+      code: "username_taken",
+      fields: { username: "That username is already taken." },
+    });
+
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text as count from better_auth."user"`,
+        )
+      ).rows[0].count,
+    ).toBe("1");
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text as count from identity_capability.accounts`,
+        )
+      ).rows[0].count,
+    ).toBe("1");
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text as count from better_auth.session`,
+        )
+      ).rows[0].count,
+    ).toBe("0");
+  });
+
+  it("keeps an existing email registration attempt generic without creating another identity", async () => {
+    await app.authentication.register({
+      email: "existing@example.com",
+      username: "existinguser",
+      password: "correct-horse-battery",
+    });
+
+    await expect(
+      app.authentication.register({
+        email: "existing@example.com",
+        username: "anotheruser",
+        password: "correct-horse-battery",
+      }),
+    ).rejects.toMatchObject({ code: "registration_failed" });
+
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text as count from better_auth."user"`,
+        )
+      ).rows[0].count,
+    ).toBe("1");
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text as count from identity_capability.accounts`,
+        )
+      ).rows[0].count,
+    ).toBe("1");
+  });
+
   it("supports Better Auth credential login, bearer resolution and session revocation", async () => {
     const email = "login@example.com";
     const account = await app.authentication.register({
@@ -104,6 +176,37 @@ suite("Better Auth and Cliqero identity boundary", () => {
     await expect(
       app.authentication.login(email, "console-reset-password-b"),
     ).resolves.toMatchObject({ account: { id: account.id } });
+  });
+
+  it("resets a password with a fresh one-time Better Auth reset token", async () => {
+    const email = "browser-reset@example.com";
+    await app.authentication.register({
+      email,
+      username: "browserreset",
+      password: "password-before-reset",
+    });
+    await app.authentication.auth.api.requestPasswordReset({
+      body: { email, redirectTo: "http://localhost:3000/reset-password" },
+    });
+    const verification = (
+      await app.database.query<{ identifier: string }>(
+        `select identifier from better_auth.verification where identifier like 'reset-password:%'`,
+      )
+    ).rows[0];
+    const token = verification.identifier.slice("reset-password:".length);
+
+    await app.authentication.auth.api.resetPassword({
+      body: { token, newPassword: "password-after-reset" },
+    });
+    await expect(app.authentication.login(email, "password-before-reset")).rejects.toThrow(
+      "Invalid credentials",
+    );
+    await expect(app.authentication.login(email, "password-after-reset")).resolves.toBeDefined();
+    await expect(
+      app.authentication.auth.api.resetPassword({
+        body: { token, newPassword: "another-password" },
+      }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_TOKEN" } });
   });
 
   it("uses Better Auth's HTTP-only cookie response for the compatibility login endpoint", async () => {

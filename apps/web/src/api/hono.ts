@@ -3,6 +3,7 @@ import type { ApplicationContainer } from "@/infrastructure/container";
 import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import { apiScopeSchema } from "@/modules/identity/api-scopes";
 import { dispatchLegacyApi, legacyApiPaths } from "./legacy-dispatch";
+import { publicErrorPayload, validationErrorPayload } from "./error";
 import { newId } from "@/kernel/ids";
 import { blogPostInputSchema } from "@/modules/blog/domain/blog";
 import {
@@ -362,7 +363,7 @@ function requireBlogScope(c: any, p: ApiPrincipal, scope: string) {
     return c.json({ error: "Forbidden", code: "forbidden" }, 403);
   return requireScope(c, p, scope);
 }
-function reviewJson(review: any) {
+function reviewJson(review: any, options: { reviewer?: string; isMine?: boolean } = {}) {
   return {
     id: review.id,
     listing_id: review.listingId,
@@ -372,7 +373,10 @@ function reviewJson(review: any) {
     created_at: review.createdAt.toISOString(),
     updated_at: review.updatedAt.toISOString(),
     moderated_at: review.moderatedAt?.toISOString() ?? null,
-    ...(review.reviewer ? { reviewer: review.reviewer } : {}),
+    ...((options.reviewer ?? review.reviewer)
+      ? { reviewer: options.reviewer ?? review.reviewer }
+      : {}),
+    ...(options.isMine ? { is_mine: true } : {}),
     ...(review.listingTitle ? { listing_title: review.listingTitle } : {}),
   };
 }
@@ -426,6 +430,10 @@ function grantableScopes(p: ApiPrincipal): Set<string> {
   return allowed;
 }
 function domainError(c: any, error: unknown) {
+  const publicError = publicErrorPayload(error);
+  if (publicError) return c.json(publicError.payload, publicError.status);
+  const validation = validationErrorPayload(error);
+  if (validation) return c.json(validation, 400);
   const message = error instanceof Error ? error.message : "Request failed";
   const status =
     message === "Forbidden"
@@ -2066,20 +2074,24 @@ export function createApiApp(
     },
   );
 
-  // Listing reviews are a first-class Hono boundary. Public projections are
-  // deliberately approved-only; author and moderation views have separate routes.
+  // Listing review reads are approved-only for the public, with a private
+  // exception for the requesting account's own review.
   app.get("/api/listings/:listingId/reviews", async (c) => {
     const listingId = c.req.param("listingId");
     if (!z.uuid().safeParse(listingId).success)
       return c.json({ error: "Listing not found", code: "not_found" }, 404);
     const requested = Number(c.req.query("limit") ?? 10);
-    const page = await container.listingReviews.public({
+    const accountId = c.get("principal")?.account.id;
+    const page = await container.listingReviews.visible({
       listingId,
+      accountId,
       cursor: c.req.query("cursor") || undefined,
       limit: Math.max(1, Math.min(Number.isFinite(requested) ? requested : 10, 50)),
     });
     return c.json({
-      items: page.items.map((review) => reviewJson(review)),
+      items: page.items.map((review) =>
+        reviewJson(review, { isMine: review.accountId === accountId }),
+      ),
       next_cursor: page.nextCursor,
     });
   });
@@ -2096,7 +2108,7 @@ export function createApiApp(
       .object({ rating: z.number().int().min(1).max(5), body: z.string().max(2000).optional() })
       .parse(await c.req.json());
     const review = await container.listingReviews.submit(p.account, c.req.param("listingId"), body);
-    return c.json({ item: reviewJson(review) });
+    return c.json({ item: reviewJson(review, { reviewer: p.account.username, isMine: true }) });
   });
   app.get("/api/operator/reviews", async (c) => {
     const p = requirePrincipal(c);

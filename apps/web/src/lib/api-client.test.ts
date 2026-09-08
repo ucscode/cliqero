@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { formatMinorUsd, minorToUsdInput, parseUsdMinor, safeContinuation } from "./api-client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  ApiClientError,
+  apiFetch,
+  formatMinorUsd,
+  minorToUsdInput,
+  parseUsdMinor,
+  presentFormApiError,
+  safeContinuation,
+} from "./api-client";
 
 describe("frontend API presentation helpers", () => {
   it("formats canonical USD minor units without floating point arithmetic", () => {
@@ -36,5 +44,58 @@ describe("frontend API presentation helpers", () => {
   it("converts minor units to an editable decimal without Number precision loss", () => {
     expect(minorToUsdInput("1000")).toBe("10.00");
     expect(minorToUsdInput("123456789012345678901")).toBe("1234567890123456789.01");
+  });
+});
+
+describe("apiFetch validation errors", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("retains the API's human-readable field errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json(
+          {
+            error: "Username must use 3–32 lowercase letters, numbers, _ or -",
+            code: "validation_error",
+            fields: { username: "Username must use 3–32 lowercase letters, numbers, _ or -" },
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    await expect(apiFetch("/api/me/onboarding")).rejects.toMatchObject({
+      name: ApiClientError.name,
+      code: "validation_error",
+      fields: { username: "Username must use 3–32 lowercase letters, numbers, _ or -" },
+    });
+  });
+});
+
+describe("form API error presentation", () => {
+  it("keeps errors for fields that the form renders at those fields", () => {
+    const error = new ApiClientError("Invalid username", 400, "validation_error", {
+      username: "That username is already taken.",
+    });
+
+    expect(presentFormApiError(error, ["username", "email"])).toEqual({
+      fields: { username: "That username is already taken." },
+      message: null,
+    });
+  });
+
+  it("makes an unmapped structured error visible without exposing its field or schema message", () => {
+    const error = new ApiClientError(
+      "Invalid input: expected string, received null",
+      400,
+      "validation_error",
+      { captchaToken: "Invalid input: expected string, received null" },
+    );
+
+    expect(presentFormApiError(error, ["username", "email"])).toEqual({
+      fields: {},
+      message: "Please check your details and try again.",
+    });
   });
 });

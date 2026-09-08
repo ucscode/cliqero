@@ -4,7 +4,7 @@ import { useCallback, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { GoogleLogoIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
-import { safeContinuation } from "@/lib/api-client";
+import { ApiClientError, apiFetch, presentFormApiError, safeContinuation } from "@/lib/api-client";
 import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -14,7 +14,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { CountrySelect } from "./country-select";
 import { HoneypotField } from "./honeypot-field";
 import { siteConfig } from "@/config/site";
-import { Captcha, type CaptchaClientConfig } from "./captcha";
+import { Captcha, captchaTokenPayload, type CaptchaClientConfig } from "./captcha";
 import { AuthShell } from "./auth-shell";
 import { TextLink } from "./text-link";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
@@ -40,15 +40,17 @@ export function AuthForm({
   const [country, setCountry] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const onCaptchaToken = useCallback((token: string | null) => setCaptchaToken(token), []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setFieldErrors({});
     const website = String(new FormData(event.currentTarget).get("website") ?? "");
     if (website.trim()) {
-      setError("Request rejected.");
+      setError("Something went wrong. Please try again.");
       setBusy(false);
       return;
     }
@@ -63,47 +65,42 @@ export function AuthForm({
       return;
     }
     try {
-      const result =
-        mode === "login"
-          ? await authClient.signIn.email({ email, password })
-          : await authClient.signUp.email({
-              email,
-              password,
-              // Better Auth's name is a provider-owned display name. The
-              // Cliqero username is submitted separately during onboarding.
-              name: "",
-              callbackURL: `/email-verified?next=${encodeURIComponent(next)}`,
-              fetchOptions: captchaToken
-                ? { headers: { "x-cliqero-captcha-token": captchaToken } }
-                : undefined,
-            });
-      if (result.error) {
-        setError(result.error.message || "Authentication failed.");
-        return;
-      }
       if (mode === "register") {
-        // Better Auth intentionally keeps autoSignIn disabled. Establish the
-        // normal Better Auth session before completing Cliqero onboarding.
+        // Registration provisions Better Auth and the Cliqero account as one
+        // server-side operation. Only a successful provision is allowed to
+        // create the browser session below.
+        await apiFetch("/api/accounts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email,
+            username,
+            password,
+            country: country || undefined,
+            ...captchaTokenPayload(captchaToken),
+            website,
+          }),
+        });
         const signIn = await authClient.signIn.email({ email, password });
         if (signIn.error) {
-          setError(signIn.error.message || "Sign in to finish setting up your account.");
+          setError("Your account was created, but we couldn’t sign you in. Please sign in.");
           return;
         }
-        const onboarding = await fetch("/api/me/onboarding", {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ username, country: country || null, website }),
-        });
-        if (!onboarding.ok) {
-          setError("Your account was created, but onboarding needs another step.");
+      } else {
+        const result = await authClient.signIn.email({ email, password });
+        if (result.error) {
+          setError(result.error.message || "Invalid email or password.");
           return;
         }
       }
       router.push(next);
       router.refresh();
-    } catch {
-      setError("Authentication failed. Please try again.");
+    } catch (cause) {
+      if (cause instanceof ApiClientError) {
+        const presented = presentFormApiError(cause, ["username", "email"]);
+        setFieldErrors(presented.fields);
+        setError(presented.message);
+      } else setError("Authentication failed. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -154,7 +151,14 @@ export function AuthForm({
               autoComplete="username"
               placeholder="username"
               pattern="[a-z0-9][a-z0-9_-]{2,31}"
+              aria-invalid={Boolean(fieldErrors.username)}
+              aria-describedby={fieldErrors.username ? "register-username-error" : undefined}
             />
+            {fieldErrors.username && (
+              <p id="register-username-error" className="text-sm text-red-700">
+                {fieldErrors.username}
+              </p>
+            )}
             <CountrySelect value={country} onChange={setCountry} />
           </>
         )}
@@ -167,7 +171,14 @@ export function AuthForm({
           required
           autoComplete="email"
           placeholder="you@example.com"
+          aria-invalid={Boolean(fieldErrors.email)}
+          aria-describedby={fieldErrors.email ? "register-email-error" : undefined}
         />
+        {fieldErrors.email && (
+          <p id="register-email-error" className="text-sm text-red-700">
+            {fieldErrors.email}
+          </p>
+        )}
         <Label htmlFor="password">Password</Label>
         <div className="relative">
           <Input
@@ -223,7 +234,13 @@ export function AuthForm({
         )}
         {mode === "register" && <Captcha config={captcha} onToken={onCaptchaToken} />}
         <Button type="submit" disabled={busy}>
-          {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
+          {busy
+            ? mode === "login"
+              ? "Signing in…"
+              : "Creating account…"
+            : mode === "login"
+              ? "Sign in"
+              : "Create account"}
         </Button>
       </form>
       <div className="mt-6 grid gap-4 border-t border-slate-200 pt-6">

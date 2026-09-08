@@ -8,6 +8,7 @@ const bodySchema = z.object({
   country: z
     .string()
     .regex(/^[A-Za-z]{2}$/)
+    .nullable()
     .optional(),
 });
 

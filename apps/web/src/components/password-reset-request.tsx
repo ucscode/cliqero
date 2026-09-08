@@ -7,7 +7,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { HoneypotField } from "./honeypot-field";
-import { Captcha, type CaptchaClientConfig } from "./captcha";
+import { Captcha, captchaTokenPayload, type CaptchaClientConfig } from "./captcha";
 import { AuthShell } from "./auth-shell";
 
 export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig }) {
@@ -21,22 +21,26 @@ export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setState(null);
     try {
       const website = String(new FormData(event.currentTarget).get("website") ?? "");
-      if (website.trim()) throw new Error("Request rejected");
+      if (website.trim()) throw new Error("Something went wrong. Please try again.");
       if (captcha.enabled && !captchaToken)
         throw new Error("Please complete the CAPTCHA challenge.");
-      const response = await fetch("/api/auth/request-password-reset", {
+      const response = await fetch("/api/password-reset/request", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           email,
           redirectTo: `${window.location.origin}/reset-password`,
-          captchaToken,
+          ...captchaTokenPayload(captchaToken),
           website,
         }),
       });
-      if (!response.ok) throw new Error("We could not process that request.");
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || "We could not process that request.");
+      }
       setState("If an account exists for that email, a reset link is on its way.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "We could not process that request.");

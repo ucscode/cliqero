@@ -66,10 +66,15 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
     ).rows[0];
     return row ? this.review(row) : null;
   }
-  async queryPublic(input: { listingId: string; cursor?: string; limit: number }) {
-    const values: unknown[] = [input.listingId];
+  async queryVisible(input: {
+    listingId: string;
+    accountId?: string;
+    cursor?: string;
+    limit: number;
+  }) {
+    const values: unknown[] = [input.listingId, input.accountId ?? null];
     const cursor = input.cursor
-      ? ` and (r.created_at,r.id)<(select created_at,id from listing_capability.reviews where uuid=$2)`
+      ? ` and (r.created_at,r.id)<(select created_at,id from listing_capability.reviews where uuid=$3)`
       : "";
     if (input.cursor) values.push(input.cursor);
     values.push(input.limit + 1);
@@ -79,7 +84,8 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
                 a.username as reviewer
          from listing_capability.reviews r join identity_capability.accounts a on a.id=r.account_id
          join listing_capability.listings l on l.id=r.listing_id left join identity_capability.accounts moderator on moderator.id=r.moderated_by
-         where r.listing_id=(select id from listing_capability.listings where uuid=$1) and r.status='approved'${cursor}
+         where r.listing_id=(select id from listing_capability.listings where uuid=$1)
+           and (r.status='approved' or r.account_id=(select id from identity_capability.accounts where uuid=$2))${cursor}
          order by r.created_at desc,r.id desc limit $${values.length}`,
         values,
       )

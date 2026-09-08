@@ -1,14 +1,13 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import { getContainer } from "@/infrastructure/container";
-import { requestHasHoneypot } from "@/security/honeypot";
+import { honeypotRejectionResponse, requestHasHoneypot } from "@/security/honeypot";
 import { verifyCaptchaToken } from "@/security/captcha";
 
 // Resolve the application container per request. Keeping construction out of
 // module evaluation allows `next build` to collect route configuration without
 // requiring runtime database credentials.
 async function route(method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", request: Request) {
-  if (await requestHasHoneypot(request))
-    return Response.json({ error: "Request rejected" }, { status: 400 });
+  if (await requestHasHoneypot(request)) return honeypotRejectionResponse();
   const captchaRequired =
     method === "POST" &&
     (request.url.includes("request-password-reset") || request.url.includes("sign-up/email"));

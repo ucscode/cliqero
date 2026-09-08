@@ -49,6 +49,8 @@ import * as operatorWithdrawalComplete from "@/api/compat/operator/withdrawals/[
 import * as operatorWithdrawalPayout from "@/api/compat/operator/withdrawals/[id]/payout/route";
 import * as operatorWithdrawalPayoutReconcile from "@/api/compat/operator/withdrawals/[id]/payout/reconcile/route";
 import * as operatorWithdrawalReject from "@/api/compat/operator/withdrawals/[id]/reject/route";
+import * as passwordReset from "@/api/compat/password-reset/route";
+import * as passwordResetRequest from "@/api/compat/password-reset/request/route";
 import * as purchases from "@/api/compat/purchases/route";
 import * as purchaseById from "@/api/compat/purchases/[id]/route";
 import * as referralDirect from "@/api/compat/referrals/direct/route";
@@ -143,6 +145,8 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/operator/withdrawals/:id/reject", module: operatorWithdrawalReject },
   { pattern: "/api/operator/withdrawals/:id", module: operatorWithdrawal },
   { pattern: "/api/operator/withdrawals", module: operatorWithdrawals },
+  { pattern: "/api/password-reset/request", module: passwordResetRequest },
+  { pattern: "/api/password-reset", module: passwordReset },
   { pattern: "/api/purchases/:id", module: purchaseById },
   { pattern: "/api/purchases", module: purchases },
   { pattern: "/api/referrals/direct", module: referralDirect },
@@ -172,6 +176,8 @@ const sessionOnlyPaths = new Set([
 
 function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern === "/api/accounts") return { mode: "anonymous", apiKey: "reject" };
+  if (pattern === "/api/password-reset" || pattern === "/api/password-reset/request")
+    return { mode: "anonymous", apiKey: "reject" };
   if (pattern === "/api/access/verify") return { mode: "integration_credential" };
   if (publicPaths.has(pattern) && publicMethods.has(method)) {
     return { mode: "anonymous", apiKey: "allow" };
