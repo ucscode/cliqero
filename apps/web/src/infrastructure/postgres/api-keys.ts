@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SqlExecutor } from "./database";
 import { assertApiScopes } from "@/modules/identity/api-scopes";
+import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 export interface ApiKeyRecord {
   id: string;
@@ -25,8 +26,8 @@ export class PostgresApiKeyRepository {
     expiresAt: Date | null;
   }) {
     const id = (
-      await this.sql.query<{ id: string }>(
-        `insert into identity_capability.api_keys(account_id,name,key_prefix,secret_hash,scopes,created_by,expires_at) values((select id from identity_capability.accounts where uuid=$1),$2,$3,$4,$5::jsonb,(select id from identity_capability.accounts where uuid=$6),$7) returning uuid as id`,
+      await this.sql.query<{ id: string; created_at: Date; expires_at: Date | null }>(
+        `insert into identity_capability.api_keys(account_id,name,key_prefix,secret_hash,scopes,created_by,expires_at) values((select id from identity_capability.accounts where uuid=$1),$2,$3,$4,$5::jsonb,(select id from identity_capability.accounts where uuid=$6),$7) returning uuid as id,created_at,expires_at`,
         [
           input.accountId,
           input.name,
@@ -37,7 +38,7 @@ export class PostgresApiKeyRepository {
           input.expiresAt,
         ],
       )
-    ).rows[0].id;
+    ).rows[0];
     return id;
   }
   async findActiveByPrefix(prefix: string) {
@@ -73,9 +74,18 @@ export class PostgresApiKeyRepository {
     );
     return rows.rows;
   }
+  async findById(id: string, accountId?: string) {
+    const result = await this.sql.query<ApiKeyRecord>(
+      `select k.uuid as id,(select uuid from identity_capability.accounts where id=k.account_id) as "accountId",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt"
+       from identity_capability.api_keys k
+       where k.uuid=$1 and ($2::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$2))`,
+      [id, accountId ?? null],
+    );
+    return result.rows[0] ?? null;
+  }
   async revoke(id: string, accountId?: string) {
     const result = await this.sql.query(
-      `update identity_capability.api_keys set revoked_at=coalesce(revoked_at,now()) where uuid=$1 and ($2::uuid is null or account_id=(select id from identity_capability.accounts where uuid=$2))`,
+      `update identity_capability.api_keys set revoked_at=now() where uuid=$1 and revoked_at is null and ($2::uuid is null or account_id=(select id from identity_capability.accounts where uuid=$2))`,
       [id, accountId ?? null],
     );
     return (result.rowCount ?? 0) > 0;
@@ -85,6 +95,7 @@ export class ApiKeyService {
   constructor(
     private readonly repository: PostgresApiKeyRepository,
     private readonly sql: SqlExecutor,
+    private readonly uow?: UnitOfWork,
   ) {}
   async create(input: {
     accountId: string;
@@ -93,19 +104,30 @@ export class ApiKeyService {
     createdBy: string;
     expiresAt?: Date | null;
   }) {
-    const scopes = [...assertApiScopes(input.scopes)];
-    const secret = `cliq_live_${randomBytes(32).toString("base64url")}`;
-    const prefix = secret.slice(0, 18);
-    const id = await this.repository.insert({
-      accountId: input.accountId,
-      name: input.name.trim(),
-      keyPrefix: prefix,
-      secretHash: hash(secret),
-      scopes,
-      createdBy: input.createdBy,
-      expiresAt: input.expiresAt ?? null,
-    });
-    return { id, secret, name: input.name.trim(), scopes };
+    const operation = async () => {
+      const scopes = [...assertApiScopes(input.scopes)];
+      const secret = `cliq_live_${randomBytes(32).toString("base64url")}`;
+      const prefix = secret.slice(0, 18);
+      const inserted = await this.repository.insert({
+        accountId: input.accountId,
+        name: input.name.trim(),
+        keyPrefix: prefix,
+        secretHash: hash(secret),
+        scopes,
+        createdBy: input.createdBy,
+        expiresAt: input.expiresAt ?? null,
+      });
+      return {
+        id: inserted.id,
+        secret,
+        name: input.name.trim(),
+        scopes,
+        keyPrefix: prefix,
+        createdAt: inserted.created_at,
+        expiresAt: inserted.expires_at,
+      };
+    };
+    return this.uow ? this.uow.transaction(operation) : operation();
   }
   async authenticate(secret: string) {
     if (!secret.startsWith("cliq_live_") || secret.length > 200) return null;
@@ -123,6 +145,9 @@ export class ApiKeyService {
   }
   revoke(id: string, accountId?: string) {
     return this.repository.revoke(id, accountId);
+  }
+  find(id: string, accountId?: string) {
+    return this.repository.findById(id, accountId);
   }
 }
 function hash(secret: string) {

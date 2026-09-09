@@ -34,6 +34,19 @@ function appWith(
         search: async () => [],
       },
       apiKeys: { create: async () => ({}), list: async () => [], revoke: async () => {} },
+      operatorApiKeys: {
+        list: async () => ({ items: [], manageableScopes: [] }),
+        create: async () => ({
+          id: "00000000-0000-4000-8000-000000000005",
+          secret: "cliq_live_test",
+          name: "test",
+          scopes: [],
+          keyPrefix: "cliq_live_test",
+          createdAt: new Date(),
+          expiresAt: null,
+        }),
+        revoke: async () => ({ changed: true, key: null }),
+      },
       operatorOverview: {
         get: async (capabilities: readonly string[]) => ({
           capabilities,
@@ -250,6 +263,9 @@ describe("Hono API foundation", () => {
     expect(paths["/api/wallet"]).toBeDefined();
     expect(paths["/api/operator/treasury/entries"]).toBeDefined();
     expect(paths["/api/api-keys"]).toBeDefined();
+    expect(paths["/api/operator/accounts/{accountId}/api-keys"]).toBeDefined();
+    expect(paths["/api/operator/accounts/{accountId}/api-keys/{id}/revoke"]).toBeDefined();
+    expect(paths["/api/operator/api-keys"]).toBeUndefined();
     expect(paths["/api/api-keys/{id}/revoke"]).toBeDefined();
     expect(paths["/api/me/access"]).toBeDefined();
     expect(paths["/api/operator/overview"]).toBeDefined();
@@ -623,11 +639,14 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const response = await appWith(principal).fetch(
-      new Request("http://localhost/api/operator/api-keys", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "x", scopes: ["hierachy:read"] }),
-      }),
+      new Request(
+        "http://localhost/api/operator/accounts/00000000-0000-4000-8000-000000000001/api-keys",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "x", scopes: ["hierachy:read"] }),
+        },
+      ),
     );
     expect(response.status).toBe(400);
   });
@@ -662,6 +681,24 @@ describe("Hono API foundation", () => {
       }),
     );
     expect(response.status).toBe(403);
+  });
+  it("does not let finance inspection authority create the broad legacy operations scope", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      capabilities: ["finance.read"],
+      scopes: new Set<string>(),
+    };
+    const response = await appWith(principal).fetch(
+      new Request("http://localhost/api/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "finance", scopes: ["operations:manage"] }),
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect((await response.json()).code).toBe("insufficient_scope");
   });
   it("enforces capability and API-key scope intersection for compatibility routes", async () => {
     const operatorKey = {

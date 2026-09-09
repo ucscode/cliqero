@@ -432,6 +432,16 @@ export type ApiKeyCreated = {
   scopes: string[];
 };
 
+export type OperatorApiKeyCreated = ApiKeyCreated & {
+  key_prefix: string;
+  created_at: string;
+  expires_at: string | null;
+};
+export type OperatorApiKeyPage = {
+  items: ApiKeyMetadata[];
+  manageable_scopes: string[];
+};
+
 export type WithdrawalState =
   "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
 

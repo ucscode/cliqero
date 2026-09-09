@@ -27,6 +27,13 @@ verification compatibility route is session-only and disabled whenever
 workers/webhooks instead. A scope never elevates the owning account's Cliqero
 capability.
 
+Operator API-key administration is account-scoped at
+`/api/operator/accounts/{accountId}/api-keys`. It requires the actor's
+`api_keys.manage` capability (and `api_keys:manage` when the actor is itself an
+API-key principal). Operator-sensitive scopes are only assignable when the
+actor and target currently hold the corresponding account capability; the
+target's capability remains required on every subsequent request.
+
 ## API route ownership
 
 The compatibility route modules under `src/api/compat` are invoked only by the

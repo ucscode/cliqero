@@ -104,6 +104,7 @@ import { HierarchyService } from "@/application/hierarchy";
 import { OperatorOverviewService } from "@/application/operator-overview";
 import { OperatorAccountService } from "@/application/operator-accounts";
 import { CapabilityAdministrationService } from "@/application/capability-administration";
+import { OperatorApiKeyService } from "@/application/operator-api-keys";
 import { OperatorFundingService } from "@/application/operator-funding";
 import {
   OperatorDistributionService,
@@ -279,7 +280,8 @@ export function createContainer(databaseUrl: string) {
   const operators = new OperatorAuthorizationService(database);
   const authentication = new AuthenticationService(database, databaseUrl);
   const apiKeyRepository = new PostgresApiKeyRepository(database);
-  const apiKeys = new ApiKeyService(apiKeyRepository, database);
+  const apiKeys = new ApiKeyService(apiKeyRepository, database, database);
+  const operatorApiKeys = new OperatorApiKeyService(apiKeys, database, database);
   const principalResolver = new ApiPrincipalResolver(authentication, apiKeys, database);
   return {
     database,
@@ -306,6 +308,7 @@ export function createContainer(databaseUrl: string) {
     referralAttribution,
     authentication,
     apiKeys,
+    operatorApiKeys,
     principalResolver,
     authorization: new AuthorizationPolicy(),
     integrations: new IntegrationService(database, database),

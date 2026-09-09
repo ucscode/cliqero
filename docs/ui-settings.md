@@ -38,7 +38,8 @@ Scopes are selected from the canonical registry and only restrict what the
 owning account may do. They cannot grant an operator capability, change ownership,
 or bypass domain authorization. Browser sessions may manage their own keys;
 API-key callers additionally need `api_keys:manage`. Operator-wide key
-management remains under the separate `/api/operator/api-keys` capability.
+management is account-scoped under `/api/operator/accounts/{accountId}/api-keys`
+and requires the target account's current authority for operator-sensitive scopes.
 
 Key metadata includes prefix, scopes, creation/use/expiry timestamps, and
 revocation state. Revocation is durable and owner-scoped; expiry is enforced
