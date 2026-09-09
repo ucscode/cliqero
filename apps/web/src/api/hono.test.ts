@@ -433,6 +433,15 @@ describe("Hono API foundation", () => {
       (await appWith(scopedOperator).fetch(new Request("http://localhost/api/operator/overview")))
         .status,
     ).toBe(200);
+    expect(
+      (
+        await appWith({
+          ...operator,
+          kind: "api_key" as const,
+          scopes: new Set<string>(["catalogue:read"]),
+        }).fetch(new Request("http://localhost/api/operator/overview"))
+      ).status,
+    ).toBe(403);
     const elevatedOrdinary = {
       ...ordinary,
       kind: "api_key" as const,

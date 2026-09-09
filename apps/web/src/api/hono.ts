@@ -379,11 +379,6 @@ function requireScope(c: any, p: ApiPrincipal, scope: string) {
   }
   return null;
 }
-function requireAnyScope(c: any, p: ApiPrincipal, scopes: readonly string[]) {
-  if (p.kind === "api_key" && !scopes.some((scope) => p.scopes.has(scope)))
-    return c.json({ error: "Forbidden", code: "insufficient_scope" }, 403);
-  return null;
-}
 function requireCapabilityScope(c: any, p: ApiPrincipal, capability: Capability, scope: string) {
   if (!hasCapability(p.capabilities, capability))
     return c.json({ error: "Forbidden", code: "forbidden" }, 403);
@@ -1824,15 +1819,7 @@ export function createApiApp(
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       if (!canAccessOperator(p.capabilities))
         return c.json({ error: "Forbidden", code: "forbidden" }, 403);
-      const denied = requireAnyScope(c, p, [
-        "operations:manage",
-        "catalogue:read",
-        "blog:read",
-        "hierarchy:read",
-        "withdrawals:read",
-        "treasury:read",
-        "reviews:moderate",
-      ]);
+      const denied = requireScope(c, p, "operations:manage");
       if (denied) return denied;
       return c.json(await container.operatorOverview.get(p.capabilities), 200);
     },
