@@ -12,6 +12,8 @@ services:
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
       OUTBOX_POLL_MS: ${OUTBOX_POLL_MS:-1000}
       OUTBOX_STALE_AFTER_MS: ${OUTBOX_STALE_AFTER_MS:-300000}
+      OUTBOX_RETRY_BASE_MS: ${OUTBOX_RETRY_BASE_MS:-1000}
+      OUTBOX_RETRY_MAX_MS: ${OUTBOX_RETRY_MAX_MS:-30000}
     depends_on:
       postgres:
         condition: service_healthy

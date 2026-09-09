@@ -9,6 +9,7 @@ import { JsonConsoleLogger, OutboxDispatcher, OutboxHandlerRegistry } from "./di
 import { PaystackChargeSucceededHandler } from "@/providers/paystack/payment/outbox-handler";
 import { PaystackRefundProcessedHandler } from "@/providers/paystack/payment/refund-handler";
 import { CommercialWorkflowDispatcher } from "@/workers/commercial/dispatcher";
+import { runWorkerLoop } from "./runner";
 
 const container = getContainer();
 const workerId = process.env.OUTBOX_WORKER_ID ?? `outbox-${randomUUID()}`;
@@ -44,23 +45,20 @@ const abortController = new AbortController();
 for (const signal of ["SIGTERM", "SIGINT"] as const)
   process.once(signal, () => abortController.abort());
 try {
-  while (!abortController.signal.aborted) {
-    try {
+  await runWorkerLoop({
+    signal: abortController.signal,
+    pollMilliseconds: positiveInteger(process.env.OUTBOX_POLL_MS, 1000),
+    retryBaseMilliseconds: positiveInteger(process.env.OUTBOX_RETRY_BASE_MS, 1000),
+    retryMaxMilliseconds: positiveInteger(process.env.OUTBOX_RETRY_MAX_MS, 30_000),
+    runIteration: async () => {
       const [outboxCount, commercialCount] = await Promise.all([
         dispatcher.runOnce(),
         commercial.runOnce(),
       ]);
-      if (outboxCount + commercialCount === 0)
-        await new Promise((resolve) =>
-          setTimeout(resolve, positiveInteger(process.env.OUTBOX_POLL_MS, 1000)),
-        );
-    } catch (error) {
-      logger.error(
-        { error: error instanceof Error ? error.message : String(error) },
-        "commercial.worker.iteration.failed",
-      );
-    }
-  }
+      return outboxCount + commercialCount;
+    },
+    logger,
+  });
 } finally {
   await container.database.close();
 }

@@ -70,4 +70,19 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
     expect(events).toContain("verification:verification-healthy");
     expect(events).toContain("distribution:distribution-healthy");
   });
+
+  it("stops the iteration on a database outage so the worker backs off once", async () => {
+    const events: string[] = [];
+    const app = application(events);
+    app.fundingInitialization.findWork = async () => {
+      throw Object.assign(new Error("getaddrinfo EAI_AGAIN postgres"), { code: "EAI_AGAIN" });
+    };
+    const logger = { error: vi.fn() };
+    await expect(new CommercialWorkflowDispatcher(app, logger).runOnce()).rejects.toMatchObject({
+      name: "WorkerInfrastructureError",
+      family: "funding-initialization",
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+  });
 });

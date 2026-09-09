@@ -3,6 +3,15 @@ import type { ApplicationContainer } from "@/infrastructure/container";
 export interface CommercialWorkflowLogger {
   error(fields: Record<string, unknown>, message: string): void;
 }
+export class WorkerInfrastructureError extends Error {
+  constructor(
+    readonly family: string,
+    cause: unknown,
+  ) {
+    super(errorMessage(cause), { cause });
+    this.name = "WorkerInfrastructureError";
+  }
+}
 const consoleLogger: CommercialWorkflowLogger = {
   error: (fields, message) =>
     console.error(
@@ -74,6 +83,7 @@ export class CommercialWorkflowDispatcher {
     try {
       items = await discover();
     } catch (error) {
+      if (isDatabaseUnavailable(error)) throw new WorkerInfrastructureError(family, error);
       this.failure(family, undefined, error, "commercial.workflow.discovery.failed");
       return 0;
     }
@@ -82,6 +92,7 @@ export class CommercialWorkflowDispatcher {
         await process(item);
         processed++;
       } catch (error) {
+        if (isDatabaseUnavailable(error)) throw new WorkerInfrastructureError(family, error);
         this.failure(family, item.id, error, "commercial.workflow.item.failed");
       }
     }
@@ -97,4 +108,40 @@ export class CommercialWorkflowDispatcher {
       message,
     );
   }
+}
+
+function isDatabaseUnavailable(error: unknown): boolean {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  if (
+    typeof code === "string" &&
+    [
+      "EAI_AGAIN",
+      "ENOTFOUND",
+      "ECONNREFUSED",
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "57P01",
+      "57P02",
+      "57P03",
+      "08000",
+      "08001",
+      "08003",
+      "08004",
+      "08006",
+      "08007",
+      "08S01",
+    ].includes(code)
+  )
+    return true;
+  const message = errorMessage(error).toLowerCase();
+  return /getaddrinfo|eai_again|enotfound|econnrefused|connection (terminated|refused|failed)|database system is starting up|terminating connection/.test(
+    message,
+  );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

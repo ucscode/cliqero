@@ -12,7 +12,12 @@ export interface SqlExecutor {
 const transactionStorage = new AsyncLocalStorage<PoolClient>();
 
 export class PostgresDatabase implements SqlExecutor, UnitOfWork {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool) {
+    // pg emits idle-client connection errors on the pool itself when
+    // PostgreSQL disappears. Keep the process alive so callers can observe the
+    // failure and the worker retry loop can reconnect on a later iteration.
+    this.pool.on("error", () => undefined);
+  }
 
   static connect(connectionString: string): PostgresDatabase {
     return new PostgresDatabase(

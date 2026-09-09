@@ -15,9 +15,7 @@ import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 export function PasswordResetForm({ token }: { token: string }) {
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -26,10 +24,6 @@ export function PasswordResetForm({ token }: { token: string }) {
     if (busy) return;
     setError(null);
     setMessage(null);
-    if (password !== confirm) {
-      setError("Passwords do not match.");
-      return;
-    }
     setBusy(true);
     try {
       const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
@@ -87,28 +81,6 @@ export function PasswordResetForm({ token }: { token: string }) {
               onClick={() => setShow((value) => !value)}
             >
               {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </Button>
-          </div>
-          <Label htmlFor="confirm-new-password">Confirm password</Label>
-          <div className="relative">
-            <Input
-              id="confirm-new-password"
-              type={showConfirm ? "text" : "password"}
-              minLength={PASSWORD_MIN_LENGTH}
-              required
-              value={confirm}
-              onChange={(event) => setConfirm(event.target.value)}
-              className="pr-11"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="absolute right-1 top-1 h-8 w-8"
-              aria-label={showConfirm ? "Hide confirmation password" : "Show confirmation password"}
-              onClick={() => setShowConfirm((value) => !value)}
-            >
-              {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </Button>
           </div>
           {error && (

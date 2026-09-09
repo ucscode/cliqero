@@ -35,9 +35,7 @@ export function AuthForm({
   const next = safeContinuation(searchParams.get("next"), "/dashboard");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [username, setUsername] = useState("");
   const [country, setCountry] = useState("");
   const [busy, setBusy] = useState(false);
@@ -62,10 +60,6 @@ export function AuthForm({
         },
         async () => {
           const honeypot = String(new FormData(form).get(HONEYPOT_FIELD_NAME) ?? "");
-          if (mode === "register" && password !== confirmPassword) {
-            setError("Passwords do not match.");
-            return;
-          }
           if (mode === "register" && captcha.enabled && !captchaToken) {
             setError("Please complete the CAPTCHA challenge.");
             return;
@@ -227,35 +221,6 @@ export function AuthForm({
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </Button>
         </div>
-        {mode === "register" && (
-          <>
-            <Label htmlFor="confirm-password">Confirm password</Label>
-            <div className="relative">
-              <Input
-                id="confirm-password"
-                type={showConfirmPassword ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                required
-                minLength={PASSWORD_MIN_LENGTH}
-                autoComplete="new-password"
-                className="pr-11"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1 h-8 w-8"
-                onClick={() => setShowConfirmPassword((value) => !value)}
-                aria-label={
-                  showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"
-                }
-              >
-                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-            </div>
-          </>
-        )}
         {mode === "register" && <Captcha config={captcha} onToken={onCaptchaToken} />}
         <Button type="submit" disabled={busy}>
           {busy

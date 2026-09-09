@@ -188,27 +188,57 @@ export class AuthenticationService {
     await this.betterAuth.resetPassword(authUserId, newPassword);
   }
 
+  async hasPasswordCredential(authUserId: string): Promise<boolean> {
+    return this.betterAuth.hasPasswordCredential(authUserId);
+  }
+
   async completeOnboarding(
     authUserId: string,
-    input: { username: string; country?: string | null },
+    input: { username: string; country?: string | null; password?: string },
+    headers?: Headers,
   ): Promise<Account> {
     const country = normalizeCountry(input.country);
+    const hasPassword = await this.betterAuth.hasPasswordCredential(authUserId);
+    if (!hasPassword && !input.password)
+      throw new PublicApplicationError(
+        "Choose a password to finish setting up your account.",
+        "validation_error",
+        400,
+        { password: "Choose a password to finish setting up your account." },
+      );
+    let createdCredentialId: string | null = null;
+    if (!hasPassword && input.password) {
+      assertPasswordMinimum(input.password);
+      if (!headers)
+        throw new Error("An authenticated request is required to create a local password");
+      createdCredentialId = await this.betterAuth.setPassword(authUserId, input.password, headers);
+    }
     const account = new Account(newId(), normalizeUsername(input.username), country);
-    await this.transaction(async () => {
-      await this.sql.query(
-        `insert into identity_capability.accounts (uuid,username,metadata)
-         values ($1,$2,$3::jsonb)`,
-        [account.id, account.username, JSON.stringify(country ? { country } : {})],
-      );
-      const updated = await this.sql.query(
-        `update identity_capability.auth_account_links
-         set account_id=(select id from identity_capability.accounts where uuid=$2),onboarding_state='complete',updated_at=now()
-         where auth_user_id=$1 and onboarding_state='incomplete'`,
-        [authUserId, account.id],
-      );
-      if (updated.rowCount !== 1) throw new Error("Authentication onboarding state is invalid");
-    });
-    return account;
+    try {
+      await this.transaction(async () => {
+        await this.sql.query(
+          `insert into identity_capability.accounts (uuid,username,metadata)
+           values ($1,$2,$3::jsonb)`,
+          [account.id, account.username, JSON.stringify(country ? { country } : {})],
+        );
+        const updated = await this.sql.query(
+          `update identity_capability.auth_account_links
+           set account_id=(select id from identity_capability.accounts where uuid=$2),onboarding_state='complete',updated_at=now()
+           where auth_user_id=$1 and onboarding_state='incomplete'`,
+          [authUserId, account.id],
+        );
+        if (updated.rowCount !== 1) throw new Error("Authentication onboarding state is invalid");
+      });
+      return account;
+    } catch (error) {
+      if (createdCredentialId)
+        await this.betterAuth.removePasswordCredential(authUserId, createdCredentialId);
+      if ((error as { code?: string }).code === "23505")
+        throw new PublicApplicationError("That username is already taken.", "username_taken", 409, {
+          username: "That username is already taken.",
+        });
+      throw error;
+    }
   }
 }
 

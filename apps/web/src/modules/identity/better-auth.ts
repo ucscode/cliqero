@@ -49,6 +49,9 @@ export class BetterAuthBoundary {
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 5_000,
     });
+    // Better Auth owns a separate pool; prevent an idle connection error from
+    // becoming an uncaught process-level event during a database restart.
+    this.pool.on("error", () => undefined);
     this.auth = betterAuth({
       appName: siteConfig.name,
       baseURL: siteConfig.url,
@@ -143,5 +146,29 @@ export class BetterAuthBoundary {
     }
     if (context.options.emailAndPassword?.revokeSessionsOnPasswordReset)
       await context.internalAdapter.deleteUserSessions(authUserId);
+  }
+
+  async hasPasswordCredential(authUserId: string): Promise<boolean> {
+    const context = await this.auth.$context;
+    return Boolean((await context.internalAdapter.findCredentialAccount(authUserId))?.password);
+  }
+
+  /**
+   * Add a local credential to an authenticated OAuth account. Better Auth's
+   * server-only setPassword endpoint owns password hashing and account-row
+   * persistence; this method keeps that protocol boundary in one place.
+   */
+  async setPassword(authUserId: string, newPassword: string, headers: Headers): Promise<string> {
+    await this.auth.api.setPassword({ body: { newPassword }, headers });
+    const context = await this.auth.$context;
+    const credential = await context.internalAdapter.findCredentialAccount(authUserId);
+    if (!credential) throw new Error("Better Auth did not create a credential account");
+    return credential.id;
+  }
+
+  async removePasswordCredential(authUserId: string, credentialId: string): Promise<void> {
+    const context = await this.auth.$context;
+    const credential = await context.internalAdapter.findCredentialAccount(authUserId);
+    if (credential?.id === credentialId) await context.internalAdapter.deleteAccount(credential.id);
   }
 }
