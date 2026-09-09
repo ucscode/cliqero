@@ -103,7 +103,6 @@ export function OnboardingForm() {
         </Alert>
       )}
       <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
-        <HoneypotField />
         <Label htmlFor="onboarding-username">Username</Label>
         <Input
           id="onboarding-username"
@@ -162,6 +161,7 @@ export function OnboardingForm() {
         <Button type="submit" disabled={busy}>
           {busy ? "Saving…" : "Continue"}
         </Button>
+        <HoneypotField />
       </form>
     </AuthShell>
   );

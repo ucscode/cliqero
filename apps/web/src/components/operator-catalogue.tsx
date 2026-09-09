@@ -153,7 +153,6 @@ export function OperatorCatalogueList() {
             void load();
           }}
         >
-          <HoneypotField />
           <label>
             Search
             <Input
@@ -174,6 +173,7 @@ export function OperatorCatalogueList() {
           <Button type="submit" variant="secondary">
             Apply filters
           </Button>
+          <HoneypotField />
         </form>
         <div className="catalogue-transfer">
           <span className="eyebrow">Transfer</span>
@@ -189,7 +189,6 @@ export function OperatorCatalogueList() {
             ))}
           </div>
           <form className="catalogue-import" onSubmit={(event) => void importFile(event)}>
-            <HoneypotField />
             <Input
               type="file"
               name="file"
@@ -207,6 +206,7 @@ export function OperatorCatalogueList() {
             <Button type="submit" variant="secondary" disabled={importing}>
               {importing ? "Importing…" : "Import"}
             </Button>
+            <HoneypotField />
           </form>
           {importMessage && (
             <Toast tone={importMessage.startsWith("Import complete") ? "success" : "error"}>
@@ -347,6 +347,10 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
+    const honeypotHeaders: Record<string, string> = honeypot
+      ? { [HONEYPOT_HEADER_NAME]: honeypot }
+      : {};
     setSaving(true);
     setError(null);
     setSaved(false);
@@ -355,7 +359,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       if (editing) {
         const next = await apiFetch<OperatorListing>(`/api/operator/listings/${listingId}`, {
           method: "PATCH",
-          headers: { "content-type": "application/json" },
+          headers: { ...honeypotHeaders, "content-type": "application/json" },
           body: JSON.stringify({
             title: form.title.trim(),
             description: form.description,
@@ -370,7 +374,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       } else {
         const next = await apiFetch<OperatorListing>("/api/operator/listings", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { ...honeypotHeaders, "content-type": "application/json" },
           body: JSON.stringify({
             title: form.title.trim(),
             description: form.description,
@@ -414,7 +418,6 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       {saved && <Toast tone="success">Listing saved.</Toast>}
       <Card>
         <form className="catalogue-editor-form" onSubmit={save}>
-          <HoneypotField />
           <label>
             Title
             <Input
@@ -480,6 +483,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <Button type="submit" disabled={saving}>
             {saving ? "Saving…" : editing ? "Save changes" : "Create listing"}
           </Button>
+          <HoneypotField />
         </form>
       </Card>
       {editing && listing && (
@@ -519,6 +523,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     setBusy(true);
     setError(null);
     try {
@@ -526,7 +531,10 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
         `/api/operator/listings/${listingId}/integrations`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+          },
           body: JSON.stringify({ name }),
         },
       );
@@ -589,7 +597,6 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
         </Toast>
       )}
       <form className="media-upload-form" onSubmit={(event) => void create(event)}>
-        <HoneypotField />
         <label className="sr-only" htmlFor={`integration-name-${listingId}`}>
           Credential name
         </label>
@@ -603,6 +610,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
         <Button type="submit" variant="secondary" disabled={busy}>
           {busy ? "Creating…" : "Create credential"}
         </Button>
+        <HoneypotField />
       </form>
       {items.length ? (
         <div className="integration-list">
@@ -714,11 +722,11 @@ function CatalogueMedia({
       </div>
       {error && <Toast>{error}</Toast>}
       <form className="media-upload-form" onSubmit={(event) => void upload(event)}>
-        <HoneypotField />
         <Input name="file" type="file" accept="image/*" required />
         <Button type="submit" variant="secondary" disabled={busy}>
           {busy ? "Uploading…" : "Add image"}
         </Button>
+        <HoneypotField />
       </form>
       {listing.media.length ? (
         <div className="catalogue-media-grid">

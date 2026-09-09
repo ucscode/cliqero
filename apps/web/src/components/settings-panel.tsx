@@ -24,6 +24,7 @@ import { Select } from "./ui/select";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { HoneypotField } from "./honeypot-field";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 const userScopes = [
   ["Catalogue", ["catalogue:read"]],
@@ -118,8 +119,9 @@ function ProfileSettings() {
     void load();
   }, [load]);
 
-  async function save(event: FormEvent) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -127,7 +129,10 @@ function ProfileSettings() {
     try {
       const value = await apiFetch<Profile>("/api/me/profile", {
         method: "PATCH",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+        },
         body: JSON.stringify({ username, country: country || null }),
       });
       setProfile(value);
@@ -164,7 +169,6 @@ function ProfileSettings() {
       {error && <Toast>{error}</Toast>}
       {message && <Toast tone="success">{message}</Toast>}
       <form className="grid max-w-2xl gap-3" onSubmit={save}>
-        <HoneypotField />
         <Label htmlFor="settings-username">Username</Label>
         <Input
           id="settings-username"
@@ -209,6 +213,7 @@ function ProfileSettings() {
         <Button type="submit" disabled={busy}>
           {busy ? "Saving…" : "Save profile"}
         </Button>
+        <HoneypotField />
       </form>
     </Card>
   );
@@ -251,15 +256,19 @@ export function IntegrationSettings() {
     void load();
   }, [load]);
 
-  async function create(event: FormEvent) {
+  async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     setBusy("create");
     setError(null);
     setMessage(null);
     try {
       const result = await apiFetch<IntegrationCredential>("/api/integrations", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+        },
         body: JSON.stringify({ name, listing_id: listingId }),
       });
       setCredential(result.credential);
@@ -397,7 +406,6 @@ export function IntegrationSettings() {
           <p className="eyebrow">Add integration</p>
           <h3>Connect a listing access tool</h3>
           <form className="grid max-w-2xl gap-3" onSubmit={create}>
-            <HoneypotField />
             <Label htmlFor="integration-name">Name</Label>
             <Input
               id="integration-name"
@@ -423,6 +431,7 @@ export function IntegrationSettings() {
             <Button type="submit" disabled={busy === "create"}>
               {busy === "create" ? "Connecting…" : "Connect integration"}
             </Button>
+            <HoneypotField />
           </form>
         </Card>
       )}
@@ -471,14 +480,18 @@ function ApiKeySettings() {
       current.includes(scope) ? current.filter((value) => value !== scope) : [...current, scope],
     );
   }
-  async function create(event: FormEvent) {
+  async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     setBusy(true);
     setError(null);
     try {
       const result = await apiFetch<ApiKeyCreated>("/api/api-keys", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+        },
         body: JSON.stringify({
           name,
           scopes: selected,
@@ -527,7 +540,6 @@ function ApiKeySettings() {
         </p>
         {error && <Toast>{error}</Toast>}
         <form className="grid max-w-2xl gap-3" onSubmit={create}>
-          <HoneypotField />
           <Label htmlFor="api-key-name">Name</Label>
           <Input
             id="api-key-name"
@@ -567,6 +579,7 @@ function ApiKeySettings() {
           <Button type="submit" disabled={busy}>
             {busy ? "Creating…" : "Create API key"}
           </Button>
+          <HoneypotField />
         </form>
       </Card>
       <Card className="grid gap-4 p-5">

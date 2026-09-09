@@ -1,5 +1,7 @@
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
+export type HoneypotSource = "header" | "form" | "json";
+
 export function isHoneypotValueFilled(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -11,9 +13,9 @@ export function honeypotRejectionResponse(): Response {
   );
 }
 
-export async function requestHasHoneypot(request: Request): Promise<boolean> {
-  if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return false;
-  if (isHoneypotValueFilled(request.headers.get(HONEYPOT_HEADER_NAME))) return true;
+export async function requestHoneypotSource(request: Request): Promise<HoneypotSource | null> {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return null;
+  if (isHoneypotValueFilled(request.headers.get(HONEYPOT_HEADER_NAME))) return "header";
   const contentType = request.headers.get("content-type") ?? "";
   if (
     contentType.includes("multipart/form-data") ||
@@ -21,16 +23,22 @@ export async function requestHasHoneypot(request: Request): Promise<boolean> {
   ) {
     try {
       const form = await request.clone().formData();
-      return [form.get(HONEYPOT_FIELD_NAME), form.get("website")].some(isHoneypotValueFilled);
+      return [form.get(HONEYPOT_FIELD_NAME), form.get("website")].some(isHoneypotValueFilled)
+        ? "form"
+        : null;
     } catch {
-      return false;
+      return null;
     }
   }
-  if (!contentType.includes("application/json")) return false;
+  if (!contentType.includes("application/json")) return null;
   try {
     const body = (await request.clone().json()) as Record<string, unknown>;
-    return [body[HONEYPOT_FIELD_NAME], body.website].some(isHoneypotValueFilled);
+    return [body[HONEYPOT_FIELD_NAME], body.website].some(isHoneypotValueFilled) ? "json" : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function requestHasHoneypot(request: Request): Promise<boolean> {
+  return (await requestHoneypotSource(request)) !== null;
 }

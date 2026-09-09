@@ -74,7 +74,6 @@ export function OperatorUsersList() {
             void load();
           }}
         >
-          <HoneypotField />
           <label>
             Search accounts
             <Input
@@ -86,6 +85,7 @@ export function OperatorUsersList() {
           <Button type="submit" variant="secondary" disabled={loading}>
             {loading ? "Searching…" : "Search"}
           </Button>
+          <HoneypotField />
         </form>
       </Card>
       {error && <Toast>{error}</Toast>}
@@ -147,7 +147,6 @@ function AccountRow({ account }: { account: OperatorAccountSummary }) {
                 : "secondary"
           }
         >
-          <HoneypotField />
           {roleLabel(account.roles)}
         </Badge>
         <span>{account.directReferralCount} direct referrals</span>

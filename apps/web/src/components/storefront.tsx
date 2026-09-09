@@ -90,7 +90,6 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
             navigate({ q: draft.trim() || null, cursor: null, trail: null });
           }}
         >
-          <HoneypotField />
           <label className="sr-only" htmlFor="catalogue-search">
             Search catalogue
           </label>
@@ -103,6 +102,7 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
           <Button type="submit" variant="secondary">
             Search
           </Button>
+          <HoneypotField />
         </form>
       </div>
       <div className="flex justify-end">

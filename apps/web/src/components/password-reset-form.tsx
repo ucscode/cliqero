@@ -60,7 +60,6 @@ export function PasswordResetForm({ token }: { token: string }) {
         </Alert>
       ) : (
         <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
-          <HoneypotField />
           <Label htmlFor="new-password">New password</Label>
           <div className="relative">
             <Input
@@ -91,6 +90,7 @@ export function PasswordResetForm({ token }: { token: string }) {
           <Button type="submit" disabled={busy}>
             {busy ? "Resetting password…" : "Reset password"}
           </Button>
+          <HoneypotField />
         </form>
       )}
     </AuthShell>

@@ -4,6 +4,7 @@ import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import { apiScopeSchema } from "@/modules/identity/api-scopes";
 import { dispatchLegacyApi, legacyApiPaths } from "./legacy-dispatch";
 import { publicErrorPayload, validationErrorPayload } from "./error";
+import { logDevelopmentError } from "@/infrastructure/development-log";
 import { newId } from "@/kernel/ids";
 import { blogPostInputSchema } from "@/modules/blog/domain/blog";
 import {
@@ -431,8 +432,18 @@ function grantableScopes(p: ApiPrincipal): Set<string> {
 }
 function domainError(c: any, error: unknown) {
   const publicError = publicErrorPayload(error);
-  if (publicError) return c.json(publicError.payload, publicError.status);
   const validation = validationErrorPayload(error);
+  logDevelopmentError(error, {
+    event: "api.error",
+    method: c.req.raw.method,
+    path: new URL(c.req.raw.url).pathname,
+    ...(publicError
+      ? { publicCode: publicError.payload.code }
+      : validation
+        ? { publicCode: validation.code }
+        : {}),
+  });
+  if (publicError) return c.json(publicError.payload, publicError.status);
   if (validation) return c.json(validation, 400);
   const message = error instanceof Error ? error.message : "Request failed";
   const status =

@@ -4,6 +4,7 @@ import { getContainer } from "@/infrastructure/container";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 import { usernameSchema } from "@/modules/identity/username";
 import { verifyCaptchaToken } from "@/security/captcha";
+import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
 
 const bodySchema = z.object({
   email: z.email("Enter a valid email address."),
@@ -22,11 +23,18 @@ export async function POST(request: Request) {
     const input = bodySchema.parse(await request.json());
     if (
       !(await verifyCaptchaToken(input.captchaToken, request.headers.get("x-forwarded-for"), true))
-    )
+    ) {
+      writeDevelopmentDiagnostic({
+        level: "warn",
+        event: "security.captcha.rejected",
+        method: request.method,
+        path: new URL(request.url).pathname,
+      });
       return Response.json(
         { error: "Please complete the CAPTCHA challenge.", code: "captcha_failed" },
         { status: 400 },
       );
+    }
     const account = await getContainer().authentication.register(input);
     const profile = await getContainer().profiles.get(account.id);
     return Response.json(
@@ -39,6 +47,6 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }

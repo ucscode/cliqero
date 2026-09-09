@@ -22,6 +22,7 @@ import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { Money } from "./money";
 import { HoneypotField } from "./honeypot-field";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 const terminalFundingStates = new Set(["confirmed", "failed", "blocked", "reconciliation_pending"]);
 
@@ -129,6 +130,7 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
 
   async function submitFunding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     setProviderError(null);
     let amountMinor: string;
     try {
@@ -146,6 +148,7 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
           headers: {
             "content-type": "application/json",
             "idempotency-key": `wallet-funding-${crypto.randomUUID()}`,
+            ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
           },
           body: JSON.stringify({ amount_minor: amountMinor, provider: configuredProvider }),
         },
@@ -312,7 +315,6 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
             <DialogTitle>Fund your wallet</DialogTitle>
           </DialogHeader>
           <form className="grid gap-3" onSubmit={submitFunding}>
-            <HoneypotField />
             <p>Funding is collected externally and becomes available after verification.</p>
             <Label htmlFor="funding-amount">Amount in USD</Label>
             <Input
@@ -330,6 +332,7 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
             <Button type="submit" disabled={submitting}>
               {submitting ? "Starting funding…" : "Start funding"}
             </Button>
+            <HoneypotField />
           </form>
         </DialogContent>
       </Dialog>

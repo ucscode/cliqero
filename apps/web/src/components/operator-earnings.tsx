@@ -88,7 +88,6 @@ export function OperatorEarningsList() {
             void load();
           }}
         >
-          <HoneypotField />
           <label>
             Search account or entry
             <Input
@@ -109,6 +108,7 @@ export function OperatorEarningsList() {
           <Button type="submit" variant="secondary" disabled={loading}>
             {loading ? "Loading…" : "Apply filters"}
           </Button>
+          <HoneypotField />
         </form>
       </Card>
       {error && <Toast>{error}</Toast>}

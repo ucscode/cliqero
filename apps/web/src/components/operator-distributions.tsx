@@ -73,7 +73,6 @@ export function OperatorDistributionList() {
             void load();
           }}
         >
-          <HoneypotField />
           <label>
             Search distributions
             <Input
@@ -85,6 +84,7 @@ export function OperatorDistributionList() {
           <Button type="submit" variant="secondary" disabled={loading}>
             {loading ? "Loading…" : "Search"}
           </Button>
+          <HoneypotField />
         </form>
       </Card>
       {error && <Toast>{error}</Toast>}

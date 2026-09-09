@@ -15,6 +15,7 @@ import { Badge } from "./ui/badge";
 import { Alert } from "./ui/alert";
 import type { BlogPost } from "@/modules/blog/domain/blog";
 import { HoneypotField } from "./honeypot-field";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 export function OperatorBlogList() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -105,8 +106,12 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<BlogPost | null>(initial ?? null);
   const [saving, setSaving] = useState(false);
-  async function submit(event: FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
+    const honeypotHeaders: Record<string, string> = honeypot
+      ? { [HONEYPOT_HEADER_NAME]: honeypot }
+      : {};
     setSaving(true);
     setError(null);
     try {
@@ -128,11 +133,16 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
       const post = saved
         ? await apiFetch<BlogPost>(`/api/blog/posts/${saved.id}`, {
             method: "PATCH",
+            headers: { ...honeypotHeaders, "content-type": "application/json" },
             body: JSON.stringify(body),
           })
         : await apiFetch<BlogPost>("/api/blog/posts", {
             method: "POST",
-            headers: { "content-type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+            headers: {
+              ...honeypotHeaders,
+              "content-type": "application/json",
+              "Idempotency-Key": crypto.randomUUID(),
+            },
             body: JSON.stringify(body),
           });
       setSaved(post);
@@ -168,7 +178,6 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   }
   return (
     <form onSubmit={submit} className="space-y-6">
-      <HoneypotField />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold text-slate-900">
@@ -278,6 +287,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
           </div>
         </div>
       </Card>
+      <HoneypotField />
     </form>
   );
 }

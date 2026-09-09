@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       hasPassword: await getContainer().authentication.hasPasswordCredential(principal.authUserId),
     });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }
 
@@ -53,6 +53,6 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
-    return apiError(error);
+    return apiError(error, request);
   }
 }

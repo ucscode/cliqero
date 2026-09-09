@@ -73,7 +73,7 @@ describe("apiFetch validation errors", () => {
     });
   });
 
-  it("forwards a populated trap in the canonical header without mutating JSON", async () => {
+  it("does not scan unrelated forms for anti-abuse data", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const querySelectorAll = vi.fn().mockReturnValue([{ value: "autofilled" }]);
     vi.stubGlobal("fetch", fetchMock);
@@ -86,8 +86,8 @@ describe("apiFetch validation errors", () => {
     });
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(new Headers(init.headers).get(HONEYPOT_HEADER_NAME)).toBe("autofilled");
-    expect(querySelectorAll).toHaveBeenCalledWith('input[name="referenceId"]');
+    expect(new Headers(init.headers).get("x-cliqero-honeypot")).toBeNull();
+    expect(querySelectorAll).not.toHaveBeenCalled();
     expect(JSON.parse(String(init.body))).toEqual({ email: "user@example.com" });
   });
 
@@ -104,7 +104,7 @@ describe("apiFetch validation errors", () => {
     });
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(new Headers(init.headers).get(HONEYPOT_HEADER_NAME)).toBe("submitting-form");
+    expect(new Headers(init.headers).get("x-cliqero-honeypot")).toBe("submitting-form");
   });
 });
 

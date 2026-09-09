@@ -88,7 +88,6 @@ export function ListingReviews({ listingId }: { listingId: string }) {
     <div className="mt-7 grid gap-6">
       {session.data?.user && (
         <form className="mt-7 grid gap-4" onSubmit={submit}>
-          <HoneypotField />
           <fieldset>
             <legend className="text-sm font-medium">Your rating</legend>
             <div className="mt-2 flex gap-1" onPointerLeave={() => setHoverRating(0)}>
@@ -129,6 +128,7 @@ export function ListingReviews({ listingId }: { listingId: string }) {
               {error}
             </p>
           )}
+          <HoneypotField />
         </form>
       )}
       <div className="grid gap-6">

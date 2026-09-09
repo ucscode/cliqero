@@ -143,7 +143,6 @@ export function OperatorNetwork() {
             void searchAccounts();
           }}
         >
-          <HoneypotField />
           <label>
             Find an account
             <Input
@@ -155,6 +154,7 @@ export function OperatorNetwork() {
           <Button type="submit" variant="secondary">
             Search network
           </Button>
+          <HoneypotField />
         </form>
         {results.length > 0 && (
           <ul className="operator-search-results">

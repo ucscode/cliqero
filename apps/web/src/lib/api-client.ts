@@ -1,5 +1,3 @@
-import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "./honeypot";
-
 export type ListingMedia = {
   id: string;
   url: string;
@@ -533,22 +531,6 @@ export function presentFormApiError(
 export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has("accept")) headers.set("accept", "application/json");
-  if (
-    typeof document !== "undefined" &&
-    !headers.has(HONEYPOT_HEADER_NAME) &&
-    ["POST", "PUT", "PATCH", "DELETE"].includes((init?.method ?? "GET").toUpperCase())
-  ) {
-    // Existing mutation call sites without form context use this fallback;
-    // form-owned callers pass the header explicitly and bypass the scan.
-    const filled = Array.from(
-      document.querySelectorAll<HTMLInputElement>(`input[name="${HONEYPOT_FIELD_NAME}"]`),
-    )
-      .map((input) => input.value)
-      .find((value) => value.trim());
-    if (filled) {
-      headers.set(HONEYPOT_HEADER_NAME, filled);
-    }
-  }
   const response = await fetch(input, {
     ...init,
     credentials: "include",

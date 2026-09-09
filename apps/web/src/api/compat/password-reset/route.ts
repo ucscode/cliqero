@@ -4,6 +4,7 @@ import { passwordResetError } from "@/api/auth-errors";
 import { getContainer } from "@/infrastructure/container";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 import type { BetterAuthInstance } from "@/modules/identity/better-auth";
+import { logDevelopmentError } from "@/infrastructure/development-log";
 
 const bodySchema = z.object({
   token: z.string().min(1),
@@ -21,7 +22,14 @@ export async function handlePasswordReset(
     await auth.api.resetPassword({ body });
     return Response.json({ status: true });
   } catch (error) {
-    return apiError(error instanceof z.ZodError ? error : passwordResetError(error));
+    if (!(error instanceof z.ZodError)) {
+      logDevelopmentError(error, {
+        event: "auth.password_reset.failed",
+        method: request.method,
+        path: new URL(request.url).pathname,
+      });
+    }
+    return apiError(error instanceof z.ZodError ? error : passwordResetError(error), request);
   }
 }
 

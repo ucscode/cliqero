@@ -27,9 +27,12 @@ body {
   margin: 0;
   background: var(--canvas);
 }
-a {
-  color: inherit;
+main a {
+  color: var(--accent);
   text-decoration: none;
+}
+a:hover {
+  color: var(--accent-dark);
 }
 button,
 input,

@@ -23,6 +23,7 @@ import { EmptyState } from "./empty-state";
 import { HoneypotField } from "./honeypot-field";
 import { Toast } from "./toast";
 import { Money } from "./money";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 const activeStates = new Set<Withdrawal["state"]>(["requested", "approved"]);
 
@@ -137,6 +138,7 @@ export function WithdrawalsPanel() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     setError(null);
     setSuccess(null);
     let amountMinor: string;
@@ -178,6 +180,7 @@ export function WithdrawalsPanel() {
         headers: {
           "content-type": "application/json",
           "idempotency-key": idempotencyKey.current!,
+          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
         },
         body: JSON.stringify({
           amount_minor: amountMinor,
@@ -281,7 +284,6 @@ export function WithdrawalsPanel() {
               </Badge>
             </div>
             <form className="grid max-w-2xl gap-3" onSubmit={submit}>
-              <HoneypotField />
               <Label htmlFor="withdrawal-amount">Amount (USD)</Label>
               <Input
                 id="withdrawal-amount"
@@ -311,6 +313,7 @@ export function WithdrawalsPanel() {
               <Button type="submit" disabled={!policy?.enabled || submitting}>
                 {submitting ? "Submitting…" : "Request withdrawal"}
               </Button>
+              <HoneypotField />
             </form>
           </Card>
           <Card className="min-w-0 p-5">

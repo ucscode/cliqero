@@ -25,6 +25,11 @@ dev-clean:
 dev-logs:
 	docker compose logs -f
 
+# Follow application diagnostics written by the development server
+dev-diagnostics:
+	@mkdir -p var/log
+	tail -F var/log/development.log
+
 # Show development service status
 dev-ps:
 	docker compose ps

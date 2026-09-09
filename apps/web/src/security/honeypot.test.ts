@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { HONEYPOT_FIELD_NAME } from "@/lib/honeypot";
-import { honeypotRejectionResponse, isHoneypotValueFilled, requestHasHoneypot } from "./honeypot";
+import {
+  honeypotRejectionResponse,
+  isHoneypotValueFilled,
+  requestHasHoneypot,
+  requestHoneypotSource,
+} from "./honeypot";
 
 describe("form honeypot", () => {
   it("returns a stable public rejection without exposing guard terminology", async () => {
@@ -68,5 +73,25 @@ describe("form honeypot", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("identifies only the transport source, never the submitted value", async () => {
+    expect(
+      await requestHoneypotSource(
+        new Request("http://localhost/api/test", {
+          method: "POST",
+          headers: { "x-cliqero-honeypot": "private-value" },
+        }),
+      ),
+    ).toBe("header");
+    expect(
+      await requestHoneypotSource(
+        new Request("http://localhost/api/test", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ [HONEYPOT_FIELD_NAME]: "private-value" }),
+        }),
+      ),
+    ).toBe("json");
   });
 });

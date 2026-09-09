@@ -155,7 +155,6 @@ export function AuthForm({
         </Alert>
       )}
       <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
-        <HoneypotField />
         {mode === "register" && (
           <>
             <Label htmlFor="username">Username</Label>
@@ -231,6 +230,7 @@ export function AuthForm({
               ? "Sign in"
               : "Create account"}
         </Button>
+        <HoneypotField />
       </form>
       <div className="mt-6 grid gap-4 border-t border-slate-200 pt-6">
         {mode === "login" && (

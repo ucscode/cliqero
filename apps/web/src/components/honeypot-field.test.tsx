@@ -9,6 +9,8 @@ describe("HoneypotField", () => {
     expect(markup).toContain('name="referenceId"');
     expect(markup).toContain(`name="${HONEYPOT_FIELD_NAME}"`);
     expect(markup).not.toContain('name="website"');
+    expect(markup).not.toContain("Leave this field empty");
+    expect(markup).toContain('type="text"');
     expect(markup).toContain('autoComplete="off"');
     expect(markup).toContain('tabindex="-1"');
     expect(markup).toContain('aria-hidden="true"');

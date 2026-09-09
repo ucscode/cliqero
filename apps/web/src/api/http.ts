@@ -2,6 +2,7 @@ import type { Account } from "@/modules/identity/account";
 import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import { getContainer } from "@/infrastructure/container";
 import { publicErrorPayload, validationErrorPayload } from "./error";
+import { logDevelopmentError } from "@/infrastructure/development-log";
 
 /** Shared authentication boundary for capability routes migrating to Hono. */
 export async function authenticatedPrincipal(request: Request): Promise<ApiPrincipal | null> {
@@ -27,10 +28,19 @@ export function referralAttributionSource(request: Request): string | undefined 
     ?.slice("cliqero_attribution=".length);
 }
 
-export function apiError(error: unknown): Response {
+export function apiError(error: unknown, request?: Request): Response {
   const publicError = publicErrorPayload(error);
-  if (publicError) return Response.json(publicError.payload, { status: publicError.status });
   const validation = validationErrorPayload(error);
+  logDevelopmentError(error, {
+    event: "api.error",
+    ...(request ? { method: request.method, path: new URL(request.url).pathname } : {}),
+    ...(publicError
+      ? { publicCode: publicError.payload.code }
+      : validation
+        ? { publicCode: validation.code }
+        : {}),
+  });
+  if (publicError) return Response.json(publicError.payload, { status: publicError.status });
   if (validation) return Response.json(validation, { status: 400 });
   const message = error instanceof Error ? error.message : "Request failed";
   const status =

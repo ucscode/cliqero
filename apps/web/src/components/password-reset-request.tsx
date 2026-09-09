@@ -68,7 +68,6 @@ export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig
         </Alert>
       )}
       <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
-        <HoneypotField />
         <Label htmlFor="reset-email">Email</Label>
         <Input
           id="reset-email"
@@ -82,6 +81,7 @@ export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig
         <Button type="submit" disabled={busy}>
           {busy ? "Sending…" : "Send reset link"}
         </Button>
+        <HoneypotField />
       </form>
       <Link href="/login" className="mt-6 block text-sm text-emerald-700 underline">
         Back to sign in

@@ -102,7 +102,6 @@ export function OperatorFundingList() {
             void load();
           }}
         >
-          <HoneypotField />
           <label>
             Search funding, reference, or account
             <Input
@@ -136,6 +135,7 @@ export function OperatorFundingList() {
           <Button type="submit" variant="secondary" disabled={loading}>
             {loading ? "Loading…" : "Apply filters"}
           </Button>
+          <HoneypotField />
         </form>
       </Card>
       {error && <Toast>{error}</Toast>}

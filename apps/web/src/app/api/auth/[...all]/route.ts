@@ -1,13 +1,24 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import { getContainer } from "@/infrastructure/container";
-import { honeypotRejectionResponse, requestHasHoneypot } from "@/security/honeypot";
+import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
+import { honeypotRejectionResponse, requestHoneypotSource } from "@/security/honeypot";
 import { verifyCaptchaToken } from "@/security/captcha";
 
 // Resolve the application container per request. Keeping construction out of
 // module evaluation allows `next build` to collect route configuration without
 // requiring runtime database credentials.
 async function route(method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", request: Request) {
-  if (await requestHasHoneypot(request)) return honeypotRejectionResponse();
+  const honeypotSource = await requestHoneypotSource(request);
+  if (honeypotSource) {
+    writeDevelopmentDiagnostic({
+      level: "warn",
+      event: "security.honeypot.rejected",
+      method: request.method,
+      path: new URL(request.url).pathname,
+      metadata: { source: honeypotSource },
+    });
+    return honeypotRejectionResponse();
+  }
   const captchaRequired =
     method === "POST" &&
     (request.url.includes("request-password-reset") || request.url.includes("sign-up/email"));
@@ -22,8 +33,15 @@ async function route(method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", reques
         request.headers.get("x-forwarded-for"),
         true,
       ))
-    )
+    ) {
+      writeDevelopmentDiagnostic({
+        level: "warn",
+        event: "security.captcha.rejected",
+        method: request.method,
+        path: new URL(request.url).pathname,
+      });
       return Response.json({ error: "CAPTCHA verification failed" }, { status: 400 });
+    }
   }
   const handler = toNextJsHandler(getContainer().authentication.auth);
   return handler[method](request);

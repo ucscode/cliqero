@@ -20,6 +20,7 @@ import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { Money } from "./money";
 import { HoneypotField } from "./honeypot-field";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Treasury data is temporarily unavailable.";
@@ -73,8 +74,9 @@ export function OperatorTreasuryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function createEntry(event: FormEvent) {
+  async function createEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     setFormError(null);
     let amountMinor: string;
     try {
@@ -94,6 +96,7 @@ export function OperatorTreasuryPage() {
         headers: {
           "content-type": "application/json",
           "Idempotency-Key": crypto.randomUUID(),
+          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
         },
         body: JSON.stringify({
           direction: entryDirection,
@@ -150,7 +153,6 @@ export function OperatorTreasuryPage() {
           <p className="panel-intro">Corrections are made with a separate opposite entry.</p>
         </div>
         <form className="operator-treasury-form" onSubmit={createEntry}>
-          <HoneypotField />
           <label>
             Direction
             <Select
@@ -194,6 +196,7 @@ export function OperatorTreasuryPage() {
           <Button type="submit" disabled={saving}>
             {saving ? "Saving…" : "Add treasury entry"}
           </Button>
+          <HoneypotField />
         </form>
       </Card>
       <Card>
@@ -210,7 +213,6 @@ export function OperatorTreasuryPage() {
             void load();
           }}
         >
-          <HoneypotField />
           <label>
             Search
             <Input
@@ -244,6 +246,7 @@ export function OperatorTreasuryPage() {
           <Button type="submit" variant="secondary" disabled={loading}>
             Apply filters
           </Button>
+          <HoneypotField />
         </form>
         {loading && !page ? (
           <Skeleton className="operator-treasury-skeleton" />

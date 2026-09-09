@@ -84,7 +84,6 @@ export function OperatorWithdrawalList() {
             void load();
           }}
         >
-          <HoneypotField />
           <label>
             Search account, withdrawal, or destination
             <Input
@@ -99,7 +98,6 @@ export function OperatorWithdrawalList() {
               value={state}
               onChange={(e) => setState(e.target.value as OperatorWithdrawalState | "")}
             >
-              <HoneypotField />
               <option value="">All states</option>
               {states.map(([value, label]) => (
                 <option key={value} value={value}>
@@ -122,6 +120,7 @@ export function OperatorWithdrawalList() {
           <Button type="submit" variant="secondary" disabled={loading}>
             {loading ? "Loading…" : "Apply filters"}
           </Button>
+          <HoneypotField />
         </form>
       </Card>
       {error && <Toast>{error}</Toast>}
