@@ -7,7 +7,7 @@ application capabilities. Existing capability services remain authoritative;
 Hono handlers do not contain business rules.
 
 Better Auth browser sessions and hashed Cliqero API keys both resolve to one
-`ApiPrincipal` containing the canonical Cliqero `accountId`, Cliqero roles, and
+`ApiPrincipal` containing the canonical Cliqero `accountId`, direct Cliqero capabilities, and
 (for keys) explicit scopes. A key cannot elevate its owner's authorization.
 Secrets are returned once at creation and never persisted or logged in
 plaintext. Compatibility handler modules are internal adapters and are not
@@ -18,14 +18,14 @@ The API-key scope registry is capability-oriented and finite: `hierarchy:read`,
 `wallet:read`, `wallet:fund`, `checkout:create`, `purchases:read`,
 `referrals:read`, `referrals:manage`, `earnings:read`, `withdrawals:read`,
 `withdrawals:create`, `withdrawals:manage`, `treasury:read`,
-`treasury:manage`, and `operations:manage`. Unknown or misspelled scopes are
+`treasury:manage`, `operations:manage`, and `reviews:moderate`. Unknown or misspelled scopes are
 rejected at both the HTTP contract and service boundary. Compatibility routes
 declare whether they are anonymous, session-only, integration-credential-only,
 or account routes requiring one of these scopes. The development funding
 verification compatibility route is session-only and disabled whenever
 `NODE_ENV=production`; production confirmation comes from provider verification
 workers/webhooks instead. A scope never elevates the owning account's Cliqero
-role.
+capability.
 
 ## API route ownership
 
@@ -62,7 +62,7 @@ X-OpenAPI-Key: <schema-discovery-secret>
 ```
 
 After reading the generated contract, the consumer must use its separate
-Cliqero API key or Better Auth session and the endpoint's normal scopes/roles
+Cliqero API key or Better Auth session and the endpoint's normal scopes/capabilities
 for actual API requests. No interactive documentation or alternate schema
 route is registered.
 
@@ -92,7 +92,7 @@ changed. PostgreSQL advisory locking, recursive cycle validation, account
 foreign keys, and an audit record protect the mutation. Deleting referral
 relationships remains blocked; use the command only for valid assignment or
 reassignment. Operator API keys require the `hierarchy:admin` scope in addition
-to the operator role.
+to the required direct capability.
 
 The mandatory operational commission file is
 `config/hierarchy/distribution.yaml`; the tracked example is only a template

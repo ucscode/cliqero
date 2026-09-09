@@ -1,6 +1,7 @@
 # Operator catalogue management
 
-Cliqero's catalogue is platform-managed. `operator` and `catalogue_manager`
+Cliqero's catalogue is platform-managed. Accounts with the direct
+`catalogue.manage` capability (or `system.root`)
 principals manage listings through the operator console; ordinary accounts are
 not sellers and never select a seller or payee when creating a listing.
 
@@ -17,7 +18,7 @@ the existing application services and bounded transfer contracts.
 The historical `listing_capability.listings.seller_id` column remains for
 compatibility and purchase/distribution snapshots. It is not used to authorize
 operator catalogue management: the API requires the caller's
-`operator`/`catalogue_manager` capability and the `catalogue:manage` API-key
+`catalogue.manage` capability and the `catalogue:manage` API-key
 scope where applicable. Catalogue creation stores the manager as legacy audit
 metadata because the current schema requires the column; it is not a seller or
 payee designation for the platform-managed wallet-first purchase path.

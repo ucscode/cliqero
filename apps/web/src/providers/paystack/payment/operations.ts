@@ -19,7 +19,7 @@ export class PaymentReconciliationService {
     idempotencyKey: string;
     correlationId: string;
   }): Promise<ReconciliationAttempt> {
-    await this.operators.requireOperator(input.actorId);
+    await this.operators.requireCapability(input.actorId, "finance.manage");
     const payment = await this.payments.findById(input.paymentId);
     if (!payment) throw new Error("Payment not found");
     if (payment.providerName !== "paystack")
@@ -51,7 +51,7 @@ export class PaymentReconciliationService {
     }
   }
   async eligible(input: { actorId: string; olderThanMinutes: number; limit: number }) {
-    await this.operators.requireOperator(input.actorId);
+    await this.operators.requireCapability(input.actorId, "finance.manage");
     return this.payments.findPendingByProviderOlderThan(
       "paystack",
       new Date(Date.now() - input.olderThanMinutes * 60_000),
@@ -66,7 +66,7 @@ export class PaystackOperationsInspectionService {
     private readonly operators: OperatorAuthorizationService,
   ) {}
   async listEvents(actorId: string, limit: number) {
-    await this.operators.requireOperator(actorId);
+    await this.operators.requireCapability(actorId, "finance.read");
     return this.operations.listProviderEvents(limit);
   }
 }

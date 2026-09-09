@@ -64,7 +64,7 @@ suite("provider-neutral payout execution", () => {
       correlationId: newId(),
     });
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [seller.id],
     );
     await app.withdrawals.approve(seller.id, withdrawal.id);

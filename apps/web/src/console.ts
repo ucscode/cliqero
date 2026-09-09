@@ -3,9 +3,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { PostgresDatabase } from "@/infrastructure/postgres/database";
 import { AuthenticationService } from "@/modules/identity/authentication";
-
-const capabilities = ["operator", "catalogue_manager", "blog_manager"] as const;
-type Capability = (typeof capabilities)[number];
+import { CAPABILITIES, type Capability } from "@/modules/identity/capabilities";
 type AccountRow = { id: string; email: string | null; username: string; country: string | null };
 type IdentityContext = { database: PostgresDatabase; authentication: AuthenticationService };
 
@@ -160,56 +158,28 @@ program
   });
 
 program
-  .command("user:role")
-  .description("Grant or revoke an existing account capability")
+  .command("user:capability")
+  .description("Grant or revoke a direct account capability")
   .argument("<identifier>", "email, username, or account ID")
-  .argument("<capability>", "operator, catalogue_manager, blog_manager, or normal")
+  .argument("<capability>", CAPABILITIES.join(", "))
   .option("--revoke", "revoke the capability")
   .action(async (identifier: string, capability: string, options: { revoke?: boolean }) => {
     const context = openContext();
     try {
       const account = await findAccount(context, identifier);
       const normalized = capability.toLowerCase();
-      if (normalized === "normal") {
-        if (!options.revoke)
-          throw new Error(
-            "The normal role is represented by no privileged capabilities; use --revoke",
-          );
-        const hasOperator =
-          (
-            await context.database.query(
-              `select 1 from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) and capability='operator'`,
-              [account.id],
-            )
-          ).rowCount === 1;
-        if (hasOperator) {
-          const count = (
-            await context.database.query<{ count: string }>(
-              `select count(*)::text as count from identity_capability.account_capabilities where capability='operator'`,
-            )
-          ).rows[0];
-          if (Number(count?.count ?? 0) <= 1)
-            throw new Error("Cannot revoke the last operator capability");
-        }
-        await context.database.query(
-          `delete from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1)`,
-          [account.id],
-        );
-        console.log(`Revoked privileged capabilities from ${account.email ?? account.username}`);
-        return;
-      }
-      if (!(capabilities as readonly string[]).includes(normalized))
-        throw new Error(`Unsupported capability. Choose: ${capabilities.join(", ")}, normal`);
+      if (!(CAPABILITIES as readonly string[]).includes(normalized))
+        throw new Error(`Unsupported capability. Choose: ${CAPABILITIES.join(", ")}`);
       const value = normalized as Capability;
       if (options.revoke) {
-        if (value === "operator") {
+        if (value === "system.root") {
           const count = (
             await context.database.query<{ count: string }>(
-              `select count(*)::text as count from identity_capability.account_capabilities where capability='operator'`,
+              `select count(*)::text as count from identity_capability.account_capabilities where capability='system.root'`,
             )
           ).rows[0];
           if (Number(count?.count ?? 0) <= 1)
-            throw new Error("Cannot revoke the last operator capability");
+            throw new Error("Cannot revoke the last system.root capability");
         }
         await context.database.query(
           `delete from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) and capability=$2`,
@@ -261,13 +231,13 @@ program
     const context = openContext();
     try {
       const account = await findAccount(context, identifier);
-      const roles = (
+      const assignedCapabilities = (
         await context.database.query<{ capability: string }>(
           `select capability from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) order by capability`,
           [account.id],
         )
       ).rows.map((row) => row.capability);
-      printAccount({ ...account, capabilities: roles });
+      printAccount({ ...account, capabilities: assignedCapabilities });
     } finally {
       await closeContext(context);
     }

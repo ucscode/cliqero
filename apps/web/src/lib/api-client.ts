@@ -188,12 +188,12 @@ export type Profile = {
 
 export type AccountAccess = {
   accountId: string;
-  roles: string[];
+  capabilities: string[];
   canAccessOperator: boolean;
 };
 
 export type OperatorOverview = {
-  role: "operator" | "catalogue_manager";
+  capabilities: string[];
   catalogue: { published: number; draft: number; archived: number };
   users?: { total: number };
   commerce?: { purchases: number };
@@ -206,7 +206,7 @@ export type OperatorAccountSummary = {
   displayName: string | null;
   email: string | null;
   country: string | null;
-  roles: string[];
+  capabilities: string[];
   createdAt: string;
   directReferralCount: number;
 };

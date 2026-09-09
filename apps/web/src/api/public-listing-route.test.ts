@@ -51,7 +51,7 @@ describe("public listing detail compatibility route", () => {
       accountId: "00000000-0000-4000-8000-000000000003",
       account: { id: "00000000-0000-4000-8000-000000000003" },
       kind: "api_key",
-      roles: [],
+      capabilities: [],
       scopes: new Set(),
     });
     const response = await GET(
@@ -70,7 +70,7 @@ describe("public listing detail compatibility route", () => {
         accountId: listing.sellerId,
         account: { id: listing.sellerId },
         kind: "user_session",
-        roles: [],
+        capabilities: [],
         scopes: new Set(),
       },
       false,

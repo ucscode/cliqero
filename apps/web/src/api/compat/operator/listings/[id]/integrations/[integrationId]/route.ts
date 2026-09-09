@@ -5,7 +5,7 @@ async function authorize(request: Request, listingId: string) {
   const account = await authenticatedAccount(request);
   if (!account) return { response: Response.json({ error: "Unauthorized" }, { status: 401 }) };
   const container = getContainer();
-  await container.operators.requireCatalogueManager(account.id);
+  await container.operators.requireCapability(account.id, "catalogue.manage");
   await container.listingService.getCatalogue(listingId);
   return { account, container };
 }

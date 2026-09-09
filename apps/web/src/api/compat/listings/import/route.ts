@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(account.id);
+    await c.operators.requireCapability(account.id, "catalogue.manage");
     const url = new URL(request.url),
       format = (url.searchParams.get("format") ??
         contentFormat(request.headers.get("content-type"))) as TransferFormat,

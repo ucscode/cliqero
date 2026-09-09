@@ -7,7 +7,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(a.id);
+    await c.operators.requireCapability(a.id, "catalogue.manage");
     const id = (await params).id,
       items = await c.listingMedia.listCatalogue(a, id);
     return Response.json({ items: items.map((x) => mediaView(x, c.listingMedia.publicUrl(x))) });
@@ -20,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(a.id);
+    await c.operators.requireCapability(a.id, "catalogue.manage");
     const f = await request.formData(),
       file = f.get("file");
     if (!(file instanceof File)) throw new Error("Image file is required");

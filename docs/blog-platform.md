@@ -12,9 +12,9 @@ The operator/blog-manager editor uses `@mdxeditor/editor`; images are URLs and
 are not stored as SQLite blobs. `feed` generates RSS and `slugify` generates
 stable unique slugs.
 
-Operators and accounts granted `blog_manager` manage posts. API keys use the
+Operators and accounts granted `content.manage` manage posts. API keys use the
 existing principal system with `blog:read`, `blog:write`, `blog:publish`, and
-`blog:manage`; scopes never elevate an account role. n8n creates drafts or
+`blog:manage`; scopes never elevate an account capability. n8n creates drafts or
 publishes through these Hono routes using an `Idempotency-Key`. Idempotency
 records are persisted in SQLite, so retries converge without duplicate posts.
 

@@ -31,7 +31,7 @@ export type OperatorAccountSummary = {
   displayName: string | null;
   email: string | null;
   country: string | null;
-  roles: string[];
+  capabilities: string[];
   createdAt: string;
   directReferralCount: number;
 };
@@ -57,7 +57,7 @@ export class OperatorAccountService {
     const rows = (
       await this.sql.query<any>(
         `select a.uuid id,a.email,a.username,a.display_name,a.metadata->>'country' country,a.created_at,
-          coalesce((select array_agg(ac.capability order by ac.capability) from identity_capability.account_capabilities ac where ac.account_id=a.id), '{}') roles,
+          coalesce((select array_agg(ac.capability order by ac.capability) from identity_capability.account_capabilities ac where ac.account_id=a.id), '{}') capabilities,
           (select count(*)::int from referral_capability.account_referrals r where r.parent_account_id=a.id) direct_referral_count
          from identity_capability.account_profiles a
          where ($1::text is null or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1)
@@ -80,7 +80,7 @@ export class OperatorAccountService {
     const row = (
       await this.sql.query<any>(
         `select a.uuid id,a.email,a.username,a.display_name,a.metadata->>'country' country,a.created_at,
-          coalesce((select array_agg(ac.capability order by ac.capability) from identity_capability.account_capabilities ac where ac.account_id=a.id), '{}') roles,
+          coalesce((select array_agg(ac.capability order by ac.capability) from identity_capability.account_capabilities ac where ac.account_id=a.id), '{}') capabilities,
           (select count(*)::int from referral_capability.account_referrals r where r.parent_account_id=a.id) direct_referral_count,
           p.uuid parent_id,p.username parent_username,p.display_name parent_display_name,
           (select count(*)::int from purchase_capability.purchases purchase where purchase.buyer_id=a.id) purchase_count
@@ -130,7 +130,7 @@ export class OperatorAccountService {
       displayName: row.display_name ?? null,
       email: row.email,
       country: row.country ?? null,
-      roles: Array.isArray(row.roles) ? row.roles : [],
+      capabilities: Array.isArray(row.capabilities) ? row.capabilities : [],
       createdAt: row.created_at,
       directReferralCount: Number(row.direct_referral_count ?? 0),
     };

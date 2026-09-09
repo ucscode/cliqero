@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import { apiScopeSchema } from "@/modules/identity/api-scopes";
+import { canAccessOperator, hasCapability, type Capability } from "@/modules/identity/capabilities";
 import { dispatchLegacyApi, legacyApiPaths } from "./legacy-dispatch";
 import { publicErrorPayload, validationErrorPayload } from "./error";
 import { logDevelopmentError } from "@/infrastructure/development-log";
@@ -52,11 +53,11 @@ const reassignmentSchema = z.object({
 });
 const accountAccessSchema = z.object({
   accountId: z.string().uuid(),
-  roles: z.array(z.string()),
+  capabilities: z.array(z.string()),
   canAccessOperator: z.boolean(),
 });
 const operatorOverviewSchema = z.object({
-  role: z.enum(["operator", "catalogue_manager"]),
+  capabilities: z.array(z.string()),
   catalogue: z.object({
     published: z.number().int().nonnegative(),
     draft: z.number().int().nonnegative(),
@@ -77,7 +78,7 @@ const operatorAccountSummarySchema = z.object({
   displayName: z.string().nullable(),
   email: z.string().nullable(),
   country: z.string().nullable(),
-  roles: z.array(z.string()),
+  capabilities: z.array(z.string()),
   createdAt: z.string(),
   directReferralCount: z.number().int().nonnegative(),
 });
@@ -355,12 +356,13 @@ function requireScope(c: any, p: ApiPrincipal, scope: string) {
   }
   return null;
 }
-function requireOperatorScope(c: any, p: ApiPrincipal, scope: string) {
-  if (!p.roles.includes("operator")) return c.json({ error: "Forbidden", code: "forbidden" }, 403);
-  return requireScope(c, p, scope);
+function requireAnyScope(c: any, p: ApiPrincipal, scopes: readonly string[]) {
+  if (p.kind === "api_key" && !scopes.some((scope) => p.scopes.has(scope)))
+    return c.json({ error: "Forbidden", code: "insufficient_scope" }, 403);
+  return null;
 }
-function requireBlogScope(c: any, p: ApiPrincipal, scope: string) {
-  if (!p.roles.includes("operator") && !p.roles.includes("blog_manager"))
+function requireCapabilityScope(c: any, p: ApiPrincipal, capability: Capability, scope: string) {
+  if (!hasCapability(p.capabilities, capability))
     return c.json({ error: "Forbidden", code: "forbidden" }, 403);
   return requireScope(c, p, scope);
 }
@@ -409,25 +411,23 @@ function grantableScopes(p: ApiPrincipal): Set<string> {
     "withdrawals:read",
     "withdrawals:create",
   ]);
-  if (p.roles.includes("catalogue_manager") || p.roles.includes("operator"))
-    allowed.add("catalogue:manage");
-  if (p.roles.includes("operator"))
-    for (const scope of [
-      "hierarchy:admin",
-      "withdrawals:manage",
-      "treasury:read",
-      "treasury:manage",
-      "operations:manage",
-      "blog:read",
-      "blog:write",
-      "blog:publish",
-      "blog:manage",
-    ])
-      allowed.add(scope);
-  if (p.roles.includes("blog_manager")) {
+  if (hasCapability(p.capabilities, "catalogue.manage")) allowed.add("catalogue:manage");
+  if (hasCapability(p.capabilities, "hierarchy.manage")) allowed.add("hierarchy:admin");
+  if (hasCapability(p.capabilities, "withdrawals.manage")) allowed.add("withdrawals:manage");
+  if (hasCapability(p.capabilities, "treasury.manage")) {
+    allowed.add("treasury:read");
+    allowed.add("treasury:manage");
+  }
+  if (
+    hasCapability(p.capabilities, "accounts.read") ||
+    hasCapability(p.capabilities, "finance.read") ||
+    hasCapability(p.capabilities, "finance.manage")
+  )
+    allowed.add("operations:manage");
+  if (hasCapability(p.capabilities, "content.manage"))
     for (const scope of ["blog:read", "blog:write", "blog:publish", "blog:manage"])
       allowed.add(scope);
-  }
+  if (hasCapability(p.capabilities, "reviews.moderate")) allowed.add("reviews:moderate");
   return allowed;
 }
 function domainError(c: any, error: unknown) {
@@ -547,21 +547,20 @@ export function createApiApp(
       const overview = document.paths["/api/operator/overview"]?.get;
       if (overview) {
         overview["x-authentication-mode"] = "account";
-        overview["x-required-api-scope"] =
-          "operations:manage (operator) or catalogue:read (catalogue_manager)";
+        overview["x-required-api-scope"] = "operations:manage";
       }
       for (const path of ["/api/operator/accounts", "/api/operator/accounts/{accountId}"]) {
         const operation = document.paths[path]?.get;
         if (operation) {
           operation["x-authentication-mode"] = "account";
-          operation["x-required-api-scope"] = "operations:manage (operator)";
+          operation["x-required-api-scope"] = "operations:manage";
         }
       }
       for (const path of ["/api/operator/funding", "/api/operator/funding/{fundingId}"]) {
         const operation = document.paths[path]?.get;
         if (operation) {
           operation["x-authentication-mode"] = "account";
-          operation["x-required-api-scope"] = "operations:manage (operator)";
+          operation["x-required-api-scope"] = "operations:manage";
         }
       }
       for (const path of [
@@ -572,7 +571,7 @@ export function createApiApp(
         const operation = document.paths[path]?.get;
         if (operation) {
           operation["x-authentication-mode"] = "account";
-          operation["x-required-api-scope"] = "operations:manage (operator)";
+          operation["x-required-api-scope"] = "operations:manage";
         }
       }
       for (const path of [
@@ -612,7 +611,7 @@ export function createApiApp(
           for (const operation of Object.values(pathItem) as any[]) {
             if (operation && typeof operation === "object") {
               operation["x-authentication-mode"] = "account";
-              operation["x-required-api-scope"] = "withdrawals:manage (operator)";
+              operation["x-required-api-scope"] = "withdrawals:manage";
             }
           }
       }
@@ -626,7 +625,7 @@ export function createApiApp(
         if (operation) {
           operation["x-authentication-mode"] = "account";
           operation["x-required-api-scope"] =
-            method === "post" ? "treasury:manage (operator)" : "treasury:read (operator)";
+            method === "post" ? "treasury:manage" : "treasury:read";
         }
       }
       const access = document.paths["/api/me/access"]?.get;
@@ -746,7 +745,7 @@ export function createApiApp(
     (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireBlogScope(c, p, "blog:read");
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
       if (denied) return denied;
       const page = container.blog.list(c.req.valid("query"));
       return c.json({ ...page, items: page.items.map(blogJson) }, 200);
@@ -772,7 +771,7 @@ export function createApiApp(
     (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireBlogScope(c, p, "blog:write");
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
@@ -805,7 +804,7 @@ export function createApiApp(
     (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireBlogScope(c, p, "blog:write");
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
@@ -840,7 +839,7 @@ export function createApiApp(
       (c) => {
         const p = requirePrincipal(c);
         if (!(p instanceof Object) || !("accountId" in p)) return p;
-        const denied = requireBlogScope(c, p, "blog:publish");
+        const denied = requireCapabilityScope(c, p, "content.manage", "blog:publish");
         if (denied) return denied;
         try {
           return c.json(blogJson(container.blog.publish(c.req.valid("param").id, published)), 200);
@@ -863,7 +862,7 @@ export function createApiApp(
     (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireBlogScope(c, p, "blog:manage");
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
       if (denied) return denied;
       try {
         container.blog.delete(c.req.valid("param").id);
@@ -908,7 +907,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "operations:manage");
+      const denied = requireCapabilityScope(c, p, "accounts.read", "operations:manage");
       if (denied) return denied;
       try {
         return c.json(await container.operatorAccounts.list(c.req.valid("query")), 200);
@@ -957,7 +956,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "operations:manage");
+      const denied = requireCapabilityScope(c, p, "finance.read", "operations:manage");
       if (denied) return denied;
       try {
         return c.json(await container.operatorFunding.list(c.req.valid("query")), 200);
@@ -993,7 +992,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "operations:manage");
+      const denied = requireCapabilityScope(c, p, "finance.read", "operations:manage");
       if (denied) return denied;
       try {
         return c.json(await container.operatorFunding.get(c.req.valid("param").fundingId), 200);
@@ -1029,7 +1028,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "operations:manage");
+      const denied = requireCapabilityScope(c, p, "accounts.read", "operations:manage");
       if (denied) return denied;
       try {
         return c.json(await container.operatorAccounts.get(c.req.valid("param").accountId), 200);
@@ -1073,7 +1072,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "operations:manage");
+      const denied = requireCapabilityScope(c, p, "finance.read", "operations:manage");
       if (denied) return denied;
       try {
         return c.json(await container.operatorDistributions.list(c.req.valid("query")), 200);
@@ -1109,7 +1108,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "operations:manage");
+      const denied = requireCapabilityScope(c, p, "finance.read", "operations:manage");
       if (denied) return denied;
       try {
         return c.json(
@@ -1162,7 +1161,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "operations:manage");
+      const denied = requireCapabilityScope(c, p, "finance.read", "operations:manage");
       if (denied) return denied;
       try {
         return c.json(await container.operatorEarnings.list(c.req.valid("query")), 200);
@@ -1177,7 +1176,7 @@ export function createApiApp(
       path: "/api/me/access",
       responses: {
         200: {
-          description: "Current account roles and safe application access flags",
+          description: "Current account capabilities and safe application access flags",
           content: { "application/json": { schema: accountAccessSchema } },
         },
         401: {
@@ -1192,11 +1191,8 @@ export function createApiApp(
       return c.json(
         {
           accountId: p.accountId,
-          roles: [...p.roles],
-          canAccessOperator:
-            p.roles.includes("operator") ||
-            p.roles.includes("catalogue_manager") ||
-            p.roles.includes("blog_manager"),
+          capabilities: [...p.capabilities],
+          canAccessOperator: canAccessOperator(p.capabilities),
         },
         200,
       );
@@ -1239,7 +1235,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "withdrawals:manage");
+      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;
       try {
         return c.json(await container.operatorWithdrawals.list(c.req.valid("query")), 200);
@@ -1275,7 +1271,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "withdrawals:manage");
+      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;
       try {
         return c.json(
@@ -1311,7 +1307,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "withdrawals:manage");
+      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;
       try {
         return c.json(
@@ -1357,7 +1353,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "withdrawals:manage");
+      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;
       try {
         return c.json(
@@ -1403,7 +1399,7 @@ export function createApiApp(
       async (c) => {
         const p = requirePrincipal(c);
         if (!(p instanceof Object) || !("accountId" in p)) return p;
-        const denied = requireOperatorScope(c, p, "withdrawals:manage");
+        const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
         if (denied) return denied;
         try {
           const id = c.req.valid("param").withdrawalId;
@@ -1449,7 +1445,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "treasury:read");
+      const denied = requireCapabilityScope(c, p, "treasury.manage", "treasury:read");
       if (denied) return denied;
       try {
         return c.json(await container.operatorTreasury.summary(), 200);
@@ -1488,7 +1484,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "treasury:read");
+      const denied = requireCapabilityScope(c, p, "treasury.manage", "treasury:read");
       if (denied) return denied;
       try {
         return c.json(await container.operatorTreasury.list(c.req.valid("query")), 200);
@@ -1524,7 +1520,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "treasury:read");
+      const denied = requireCapabilityScope(c, p, "treasury.manage", "treasury:read");
       if (denied) return denied;
       try {
         return c.json(await container.operatorTreasury.get(c.req.valid("param").entryId), 200);
@@ -1578,7 +1574,7 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireOperatorScope(c, p, "treasury:manage");
+      const denied = requireCapabilityScope(c, p, "treasury.manage", "treasury:manage");
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
@@ -1619,7 +1615,7 @@ export function createApiApp(
       path: "/api/operator/overview",
       responses: {
         200: {
-          description: "Role-scoped operator overview",
+          description: "Capability-scoped operator overview",
           content: { "application/json": { schema: operatorOverviewSchema } },
         },
         401: {
@@ -1635,19 +1631,19 @@ export function createApiApp(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const role = p.roles.includes("operator")
-        ? "operator"
-        : p.roles.includes("catalogue_manager")
-          ? "catalogue_manager"
-          : null;
-      if (!role) return c.json({ error: "Forbidden", code: "forbidden" }, 403);
-      const denied = requireScope(
-        c,
-        p,
-        role === "operator" ? "operations:manage" : "catalogue:read",
-      );
+      if (!canAccessOperator(p.capabilities))
+        return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+      const denied = requireAnyScope(c, p, [
+        "operations:manage",
+        "catalogue:read",
+        "blog:read",
+        "hierarchy:read",
+        "withdrawals:read",
+        "treasury:read",
+        "reviews:moderate",
+      ]);
       if (denied) return denied;
-      return c.json(await container.operatorOverview.get(role), 200);
+      return c.json(await container.operatorOverview.get(p.capabilities), 200);
     },
   );
   const queryTree = z.object({ root: z.string().uuid().optional() });
@@ -1678,7 +1674,7 @@ export function createApiApp(
       if (denied) return denied;
       const root = c.req.valid("query").root ?? p.accountId;
       const admin =
-        p.roles.includes("operator") &&
+        hasCapability(p.capabilities, "hierarchy.manage") &&
         (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
       try {
         return c.json(await container.hierarchy.tree(p.accountId, root, admin), 200);
@@ -1729,7 +1725,7 @@ export function createApiApp(
       if (denied) return denied;
       const q = c.req.valid("query");
       const admin =
-        p.roles.includes("operator") &&
+        hasCapability(p.capabilities, "hierarchy.manage") &&
         (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
       const items = await container.hierarchy.search(p.accountId, q.q, admin, q.limit);
       return c.json({ items }, 200);
@@ -1764,7 +1760,7 @@ export function createApiApp(
       const denied = hierarchyReadOrAdmin(c, p);
       if (denied) return denied;
       const admin =
-        p.roles.includes("operator") &&
+        hasCapability(p.capabilities, "hierarchy.manage") &&
         (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
       try {
         return c.json(
@@ -1826,7 +1822,7 @@ export function createApiApp(
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireScope(c, p, "hierarchy:admin");
       if (denied) return denied;
-      if (!p.roles.includes("operator"))
+      if (!hasCapability(p.capabilities, "hierarchy.manage"))
         return c.json({ error: "Forbidden", code: "forbidden" }, 403);
       try {
         const result = await container.referralGraphService.reassignParent(
@@ -2022,7 +2018,7 @@ export function createApiApp(
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireScope(c, p, "api_keys:manage");
       if (denied) return denied;
-      if (!p.roles.includes("operator"))
+      if (!hasCapability(p.capabilities, "api_keys.manage"))
         return c.json({ error: "Forbidden", code: "forbidden" }, 403);
       const b = c.req.valid("json");
       const result = await container.apiKeys.create({
@@ -2051,7 +2047,7 @@ export function createApiApp(
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireScope(c, p, "api_keys:manage");
       if (denied) return denied;
-      if (!p.roles.includes("operator"))
+      if (!hasCapability(p.capabilities, "api_keys.manage"))
         return c.json({ error: "Forbidden", code: "forbidden" }, 403);
       return c.json({ items: await container.apiKeys.list() }, 200);
     },
@@ -2078,7 +2074,7 @@ export function createApiApp(
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireScope(c, p, "api_keys:manage");
       if (denied) return denied;
-      if (!p.roles.includes("operator"))
+      if (!hasCapability(p.capabilities, "api_keys.manage"))
         return c.json({ error: "Forbidden", code: "forbidden" }, 403);
       await container.apiKeys.revoke(c.req.valid("param").id);
       return c.body(null, 204);
@@ -2124,10 +2120,12 @@ export function createApiApp(
   app.get("/api/operator/reviews", async (c) => {
     const p = requirePrincipal(c);
     if (!(p instanceof Object) || !("accountId" in p)) return p;
+    const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
+    if (denied) return denied;
     const status = z
       .enum(["pending", "approved", "rejected"])
       .optional()
-      .parse(c.req.query("status"));
+      .parse(c.req.query("status") || undefined);
     const page = await container.listingReviews.operatorQueue(p.account, {
       status,
       cursor: c.req.query("cursor") || undefined,
@@ -2145,6 +2143,8 @@ export function createApiApp(
     app.post(`/api/operator/reviews/:reviewId/${verb}`, async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
+      if (denied) return denied;
       const review = await container.listingReviews.moderate(
         p.account,
         c.req.param("reviewId"),

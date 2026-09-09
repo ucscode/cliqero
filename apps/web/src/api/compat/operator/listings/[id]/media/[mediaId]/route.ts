@@ -16,7 +16,7 @@ export async function GET(
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(a.id);
+    await c.operators.requireCapability(a.id, "catalogue.manage");
     const p = await params,
       v = await c.listingMedia.getCatalogue(a, p.id, p.mediaId);
     return Response.json(mediaView(v, c.listingMedia.publicUrl(v)));
@@ -32,7 +32,7 @@ export async function PATCH(
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(a.id);
+    await c.operators.requireCapability(a.id, "catalogue.manage");
     const p = await params,
       b = patch.parse(await request.json()),
       v = await c.listingMedia.updateCatalogue(a, p.id, p.mediaId, {
@@ -52,7 +52,7 @@ export async function DELETE(
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(a.id);
+    await c.operators.requireCapability(a.id, "catalogue.manage");
     const p = await params,
       v = await c.listingMedia.requestDeletionCatalogue(a, p.id, p.mediaId);
     return Response.json({ id: v.id, state: v.state }, { status: 202 });

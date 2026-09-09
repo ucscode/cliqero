@@ -2,8 +2,9 @@
 
 The operator console provides bounded account inspection at `/operator/users`
 and hierarchy inspection at `/operator/network`. These pages are available only
-to the `operator` capability. `catalogue_manager` remains intentionally limited
-to the overview and catalogue surfaces.
+to the direct account capabilities required by each operator section. Catalogue
+access uses `catalogue.manage`; broader platform inspection uses the
+corresponding direct capabilities.
 
 Account search is server-side, bounded, and ordered by `(created_at, id)`.
 Responses are safe projections: authentication secrets, API-key material,

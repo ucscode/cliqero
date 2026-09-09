@@ -5,7 +5,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireOperator(a.id);
+    await c.operators.requireCapability(a.id, "treasury.manage");
     const e = await c.treasuryRepository.findById((await params).id);
     if (!e) throw new Error("Treasury entry not found");
     return Response.json({

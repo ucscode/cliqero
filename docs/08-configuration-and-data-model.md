@@ -29,7 +29,7 @@ Applied policy is immutably snapshotted when distribution is created.
 
 ## Catalogue-owned listing model
 
-Ordinary users are not sellers. Listing management is restricted to operator or `catalogue_manager` capability.
+Ordinary users are not sellers. Listing management is restricted to the direct `catalogue.manage` capability (or `system.root`).
 
 Stable listing data includes identity, title/presentation, canonical price, destination reference, lifecycle state, media, metadata, and audit timestamps. A creator/manager audit reference must not be interpreted as seller/payee semantics.
 

@@ -2,7 +2,7 @@
 
 Cliqero is a catalogue-led commerce platform with optional referral distribution and external access fulfillment.
 
-The platform owns the commercial catalogue. Ordinary accounts browse, purchase, access purchases, and may promote eligible listings. Listing creation and publication are privileged operations for operators or accounts with the `catalogue_manager` capability. Ordinary users are not sellers.
+The platform owns the commercial catalogue. Ordinary accounts browse, purchase, access purchases, and may promote eligible listings. Listing creation and publication require the direct `catalogue.manage` capability or `system.root`. Ordinary users are not sellers.
 
 The primary customer-facing commerce flow is:
 
@@ -20,7 +20,7 @@ The underlying thing represented by a listing may be software, a download, a ser
 
 - [Installation and Configuration](./installation-and-configuration.md) — local development, production-like execution, environment values, YAML configuration, persistence, and common commands.
 - [Product Vision](./01-product-vision.md) — catalogue ownership, productless commerce, entitlement, destination, and access.
-- [Roles and User Journeys](./02-roles-and-user-journeys.md) — visitor, buyer/member, promoter, catalogue manager, and operator journeys.
+- [User Journeys](./02-roles-and-user-journeys.md) — visitor, buyer/member, and promoter journeys; operator access is governed by direct capabilities.
 - [Listings, Profiles, and Access Links](./03-offers-profiles-and-links.md) — listing data, destinations, referral URLs, and source credentials.
 - [Purchase and Entitlement Model](./04-campaign-and-action-model.md) — purchase lifecycle and entitlement consequences. The historical filename is retained for link stability.
 - [Money, Wallets, and Currency](./05-money-wallets-and-currency.md) — internal funding, canonical accounting, earnings, settlement, withdrawals, and treasury boundaries.
@@ -42,7 +42,7 @@ The underlying thing represented by a listing may be software, a download, a ser
 ## Current business invariants
 
 1. Cliqero owns/provides the catalogue; ordinary users do not create listings.
-2. `catalogue_manager` is a privileged catalogue capability, not a seller role.
+2. `catalogue.manage` is a privileged catalogue capability, not a seller role.
 3. External providers fund internal buyer value only.
 4. A listing purchase is paid internally and creates a durable purchase fact.
 5. Entitlement/access is independent from referral distribution processing.

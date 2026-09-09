@@ -18,7 +18,7 @@ function configure(owner = account.id) {
         accountId: account.id,
         account,
         kind: "user_session",
-        roles: [],
+        capabilities: [],
         scopes: new Set(),
       })),
     },

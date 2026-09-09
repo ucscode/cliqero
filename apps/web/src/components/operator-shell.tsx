@@ -33,20 +33,19 @@ import {
   SidebarTrigger,
 } from "./ui/sidebar";
 import { BrandLink } from "./brand-identity";
-
-type OperatorRole = "operator" | "catalogue_manager" | "blog_manager";
+import { hasCapability, type Capability } from "@/modules/identity/capabilities";
 
 export function OperatorShell({
-  role,
+  capabilities,
   username,
   email,
   activeSection = "overview",
   title = "Overview",
   children,
 }: {
-  role: OperatorRole;
+  capabilities: readonly Capability[];
   username: string;
-  email: string;
+  email: string | null;
   activeSection?:
     | "overview"
     | "catalogue"
@@ -69,11 +68,6 @@ export function OperatorShell({
 
   useEffect(() => {
     let active = true;
-    if (role === "blog_manager") {
-      return () => {
-        active = false;
-      };
-    }
     void apiFetch<OperatorOverview>("/api/operator/overview")
       .then((value) => {
         if (active) setOverview(value);
@@ -88,7 +82,7 @@ export function OperatorShell({
     return () => {
       active = false;
     };
-  }, [role]);
+  }, []);
 
   async function signOut() {
     await authClient.signOut();
@@ -97,47 +91,67 @@ export function OperatorShell({
   }
 
   const navigation = [
-    { key: "overview", href: "/operator", label: "Overview", visible: role !== "blog_manager" },
+    { key: "overview", href: "/operator", label: "Overview", visible: true },
     {
       key: "catalogue",
       href: "/operator/catalogue",
       label: "Catalogue",
-      visible: role === "operator" || role === "catalogue_manager",
+      visible: hasCapability(capabilities, "catalogue.manage"),
     },
-    { key: "users", href: "/operator/users", label: "Users", visible: role === "operator" },
-    { key: "network", href: "/operator/network", label: "Network", visible: role === "operator" },
-    { key: "funding", href: "/operator/funding", label: "Funding", visible: role === "operator" },
+    {
+      key: "users",
+      href: "/operator/users",
+      label: "Users",
+      visible: hasCapability(capabilities, "accounts.read"),
+    },
+    {
+      key: "network",
+      href: "/operator/network",
+      label: "Network",
+      visible: hasCapability(capabilities, "hierarchy.manage"),
+    },
+    {
+      key: "funding",
+      href: "/operator/funding",
+      label: "Funding",
+      visible: hasCapability(capabilities, "finance.read"),
+    },
     {
       key: "distributions",
       href: "/operator/distributions",
       label: "Distributions",
-      visible: role === "operator",
+      visible: hasCapability(capabilities, "finance.read"),
     },
     {
       key: "earnings",
       href: "/operator/earnings",
       label: "Earnings",
-      visible: role === "operator",
+      visible: hasCapability(capabilities, "finance.read"),
     },
     {
       key: "withdrawals",
       href: "/operator/withdrawals",
       label: "Withdrawals",
-      visible: role === "operator",
+      visible: hasCapability(capabilities, "withdrawals.manage"),
     },
     {
       key: "treasury",
       href: "/operator/treasury",
       label: "Treasury",
-      visible: role === "operator",
+      visible: hasCapability(capabilities, "treasury.manage"),
     },
     {
       key: "blog",
       href: "/operator/blog",
       label: "Blog",
-      visible: role === "operator" || role === "blog_manager",
+      visible: hasCapability(capabilities, "content.manage"),
     },
-    { key: "reviews", href: "/operator/reviews", label: "Reviews", visible: role === "operator" },
+    {
+      key: "reviews",
+      href: "/operator/reviews",
+      label: "Reviews",
+      visible: hasCapability(capabilities, "reviews.moderate"),
+    },
   ];
 
   return (
@@ -152,9 +166,7 @@ export function OperatorShell({
               <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
                 Operations
               </span>
-              <Badge variant="destructive">
-                {role === "operator" ? "Operator" : "Catalogue manager"}
-              </Badge>
+              <Badge variant="destructive">Operator</Badge>
             </div>
             <SidebarGroup>
               <SidebarGroupLabel>Workspace</SidebarGroupLabel>
@@ -223,24 +235,26 @@ export function OperatorShell({
                 <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                      {role === "operator" ? "Platform operations" : "Catalogue operations"}
+                      {hasCapability(capabilities, "system.root")
+                        ? "Platform operations"
+                        : "Authorized operations"}
                     </p>
                     <h2
                       id="operator-overview-heading"
                       className="text-2xl font-semibold text-slate-900"
                     >
-                      {role === "operator"
+                      {hasCapability(capabilities, "system.root")
                         ? "A clear view of the platform"
-                        : "A focused catalogue view"}
+                        : "A focused operational view"}
                     </h2>
                     <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                      {role === "operator"
-                        ? "Authoritative operational counts from Cliqero services."
-                        : "Only catalogue information is available to this role."}
+                      Authoritative operational counts from Cliqero services.
                     </p>
                   </div>
                   <Badge variant="default">
-                    {role === "operator" ? "Full operator access" : "Catalogue scope"}
+                    {hasCapability(capabilities, "system.root")
+                      ? "Full operator access"
+                      : "Direct capabilities"}
                   </Badge>
                 </div>
                 {error && <Toast>{error}</Toast>}
@@ -249,11 +263,14 @@ export function OperatorShell({
                     className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
                     aria-label="Loading overview"
                   >
-                    {Array.from({ length: role === "operator" ? 7 : 3 }, (_, index) => (
-                      <Card className="p-6" key={index}>
-                        <Skeleton className="h-24 w-full" />
-                      </Card>
-                    ))}
+                    {Array.from(
+                      { length: hasCapability(capabilities, "system.root") ? 7 : 3 },
+                      (_, index) => (
+                        <Card className="p-6" key={index}>
+                          <Skeleton className="h-24 w-full" />
+                        </Card>
+                      ),
+                    )}
                   </div>
                 ) : overview ? (
                   <OverviewMetrics overview={overview} />

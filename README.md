@@ -108,7 +108,7 @@ Canonical access uses `/access/{purchaseId}`. The platform verifies ownership an
 
 ## Catalogue ownership
 
-Ordinary accounts do not create commercial listings. Catalogue management is restricted to operator/admin users and accounts granted the `catalogue_manager` capability. Historical seller-oriented fields may remain for compatibility/audit but are not seller/payee semantics for new commerce.
+Ordinary accounts do not create commercial listings. Catalogue management is restricted to accounts granted the direct `catalogue.manage` capability (or `system.root`). Historical seller-oriented fields may remain for compatibility/audit but are not seller/payee semantics for new commerce.
 
 Listing lifecycle, media storage, and JSON/CSV/YAML transfer are documented in [Listing Management and Media](docs/listing-management-and-media.md).
 

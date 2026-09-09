@@ -12,9 +12,21 @@ describe("operator overview projection", () => {
       query: async <T extends object>() =>
         result<T>([{ published: "3", draft: "2", archived: "1" }] as T[]),
     });
-    await expect(service.get("catalogue_manager")).resolves.toEqual({
-      role: "catalogue_manager",
+    await expect(service.get(["catalogue.manage"])).resolves.toEqual({
+      capabilities: ["catalogue.manage"],
       catalogue: { published: 3, draft: 2, archived: 1 },
+    });
+  });
+
+  it("does not query catalogue data for an unrelated operator capability", async () => {
+    const service = new OperatorOverviewService({
+      query: async () => {
+        throw new Error("catalogue query should not run");
+      },
+    });
+    await expect(service.get(["content.manage"])).resolves.toEqual({
+      capabilities: ["content.manage"],
+      catalogue: { published: 0, draft: 0, archived: 0 },
     });
   });
 
@@ -28,8 +40,8 @@ describe("operator overview projection", () => {
     const service = new OperatorOverviewService({
       query: async <T extends object>() => responses.shift() as QueryResult<T>,
     });
-    await expect(service.get("operator")).resolves.toEqual({
-      role: "operator",
+    await expect(service.get(["system.root"])).resolves.toEqual({
+      capabilities: ["system.root"],
       catalogue: { published: 4, draft: 0, archived: 2 },
       users: { total: 8 },
       commerce: { purchases: 5 },

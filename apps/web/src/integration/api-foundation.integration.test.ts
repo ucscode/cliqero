@@ -26,7 +26,7 @@ suite("headless API principal and hierarchy read model", () => {
   it("creates hashed API keys and resolves the same Cliqero account", async () => {
     const owner = await account("key");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [owner.id],
     );
     const created = await app.apiKeys.create({
@@ -89,7 +89,7 @@ suite("headless API principal and hierarchy read model", () => {
           accountId: owner.id,
           account: owner,
           kind: "user_session",
-          roles: [],
+          capabilities: [],
           scopes: new Set<string>(),
         }),
       },
@@ -125,33 +125,33 @@ suite("headless API principal and hierarchy read model", () => {
     );
     expect(revoked.status).toBe(204);
   });
-  it("returns role-scoped operator overview data through Hono", async () => {
+  it("returns capability-scoped operator overview data through Hono", async () => {
     const catalogueManager = await account("cataloguemanager"),
       operator = await account("overviewoperator"),
       ordinary = await account("overviewordinary");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'catalogue_manager'),((select id from identity_capability.accounts where uuid=$2),'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'catalogue.manage'),((select id from identity_capability.accounts where uuid=$2),'system.root')`,
       [catalogueManager.id, operator.id],
     );
-    const forPrincipal = (accountId: string, roles: string[]) =>
+    const forPrincipal = (accountId: string, capabilities: string[]) =>
       createApiApp({
         ...app,
         principalResolver: {
           resolve: async () => ({
             accountId,
-            account: roles.includes("operator") ? operator : catalogueManager,
+            account: capabilities.includes("system.root") ? operator : catalogueManager,
             kind: "user_session" as const,
-            roles,
+            capabilities,
             scopes: new Set<string>(),
           }),
         },
       } as any);
-    const catalogueResponse = await forPrincipal(catalogueManager.id, ["catalogue_manager"]).fetch(
+    const catalogueResponse = await forPrincipal(catalogueManager.id, ["catalogue.manage"]).fetch(
       new Request("http://localhost/api/operator/overview"),
     );
     expect(catalogueResponse.status).toBe(200);
     expect((await catalogueResponse.json()).users).toBeUndefined();
-    const operatorResponse = await forPrincipal(operator.id, ["operator"]).fetch(
+    const operatorResponse = await forPrincipal(operator.id, ["system.root"]).fetch(
       new Request("http://localhost/api/operator/overview"),
     );
     expect(operatorResponse.status).toBe(200);
@@ -165,7 +165,7 @@ suite("headless API principal and hierarchy read model", () => {
     const operator = await account("accountoperator");
     const child = await account("accountchild");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [operator.id],
     );
     await app.referralGraphService.establish(child.id, operator.id);
@@ -176,7 +176,7 @@ suite("headless API principal and hierarchy read model", () => {
           accountId: operator.id,
           account: operator,
           kind: "user_session" as const,
-          roles: ["operator"],
+          capabilities: ["system.root"],
           scopes: new Set<string>(),
         }),
       },
@@ -197,7 +197,7 @@ suite("headless API principal and hierarchy read model", () => {
     expect(await detail.json()).toMatchObject({
       id: child.id,
       parent: { id: operator.id },
-      roles: [],
+      capabilities: [],
     });
     const unrelated = await api.fetch(
       new Request(`http://localhost/api/operator/accounts/${newId()}`),
@@ -239,7 +239,7 @@ suite("headless API principal and hierarchy read model", () => {
     await expect(app.hierarchy.tree(root.id, outsider.id, false)).rejects.toThrow("Forbidden");
     const admin = await account("admin");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [admin.id],
     );
     expect((await app.hierarchy.tree(admin.id, outsider.id, true)).root).toBe(outsider.id);
@@ -292,7 +292,7 @@ suite("headless API principal and hierarchy read model", () => {
     expect(await app.hierarchy.search(root.id, other.username, false, 20)).toEqual([]);
     const operator = await account("searchoperator");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [operator.id],
     );
     expect(
@@ -306,7 +306,7 @@ suite("headless API principal and hierarchy read model", () => {
       newParent = await account("new_parent"),
       normal = await account("normal");
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'operator')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [operator.id],
     );
     await app.referralGraphService.establish(child.id, oldParent.id);
@@ -317,7 +317,7 @@ suite("headless API principal and hierarchy read model", () => {
           accountId: operator.id,
           account: operator,
           kind: "user_session",
-          roles: ["operator"],
+          capabilities: ["system.root"],
           scopes: new Set<string>(),
         }),
       },
@@ -338,7 +338,7 @@ suite("headless API principal and hierarchy read model", () => {
           accountId: normal.id,
           account: normal,
           kind: "user_session",
-          roles: [],
+          capabilities: [],
           scopes: new Set<string>(),
         }),
       },
@@ -361,7 +361,7 @@ suite("headless API principal and hierarchy read model", () => {
           accountId: operator.id,
           account: operator,
           kind: "api_key",
-          roles: ["operator"],
+          capabilities: ["system.root"],
           scopes: new Set<string>(["hierarchy:admin"]),
         }),
       },
@@ -384,7 +384,7 @@ suite("headless API principal and hierarchy read model", () => {
           accountId: operator.id,
           account: operator,
           kind: "api_key",
-          roles: ["operator"],
+          capabilities: ["system.root"],
           scopes: new Set<string>(["hierarchy:read"]),
         }),
       },

@@ -5,7 +5,7 @@ export async function GET(request: Request) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    await getContainer().operators.requireOperator(account.id);
+    await getContainer().operators.requireCapability(account.id, "withdrawals.manage");
     const state = z
       .enum(["requested", "approved", "rejected", "cancelled", "completed", "failed"])
       .optional()

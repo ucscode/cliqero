@@ -54,7 +54,7 @@ export function OperatorNetwork() {
     } catch (cause) {
       setError(
         cause instanceof ApiClientError && cause.status === 403
-          ? "This account or branch is not available to your operator role."
+          ? "This account or branch is not available to your authorized view."
           : errorMessage(cause),
       );
     } finally {

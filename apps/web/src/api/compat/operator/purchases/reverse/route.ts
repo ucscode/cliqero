@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    await getContainer().operators.requireOperator(account.id);
+    await getContainer().operators.requireCapability(account.id, "finance.manage");
     const key = request.headers.get("idempotency-key");
     if (!key || key.length > 200) throw new Error("A valid Idempotency-Key is required");
     const body = schema.parse(await request.json());

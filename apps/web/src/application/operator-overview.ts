@@ -1,7 +1,8 @@
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import { hasCapability, type Capability } from "@/modules/identity/capabilities";
 
 export type OperatorOverview = {
-  role: "operator" | "catalogue_manager";
+  capabilities: readonly Capability[];
   catalogue: {
     published: number;
     draft: number;
@@ -19,25 +20,27 @@ function count(value: unknown) {
 export class OperatorOverviewService {
   constructor(private readonly sql: SqlExecutor) {}
 
-  async get(role: "operator" | "catalogue_manager"): Promise<OperatorOverview> {
-    const catalogue = (
-      await this.sql.query<{ published: string; draft: string; archived: string }>(
-        `select
-           count(*) filter (where state='published')::int published,
-           count(*) filter (where state='draft')::int draft,
-           count(*) filter (where state='archived')::int archived
-         from listing_capability.listings`,
-      )
-    ).rows[0];
+  async get(capabilities: readonly Capability[]): Promise<OperatorOverview> {
+    const catalogue = hasCapability(capabilities, "catalogue.manage")
+      ? (
+          await this.sql.query<{ published: string; draft: string; archived: string }>(
+            `select
+               count(*) filter (where state='published')::int published,
+               count(*) filter (where state='draft')::int draft,
+               count(*) filter (where state='archived')::int archived
+             from listing_capability.listings`,
+          )
+        ).rows[0]
+      : undefined;
     const base = {
-      role,
+      capabilities,
       catalogue: {
         published: count(catalogue?.published),
         draft: count(catalogue?.draft),
         archived: count(catalogue?.archived),
       },
     } satisfies OperatorOverview;
-    if (role === "catalogue_manager") return base;
+    if (!hasCapability(capabilities, "accounts.read")) return base;
 
     const [users, purchases, withdrawals] = await Promise.all([
       this.sql.query<{ total: string }>(

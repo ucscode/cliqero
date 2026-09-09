@@ -1,6 +1,6 @@
 # Catalogue, commission, and treasury
 
-Cliqero is a platform catalogue, not a multi-seller marketplace. Ordinary accounts may browse, fund a USD wallet, purchase listings, share deterministic referral URLs, and withdraw referral earnings. Catalogue managers and operators manage listing content through the operator listing APIs; `created_by` metadata is audit information and is not a seller/payee relationship.
+Cliqero is a platform catalogue, not a multi-seller marketplace. Ordinary accounts may browse, fund a USD wallet, purchase listings, share deterministic referral URLs, and withdraw referral earnings. Accounts with `catalogue.manage` manage listing content through the operator listing APIs; `created_by` metadata is audit information and is not a seller/payee relationship.
 
 ## Listing lifecycle
 

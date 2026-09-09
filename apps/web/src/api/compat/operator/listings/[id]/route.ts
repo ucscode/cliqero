@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(a.id);
+    await c.operators.requireCapability(a.id, "catalogue.manage");
     const id = (await params).id,
       l = await c.listingService.getCatalogue(id);
     return Response.json(
@@ -39,7 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(a.id);
+    await c.operators.requireCapability(a.id, "catalogue.manage");
     const b = schema.parse(await request.json()),
       l = await c.listingService.updateCatalogue(a, (await params).id, {
         title: b.title,
@@ -60,7 +60,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(a.id);
+    await c.operators.requireCapability(a.id, "catalogue.manage");
     return Response.json(
       ownerListingView(await c.listingService.archiveCatalogue(a, (await params).id)),
     );

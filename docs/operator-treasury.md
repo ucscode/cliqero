@@ -16,8 +16,9 @@ ordinary opposite-direction entries with an explanatory note. Requests use an
 `Idempotency-Key`, so retries with the same semantic request converge to one
 fact and conflicting reuse is rejected.
 
-The operator API is role and scope protected: treasury reads require an
-operator and `treasury:read` for API keys; manual writes require an operator and
+The operator API is capability and scope protected: treasury reads require the
+`treasury.manage` capability and `treasury:read` for API keys; manual writes require
+the same capability and
 `treasury:manage`. Scopes restrict an account's authority and never elevate a
-catalogue manager or ordinary account. History is bounded and keyset-paginated;
+catalogue operator or ordinary account. History is bounded and keyset-paginated;
 automatic distribution entries link back to the distribution for traceability.

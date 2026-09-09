@@ -2,13 +2,14 @@ import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import { Account } from "./account";
 import type { ApiKeyService } from "@/infrastructure/postgres/api-keys";
 import { AuthenticationService } from "./authentication";
+import type { Capability } from "./capabilities";
 
 export type ApiPrincipalKind = "user_session" | "api_key";
 export interface ApiPrincipal {
   accountId: string;
   account: Account;
   kind: ApiPrincipalKind;
-  roles: readonly string[];
+  capabilities: readonly Capability[];
   scopes: ReadonlySet<string>;
 }
 export class ApiPrincipalResolver {
@@ -43,7 +44,7 @@ export class ApiPrincipalResolver {
       accountId: account.id,
       account,
       kind,
-      roles: rows.rows.map((r) => r.capability),
+      capabilities: rows.rows.map((r) => r.capability as Capability),
       scopes: new Set(scopes),
     };
   }

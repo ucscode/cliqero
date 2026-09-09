@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    await getContainer().operators.requireCatalogueManager(account.id);
+    await getContainer().operators.requireCapability(account.id, "catalogue.manage");
     const body = listingSchema.parse(await request.json());
     const listing = await getContainer().listingService.create(account, {
       title: body.title,

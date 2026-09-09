@@ -66,6 +66,8 @@ import * as withdrawalById from "@/api/compat/withdrawals/[id]/route";
 import * as withdrawalPolicy from "@/api/compat/withdrawals/policy/route";
 import type { ApiPrincipal } from "@/modules/identity/api-principal";
 import type { ApiScope } from "@/modules/identity/api-scopes";
+import type { Capability } from "@/modules/identity/capabilities";
+import { hasCapability } from "@/modules/identity/capabilities";
 
 type RouteContext = { params: Promise<Record<string, string>> };
 type Handler = (request: Request, context?: RouteContext) => Response | Promise<Response>;
@@ -80,6 +82,7 @@ export type LegacyAuthMode = "anonymous" | "account" | "session_only" | "integra
 export type LegacyRouteAccess = {
   mode: LegacyAuthMode;
   scope?: ApiScope;
+  capability?: Capability;
   apiKey?: "allow" | "reject";
   allowIncompleteSession?: boolean;
 };
@@ -186,16 +189,34 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
     return { mode: "session_only", apiKey: "reject", allowIncompleteSession: true };
   if (sessionOnlyPaths.has(pattern)) return { mode: "session_only" };
   if (pattern.startsWith("/api/operator/treasury")) {
-    return { mode: "account", scope: method === "GET" ? "treasury:read" : "treasury:manage" };
+    return {
+      mode: "account",
+      scope: method === "GET" ? "treasury:read" : "treasury:manage",
+      capability: "treasury.manage",
+    };
   }
   if (pattern.startsWith("/api/operator/listings"))
-    return { mode: "account", scope: "catalogue:manage" };
-  if (pattern.startsWith("/api/operator/")) return { mode: "account", scope: "operations:manage" };
+    return { mode: "account", scope: "catalogue:manage", capability: "catalogue.manage" };
+  if (pattern === "/api/operator/paystack/events")
+    return { mode: "account", scope: "operations:manage", capability: "finance.read" };
+  if (pattern.startsWith("/api/operator/paystack"))
+    return { mode: "account", scope: "operations:manage", capability: "finance.manage" };
+  if (pattern.startsWith("/api/operator/purchases") || pattern === "/api/operator/settlement")
+    return { mode: "account", scope: "operations:manage", capability: "finance.manage" };
+  if (pattern.startsWith("/api/operator/withdrawals"))
+    return { mode: "account", scope: "withdrawals:manage", capability: "withdrawals.manage" };
+  if (pattern.startsWith("/api/operator/distribution-policy"))
+    return { mode: "account", scope: "operations:manage", capability: "finance.read" };
+  if (pattern.startsWith("/api/operator/"))
+    return { mode: "account", scope: "operations:manage", capability: "finance.read" };
   if (pattern === "/api/listings/:id/referral-url")
     return { mode: "session_only", apiKey: "reject" };
   if (pattern === "/api/listings" || pattern === "/api/listings/:id")
-    return { mode: "account", scope: "catalogue:manage" };
-  if (pattern.startsWith("/api/listings/")) return { mode: "account", scope: "catalogue:manage" };
+    return method === "GET"
+      ? { mode: "account", scope: "catalogue:read" }
+      : { mode: "account", scope: "catalogue:manage", capability: "catalogue.manage" };
+  if (pattern.startsWith("/api/listings/"))
+    return { mode: "account", scope: "catalogue:manage", capability: "catalogue.manage" };
   if (pattern === "/api/me/listings") return { mode: "account", scope: "catalogue:read" };
   if (pattern === "/api/wallet") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/transactions") return { mode: "account", scope: "wallet:read" };
@@ -278,6 +299,13 @@ export function authorizeLegacyRequest(
   if (access.mode === "anonymous" && principal?.kind === "api_key" && access.apiKey === "reject")
     return forbidden();
   if (access.mode === "account" && !principal) return unauthorized();
+  if (
+    access.mode === "account" &&
+    access.capability &&
+    principal &&
+    !hasCapability(principal.capabilities, access.capability)
+  )
+    return forbidden();
   if (
     access.mode === "account" &&
     principal?.kind === "api_key" &&

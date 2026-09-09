@@ -28,7 +28,7 @@ Command-specific help is available with the same interface:
 ```bash
 just cli user:create --help
 just cli user:password --help
-just cli user:role --help
+just cli user:capability --help
 just cli user:list --help
 just cli user:show --help
 ```
@@ -67,8 +67,7 @@ Options:
 
 The command creates the Better Auth credential identity, links it to the
 canonical Cliqero account, and leaves the account as a normal user with no
-privileged capability. It does not grant `operator`, `catalogue_manager`, or
-`blog_manager` access.
+privileged capability. It does not grant any other direct capability.
 
 For an interactive, history-safe password setup:
 
@@ -96,42 +95,40 @@ Better Auth remains authoritative for password hashing and credential
 storage; the console does not implement a second hash algorithm or credential
 store.
 
-## `user:role`
+## `user:capability`
 
 Grant or revoke an existing account capability:
 
 ```bash
-just cli user:role user@example.com operator
-just cli user:role user@example.com catalogue_manager
-just cli user:role user@example.com blog_manager
-
-just cli user:role user@example.com blog_manager --revoke
+just cli user:capability user@example.com catalogue.manage
+just cli user:capability user@example.com content.manage
+just cli user:capability user@example.com content.manage --revoke
 ```
 
-The currently supported privileged capabilities are:
+The currently supported privileged capabilities are the identifiers in the
+application capability registry, including `catalogue.manage`, `content.manage`,
+`accounts.read`, `hierarchy.manage`, `finance.read`, `finance.manage`,
+`withdrawals.manage`, `treasury.manage`, `reviews.moderate`, `api_keys.manage`,
+`capabilities.manage`, and `system.root` (master operator authority). API-key
+scopes still restrict keys owned by a root account.
 
-- `operator` — operator/admin application access.
-- `catalogue_manager` — catalogue-management access.
-- `blog_manager` — blog administration access.
+`admin`, `superadmin`, and legacy role names are not capabilities in the current
+authorization model. To remove one capability, pass it with `--revoke`.
 
-`admin` and `superadmin` are not capabilities in the current authorization
-model. Do not use those names. The special `normal` argument means “no
-privileged capabilities” and is only valid with `--revoke`:
-
-```bash
-just cli user:role user@example.com normal --revoke
-```
+Capabilities are evaluated directly: `system.root` is the only master
+capability, and no capability implicitly grants another (for example,
+`finance.manage` does not include `finance.read`). Grant both explicitly when
+an operator needs both financial mutation and reporting access.
 
 To bootstrap the first operator:
 
 ```bash
 just cli user:create --email admin@example.com --username admin
-just cli user:role admin@example.com operator
+just cli user:capability admin@example.com system.root
 ```
 
-The console protects the installation's last operator: it refuses to revoke
-the final remaining `operator` capability, including through
-`normal --revoke`.
+The console protects the installation's last root: it refuses to revoke the
+final remaining `system.root` capability.
 
 ## `user:list`
 

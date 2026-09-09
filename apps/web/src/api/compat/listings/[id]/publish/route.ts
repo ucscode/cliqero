@@ -6,7 +6,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(account.id);
+    await c.operators.requireCapability(account.id, "catalogue.manage");
     return Response.json(
       ownerListingView(await c.listingService.publishCatalogue(account, (await params).id)),
     );

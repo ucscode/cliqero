@@ -10,7 +10,7 @@ export async function POST(
     const account = await authenticatedAccount(request);
     if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
     const container = getContainer();
-    await container.operators.requireCatalogueManager(account.id);
+    await container.operators.requireCapability(account.id, "catalogue.manage");
     await container.listingService.getCatalogue(values.id);
     return Response.json(
       await container.integrations.rotateForListing(account.id, values.id, values.integrationId),

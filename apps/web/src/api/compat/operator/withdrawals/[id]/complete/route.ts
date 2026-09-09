@@ -4,7 +4,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    await getContainer().operators.requireOperator(account.id);
+    await getContainer().operators.requireCapability(account.id, "withdrawals.manage");
     return Response.json(
       await getContainer().payoutExecution.manualComplete(
         (await params).id,

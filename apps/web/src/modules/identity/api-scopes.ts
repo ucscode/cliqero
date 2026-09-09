@@ -23,6 +23,7 @@ export const API_SCOPES = [
   "blog:write",
   "blog:publish",
   "blog:manage",
+  "reviews:moderate",
 ] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 export const apiScopeSchema = z.enum(API_SCOPES);

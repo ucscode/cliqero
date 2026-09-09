@@ -89,7 +89,7 @@ Hono routes also accept `Authorization: Bearer cliq_live_...` API keys. The
 `identity_capability.api_keys` table stores only a SHA-256 secret hash and
 lookup prefix; the plaintext secret is returned once at operator creation.
 Revocation, expiry, and `last_used_at` are durable. API-key requests resolve to
-the same Cliqero account and roles as browser sessions, while key scopes add a
+the same Cliqero account and direct capabilities as browser sessions, while key scopes add a
 restriction and can never elevate the account. Invalid explicit credentials do
 not fall back to another credential. The generated Hono/OpenAPI contract is
 available at `/api/openapi.json`. It is public only in development; production

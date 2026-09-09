@@ -16,7 +16,7 @@ This matters strategically: Cliqero should look like a credible commerce busines
 
 ## Catalogue model
 
-Ordinary users do not create commercial inventory. Catalogue creation and publication are controlled by operators and permitted catalogue managers. This allows the platform to control quality, presentation, policy, and commercial inventory while still using a generic listing model across different product categories.
+Ordinary users do not create commercial inventory. Catalogue creation and publication are controlled by accounts with the appropriate direct capability. This allows the platform to control quality, presentation, policy, and commercial inventory while still using a generic listing model across different product categories.
 
 ## Productless architecture
 

@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireCatalogueManager(account.id);
+    await c.operators.requireCapability(account.id, "catalogue.manage");
     const format = (new URL(request.url).searchParams.get("format") ?? "json") as TransferFormat;
     if (!["json", "csv", "yaml"].includes(format))
       return Response.json({ error: "Invalid export format" }, { status: 400 });

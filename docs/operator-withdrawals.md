@@ -23,7 +23,7 @@ manual transfer has already happened. It cannot race with or follow an automated
 payout attempt.
 
 The operator APIs are Hono-owned and require an operator principal plus the
-`withdrawals:manage` API-key scope. Catalogue managers and ordinary accounts
+`withdrawals:manage` API-key scope. Accounts without `withdrawals.manage` and ordinary accounts
 cannot inspect or mutate operator withdrawals. Destination references and
 provider metadata are masked to safe projections; provider credentials are
 never exposed.

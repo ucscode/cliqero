@@ -2,7 +2,7 @@
 
 Cliqero settings keep authentication infrastructure separate from business
 identity. Better Auth owns sessions and provider credentials; the Cliqero
-account owns the username, country, profile, integrations, roles, and economic
+account owns the username, country, profile, integrations, direct capabilities, and economic
 identity.
 
 ## Profile and account
@@ -35,7 +35,7 @@ state, offers an explicit copy action, and clears it when dismissed. It is
 never put in a URL, browser storage, or subsequent API response.
 
 Scopes are selected from the canonical registry and only restrict what the
-owning account may do. They cannot grant an operator role, change ownership,
+owning account may do. They cannot grant an operator capability, change ownership,
 or bypass domain authorization. Browser sessions may manage their own keys;
 API-key callers additionally need `api_keys:manage`. Operator-wide key
 management remains under the separate `/api/operator/api-keys` capability.

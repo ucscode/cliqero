@@ -32,7 +32,7 @@ export class ListingReviewService {
     return this.reviews.queryVisible(input);
   }
   async moderate(account: Account, reviewId: Id, status: "approved" | "rejected") {
-    await this.operators.requireOperator(account.id);
+    await this.operators.requireCapability(account.id, "reviews.moderate");
     const review = await this.reviews.moderate(reviewId, status, account.id);
     if (!review) throw new Error("Review not found");
     return review;
@@ -41,7 +41,7 @@ export class ListingReviewService {
     account: Account,
     input: { status?: ReviewStatus; cursor?: string; limit: number },
   ) {
-    await this.operators.requireOperator(account.id);
+    await this.operators.requireCapability(account.id, "reviews.moderate");
     return this.reviews.queryOperator(input);
   }
   summariesForListings(listingIds: readonly Id[]) {

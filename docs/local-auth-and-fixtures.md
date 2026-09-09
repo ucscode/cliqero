@@ -37,5 +37,5 @@ than editing PostgreSQL manually:
 ```text
 just cli --help
 just cli user:create --email operator@example.test --username operator --country NG
-just cli user:role operator@example.test operator
+just cli user:capability operator@example.test system.root
 ```

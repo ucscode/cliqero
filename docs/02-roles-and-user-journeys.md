@@ -32,11 +32,11 @@ Clicks, views, registrations, and recruitment alone do not create commission.
 
 Promotion is intentionally presented through dedicated referral/opportunity surfaces. It should not dominate the general storefront's customer proposition.
 
-## Catalogue manager
+## Catalogue capability
 
-`catalogue_manager` is a privileged capability. It permits the catalogue-management subset of operator functionality, including creation/editing, media management, publication/archive/restore, and supported import/export.
+`catalogue.manage` is a direct privileged capability. It permits the catalogue-management subset of operator functionality, including creation/editing, media management, publication/archive/restore, and supported import/export. There are no application roles or bundles.
 
-A catalogue manager is not a seller and does not become a payee merely because they created or managed a listing.
+An account with `catalogue.manage` is not a seller and does not become a payee merely because it created or managed a listing.
 
 ## Administrator / operator
 
@@ -70,7 +70,7 @@ Administrative corrections preserve history through explicit auditable facts rat
 ## Typical catalogue-management journey
 
 1. An operator grants the appropriate capability.
-2. The catalogue manager creates/imports a draft listing.
+2. An authorized catalogue operator creates/imports a draft listing.
 3. They add presentation metadata, price, destination, and media.
 4. They publish the listing.
 5. Customers discover and purchase it.

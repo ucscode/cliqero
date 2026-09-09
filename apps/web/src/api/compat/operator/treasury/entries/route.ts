@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireOperator(a.id);
+    await c.operators.requireCapability(a.id, "treasury.manage");
     const key = request.headers.get("idempotency-key");
     if (!key) throw new Error("A valid Idempotency-Key is required");
     const b = schema.parse(await request.json()),
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const c = getContainer();
-    await c.operators.requireOperator(a.id);
+    await c.operators.requireCapability(a.id, "treasury.manage");
     const u = new URL(request.url),
       q = await c.treasuryRepository.list({
         cursor: u.searchParams.get("cursor") ?? undefined,

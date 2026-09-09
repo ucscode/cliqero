@@ -21,10 +21,8 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : "The account service is temporarily unavailable.";
 }
 
-function roleLabel(roles: string[]) {
-  if (roles.includes("operator")) return "Operator";
-  if (roles.includes("catalogue_manager")) return "Catalogue manager";
-  return "User";
+function capabilityLabel(capabilities: string[]) {
+  return capabilities.length ? "Operator" : "User";
 }
 
 export function OperatorUsersList() {
@@ -140,14 +138,14 @@ function AccountRow({ account }: { account: OperatorAccountSummary }) {
       <div className="operator-user-meta">
         <Badge
           variant={
-            account.roles.includes("operator")
+            account.capabilities.includes("system.root")
               ? "destructive"
-              : account.roles.includes("catalogue_manager")
+              : account.capabilities.length
                 ? "default"
                 : "secondary"
           }
         >
-          {roleLabel(account.roles)}
+          {capabilityLabel(account.capabilities)}
         </Badge>
         <span>{account.directReferralCount} direct referrals</span>
         <span>{account.country || "Country not set"}</span>
@@ -246,14 +244,14 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
         </div>
         <Badge
           variant={
-            account.roles.includes("operator")
+            account.capabilities.includes("system.root")
               ? "destructive"
-              : account.roles.includes("catalogue_manager")
+              : account.capabilities.length
                 ? "default"
                 : "secondary"
           }
         >
-          {roleLabel(account.roles)}
+          {capabilityLabel(account.capabilities)}
         </Badge>
       </div>
       {error && <Toast>{error}</Toast>}
@@ -278,14 +276,14 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
         <Card>
           <p className="eyebrow">Capabilities</p>
           <div className="badge-row">
-            {account.roles.length ? (
-              account.roles.map((role) => <Badge key={role}>{role}</Badge>)
+            {account.capabilities.length ? (
+              account.capabilities.map((capability) => <Badge key={capability}>{capability}</Badge>)
             ) : (
               <span>Standard account</span>
             )}
           </div>
           <p className="panel-note">
-            Capabilities are inspected here; role editing is intentionally separate.
+            Capabilities are inspected here; assignment is intentionally separate.
           </p>
         </Card>
         <Card>

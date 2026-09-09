@@ -32,7 +32,7 @@ function configure(account: typeof sessionAccount | null, funding: any) {
               accountId: account.id,
               account,
               kind: "user_session",
-              roles: [],
+              capabilities: [],
               scopes: new Set(),
             }
           : null,
@@ -56,7 +56,7 @@ describe("development funding verification boundary", () => {
           accountId: sessionAccount.id,
           account: sessionAccount,
           kind: "api_key",
-          roles: [],
+          capabilities: [],
           scopes: new Set(),
         })),
       },

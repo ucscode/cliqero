@@ -536,7 +536,7 @@ function ApiKeySettings() {
         </div>
         <p className="text-sm leading-relaxed text-slate-500">
           Keys are hashed and shown only once. Scopes can restrict what a key does, but can never
-          grant account roles.
+          grant account capabilities.
         </p>
         {error && <Toast>{error}</Toast>}
         <form className="grid max-w-2xl gap-3" onSubmit={create}>

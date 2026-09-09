@@ -6,7 +6,7 @@
 
 Cliqero is a catalogue-led commerce platform for purchasing access to products and services fulfilled through configured destinations.
 
-The platform owns and curates the commercial catalogue. Ordinary accounts are customers and, where eligible, promoters. They do not become sellers merely by registering. Catalogue creation and publication require operator authority or the dedicated `catalogue_manager` capability.
+The platform owns and curates the commercial catalogue. Ordinary accounts are customers and, where eligible, promoters. They do not become sellers merely by registering. Catalogue creation and publication require the direct `catalogue.manage` capability or `system.root`.
 
 The primary commerce flow is:
 
@@ -31,7 +31,7 @@ Product-specific information is introduced only when a real requirement establis
 
 Commercial listings are platform inventory, not user storefronts.
 
-Operators and catalogue managers can create, edit, import, publish, archive, restore, and manage listing media. A creator/manager identifier may exist for audit, but it does not make that account the seller or payee. Historical seller fields are compatibility/audit data only for new wallet commerce.
+Accounts with `catalogue.manage` or `system.root` can create, edit, import, publish, archive, restore, and manage listing media. A creator identifier may exist for audit, but it does not make that account the seller or payee. Historical seller fields are compatibility/audit data only for new wallet commerce.
 
 This distinction also controls economics: completed commerce may produce referral earnings and platform allocation, but there is no normal seller-credit branch for ordinary user-created inventory.
 

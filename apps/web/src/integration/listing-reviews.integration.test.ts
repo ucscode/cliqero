@@ -54,7 +54,7 @@ suite("listing review visibility", () => {
     });
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
-       values((select id from identity_capability.accounts where uuid=$1),'operator')`,
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [owner.id],
     );
     await app.listingReviews.moderate(owner, approved.id, "approved");
@@ -113,7 +113,7 @@ suite("listing review visibility", () => {
     const approved = await app.listingReviews.submit(approvedAuthor, listing.id, { rating: 4 });
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
-       values((select id from identity_capability.accounts where uuid=$1),'operator')`,
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [owner.id],
     );
     await app.listingReviews.moderate(owner, approved.id, "approved");

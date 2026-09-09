@@ -537,7 +537,7 @@ CREATE TABLE identity_capability.account_capabilities (
     capability text NOT NULL,
     granted_at timestamp with time zone DEFAULT now() NOT NULL,
     account_id bigint NOT NULL,
-    CONSTRAINT account_capabilities_known CHECK ((capability = ANY (ARRAY['operator'::text, 'catalogue_manager'::text, 'blog_manager'::text])))
+    CONSTRAINT account_capabilities_known CHECK ((capability = ANY (ARRAY['system.root'::text, 'catalogue.manage'::text, 'content.manage'::text, 'accounts.read'::text, 'hierarchy.manage'::text, 'finance.read'::text, 'finance.manage'::text, 'withdrawals.manage'::text, 'treasury.manage'::text, 'reviews.moderate'::text, 'api_keys.manage'::text, 'capabilities.manage'::text])))
 );
 
 

@@ -112,7 +112,7 @@ export class WithdrawalService {
     return this.operatorTransition(actorId, id, "requested", "approved", "withdrawal.approved");
   }
   async reject(actorId: string, id: string, reason: string) {
-    await this.operators.requireOperator(actorId);
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
     if (!reason.trim()) throw new Error("Withdrawal rejection reason is required");
     return this.uow.transaction(async () => {
       const withdrawal = await this.withdrawals.findByIdForUpdate(id);
@@ -208,7 +208,7 @@ export class WithdrawalService {
     release = false,
     completion?: "completed",
   ) {
-    await this.operators.requireOperator(actorId);
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
     return this.uow.transaction(async () => {
       const withdrawal = await this.withdrawals.findByIdForUpdate(id);
       if (!withdrawal) throw new Error("Withdrawal not found");

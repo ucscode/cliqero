@@ -316,7 +316,7 @@ suite("listing management and media", () => {
         country: "NG",
       });
     await app.database.query(
-      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'catalogue_manager'),((select id from identity_capability.accounts where uuid=$2),'catalogue_manager')`,
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'catalogue.manage'),((select id from identity_capability.accounts where uuid=$2),'catalogue.manage')`,
       [managerA.id, managerB.id],
     );
     const listing = await app.listingService.createCatalogue(managerA, {
@@ -341,8 +341,10 @@ suite("listing management and media", () => {
     expect(createdAudit[0]).toMatchObject({ action: "listing.created", actor_id: managerA.id });
     expect(createdAudit[0].previous_state).toBeNull();
     expect(createdAudit[0].new_state).toMatchObject({ state: "draft", title: "Platform listing" });
-    await app.operators.requireCatalogueManager(managerB.id);
-    await expect(app.operators.requireCatalogueManager(ordinary.id)).rejects.toThrow("Forbidden");
+    await app.operators.requireCapability(managerB.id, "catalogue.manage");
+    await expect(app.operators.requireCapability(ordinary.id, "catalogue.manage")).rejects.toThrow(
+      "Forbidden",
+    );
     expect(
       (await app.listingService.updateCatalogue(managerB, listing.id, { title: "Curated" })).title,
     ).toBe("Curated");
