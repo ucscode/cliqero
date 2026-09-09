@@ -39,7 +39,7 @@ export function Sidebar({ children, className }: React.HTMLAttributes<HTMLElemen
       <aside
         data-sidebar="sidebar"
         className={cn(
-          "hidden w-64 shrink-0 border-r border-slate-200 bg-[#f1f4ef] lg:block",
+          "hidden min-h-screen w-64 shrink-0 border-r border-slate-200 bg-[#f1f4ef] lg:block",
           className,
         )}
       >

@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ChevronDown, LogOut } from "lucide-react";
 import { authClient, authDisplayName } from "@/lib/auth-client";
 import {
   apiFetch,
@@ -60,8 +60,19 @@ const navigation = [
   { label: "Settings", href: "/dashboard?section=settings", section: "settings" },
 ];
 
+const primaryNavigation = navigation.filter((item) =>
+  ["overview", "catalogue", "purchases"].includes(item.section),
+);
+const moneyNavigation = navigation.filter((item) =>
+  ["wallet", "earnings", "withdrawals"].includes(item.section),
+);
+const referralNavigation = navigation.filter((item) =>
+  ["promote", "referrals"].includes(item.section),
+);
+
 export function DashboardShell() {
   const session = authClient.useSession();
+  const { refetch: refetchSession } = session;
   const params = useSearchParams();
   const section = params.get("section") ?? (params.get("buy") ? "checkout" : "overview");
   const buy = params.get("buy");
@@ -81,6 +92,19 @@ export function DashboardShell() {
       .then(setAccountAccess)
       .catch(() => undefined);
   }, [session.data?.user]);
+
+  useEffect(() => {
+    if (!session.data?.user) return;
+    const refreshSession = () => {
+      if (document.visibilityState === "visible") void refetchSession();
+    };
+    window.addEventListener("focus", refreshSession);
+    document.addEventListener("visibilitychange", refreshSession);
+    return () => {
+      window.removeEventListener("focus", refreshSession);
+      document.removeEventListener("visibilitychange", refreshSession);
+    };
+  }, [session.data?.user, refetchSession]);
 
   useEffect(() => {
     if (!buy) return;
@@ -155,13 +179,24 @@ export function DashboardShell() {
             <SidebarGroup>
               <SidebarGroupLabel>Your space</SidebarGroupLabel>
               <SidebarMenu aria-label="Dashboard navigation">
-                {navigation.map((item) => (
+                {primaryNavigation.map((item) => (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton asChild isActive={section === item.section}>
                       <Link href={item.href}>{item.label}</Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+                <DashboardNavGroup label="Money" items={moneyNavigation} section={section} />
+                <DashboardNavGroup label="Referrals" items={referralNavigation} section={section} />
+                <SidebarMenuItem className="mt-2 border-t border-slate-200 pt-2">
+                  <SidebarMenuButton
+                    asChild
+                    isActive={section === "settings"}
+                    className="font-medium"
+                  >
+                    <Link href="/dashboard?section=settings">Settings</Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
                 {accountAccess?.canAccessOperator && (
                   <SidebarMenuItem className="mt-2 border-t border-slate-200 pt-2">
                     <SidebarMenuButton asChild>
@@ -172,13 +207,14 @@ export function DashboardShell() {
               </SidebarMenu>
             </SidebarGroup>
           </SidebarContent>
-          <SidebarFooter>
+          <SidebarFooter className="grid gap-2 border-t border-slate-200 pt-4">
             <SidebarMenuButton asChild>
               <Link href="/catalogue">
                 <ArrowLeft className="mr-1 inline h-4 w-4" aria-hidden="true" />
                 Browse catalogue
               </Link>
             </SidebarMenuButton>
+            <DashboardSignOut />
           </SidebarFooter>
         </Sidebar>
         <SidebarInset>
@@ -196,6 +232,9 @@ export function DashboardShell() {
                 <span>{profile?.username ?? providerDisplayName}</span>
               </div>
             </header>
+            {!session.data.user.emailVerified && (
+              <EmailVerificationNotice email={session.data.user.email} />
+            )}
             {error && <Toast>{error}</Toast>}
             {content}
           </main>
@@ -224,7 +263,7 @@ function DashboardOverview({ profile }: { profile: { username: string; email: st
       .catch(() => setError(true));
   }, []);
   return (
-    <>
+    <div className="grid gap-6">
       {error && <Toast>Some account summaries are temporarily unavailable.</Toast>}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="p-5">
@@ -281,7 +320,133 @@ function DashboardOverview({ profile }: { profile: { username: string; email: st
           <Link href="/catalogue">Explore catalogue</Link>
         </Button>
       </Card>
+    </div>
+  );
+}
+
+function DashboardNavGroup({
+  label,
+  items,
+  section,
+}: {
+  label: string;
+  items: typeof navigation;
+  section: string;
+}) {
+  const active = items.some((item) => item.section === section);
+  const [manualOpen, setManualOpen] = useState(false);
+  const open = active || manualOpen;
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        type="button"
+        isActive={active}
+        aria-expanded={open}
+        onClick={() => setManualOpen((value) => !value)}
+      >
+        <span>{label}</span>
+        <ChevronDown
+          className={`ml-auto h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        />
+      </SidebarMenuButton>
+      {open && (
+        <SidebarMenu className="ml-3 border-l border-slate-200 pl-2">
+          {items.map((item) => (
+            <SidebarMenuItem key={item.href}>
+              <SidebarMenuButton asChild isActive={section === item.section}>
+                <Link href={item.href}>{item.label}</Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      )}
+    </SidebarMenuItem>
+  );
+}
+
+function DashboardSignOut() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+
+  async function signOut() {
+    if (busy) return;
+    setBusy(true);
+    setError(false);
+    try {
+      const result = await authClient.signOut();
+      if (result.error) throw result.error;
+      router.refresh();
+      router.push("/");
+    } catch {
+      setError(true);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <SidebarMenuButton type="button" onClick={() => void signOut()} disabled={busy}>
+        <LogOut className="mr-1 h-4 w-4" aria-hidden="true" />
+        {busy ? "Signing out…" : "Sign out"}
+      </SidebarMenuButton>
+      {error && (
+        <p className="px-3 text-xs text-red-700" role="alert">
+          We couldn’t sign you out. Please try again.
+        </p>
+      )}
     </>
+  );
+}
+
+function EmailVerificationNotice({ email }: { email: string }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+
+  async function resend() {
+    if (busy) return;
+    setBusy(true);
+    setMessage(null);
+    setError(false);
+    try {
+      const result = await authClient.sendVerificationEmail({
+        email,
+        callbackURL: `${window.location.origin}/email-verified`,
+      });
+      if (result.error) throw result.error;
+      setMessage("Verification email sent.");
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="mb-6 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+      role="status"
+      aria-live="polite"
+    >
+      <div>
+        <p className="font-semibold">Your email address is not verified.</p>
+        <p className="mt-1 text-amber-900">
+          Verify your email to keep your account details up to date.
+        </p>
+        {message && <p className="mt-2 font-medium text-emerald-800">{message}</p>}
+        {error && (
+          <p className="mt-2 text-red-700" role="alert">
+            We couldn’t resend the verification email. Please try again.
+          </p>
+        )}
+      </div>
+      <Button type="button" variant="outline" onClick={() => void resend()} disabled={busy}>
+        {busy ? "Sending…" : "Resend verification email"}
+      </Button>
+    </div>
   );
 }
 
