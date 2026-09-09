@@ -13,7 +13,7 @@ describe("API honeypot mutation boundaries", () => {
       new Request("http://localhost/api/accounts", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cliqeroTrap: "autofilled" }),
+        body: JSON.stringify({ referenceId: "autofilled" }),
       }),
     );
 

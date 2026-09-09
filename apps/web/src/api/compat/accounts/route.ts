@@ -4,7 +4,6 @@ import { getContainer } from "@/infrastructure/container";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 import { usernameSchema } from "@/modules/identity/username";
 import { verifyCaptchaToken } from "@/security/captcha";
-import { HONEYPOT_FIELD_NAME } from "@/lib/honeypot";
 
 const bodySchema = z.object({
   email: z.email("Enter a valid email address."),
@@ -17,7 +16,6 @@ const bodySchema = z.object({
     .regex(/^[A-Za-z]{2}$/, "Choose a valid country.")
     .optional(),
   captchaToken: z.string().optional(),
-  [HONEYPOT_FIELD_NAME]: z.string().optional(),
 });
 export async function POST(request: Request) {
   try {

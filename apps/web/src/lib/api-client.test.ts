@@ -8,7 +8,7 @@ import {
   presentFormApiError,
   safeContinuation,
 } from "./api-client";
-import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "./honeypot";
+import { HONEYPOT_HEADER_NAME } from "./honeypot";
 
 describe("frontend API presentation helpers", () => {
   it("formats canonical USD minor units without floating point arithmetic", () => {
@@ -73,12 +73,11 @@ describe("apiFetch validation errors", () => {
     });
   });
 
-  it("forwards a populated trap to the server instead of rejecting in the browser", async () => {
+  it("forwards a populated trap in the canonical header without mutating JSON", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const querySelectorAll = vi.fn().mockReturnValue([{ value: "autofilled" }]);
     vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("document", {
-      querySelectorAll: vi.fn().mockReturnValue([{ value: "autofilled" }]),
-    });
+    vi.stubGlobal("document", { querySelectorAll });
 
     await apiFetch("/api/test", {
       method: "POST",
@@ -88,10 +87,24 @@ describe("apiFetch validation errors", () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(new Headers(init.headers).get(HONEYPOT_HEADER_NAME)).toBe("autofilled");
-    expect(JSON.parse(String(init.body))).toMatchObject({
-      email: "user@example.com",
-      [HONEYPOT_FIELD_NAME]: "autofilled",
+    expect(querySelectorAll).toHaveBeenCalledWith('input[name="referenceId"]');
+    expect(JSON.parse(String(init.body))).toEqual({ email: "user@example.com" });
+  });
+
+  it("preserves an explicitly owned trap header instead of consulting another form", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("document", {
+      querySelectorAll: vi.fn().mockReturnValue([{ value: "another-form" }]),
     });
+
+    await apiFetch("/api/test", {
+      method: "POST",
+      headers: { [HONEYPOT_HEADER_NAME]: "submitting-form" },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(init.headers).get(HONEYPOT_HEADER_NAME)).toBe("submitting-form");
   });
 });
 

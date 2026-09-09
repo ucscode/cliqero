@@ -658,9 +658,9 @@ function CatalogueMedia({
     try {
       const body = new FormData();
       body.set("file", file);
-      body.set(HONEYPOT_FIELD_NAME, honeypot);
       const media = await apiFetch<ListingMedia>(`/api/operator/listings/${listing.id}/media`, {
         method: "POST",
+        headers: honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : undefined,
         body,
       });
       onChange({

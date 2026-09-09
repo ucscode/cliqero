@@ -9,7 +9,7 @@ import { Label } from "./ui/label";
 import { HoneypotField } from "./honeypot-field";
 import { Captcha, captchaTokenPayload, type CaptchaClientConfig } from "./captcha";
 import { AuthShell } from "./auth-shell";
-import { HONEYPOT_FIELD_NAME } from "@/lib/honeypot";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig }) {
   const [email, setEmail] = useState("");
@@ -30,12 +30,14 @@ export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig
         throw new Error("Please complete the CAPTCHA challenge.");
       const response = await fetch("/api/password-reset/request", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+        },
         body: JSON.stringify({
           email,
           redirectTo: `${window.location.origin}/reset-password`,
           ...captchaTokenPayload(captchaToken),
-          [HONEYPOT_FIELD_NAME]: honeypot,
         }),
       });
       if (!response.ok) {

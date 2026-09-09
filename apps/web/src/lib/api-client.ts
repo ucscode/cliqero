@@ -531,13 +531,15 @@ export function presentFormApiError(
 }
 
 export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-  let body = init?.body;
   const headers = new Headers(init?.headers);
   if (!headers.has("accept")) headers.set("accept", "application/json");
   if (
     typeof document !== "undefined" &&
+    !headers.has(HONEYPOT_HEADER_NAME) &&
     ["POST", "PUT", "PATCH", "DELETE"].includes((init?.method ?? "GET").toUpperCase())
   ) {
+    // Existing mutation call sites without form context use this fallback;
+    // form-owned callers pass the header explicitly and bypass the scan.
     const filled = Array.from(
       document.querySelectorAll<HTMLInputElement>(`input[name="${HONEYPOT_FIELD_NAME}"]`),
     )
@@ -545,21 +547,10 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
       .find((value) => value.trim());
     if (filled) {
       headers.set(HONEYPOT_HEADER_NAME, filled);
-      if (typeof body === "string" && headers.get("content-type")?.includes("application/json")) {
-        try {
-          body = JSON.stringify({
-            ...(JSON.parse(body) as Record<string, unknown>),
-            [HONEYPOT_FIELD_NAME]: filled,
-          });
-        } catch {
-          // Leave a non-JSON request body unchanged.
-        }
-      }
     }
   }
   const response = await fetch(input, {
     ...init,
-    body,
     credentials: "include",
     headers,
   });

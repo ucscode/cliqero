@@ -11,7 +11,7 @@ export function HoneypotField() {
         name={HONEYPOT_FIELD_NAME}
         type="text"
         tabIndex={-1}
-        autoComplete="new-password"
+        autoComplete="off"
         aria-hidden="true"
       />
     </div>

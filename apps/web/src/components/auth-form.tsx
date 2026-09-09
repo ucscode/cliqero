@@ -76,14 +76,16 @@ export function AuthForm({
             // create the browser session below.
             await apiFetch("/api/accounts", {
               method: "POST",
-              headers: { "content-type": "application/json" },
+              headers: {
+                "content-type": "application/json",
+                ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+              },
               body: JSON.stringify({
                 email,
                 username,
                 password,
                 country: country || undefined,
                 ...captchaTokenPayload(captchaToken),
-                [HONEYPOT_FIELD_NAME]: honeypot,
               }),
             });
             const signIn = await authClient.signIn.email({

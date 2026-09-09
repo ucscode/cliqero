@@ -11,7 +11,7 @@ import { HoneypotField } from "./honeypot-field";
 import { AuthShell } from "./auth-shell";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { HONEYPOT_FIELD_NAME } from "@/lib/honeypot";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 export function PasswordResetForm({ token }: { token: string }) {
   const [password, setPassword] = useState("");
@@ -35,11 +35,13 @@ export function PasswordResetForm({ token }: { token: string }) {
       const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
       await apiFetch("/api/password-reset", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+        },
         body: JSON.stringify({
           newPassword: password,
           token,
-          [HONEYPOT_FIELD_NAME]: honeypot,
         }),
       });
       setMessage("Password reset. You can now sign in.");

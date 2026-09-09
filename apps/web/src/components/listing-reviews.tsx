@@ -13,7 +13,7 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { HoneypotField } from "./honeypot-field";
-import { HONEYPOT_FIELD_NAME } from "@/lib/honeypot";
+import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 export function visibleRating(selectedRating: number, hoverRating: number) {
   return hoverRating || selectedRating;
@@ -69,8 +69,11 @@ export function ListingReviews({ listingId }: { listingId: string }) {
         `/api/listings/${listingId}/reviews/me`,
         {
           method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ rating, body, [HONEYPOT_FIELD_NAME]: honeypot }),
+          headers: {
+            "content-type": "application/json",
+            ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+          },
+          body: JSON.stringify({ rating, body }),
         },
       );
       setReviews((current) => replaceOwnReview(current, result.item));
