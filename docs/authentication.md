@@ -64,7 +64,7 @@ configuration can use the same Better Auth hooks without changing any Cliqero
 business capability. Future 2FA/passkey plugins can be added at this boundary.
 
 Authorization remains Cliqero-owned: authentication establishes a principal,
-then operator/catalogue-manager capabilities are evaluated from the account's
+then operator capabilities are evaluated from the account's
 domain records. Public listing reads remain anonymous; authenticated state can
 be resolved server-side without exposing authentication-provider objects.
 

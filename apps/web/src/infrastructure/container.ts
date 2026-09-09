@@ -103,6 +103,7 @@ import { ApiPrincipalResolver } from "@/modules/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
 import { OperatorOverviewService } from "@/application/operator-overview";
 import { OperatorAccountService } from "@/application/operator-accounts";
+import { CapabilityAdministrationService } from "@/application/capability-administration";
 import { OperatorFundingService } from "@/application/operator-funding";
 import {
   OperatorDistributionService,
@@ -393,6 +394,7 @@ export function createContainer(databaseUrl: string) {
     hierarchy: new HierarchyService(database),
     operatorOverview: new OperatorOverviewService(database),
     operatorAccounts: new OperatorAccountService(database),
+    capabilityAdministration: new CapabilityAdministrationService(database, database),
     operatorFunding: new OperatorFundingService(database),
     operatorDistributions: new OperatorDistributionService(database),
     operatorEarnings: new OperatorEarningsService(database),

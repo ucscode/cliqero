@@ -219,7 +219,7 @@ function ProfileSettings() {
   );
 }
 
-/** Reserved for the operator/catalogue-manager surface; not mounted in ordinary Settings. */
+/** Reserved for operator catalogue workflows; not mounted in ordinary Settings. */
 export function IntegrationSettings() {
   const [items, setItems] = useState<Integration[]>([]);
   const [listings, setListings] = useState<ListingPage["items"]>([]);

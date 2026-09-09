@@ -206,7 +206,6 @@ export type OperatorAccountSummary = {
   displayName: string | null;
   email: string | null;
   country: string | null;
-  capabilities: string[];
   createdAt: string;
   directReferralCount: number;
 };
@@ -389,6 +388,18 @@ export type OperatorTreasuryPage = {
 export type OperatorAccountPage = {
   items: OperatorAccountSummary[];
   nextCursor: string | null;
+};
+
+export type CapabilityAssignment = {
+  capability: string;
+  grantedAt: string;
+};
+
+export type CapabilityAdministrationView = {
+  accountId: string;
+  assignments: CapabilityAssignment[];
+  manageableCapabilities: string[];
+  isSelf: boolean;
 };
 
 export type Integration = {

@@ -171,32 +171,69 @@ program
       if (!(CAPABILITIES as readonly string[]).includes(normalized))
         throw new Error(`Unsupported capability. Choose: ${CAPABILITIES.join(", ")}`);
       const value = normalized as Capability;
-      if (options.revoke) {
+      await context.database.transaction(async () => {
         if (value === "system.root") {
-          const count = (
-            await context.database.query<{ count: string }>(
-              `select count(*)::text as count from identity_capability.account_capabilities where capability='system.root'`,
-            )
-          ).rows[0];
-          if (Number(count?.count ?? 0) <= 1)
-            throw new Error("Cannot revoke the last system.root capability");
+          await context.database.query(
+            `select pg_advisory_xact_lock(hashtext('cliqero:system-root'))`,
+          );
         }
-        await context.database.query(
-          `delete from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) and capability=$2`,
-          [account.id, value],
-        );
-        console.log(`Revoked ${value} from ${account.email ?? account.username}`);
-      } else {
-        await context.database.query(
-          `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),$2) on conflict do nothing`,
-          [account.id, value],
-        );
-        console.log(`Granted ${value} to ${account.email ?? account.username}`);
-      }
+        if (options.revoke) {
+          const assignment = await context.database.query(
+            `select 1 from identity_capability.account_capabilities
+             where account_id=(select id from identity_capability.accounts where uuid=$1)
+               and capability=$2`,
+            [account.id, value],
+          );
+          if (!assignment.rowCount) return;
+          if (value === "system.root") {
+            const count = (
+              await context.database.query<{ count: string }>(
+                `select count(*)::text as count from identity_capability.account_capabilities where capability='system.root'`,
+              )
+            ).rows[0];
+            if (Number(count?.count ?? 0) <= 1)
+              throw new Error("Cannot revoke the last system.root capability");
+          }
+          const removed = await context.database.query(
+            `delete from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1) and capability=$2`,
+            [account.id, value],
+          );
+          if (removed.rowCount) await recordCapabilityAudit(context, account.id, value, "revoked");
+        } else {
+          const inserted = await context.database.query(
+            `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),$2) on conflict do nothing`,
+            [account.id, value],
+          );
+          if (inserted.rowCount) await recordCapabilityAudit(context, account.id, value, "granted");
+        }
+      });
+      console.log(
+        `${options.revoke ? "Revoked" : "Granted"} ${value} from ${account.email ?? account.username}`,
+      );
     } finally {
       await closeContext(context);
     }
   });
+
+async function recordCapabilityAudit(
+  context: IdentityContext,
+  targetId: string,
+  capability: Capability,
+  action: "granted" | "revoked",
+) {
+  await context.database.query(
+    `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
+     values(null,$1,'account_capability',$2,$3::jsonb,$4::jsonb,gen_random_uuid())`,
+    [
+      `capability.${action}`,
+      targetId,
+      action === "revoked"
+        ? JSON.stringify({ capability, assigned: true, source: "trusted_cli" })
+        : null,
+      JSON.stringify({ capability, assigned: action === "granted", source: "trusted_cli" }),
+    ],
+  );
+}
 
 program
   .command("user:list")

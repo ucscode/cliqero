@@ -55,12 +55,33 @@ function appWith(
           displayName: null,
           email: "sample@example.com",
           country: null,
-          capabilities: [],
           createdAt: new Date().toISOString(),
           directReferralCount: 0,
           parent: null,
           purchaseCount: 0,
           latestParentReassignment: null,
+        }),
+      },
+      capabilityAdministration: {
+        inspect: async (_actorId: string, accountId: string) => ({
+          accountId,
+          assignments: [],
+          manageableCapabilities: [],
+          isSelf: false,
+        }),
+        grant: async (_actorId: string, accountId: string, capability: string) => ({
+          accountId,
+          capability,
+          changed: true,
+          assigned: true,
+          grantedAt: new Date().toISOString(),
+        }),
+        revoke: async (_actorId: string, accountId: string, capability: string) => ({
+          accountId,
+          capability,
+          changed: true,
+          assigned: false,
+          grantedAt: null,
         }),
       },
       operatorFunding: {
@@ -234,6 +255,13 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/overview"]).toBeDefined();
     expect(paths["/api/operator/accounts"]).toBeDefined();
     expect(paths["/api/operator/accounts/{accountId}"]).toBeDefined();
+    expect(paths["/api/operator/accounts/{accountId}/capabilities"]).toMatchObject({
+      get: expect.any(Object),
+      post: expect.any(Object),
+    });
+    expect(paths["/api/operator/accounts/{accountId}/capabilities/{capability}"]).toMatchObject({
+      delete: expect.any(Object),
+    });
     expect(paths["/api/operator/funding"]).toBeDefined();
     expect(paths["/api/operator/funding/{fundingId}"]).toBeDefined();
     expect(paths["/api/operator/listings"]).toBeDefined();
@@ -881,6 +909,39 @@ describe("Hono API foundation", () => {
         }).fetch(new Request("http://localhost/api/operator/accounts"))
       ).status,
     ).toBe(403);
+  });
+  it("keeps capability administration session-only and explicit", async () => {
+    const target = "00000000-0000-4000-8000-000000000002";
+    const ordinary = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      capabilities: [],
+      scopes: new Set<string>(),
+    };
+    const path = `http://localhost/api/operator/accounts/${target}/capabilities`;
+    expect((await appWith().fetch(new Request(path))).status).toBe(401);
+    expect(
+      (await appWith({ ...ordinary, capabilities: ["accounts.read"] }).fetch(new Request(path)))
+        .status,
+    ).toBe(403);
+    const admin = { ...ordinary, capabilities: ["capabilities.manage"] };
+    expect((await appWith(admin).fetch(new Request(path))).status).toBe(200);
+    expect((await appWith({ ...admin, kind: "api_key" }).fetch(new Request(path))).status).toBe(
+      403,
+    );
+    const grant = await appWith(admin).fetch(
+      new Request(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ capability: "catalogue.manage" }),
+      }),
+    );
+    expect(grant.status).toBe(200);
+    const revoke = await appWith(admin).fetch(
+      new Request(`${path}/catalogue.manage`, { method: "DELETE" }),
+    );
+    expect(revoke.status).toBe(200);
   });
   it("allows an operator hierarchy key to use hierarchy:admin without a redundant read scope", async () => {
     const principal = {

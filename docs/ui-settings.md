@@ -19,7 +19,7 @@ The existing integration capability is a legacy listing-access verification
 credential. It is tied to a listing owner by the backend and is used by
 downstream access verification; it is not a normal-user catalogue or seller
 capability. Accordingly, it is intentionally not exposed in the ordinary-user
-Settings navigation. Operator/catalogue-manager workflows retain the existing
+Settings navigation. Operator catalogue workflows retain the existing
 owner-scoped API and hashed, one-time credential behavior.
 
 User-facing payout destination management is still deferred because the

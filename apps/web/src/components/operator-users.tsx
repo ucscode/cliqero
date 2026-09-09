@@ -4,10 +4,17 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   apiFetch,
+  ApiClientError,
+  type CapabilityAdministrationView,
   type OperatorAccountDetail,
   type OperatorAccountPage,
   type OperatorAccountSummary,
 } from "@/lib/api-client";
+import {
+  CAPABILITIES,
+  CAPABILITY_METADATA,
+  type Capability,
+} from "@/modules/identity/capabilities";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -19,10 +26,6 @@ import { Toast } from "./toast";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The account service is temporarily unavailable.";
-}
-
-function capabilityLabel(capabilities: string[]) {
-  return capabilities.length ? "Operator" : "User";
 }
 
 export function OperatorUsersList() {
@@ -136,17 +139,7 @@ function AccountRow({ account }: { account: OperatorAccountSummary }) {
         </div>
       </div>
       <div className="operator-user-meta">
-        <Badge
-          variant={
-            account.capabilities.includes("system.root")
-              ? "destructive"
-              : account.capabilities.length
-                ? "default"
-                : "secondary"
-          }
-        >
-          {capabilityLabel(account.capabilities)}
-        </Badge>
+        <Badge variant="secondary">Account</Badge>
         <span>{account.directReferralCount} direct referrals</span>
         <span>{account.country || "Country not set"}</span>
       </div>
@@ -165,6 +158,10 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
   const [parentResults, setParentResults] = useState<OperatorAccountSummary[]>([]);
   const [selectedParent, setSelectedParent] = useState<OperatorAccountSummary | null>(null);
   const [saving, setSaving] = useState(false);
+  const [capabilityView, setCapabilityView] = useState<CapabilityAdministrationView | null>(null);
+  const [capabilityLoading, setCapabilityLoading] = useState(true);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
+  const [capabilitySaving, setCapabilitySaving] = useState<Capability | null>(null);
 
   async function load() {
     setLoading(true);
@@ -177,12 +174,68 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
       setLoading(false);
     }
   }
+
+  async function loadCapabilities() {
+    setCapabilityLoading(true);
+    setCapabilityError(null);
+    try {
+      setCapabilityView(
+        await apiFetch<CapabilityAdministrationView>(
+          `/api/operator/accounts/${accountId}/capabilities`,
+        ),
+      );
+    } catch (cause) {
+      // Account readers are intentionally not given assignment data. Keep the
+      // detail page useful without exposing a second authorization surface.
+      if (cause instanceof ApiClientError && cause.status === 403) {
+        setCapabilityView(null);
+      } else {
+        setCapabilityError(message(cause));
+      }
+    } finally {
+      setCapabilityLoading(false);
+    }
+  }
   useEffect(() => {
     // Initial loading synchronizes this detail panel with the remote API.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+    void loadCapabilities();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
+
+  async function changeCapability(capability: Capability, action: "grant" | "revoke") {
+    if (!capabilityView || capabilitySaving) return;
+    if (action === "revoke" && capability === "system.root") {
+      const warning = capabilityView.isSelf
+        ? "Remove your own master operator authority? Another root account must remain."
+        : "Remove master operator authority from this account? Another root account must remain.";
+      if (!window.confirm(warning)) return;
+    } else if (action === "grant" && capability === "system.root") {
+      if (!window.confirm("Grant master operator authority to this account?")) return;
+    }
+    setCapabilitySaving(capability);
+    setCapabilityError(null);
+    try {
+      await apiFetch(
+        `/api/operator/accounts/${accountId}/capabilities${action === "revoke" ? `/${encodeURIComponent(capability)}` : ""}`,
+        {
+          method: action === "revoke" ? "DELETE" : "POST",
+          ...(action === "grant"
+            ? {
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ capability }),
+              }
+            : {}),
+        },
+      );
+      await loadCapabilities();
+    } catch (cause) {
+      setCapabilityError(message(cause));
+    } finally {
+      setCapabilitySaving(null);
+    }
+  }
 
   async function searchParent() {
     if (!parentSearch.trim()) return;
@@ -242,17 +295,6 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
             @{account.username} · {account.email ?? "No authentication email"}
           </p>
         </div>
-        <Badge
-          variant={
-            account.capabilities.includes("system.root")
-              ? "destructive"
-              : account.capabilities.length
-                ? "default"
-                : "secondary"
-          }
-        >
-          {capabilityLabel(account.capabilities)}
-        </Badge>
       </div>
       {error && <Toast>{error}</Toast>}
       <div className="operator-detail-grid">
@@ -273,19 +315,20 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
             </div>
           </dl>
         </Card>
-        <Card>
-          <p className="eyebrow">Capabilities</p>
-          <div className="badge-row">
-            {account.capabilities.length ? (
-              account.capabilities.map((capability) => <Badge key={capability}>{capability}</Badge>)
-            ) : (
-              <span>Standard account</span>
-            )}
-          </div>
-          <p className="panel-note">
-            Capabilities are inspected here; assignment is intentionally separate.
-          </p>
-        </Card>
+        {!capabilityLoading && capabilityView && (
+          <CapabilityCard
+            view={capabilityView}
+            saving={capabilitySaving}
+            onChange={changeCapability}
+          />
+        )}
+        {capabilityLoading && (
+          <Card>
+            <p className="eyebrow">Platform capabilities</p>
+            <Skeleton className="catalogue-skeleton" />
+          </Card>
+        )}
+        {capabilityError && <Toast>{capabilityError}</Toast>}
         <Card>
           <p className="eyebrow">Referral context</p>
           <dl className="detail-list">
@@ -386,5 +429,94 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
         </Card>
       )}
     </div>
+  );
+}
+
+function CapabilityCard({
+  view,
+  saving,
+  onChange,
+}: {
+  view: CapabilityAdministrationView;
+  saving: Capability | null;
+  onChange: (capability: Capability, action: "grant" | "revoke") => Promise<void>;
+}) {
+  const assigned = new Map(view.assignments.map((item) => [item.capability, item.grantedAt]));
+  const manageable = new Set(view.manageableCapabilities);
+  const rootAssigned = assigned.has("system.root");
+  const ordinary = CAPABILITIES.filter((capability) => capability !== "system.root");
+
+  return (
+    <Card className="operator-capabilities-card col-span-full">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="eyebrow">Platform capabilities</p>
+          <p className="panel-note">
+            These are direct assignments. Master operator authority is evaluated separately from the
+            capabilities stored on the account.
+          </p>
+        </div>
+        {rootAssigned && <Badge variant="destructive">system.root · master authority</Badge>}
+      </div>
+      <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+        <strong>{CAPABILITY_METADATA["system.root"].label}</strong>
+        <p className="mt-1">{CAPABILITY_METADATA["system.root"].description}</p>
+        <p className="mt-1 font-medium">{rootAssigned ? "Directly assigned" : "Not assigned"}</p>
+        {manageable.has("system.root") && (
+          <Button
+            className="mt-3"
+            variant="destructive"
+            size="sm"
+            disabled={saving === "system.root"}
+            onClick={() => void onChange("system.root", rootAssigned ? "revoke" : "grant")}
+          >
+            {saving === "system.root"
+              ? "Saving…"
+              : rootAssigned
+                ? "Revoke master authority"
+                : "Grant master authority"}
+          </Button>
+        )}
+      </div>
+      <div className="mt-4 grid gap-3">
+        {ordinary.map((capability) => {
+          const metadata = CAPABILITY_METADATA[capability];
+          const grantedAt = assigned.get(capability);
+          const canChange = manageable.has(capability);
+          return (
+            <div key={capability} className="rounded-md border p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <strong>{metadata.label}</strong>
+                  <p className="text-xs text-slate-500">{capability}</p>
+                  <p className="mt-1 text-sm text-slate-600">{metadata.description}</p>
+                  {grantedAt && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Granted {new Date(grantedAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={grantedAt ? "default" : "secondary"}>
+                    {grantedAt ? "Assigned" : "Not assigned"}
+                  </Badge>
+                  {canChange && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={grantedAt ? "outline" : "secondary"}
+                      disabled={saving === capability}
+                      onClick={() => void onChange(capability, grantedAt ? "revoke" : "grant")}
+                    >
+                      {saving === capability ? "Saving…" : grantedAt ? "Revoke" : "Grant"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }

@@ -7,7 +7,7 @@ function result<T extends object>(rows: T[]): QueryResult<T> {
 }
 
 describe("operator overview projection", () => {
-  it("keeps catalogue-manager data limited to catalogue counts", async () => {
+  it("keeps catalogue capability data limited to catalogue counts", async () => {
     const service = new OperatorOverviewService({
       query: async <T extends object>() =>
         result<T>([{ published: "3", draft: "2", archived: "1" }] as T[]),

@@ -197,7 +197,6 @@ suite("headless API principal and hierarchy read model", () => {
     expect(await detail.json()).toMatchObject({
       id: child.id,
       parent: { id: operator.id },
-      capabilities: [],
     });
     const unrelated = await api.fetch(
       new Request(`http://localhost/api/operator/accounts/${newId()}`),

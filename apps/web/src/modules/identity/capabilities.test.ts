@@ -30,7 +30,13 @@ describe("direct account capabilities", () => {
   });
 
   it("keeps root grant and revoke authority separate from ordinary capability management", () => {
-    expect(canManageCapability(["capabilities.manage"], "catalogue.manage")).toBe(true);
+    expect(canManageCapability(["capabilities.manage"], "catalogue.manage")).toBe(false);
+    expect(
+      canManageCapability(["capabilities.manage", "catalogue.manage"], "catalogue.manage"),
+    ).toBe(true);
+    expect(
+      canManageCapability(["capabilities.manage", "catalogue.manage"], "treasury.manage"),
+    ).toBe(false);
     expect(canManageCapability(["capabilities.manage"], "system.root")).toBe(false);
     expect(canManageCapability(["system.root"], "system.root")).toBe(true);
   });
