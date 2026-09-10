@@ -90,7 +90,7 @@ Use `%%env(NAME)%%` when the placeholder must remain literal.
 
 Provider configuration is optional by capability. External payment providers fund the buyer account balance; they do not directly purchase listings. The internal checkout consumes available canonical USD value. Referral commission policy is defined independently from payment providers.
 
-See [Installation and Configuration](docs/installation-and-configuration.md) for the complete setup model.
+See [Installation and Configuration](docs/operations/installation-and-configuration.md) for the complete setup model.
 
 ## Persistence
 
@@ -110,13 +110,13 @@ Canonical access uses `/access/{purchaseId}`. The platform verifies ownership an
 
 Ordinary accounts do not create commercial listings. Catalogue management is restricted to accounts granted the direct `catalogue.manage` capability (or `system.root`). Historical seller-oriented fields may remain for compatibility/audit but are not seller/payee semantics for new commerce.
 
-Listing lifecycle, media storage, and JSON/CSV/YAML transfer are documented in [Listing Management and Media](docs/listing-management-and-media.md).
+Listing lifecycle, media storage, and JSON/CSV/YAML transfer are documented in [Listing Management and Media](docs/integrations/listing-management-and-media.md).
 
 ## Authentication and API
 
 Better Auth handles authentication. Cliqero's canonical account remains the domain/economic identity. Application APIs are routed through Hono and use either authenticated browser sessions or scoped database-backed API keys.
 
-See [Authentication](docs/authentication.md) and [API Foundation](docs/api-foundation.md).
+See [Authentication](docs/integrations/authentication.md) and [API Foundation](docs/integrations/api-foundation.md).
 
 ## Referral distribution
 

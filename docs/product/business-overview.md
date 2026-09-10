@@ -1,6 +1,6 @@
 # Investor and Business Overview
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## Executive summary
 

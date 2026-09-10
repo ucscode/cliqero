@@ -1,6 +1,6 @@
 # Purchase and Entitlement Model
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 > This file retains its historical filename to avoid breaking documentation links. The old campaign/pay-per-action model is superseded by the purchase-and-access model described here.
 
@@ -12,7 +12,7 @@ The economically meaningful event is a verified purchase, not a page view, CTA c
 
 Core sequence:
 
-`listing -> checkout -> payment verification -> purchase -> entitlement -> access`
+`listing -> wallet checkout -> wallet debit -> paid purchase -> entitlement -> access`
 
 ## Purchase record
 

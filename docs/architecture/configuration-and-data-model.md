@@ -1,6 +1,6 @@
 # Configuration and Data Model
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## Configuration philosophy
 
@@ -17,7 +17,7 @@ YAML can explicitly reference environment values with `%env(NAME)%`; environment
 
 ## Deployment values
 
-Environment variables cover concerns such as application URL, PostgreSQL bootstrap connection, Better Auth bootstrap values, ports, and persistent paths. See [Installation and Configuration](./installation-and-configuration.md).
+Environment variables cover concerns such as application URL, PostgreSQL bootstrap connection, Better Auth bootstrap values, ports, and persistent paths. See [Installation and Configuration](../operations/installation-and-configuration.md).
 
 Provider credentials belong to provider configuration rather than becoming an ever-growing flat application environment.
 

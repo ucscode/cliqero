@@ -10,7 +10,7 @@ The operator console exposes the sections supported by the account's direct
 capabilities. Sections that do not yet have a corresponding operator UI are
 not advertised, even when their capability exists.
 
-Catalogue management is documented in `docs/operator-catalogue.md`. It uses the
+Catalogue management is documented in `docs/operations/operator-catalogue.md`. It uses the
 existing Hono listing, media, and transfer APIs and never treats an authorized
 operator as a seller or payee.
 

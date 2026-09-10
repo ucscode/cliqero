@@ -1,6 +1,6 @@
 # Listings, Profiles, and Access Links
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## Public surfaces
 
@@ -8,14 +8,14 @@ Cliqero separates public discovery from authenticated management.
 
 The main domain owns the application/dashboard. Public distribution may use dedicated subdomains or routes, but those surfaces are presentation and attribution concerns rather than separate product architectures.
 
-## Seller public profile
+## Catalogue presentation
 
-A seller may have a public profile containing:
+Listings may expose catalogue presentation metadata containing:
 
 - display name;
 - logo/avatar;
 - description;
-- visible listings;
+- visible catalogue listings;
 - optional public metadata.
 
 Profiles are conveniences around listings, not owners of product-specific behavior.
@@ -29,7 +29,7 @@ Cliqero intentionally does not define separate listing types for ebook, software
 A listing should contain stable fields such as:
 
 - identity;
-- owner/seller;
+- catalogue manager/creator audit reference (not a seller/payee relationship);
 - title;
 - description;
 - price;
@@ -146,7 +146,7 @@ A specific listing link should remain semantically tied to that listing. It must
 Authenticated management belongs on the main application surface:
 
 - account settings;
-- seller profile editing;
+- catalogue presentation/profile editing where applicable;
 - listing management;
 - purchases;
 - buyer entitlements/access history;

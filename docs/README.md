@@ -18,26 +18,54 @@ The underlying thing represented by a listing may be software, a download, a ser
 
 ## Start here
 
-- [Installation and Configuration](./installation-and-configuration.md) — local development, production-like execution, environment values, YAML configuration, persistence, and common commands.
-- [Product Vision](./01-product-vision.md) — catalogue ownership, productless commerce, entitlement, destination, and access.
-- [User Journeys](./02-roles-and-user-journeys.md) — visitor, buyer/member, and promoter journeys; operator access is governed by direct capabilities.
-- [Listings, Profiles, and Access Links](./03-offers-profiles-and-links.md) — listing data, destinations, referral URLs, and source credentials.
-- [Purchase and Entitlement Model](./04-campaign-and-action-model.md) — purchase lifecycle and entitlement consequences. The historical filename is retained for link stability.
-- [Money, Wallets, and Currency](./05-money-wallets-and-currency.md) — internal funding, canonical accounting, earnings, settlement, withdrawals, and treasury boundaries.
-- [Referrers, Promotion, and Referral Network](./06-promoters-and-referrals.md) — attributed promotion and network rules.
-- [System Architecture](./07-system-architecture.md) — modular monolith, processors, Hono APIs, Docker Compose, Next.js, and failure isolation.
-- [Configuration and Data Model](./08-configuration-and-data-model.md) — deployment values, YAML configuration, data invariants, metadata, and access credentials.
-- [Reliability, Fraud, and Audit](./09-reliability-fraud-and-audit.md) — idempotency, financial/access integrity, and auditability.
-- [Investor and Business Overview](./10-investor-business-overview.md) — catalogue-led business model and expansion strategy.
-- [Initial Production Scope](./11-initial-production-scope.md) — current production scope and build boundaries.
-- [Catalogue, Commission, and Treasury](./catalogue-treasury.md) — privileged catalogue ownership, commission policy, and platform treasury.
-- [Authentication](./authentication.md) — Better Auth boundary and canonical account identity.
-- [Application Console](./console.md) — user creation, password changes, and capability bootstrap.
-- [API Foundation](./api-foundation.md) — Hono/OpenAPI, principals, sessions, API keys, and scopes.
-- [Blog Platform](./blog-platform.md) — isolated SQLite content platform.
-- [Wallet-first Commerce](./wallet-first-commerce.md) — funding and internal checkout workflow.
-- [Listing Management and Media](./listing-management-and-media.md) — lifecycle, media providers, import, and export.
-- [Public API Matrix](./public-api-matrix.md) — implemented application API surface.
+For a new model or developer, read [Continuity](./continuity/README.md) first, then [Current State](./continuity/current-state.md), [Requirements and Invariants](./continuity/requirements-and-invariants.md), and [Active Work](./continuity/active-work.md). Then inspect the code and use the topical docs below.
+
+### Product
+
+- [Vision](./product/vision.md)
+- [Roles and Journeys](./product/roles-and-journeys.md)
+- [Listings and Access](./product/listings-and-access.md)
+- [Referrals](./product/referrals.md)
+- [Business Overview](./product/business-overview.md)
+- [Production Scope](./product/production-scope.md)
+
+### Architecture
+
+- [System Architecture](./architecture/system.md)
+- [Configuration and Data Model](./architecture/configuration-and-data-model.md)
+- [Reliability and Audit](./architecture/reliability-and-audit.md)
+
+### Flows
+
+- [Wallet-first Commerce](./flows/wallet-first-commerce.md)
+- [Purchase and Entitlement](./flows/purchase-and-entitlement.md)
+- [Money, Wallets, and Currency](./flows/money-wallets-and-currency.md)
+- [Catalogue and Treasury](./flows/catalogue-and-treasury.md)
+
+### Integrations and API
+
+- [API Foundation](./integrations/api-foundation.md)
+- [Authentication](./integrations/authentication.md)
+- [Listing Management and Media](./integrations/listing-management-and-media.md)
+- [Public API Matrix](./integrations/public-api-matrix.md)
+- [Blog Platform](./integrations/blog-platform.md)
+
+### Operations
+
+- [Installation and Configuration](./operations/installation-and-configuration.md)
+- [Local Authentication and Fixtures](./operations/local-auth-and-fixtures.md)
+- [Application Console](./operations/console.md)
+- [Operator Docs](./operations/)
+
+### UI
+
+- [UI Foundation](./ui/ui-foundation.md)
+- [Frontend Component System](./ui/frontend-component-system.md)
+- [UI Settings](./ui/ui-settings.md)
+- [UI Withdrawals](./ui/ui-withdrawals.md)
+- [UI Promotion and Referrals](./ui/ui-promote-referrals.md)
+
+Examples for listing import/export are under [integrations/examples](./integrations/examples/).
 
 ## Current business invariants
 

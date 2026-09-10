@@ -1,6 +1,6 @@
 # Money, Wallets, and Currency
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## Canonical currency
 
@@ -21,15 +21,17 @@ Examples:
 - USD 10.00 => amount `1000`, currency `USD`;
 - NGN 5,000.00 => amount `500000`, currency `NGN`.
 
-## Purchase-first money flow
+## Wallet-first money flow
 
-The old campaign-reservation model is superseded.
+The current financial flow is split into independent boundaries:
 
-The core financial flow is:
+`funding creation -> provider initialization -> provider callback/IPN or polling -> verification -> wallet credit -> available wallet`
 
-`Buyer payment -> provider verification -> purchase -> ledger distribution -> entitlement`
+`available wallet -> wallet-only checkout -> purchase -> entitlement`
 
-The payment provider verifies external money. The purchase domain determines the commercial fact. The ledger records the financial consequences. The entitlement domain records the buyer's access right.
+`paid purchase -> referral/platform distribution`
+
+External providers fund internal buyer wallet value; they do not purchase listings or create entitlements directly. See [Wallet-first commercial workflow](./wallet-first-commerce.md) for the state transitions and retry boundaries.
 
 No module should bypass these boundaries by directly changing balances.
 
@@ -74,7 +76,7 @@ Provider retries must not create duplicate purchases, entitlements, commissions,
 
 ## Initial payment providers
 
-The first production target may include Paystack and USDT TRC-20.
+The code currently registers Paystack, NOWPayments, `usdt_erc20`, `usdt_trc20`, and `bank_transfer` when their configuration is enabled. Provider eligibility is filtered by account country and requested collection currency; the API exposes eligible methods rather than requiring the UI to hardcode policy.
 
 Providers implement a generic payment capability. Listing, purchase, entitlement, referral, and ledger code must not import Paystack- or TRON-specific logic.
 
@@ -96,13 +98,9 @@ The affiliate/referral capability determines relationship/distribution facts but
 
 A commission/sale processor coordinates the consequence through the ledger capability.
 
-## Seller earnings
+## Catalogue and distribution accounting
 
-Seller earnings should be explicitly distinguishable from buyer payments and referral earnings.
-
-Policy may define pending/available states before withdrawal, especially where refunds, disputes, or provider settlement delays apply.
-
-Do not invent complex settlement delays in V1 unless required, but keep the state model capable of representing them safely.
+New wallet-paid catalogue purchases create referral earnings and a platform allocation according to the configured distribution policy. They do not create ordinary-user seller earnings. Buyer wallet value, referral earnings, and platform treasury are separate accounting domains.
 
 ## Referral earnings
 

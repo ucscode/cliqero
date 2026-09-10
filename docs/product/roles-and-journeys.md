@@ -1,6 +1,6 @@
 # Roles and User Journeys
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 Cliqero uses one canonical account identity with capability-based authorization. Ordinary accounts are not sellers.
 

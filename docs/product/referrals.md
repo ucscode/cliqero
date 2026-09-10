@@ -1,6 +1,6 @@
 # Referrers, Promotion, and Referral Network
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## Referrer purpose
 

@@ -1,6 +1,6 @@
 # Installation and Configuration
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## Requirements
 

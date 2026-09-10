@@ -15,6 +15,12 @@ the only path that confirms funding. Authenticated Paystack events are stored
 and processed through the outbox before verification; an event never credits a
 wallet by itself.
 
+Bank transfer is intentionally different: initialization returns safe transfer
+instructions and verification remains `awaiting_manual_confirmation`. The
+operator UI currently inspects funding but does not yet provide the privileged
+confirmation transition, so bank-transfer funding cannot become confirmed
+through customer submission alone.
+
 The detail view keeps canonical USD minor units separate from the provider's
 collection amount and displays the immutable conversion snapshot when one
 exists. Wallet consequence is read from the credit relation: no credit,

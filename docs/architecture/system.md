@@ -1,6 +1,6 @@
 # System Architecture
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## Architectural goal
 
@@ -251,11 +251,15 @@ External webhooks and APIs translate into domain operations rather than contain 
 
 Examples:
 
-`Paystack webhook -> PaystackProvider.verify() -> payment.verified -> PurchaseCompletionProcessor`
+`funding callback/IPN -> provider verification -> confirmed funding -> wallet credit -> available wallet`
+
+`wallet-only checkout -> paid purchase -> entitlement/access`
+
+Paystack webhooks and NOWPayments-family IPNs are ingress signals that enqueue or expose verification work; they do not credit a wallet directly.
 
 `Destination verify request -> authenticated Access API -> Entitlement/Access capability -> authorization result`
 
-Another payment provider can produce the same domain fact without purchase logic knowing the provider source.
+Another payment provider can produce the same verified-funding fact without checkout or entitlement logic knowing the provider source.
 
 ## Production philosophy
 

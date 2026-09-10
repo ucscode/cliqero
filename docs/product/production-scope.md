@@ -1,6 +1,6 @@
 # Initial Production Scope
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## Production-grade V1
 
@@ -15,7 +15,7 @@ The first release should be deliberately narrow, but every included capability m
 ### Identity and accounts
 
 - one account identity;
-- seller capability;
+- privileged catalogue-management capability;
 - buyer capability;
 - referrer/promoter capability;
 - account referral relationship where enabled;
@@ -27,7 +27,7 @@ The first release should be deliberately narrow, but every included capability m
 - title, description, price, media, metadata, destination, status/visibility;
 - public listing pages;
 - no separate ebook/software/course/service product models;
-- seller profile/listing discovery surface where useful.
+- catalogue discovery surface; creator metadata is audit information, not seller/payee semantics.
 
 ### Checkout and purchase
 
@@ -65,10 +65,9 @@ The first release should be deliberately narrow, but every included capability m
 - canonical USD accounting;
 - precise Money value object;
 - immutable ledger;
-- seller and referral earnings;
+- referral earnings and platform allocation;
 - platform share/fee accounting;
-- Paystack funding/payment support where selected;
-- USDT TRC-20 support where selected;
+- Paystack, NOWPayments, USDT ERC-20/TRC-20, and bank-transfer funding where configured;
 - idempotent provider verification;
 - auditable reversal/refund model if implemented;
 - manual withdrawals.

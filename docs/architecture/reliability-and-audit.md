@@ -1,6 +1,6 @@
 # Reliability, Fraud, and Audit
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## Reliability standard
 

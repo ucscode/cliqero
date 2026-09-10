@@ -1,6 +1,6 @@
 # Product Vision
 
-[Back to documentation index](./README.md)
+[Back to documentation index](../README.md)
 
 ## What Cliqero is
 
