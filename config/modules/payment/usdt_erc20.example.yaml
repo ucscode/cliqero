@@ -1,0 +1,14 @@
+# NOWPayments USDT on Ethereum (ERC20).
+enabled: false
+config:
+  api_key: api_key_here
+  ipn_secret: ipn_secret_here
+  api_base_url: https://api-sandbox.nowpayments.io
+  ipn_callback_url: https://example.test/api/payments/usdt-erc20/ipn
+  pay_currency: usdterc20
+  asset: USDT
+  network: ERC20
+filters:
+  countries: null
+  currencies:
+    - USD

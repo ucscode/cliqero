@@ -22,6 +22,7 @@ export class PaymentVerificationProcessor {
       const verified = await this.providers.get(current.providerName).verify({
         reference: current.providerReference,
         expectedAmount: current.collectionAmount ?? current.amount,
+        initialization: current.providerInitialization,
       });
       await this.uow.transaction(async () => {
         const locked = await this.payments.findById(paymentId, { forUpdate: true });

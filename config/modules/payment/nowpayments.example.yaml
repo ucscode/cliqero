@@ -1,0 +1,12 @@
+# NOWPayments standard API (sandbox: https://api-sandbox.nowpayments.io).
+enabled: false
+config:
+  api_key: api_key_here
+  ipn_secret: ipn_secret_here
+  api_base_url: https://api-sandbox.nowpayments.io
+  ipn_callback_url: https://example.test/api/payments/nowpayments/ipn
+  pay_currency: btc
+filters:
+  countries: null
+  currencies:
+    - USD

@@ -135,6 +135,7 @@ export class FundingInitializationProcessor {
         f.providerInitialization = {
           authorizationUrl: result.authorizationUrl,
           accessCode: result.accessCode,
+          ...result.metadata,
         };
         f.state = "awaiting_payment";
         f.initializationClaimedAt = undefined;
@@ -189,9 +190,11 @@ export class FundingVerificationProcessor {
     if (!f || !(f.state === "verification_pending" || f.state === "awaiting_payment")) return null;
     let result;
     try {
-      result = await this.providers
-        .get(f.providerName)
-        .verify({ reference: f.providerReference, expectedAmount: f.collectionAmount });
+      result = await this.providers.get(f.providerName).verify({
+        reference: f.providerReference,
+        expectedAmount: f.collectionAmount,
+        initialization: f.providerInitialization,
+      });
     } catch (error) {
       const diagnostic =
         error instanceof ProviderOperationError
@@ -222,6 +225,11 @@ export class FundingVerificationProcessor {
     return this.uow.transaction(async () => {
       const locked = await this.funding.findById(id, { forUpdate: true });
       if (!locked || locked.state === "confirmed") return locked;
+      if (!result.verified && isFundingPendingStatus(result.status)) {
+        locked.state = "awaiting_payment";
+        await this.funding.save(locked);
+        return locked;
+      }
       if (mismatch) {
         const code =
           !result.verified || result.status !== "success"
@@ -257,6 +265,18 @@ export class FundingVerificationProcessor {
       return locked;
     });
   }
+}
+
+function isFundingPendingStatus(status: string) {
+  return new Set([
+    "awaiting_manual_confirmation",
+    "waiting",
+    "confirming",
+    "confirmed",
+    "sending",
+    "partially_paid",
+    "processing",
+  ]).has(status.toLowerCase());
 }
 
 export class WalletService {

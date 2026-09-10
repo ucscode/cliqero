@@ -23,6 +23,10 @@ import { DevelopmentPaymentProvider, PaymentProviderRegistry } from "@/modules/p
 import { PaystackProvider } from "@/providers/paystack/payment/provider";
 import { loadPaystackConfiguration } from "@/providers/paystack/payment/config";
 import { PaystackWebhookIngress } from "@/providers/paystack/payment/webhook";
+import { NowPaymentsProvider } from "@/providers/nowpayments/provider";
+import { loadNowPaymentsConfiguration } from "@/providers/nowpayments/config";
+import { BankTransferProvider } from "@/providers/bank-transfer/provider";
+import { loadBankTransferConfiguration } from "@/providers/bank-transfer/config";
 import { ListingService } from "@/application/listings";
 import { CheckoutService, PaymentCompletionService } from "@/application/commerce";
 import { BuyerAccessService } from "@/application/access";
@@ -215,6 +219,22 @@ export function createContainer(databaseUrl: string) {
     : null;
   if (paystack)
     providers.register(paystack, { enabled: true, filters: paystackConfiguration!.filters });
+  for (const [name, path] of [
+    ["nowpayments", "config/modules/payment/nowpayments.yaml"],
+    ["usdt_erc20", "config/modules/payment/usdt_erc20.yaml"],
+    ["usdt_trc20", "config/modules/payment/usdt_trc20.yaml"],
+  ] as const) {
+    const configuration = loadNowPaymentsConfiguration(path);
+    if (configuration)
+      providers.register(new NowPaymentsProvider(configuration.provider, name), {
+        filters: configuration.filters,
+      });
+  }
+  const bankTransfer = loadBankTransferConfiguration();
+  if (bankTransfer)
+    providers.register(new BankTransferProvider(bankTransfer.provider), {
+      filters: bankTransfer.filters,
+    });
   const paymentInitialization = new PaymentInitializationProcessor(
     payments,
     providers,

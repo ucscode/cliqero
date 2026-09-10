@@ -1,6 +1,9 @@
 import type { Id } from "@/kernel/ids";
 import type { Money } from "@/modules/money/money";
-import type { PaymentConversionSnapshot } from "@/modules/payment/payment";
+import type {
+  PaymentConversionSnapshot,
+  PaymentInitializationMetadata,
+} from "@/modules/payment/payment";
 
 export type FundingState =
   | "initialization_pending"
@@ -21,7 +24,7 @@ export interface FundingTransaction {
   conversionSnapshot?: PaymentConversionSnapshot;
   state: FundingState;
   idempotencyKey: string;
-  providerInitialization?: { authorizationUrl?: string; accessCode?: string };
+  providerInitialization?: PaymentInitializationMetadata;
   confirmedAt?: Date;
   initializationClaimedAt?: Date;
 }

@@ -1,0 +1,11 @@
+# Manual bank-transfer funding instructions. No automatic confirmation is implied.
+enabled: false
+config:
+  bank_name: Example Bank
+  account_name: Cliqero Limited
+  account_number: "0000000000"
+  instructions: Include the funding reference in the transfer narration.
+filters:
+  countries: null
+  currencies:
+    - USD

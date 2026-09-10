@@ -24,6 +24,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         funding.state === "awaiting_payment"
           ? (funding.providerInitialization?.authorizationUrl ?? null)
           : null,
+      payment_address:
+        funding.state === "awaiting_payment"
+          ? (funding.providerInitialization?.paymentAddress ?? null)
+          : null,
+      payment_amount:
+        funding.state === "awaiting_payment"
+          ? (funding.providerInitialization?.paymentAmount ?? null)
+          : null,
+      payment_currency:
+        funding.state === "awaiting_payment"
+          ? (funding.providerInitialization?.paymentCurrency ?? null)
+          : null,
+      asset:
+        funding.state === "awaiting_payment"
+          ? (funding.providerInitialization?.asset ?? null)
+          : null,
+      network:
+        funding.state === "awaiting_payment"
+          ? (funding.providerInitialization?.network ?? null)
+          : null,
+      instructions:
+        funding.state === "awaiting_payment"
+          ? (funding.providerInitialization?.instructions ?? null)
+          : null,
       confirmed_at: funding.confirmedAt?.toISOString() ?? null,
     });
   } catch (error) {

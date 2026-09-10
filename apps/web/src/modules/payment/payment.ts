@@ -40,7 +40,7 @@ export interface PaymentRecord {
   providerFee?: Money;
   /** Immutable quote used for a future canonical-to-collection conversion. */
   conversionSnapshot?: PaymentConversionSnapshot;
-  providerInitialization?: { authorizationUrl?: string; accessCode?: string };
+  providerInitialization?: PaymentInitializationMetadata;
 }
 export interface PaymentRepository {
   findById(id: Id, options?: { forUpdate?: boolean }): Promise<PaymentRecord | null>;
@@ -52,6 +52,21 @@ export interface PaymentInitialization {
   reference: string;
   authorizationUrl?: string;
   accessCode?: string;
+  metadata?: PaymentInitializationMetadata;
+}
+
+/** Provider instructions are persisted as opaque, non-secret funding metadata. */
+export interface PaymentInitializationMetadata {
+  authorizationUrl?: string;
+  accessCode?: string;
+  providerPaymentId?: string;
+  paymentAddress?: string;
+  paymentAmount?: string;
+  paymentCurrency?: string;
+  asset?: string;
+  network?: string;
+  instructions?: string;
+  expiresAt?: string;
 }
 export interface PaymentVerification {
   verified: boolean;
@@ -72,7 +87,11 @@ export interface PaymentProvider {
     idempotencyKey: string;
     buyerEmail: string;
   }): Promise<PaymentInitialization>;
-  verify(input: { reference: string; expectedAmount: Money }): Promise<PaymentVerification>;
+  verify(input: {
+    reference: string;
+    expectedAmount: Money;
+    initialization?: PaymentInitializationMetadata;
+  }): Promise<PaymentVerification>;
 }
 export interface PaymentProviderFilters {
   countries: string[] | null;
@@ -136,6 +155,27 @@ export class PaymentProviderRegistry {
     return [...this.providers.values()]
       .filter((registration) => registration.isEligible(context))
       .map((registration) => registration.provider);
+  }
+  availableMethodsFor(
+    context: Omit<PaymentProviderEligibilityContext, "currency"> & { currency?: string },
+  ) {
+    return [...this.providers.values()]
+      .filter((registration) => registration.enabled)
+      .map((registration) => {
+        const currencies = context.currency
+          ? [context.currency]
+          : registration.provider.collectionCurrencies?.length
+            ? [...registration.provider.collectionCurrencies]
+            : ["USD"];
+        const currency = currencies.find((candidate) =>
+          registration.isEligible({ ...context, currency: candidate }),
+        );
+        return currency ? { provider: registration.provider, collectionCurrency: currency } : null;
+      })
+      .filter(
+        (method): method is { provider: PaymentProvider; collectionCurrency: string } =>
+          method !== null,
+      );
   }
 }
 export class DevelopmentPaymentProvider implements PaymentProvider {

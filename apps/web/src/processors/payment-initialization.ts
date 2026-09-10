@@ -51,6 +51,7 @@ export class PaymentInitializationProcessor {
         locked.providerInitialization = {
           authorizationUrl: result.authorizationUrl,
           accessCode: result.accessCode,
+          ...result.metadata,
         };
         await this.payments.save(locked);
       });

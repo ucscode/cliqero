@@ -2354,6 +2354,59 @@ export function createApiApp(
     const review = await container.listingReviews.mine(p.account, c.req.param("listingId"));
     return c.json({ item: review ? reviewJson(review) : null });
   });
+  app.get("/api/wallet/funding-methods", async (c) => {
+    const p = requirePrincipal(c);
+    if (!(p instanceof Object) || !("accountId" in p)) return p;
+    const requested = c.req.query("currency")?.trim().toUpperCase();
+    if (requested && !/^[A-Z]{3}$/.test(requested))
+      return c.json(
+        { error: "Currency must be a three-letter code", code: "invalid_request" },
+        400,
+      );
+    const methods = container.providers
+      .availableMethodsFor({ country: p.account.country, currency: requested })
+      .map(({ provider, collectionCurrency }) => ({
+        id: provider.name,
+        collection_currency: collectionCurrency,
+      }));
+    return c.json({ methods }, 200);
+  });
+  app.post("/api/payments/:provider/ipn", async (c) => {
+    const providerName = c.req.param("provider");
+    if (!new Set(["nowpayments", "usdt_erc20", "usdt_trc20"]).has(providerName))
+      return c.json({ error: "Not found", code: "not_found" }, 404);
+    let provider: any;
+    try {
+      provider = container.providers.get(providerName);
+    } catch {
+      return c.json({ error: "Provider unavailable", code: "provider_unavailable" }, 503);
+    }
+    const raw = new Uint8Array(await c.req.raw.arrayBuffer());
+    if (!provider.verifyIpnSignature?.(raw, c.req.header("x-nowpayments-sig") ?? null))
+      return c.json({ error: "Unauthorized", code: "unauthorized" }, 401);
+    let payload: any;
+    try {
+      payload = JSON.parse(Buffer.from(raw).toString("utf8"));
+    } catch {
+      return c.json({ error: "Invalid notification", code: "invalid_request" }, 400);
+    }
+    const reference = typeof payload.order_id === "string" ? payload.order_id : null;
+    if (!reference) return c.json({ error: "Invalid notification", code: "invalid_request" }, 400);
+    const funding = await container.funding.findByProviderReference(providerName, reference);
+    if (!funding) return c.json({ error: "Not found", code: "not_found" }, 404);
+    if (funding.state === "confirmed" || funding.state === "failed") return c.body(null, 204);
+    await container.database.transaction(async () => {
+      const locked = await container.funding.findById(funding.id, { forUpdate: true });
+      if (
+        locked &&
+        (locked.state === "awaiting_payment" || locked.state === "verification_pending")
+      ) {
+        locked.state = "verification_pending";
+        await container.funding.save(locked);
+      }
+    });
+    return c.body(null, 202);
+  });
   app.put("/api/listings/:listingId/reviews/me", async (c) => {
     const p = requirePrincipal(c);
     if (!(p instanceof Object) || !("accountId" in p)) return p;
