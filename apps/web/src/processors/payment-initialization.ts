@@ -35,6 +35,7 @@ export class PaymentInitializationProcessor {
         amount: current.collectionAmount ?? current.amount,
         idempotencyKey: current.idempotencyKey,
         buyerEmail,
+        country: buyer.country,
       });
       if (result.reference !== current.providerReference)
         throw new ProviderOperationError(

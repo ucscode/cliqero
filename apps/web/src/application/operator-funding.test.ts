@@ -29,6 +29,77 @@ const baseRow = {
 };
 
 describe("operator funding projection", () => {
+  it("confirms bank transfers transactionally and audits the state change", async () => {
+    const statements: string[] = [];
+    const service = new OperatorFundingService(
+      {
+        query: async <T extends object>(sql: string) => {
+          statements.push(sql);
+          if (sql.includes("for update"))
+            return result<T>([
+              {
+                id: baseRow.id,
+                provider_name: "bank_transfer",
+                provider_reference: "bank-ref",
+                state: "awaiting_payment",
+                collection_amount_minor: "1000",
+                collection_currency: "USD",
+                confirmed_at: null,
+              },
+            ] as T[]);
+          return result<T>([]) as QueryResult<T>;
+        },
+      },
+      { transaction: async (operation) => operation() },
+    );
+    await expect(
+      service.confirmBankTransfer("00000000-0000-4000-8000-000000000001", baseRow.id),
+    ).resolves.toMatchObject({ id: baseRow.id, state: "confirmed" });
+    expect(statements.some((sql) => sql.includes("set state='confirmed'"))).toBe(true);
+    expect(statements.some((sql) => sql.includes("insert into kernel.audit_records"))).toBe(true);
+  });
+
+  it("makes repeated bank-transfer confirmation a no-op", async () => {
+    const statements: string[] = [];
+    const service = new OperatorFundingService({
+      query: async <T extends object>(sql: string) => {
+        statements.push(sql);
+        if (sql.includes("for update"))
+          return result<T>([
+            {
+              id: baseRow.id,
+              provider_name: "bank_transfer",
+              provider_reference: "bank-ref",
+              state: "confirmed",
+              confirmed_at: "2026-01-01T00:01:00.000Z",
+            },
+          ] as T[]);
+        return result<T>([]) as QueryResult<T>;
+      },
+    });
+    await service.confirmBankTransfer("actor", baseRow.id);
+    expect(statements.some((sql) => sql.includes("insert into kernel.audit_records"))).toBe(false);
+  });
+
+  it("rejects non-bank funding confirmation", async () => {
+    const service = new OperatorFundingService({
+      query: async <T extends object>(sql: string) =>
+        sql.includes("for update")
+          ? result<T>([
+              {
+                id: baseRow.id,
+                provider_name: "paystack",
+                provider_reference: "pay-ref",
+                state: "awaiting_payment",
+              },
+            ] as T[])
+          : (result<T>([]) as QueryResult<T>),
+    });
+    await expect(service.confirmBankTransfer("actor", baseRow.id)).rejects.toThrow(
+      "Funding provider mismatch",
+    );
+  });
+
   it("keeps canonical and collection amounts separate and projects wallet credit state", async () => {
     const service = new OperatorFundingService({
       query: async <T extends object>(sql: string) => {

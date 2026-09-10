@@ -17,7 +17,13 @@ export interface NowPaymentsConfiguration {
   payCurrency: string;
   asset?: string;
   network?: string;
+  /** NOWPayments' documented sandbox create-payment test case. */
+  sandboxCase?: NowPaymentsSandboxCase;
 }
+
+/** Values documented by NOWPayments for its sandbox payment test procedure. */
+export const NOWPAYMENTS_SANDBOX_CASES = ["success"] as const;
+export type NowPaymentsSandboxCase = (typeof NOWPAYMENTS_SANDBOX_CASES)[number];
 
 export type NowPaymentsHttpClient = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -56,16 +62,20 @@ export class NowPaymentsProvider implements PaymentProvider {
     buyerEmail: string;
   }): Promise<PaymentInitialization> {
     const reference = this.referenceFor(input);
+    const requestBody = {
+      price_amount: decimalAmount(input.amount),
+      price_currency: input.amount.currency.toLowerCase(),
+      pay_currency: this.config.payCurrency.toLowerCase(),
+      order_id: reference,
+      order_description: `Cliqero wallet funding ${reference}`,
+      ...(this.config.ipnCallbackUrl ? { ipn_callback_url: this.config.ipnCallbackUrl } : {}),
+      ...(isNowPaymentsSandboxApi(this.config.apiBaseUrl) && this.config.sandboxCase
+        ? { case: this.config.sandboxCase }
+        : {}),
+    };
     const data = await this.request<PaymentData>("/v1/payment", {
       method: "POST",
-      body: JSON.stringify({
-        price_amount: decimalAmount(input.amount),
-        price_currency: input.amount.currency.toLowerCase(),
-        pay_currency: this.config.payCurrency.toLowerCase(),
-        order_id: reference,
-        order_description: `Cliqero wallet funding ${reference}`,
-        ...(this.config.ipnCallbackUrl ? { ipn_callback_url: this.config.ipnCallbackUrl } : {}),
-      }),
+      body: JSON.stringify(requestBody),
     });
     if (String(data.payment_id).length === 0 || data.order_id !== reference)
       throw new ProviderOperationError(
@@ -182,6 +192,14 @@ export class NowPaymentsProvider implements PaymentProvider {
         "Provider rejected request",
       );
     return body as T;
+  }
+}
+
+export function isNowPaymentsSandboxApi(apiBaseUrl: string): boolean {
+  try {
+    return new URL(apiBaseUrl).hostname.toLowerCase() === "api-sandbox.nowpayments.io";
+  } catch {
+    return false;
   }
 }
 

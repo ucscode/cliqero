@@ -1,13 +1,19 @@
-# NOWPayments USDT on Tron (TRC20).
+# Direct USDT funding on TRON mainnet (TRC20), verified from public chain data.
+# Copy to usdt_trc20.yaml locally and keep enabled=false until configured.
 enabled: false
 config:
-  api_key: api_key_here
-  ipn_secret: ipn_secret_here
-  api_base_url: https://api-sandbox.nowpayments.io
-  ipn_callback_url: https://example.test/api/payments/usdt-trc20/ipn
-  pay_currency: usdttrc20
-  asset: USDT
-  network: TRC20
+  # Fill with a dedicated production receiving address (never a private key).
+  wallet_address: "YOUR_TRC20_RECEIVING_WALLET"
+  # Official TRON mainnet USD₮ contract.
+  token_contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+  confirmations_required: 20
+  verification:
+    provider: trongrid
+    api_base_url: https://api.trongrid.io
+    api_key: "YOUR_TRON_PRO_API_KEY"
+    # Local/testnet acceptance uses Shasta:
+    # api_base_url: https://api.shasta.trongrid.io
+    # token_contract: TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs
 filters:
   countries: null
   currencies:

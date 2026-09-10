@@ -1,4 +1,5 @@
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 type FundingState =
   | "initialization_pending"
@@ -98,6 +99,13 @@ export type OperatorFundingDetail = OperatorFundingSummary & {
   providerInitialization: { authorizationUrl: string | null } | null;
   operations: OperatorFundingOperation[];
   events: OperatorFundingEvent[];
+  evidence: {
+    id: string;
+    transferReference: string | null;
+    proofImageUrl: string | null;
+    customerNote: string | null;
+    createdAt: string;
+  } | null;
 };
 
 function summary(row: any): OperatorFundingSummary {
@@ -128,7 +136,60 @@ function summary(row: any): OperatorFundingSummary {
 }
 
 export class OperatorFundingService {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(
+    private readonly sql: SqlExecutor,
+    private readonly uow: UnitOfWork = { transaction: (operation) => operation() },
+  ) {}
+
+  async confirmBankTransfer(actorId: string, fundingId: string) {
+    return this.uow.transaction(async () => {
+      const row = (
+        await this.sql.query<any>(
+          `select f.uuid as id,f.provider_name,f.provider_reference,f.state,
+                  f.collection_amount_minor,f.collection_currency,f.confirmed_at
+             from funding_capability.funding_transactions f
+            where f.uuid=$1
+            for update`,
+          [fundingId],
+        )
+      ).rows[0];
+      if (!row) throw new Error("Funding not found");
+      if (row.provider_name !== "bank_transfer") throw new Error("Funding provider mismatch");
+      if (row.state === "confirmed")
+        return { id: row.id, state: row.state, confirmedAt: row.confirmed_at ?? null };
+      if (row.state !== "awaiting_payment" && row.state !== "verification_pending")
+        throw new Error("Funding is not awaiting manual confirmation");
+
+      await this.sql.query(
+        `update funding_capability.funding_transactions
+            set state='confirmed',confirmed_at=now(),updated_at=now()
+          where uuid=$1`,
+        [fundingId],
+      );
+      await this.sql.query(
+        `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
+         values((select id from identity_capability.accounts where uuid=$1),$2,'funding_transaction',$3,$4::jsonb,$5::jsonb,gen_random_uuid())`,
+        [
+          actorId,
+          "funding.bank_transfer.confirmed",
+          fundingId,
+          JSON.stringify({
+            provider: row.provider_name,
+            providerReference: row.provider_reference,
+            state: row.state,
+          }),
+          JSON.stringify({
+            provider: row.provider_name,
+            providerReference: row.provider_reference,
+            amountMinor: String(row.collection_amount_minor),
+            currency: row.collection_currency,
+            state: "confirmed",
+          }),
+        ],
+      );
+      return { id: row.id, state: "confirmed", confirmedAt: new Date().toISOString() };
+    });
+  }
 
   async list(input: {
     search?: string;
@@ -201,6 +262,14 @@ export class OperatorFundingService {
         [id],
       )
     ).rows;
+    const evidence = (
+      await this.sql.query<any>(
+        `select uuid as id,transfer_reference,proof_image_url,customer_note,created_at
+           from funding_capability.funding_evidence
+          where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)`,
+        [id],
+      )
+    ).rows[0];
     const events = (
       await this.sql.query<any>(
         `select e.id,e.event_type,e.provider_reference,e.amount_minor,e.currency,e.state,e.last_error,
@@ -257,6 +326,15 @@ export class OperatorFundingService {
         outboxState: event.outbox_state ?? null,
         outboxLastError: event.outbox_last_error ?? null,
       })),
+      evidence: evidence
+        ? {
+            id: evidence.id,
+            transferReference: evidence.transfer_reference ?? null,
+            proofImageUrl: evidence.proof_image_url ?? null,
+            customerNote: evidence.customer_note ?? null,
+            createdAt: new Date(evidence.created_at).toISOString(),
+          }
+        : null,
     };
   }
 }

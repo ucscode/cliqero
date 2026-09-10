@@ -67,6 +67,8 @@ export interface PaymentInitializationMetadata {
   network?: string;
   instructions?: string;
   expiresAt?: string;
+  providerAccountId?: string;
+  transactionHash?: string;
 }
 export interface PaymentVerification {
   verified: boolean;
@@ -80,12 +82,14 @@ export interface PaymentProvider {
   readonly name: string;
   /** Currencies this provider collects in; this is distinct from canonical listing currency. */
   readonly collectionCurrencies?: readonly string[];
+  readonly isEligible?: (context: PaymentProviderEligibilityContext) => boolean;
   readonly referenceFor?: (input: { paymentId: Id; idempotencyKey: string }) => string;
   initiate(input: {
     paymentId: Id;
     amount: Money;
     idempotencyKey: string;
     buyerEmail: string;
+    country?: string | null;
   }): Promise<PaymentInitialization>;
   verify(input: {
     reference: string;
@@ -124,6 +128,7 @@ export class PaymentProviderRegistry {
       filters,
       isEligible: (context) =>
         enabled &&
+        (provider.isEligible?.(context) ?? true) &&
         (filters.countries === null ||
           (context.country !== null && filters.countries.includes(context.country))) &&
         (filters.currencies === null || filters.currencies.includes(context.currency)),

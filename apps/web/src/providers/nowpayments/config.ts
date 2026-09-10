@@ -2,6 +2,7 @@ import { z } from "zod";
 import { parseYamlConfiguration, resolveEnvironmentPlaceholders } from "@/config/yaml";
 import type { PaymentProviderFilters } from "@/modules/payment/payment";
 import type { NowPaymentsConfiguration } from "./provider";
+import { NOWPAYMENTS_SANDBOX_CASES } from "./provider";
 
 const filters = z.object({
   countries: z.array(z.string()).nullable().default(null),
@@ -22,6 +23,7 @@ const loaded = z.object({
     pay_currency: z.string().min(1),
     asset: z.string().optional(),
     network: z.string().optional(),
+    sandbox_case: z.enum(NOWPAYMENTS_SANDBOX_CASES).optional(),
   }),
   filters: filters.default({ countries: null, currencies: null }),
 });
@@ -41,6 +43,7 @@ export function loadNowPaymentsConfiguration(path: string) {
     payCurrency: config.config.pay_currency,
     asset: config.config.asset,
     network: config.config.network,
+    sandboxCase: config.config.sandbox_case,
   };
   return { provider, filters: config.filters as PaymentProviderFilters };
 }

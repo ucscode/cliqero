@@ -1,11 +1,63 @@
 # Manual bank-transfer funding instructions. No automatic confirmation is implied.
+# Copy to bank_transfer.yaml for local use; the non-example file is Git-ignored.
+# Keep enabled=false until receiving-account details have been reviewed.
 enabled: false
 config:
-  bank_name: Example Bank
-  account_name: Cliqero Limited
-  account_number: "0000000000"
-  instructions: Include the funding reference in the transfer narration.
-filters:
-  countries: null
-  currencies:
-    - USD
+  # Each account is independently eligible; the first matching account is used.
+  accounts:
+
+    - id: nigeria_ngn
+      # Use uppercase ISO country/currency codes. null means unrestricted.
+      filters:
+        countries: [NG]
+        currencies: [NGN]
+      # Ordered opaque fields shown to the customer; keys have no bank semantics.
+      fields:
+        - key: bank_name
+          label: Bank Name
+          value: Example Bank Nigeria
+
+        - key: account_name
+          label: Account Name
+          value: Cliqero Limited
+
+        - key: account_number
+          label: Account Number
+          value: "0000000000"
+
+        - key: custom_instruction
+          label: Transfer instruction
+          value: Include the funding reference in the transfer narration.
+
+    - id: international_usd
+      filters:
+        countries: null
+        currencies: [USD]
+      fields:
+        - key: bank_name
+          label: Bank Name
+          value: Example International Bank
+
+        - key: account_name
+          label: Account Name
+          value: Cliqero Limited
+
+        - key: account_number
+          label: Account Number
+          value: "0000000000"
+
+        - key: swift
+          label: SWIFT / BIC
+          value: EXAMPLEX
+
+        - key: iban
+          label: IBAN
+          value: XX00EXAMPLE0000000000
+
+        - key: bank_address
+          label: Bank Address
+          value: Example address
+
+        - key: custom_instruction
+          label: Transfer instruction
+          value: Include the funding reference in the transfer narration.

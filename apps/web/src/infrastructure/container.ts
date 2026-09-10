@@ -25,6 +25,9 @@ import { loadPaystackConfiguration } from "@/providers/paystack/payment/config";
 import { PaystackWebhookIngress } from "@/providers/paystack/payment/webhook";
 import { NowPaymentsProvider } from "@/providers/nowpayments/provider";
 import { loadNowPaymentsConfiguration } from "@/providers/nowpayments/config";
+import { DirectTrc20Provider } from "@/providers/direct-trc20/provider";
+import { HttpDirectTrc20Verifier } from "@/providers/direct-trc20/verifier";
+import { loadDirectTrc20Configuration } from "@/providers/direct-trc20/config";
 import { BankTransferProvider } from "@/providers/bank-transfer/provider";
 import { loadBankTransferConfiguration } from "@/providers/bank-transfer/config";
 import { ListingService } from "@/application/listings";
@@ -110,6 +113,7 @@ import { OperatorAccountService } from "@/application/operator-accounts";
 import { CapabilityAdministrationService } from "@/application/capability-administration";
 import { OperatorApiKeyService } from "@/application/operator-api-keys";
 import { OperatorFundingService } from "@/application/operator-funding";
+import { BankTransferEvidenceService } from "@/application/bank-transfer-evidence";
 import {
   OperatorDistributionService,
   OperatorEarningsService,
@@ -219,16 +223,24 @@ export function createContainer(databaseUrl: string) {
     : null;
   if (paystack)
     providers.register(paystack, { enabled: true, filters: paystackConfiguration!.filters });
-  for (const [name, path] of [
-    ["nowpayments", "config/modules/payment/nowpayments.yaml"],
-    ["usdt_erc20", "config/modules/payment/usdt_erc20.yaml"],
-    ["usdt_trc20", "config/modules/payment/usdt_trc20.yaml"],
-  ] as const) {
-    const configuration = loadNowPaymentsConfiguration(path);
-    if (configuration)
-      providers.register(new NowPaymentsProvider(configuration.provider, name), {
-        filters: configuration.filters,
-      });
+  const nowPaymentsConfiguration = loadNowPaymentsConfiguration(
+    "config/modules/payment/nowpayments.yaml",
+  );
+  if (nowPaymentsConfiguration)
+    providers.register(new NowPaymentsProvider(nowPaymentsConfiguration.provider), {
+      filters: nowPaymentsConfiguration.filters,
+    });
+  const directTrc20Configuration = loadDirectTrc20Configuration(
+    "config/modules/payment/usdt_trc20.yaml",
+  );
+  if (directTrc20Configuration) {
+    const verifier = new HttpDirectTrc20Verifier({
+      ...directTrc20Configuration.provider.verification,
+      tokenContract: directTrc20Configuration.provider.tokenContract,
+    });
+    providers.register(new DirectTrc20Provider(directTrc20Configuration.provider, verifier), {
+      filters: directTrc20Configuration.filters,
+    });
   }
   const bankTransfer = loadBankTransferConfiguration();
   if (bankTransfer)
@@ -418,7 +430,8 @@ export function createContainer(databaseUrl: string) {
     operatorOverview: new OperatorOverviewService(database),
     operatorAccounts: new OperatorAccountService(database),
     capabilityAdministration: new CapabilityAdministrationService(database, database),
-    operatorFunding: new OperatorFundingService(database),
+    operatorFunding: new OperatorFundingService(database, database),
+    bankTransferEvidence: new BankTransferEvidenceService(database, database),
     operatorDistributions: new OperatorDistributionService(database),
     operatorEarnings: new OperatorEarningsService(database),
     operatorWithdrawals: new OperatorWithdrawalService(database),

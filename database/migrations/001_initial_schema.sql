@@ -500,6 +500,38 @@ CREATE TABLE funding_capability.funding_transactions (
     CONSTRAINT funding_state_valid CHECK ((state = ANY (ARRAY['initialization_pending'::text, 'initializing'::text, 'awaiting_payment'::text, 'verification_pending'::text, 'confirmed'::text, 'failed'::text, 'blocked'::text, 'reconciliation_pending'::text])))
 );
 
+-- Customer-submitted bank-transfer evidence is supporting material only; it
+-- never confirms funding by itself.
+CREATE TABLE funding_capability.funding_evidence (
+    uuid uuid DEFAULT gen_random_uuid() NOT NULL,
+    funding_id bigint NOT NULL,
+    account_id bigint NOT NULL,
+    transfer_reference text,
+    proof_image_url text,
+    customer_note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    id bigint NOT NULL,
+    CONSTRAINT funding_evidence_meaningful_check CHECK ((nullif(btrim(transfer_reference), '') IS NOT NULL OR nullif(btrim(proof_image_url), '') IS NOT NULL OR nullif(btrim(customer_note), '') IS NOT NULL)),
+    CONSTRAINT funding_evidence_funding_unique UNIQUE (funding_id)
+);
+
+ALTER TABLE funding_capability.funding_evidence ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME funding_capability.funding_evidence_id_seq
+);
+
+ALTER TABLE ONLY funding_capability.funding_evidence
+    ADD CONSTRAINT funding_evidence_funding_fk FOREIGN KEY (funding_id) REFERENCES funding_capability.funding_transactions(id),
+    ADD CONSTRAINT funding_evidence_account_fk FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id);
+
+CREATE INDEX funding_evidence_account_idx ON funding_capability.funding_evidence USING btree (account_id, created_at DESC);
+
+-- A direct blockchain transaction can fund at most one Cliqero transaction.
+CREATE UNIQUE INDEX funding_direct_usdt_transaction_unique
+ON funding_capability.funding_transactions
+((provider_initialization->>'network'), (provider_initialization->>'transactionHash'))
+WHERE provider_name = 'usdt_trc20'
+  AND provider_initialization->>'transactionHash' IS NOT NULL;
+
 
 --
 -- Name: TABLE funding_transactions; Type: COMMENT; Schema: funding_capability; Owner: -

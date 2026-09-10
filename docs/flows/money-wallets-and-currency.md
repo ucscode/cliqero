@@ -76,9 +76,13 @@ Provider retries must not create duplicate purchases, entitlements, commissions,
 
 ## Initial payment providers
 
-The code currently registers Paystack, NOWPayments, `usdt_erc20`, `usdt_trc20`, and `bank_transfer` when their configuration is enabled. Provider eligibility is filtered by account country and requested collection currency; the API exposes eligible methods rather than requiring the UI to hardcode policy.
+The code currently registers Paystack, NOWPayments-managed crypto, direct-wallet `usdt_trc20`, and `bank_transfer` when their configuration is enabled. Provider eligibility is filtered by account country and requested collection currency; the API exposes eligible methods rather than requiring the UI to hardcode policy. Direct TRC20 funding snapshots the receiving wallet, network, asset, and expected amount, then verifies a customer-submitted transaction hash against configured blockchain infrastructure.
+
+For acceptance testing, NOWPayments Sandbox supports its official create-payment `case: success` procedure through `sandbox_case: success`. The field is sent only to the sandbox API (never live), with `usdttrc20` as the current test currency; IPN testing requires a publicly reachable callback and uses no real funds.
 
 Providers implement a generic payment capability. Listing, purchase, entitlement, referral, and ledger code must not import Paystack- or TRON-specific logic.
+
+Bank transfer is configured as one `bank_transfer` method containing independent receiving accounts. Each account has its own explicit country/currency filters and ordered opaque display fields; Cliqero does not validate or attach semantics to banking-specific field keys. Initialization selects an eligible account and persists the account identifier and rendered instructions with the funding record; existing funding does not depend on later mutable configuration.
 
 Additional providers should be addable through provider registration rather than core rewrites.
 

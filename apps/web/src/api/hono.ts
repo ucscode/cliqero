@@ -192,6 +192,15 @@ const operatorFundingDetailSchema = operatorFundingSummarySchema.extend({
       outboxLastError: z.string().nullable(),
     }),
   ),
+  evidence: z
+    .object({
+      id: z.string().uuid(),
+      transferReference: z.string().nullable(),
+      proofImageUrl: z.string().nullable(),
+      customerNote: z.string().nullable(),
+      createdAt: z.string(),
+    })
+    .nullable(),
 });
 const operatorDistributionSummarySchema = z.object({
   id: z.string().uuid(),
@@ -1021,6 +1030,56 @@ export function createApiApp(
       if (denied) return denied;
       try {
         return c.json(await container.operatorFunding.get(c.req.valid("param").fundingId), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/funding/{fundingId}/confirm-bank-transfer",
+      request: { params: z.object({ fundingId: z.string().uuid() }) },
+      responses: {
+        200: {
+          description: "Bank-transfer funding confirmed",
+          content: {
+            "application/json": {
+              schema: z.object({
+                id: z.string().uuid(),
+                state: z.literal("confirmed"),
+                confirmedAt: z.string().nullable(),
+              }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Finance management capability required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Funding not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "finance.manage", "operations:manage");
+      if (denied) return denied;
+      try {
+        return c.json(
+          await container.operatorFunding.confirmBankTransfer(
+            p.accountId,
+            c.req.valid("param").fundingId,
+          ),
+          200,
+        );
       } catch (error) {
         return domainError(c, error);
       }
@@ -2373,7 +2432,7 @@ export function createApiApp(
   });
   app.post("/api/payments/:provider/ipn", async (c) => {
     const providerName = c.req.param("provider");
-    if (!new Set(["nowpayments", "usdt_erc20", "usdt_trc20"]).has(providerName))
+    if (providerName !== "nowpayments")
       return c.json({ error: "Not found", code: "not_found" }, 404);
     let provider: any;
     try {

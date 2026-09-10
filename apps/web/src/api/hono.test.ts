@@ -121,6 +121,12 @@ function appWith(
           providerInitialization: null,
           operations: [],
           events: [],
+          evidence: null,
+        }),
+        confirmBankTransfer: async (_actorId: string, id: string) => ({
+          id,
+          state: "confirmed" as const,
+          confirmedAt: new Date().toISOString(),
         }),
       },
       operatorDistributions: {
@@ -280,6 +286,7 @@ describe("Hono API foundation", () => {
     });
     expect(paths["/api/operator/funding"]).toBeDefined();
     expect(paths["/api/operator/funding/{fundingId}"]).toBeDefined();
+    expect(paths["/api/operator/funding/{fundingId}/confirm-bank-transfer"]).toBeDefined();
     expect(paths["/api/operator/listings"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}/integrations"]).toBeDefined();
@@ -498,6 +505,24 @@ describe("Hono API foundation", () => {
       (await appWith(elevatedCatalogue).fetch(new Request("http://localhost/api/operator/funding")))
         .status,
     ).toBe(403);
+  });
+  it("keeps bank-transfer confirmation operator-only", async () => {
+    const fundingId = "00000000-0000-4000-8000-000000000010";
+    const ordinary = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      capabilities: [] as string[],
+      scopes: new Set<string>(),
+    };
+    const request = () =>
+      new Request(`http://localhost/api/operator/funding/${fundingId}/confirm-bank-transfer`, {
+        method: "POST",
+      });
+    expect((await appWith(ordinary).fetch(request())).status).toBe(403);
+    expect(
+      (await appWith({ ...ordinary, capabilities: ["finance.manage"] }).fetch(request())).status,
+    ).toBe(200);
   });
   it("protects operator withdrawals with the withdrawals manage scope", async () => {
     const base = {

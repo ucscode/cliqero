@@ -76,6 +76,33 @@ export class FundingService {
       return value;
     });
   }
+
+  async submitTransaction(input: {
+    accountId: string;
+    fundingId: string;
+    transactionHash: string;
+  }) {
+    const normalized = input.transactionHash.trim();
+    if (!/^(0x[a-fA-F0-9]{64}|[a-fA-F0-9]{64})$/.test(normalized))
+      throw new Error("Transaction hash is invalid");
+    return this.uow.transaction(async () => {
+      const funding = await this.funding.findById(input.fundingId, { forUpdate: true });
+      if (!funding || funding.accountId !== input.accountId) throw new Error("Funding not found");
+      if (funding.providerName !== "usdt_trc20")
+        throw new Error("Transaction hash is not supported for this funding method");
+      if (funding.state !== "awaiting_payment" && funding.state !== "verification_pending")
+        throw new Error("Funding is not awaiting payment");
+      const existing = funding.providerInitialization?.transactionHash;
+      if (existing === normalized) return funding;
+      funding.providerInitialization = {
+        ...funding.providerInitialization,
+        transactionHash: normalized,
+      };
+      funding.state = "verification_pending";
+      await this.funding.save(funding);
+      return funding;
+    });
+  }
 }
 
 export class FundingInitializationProcessor {
@@ -108,6 +135,7 @@ export class FundingInitializationProcessor {
         amount: claim.collectionAmount,
         idempotencyKey: claim.idempotencyKey,
         buyerEmail,
+        country: account.country,
       });
       if (result.reference !== claim.providerReference)
         throw new ProviderOperationError(
@@ -226,7 +254,8 @@ export class FundingVerificationProcessor {
       const locked = await this.funding.findById(id, { forUpdate: true });
       if (!locked || locked.state === "confirmed") return locked;
       if (!result.verified && isFundingPendingStatus(result.status)) {
-        locked.state = "awaiting_payment";
+        locked.state =
+          locked.state === "verification_pending" ? "verification_pending" : "awaiting_payment";
         await this.funding.save(locked);
         return locked;
       }
@@ -270,6 +299,9 @@ export class FundingVerificationProcessor {
 function isFundingPendingStatus(status: string) {
   return new Set([
     "awaiting_manual_confirmation",
+    "awaiting_transaction",
+    "not_found",
+    "pending",
     "waiting",
     "confirming",
     "confirmed",

@@ -4,6 +4,8 @@ coverage/
 *.tsbuildinfo
 *.log
 var/log/
+config/modules/payment/*.yaml
+!config/modules/payment/*.example.yaml
 .env
 .env.*
 !.env.example
