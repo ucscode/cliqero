@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DevelopmentPaymentProvider, PaymentProviderRegistry } from "./payment";
+import {
+  DevelopmentPaymentProvider,
+  isDevelopmentProviderEnabled,
+  PaymentProviderRegistry,
+} from "./payment";
 import { PaystackProvider } from "@/providers/paystack/payment/provider";
 import { NowPaymentsProvider } from "@/providers/nowpayments/provider";
 import { BankTransferProvider } from "@/providers/bank-transfer/provider";
@@ -94,5 +98,33 @@ describe("payment provider eligibility", () => {
     expect(registry.availableMethodsFor({ country: "NG" })).toEqual([
       expect.objectContaining({ collectionCurrency: "NGN" }),
     ]);
+  });
+
+  it("exposes selectable payment currencies and rejects provider mismatches", () => {
+    const registry = new PaymentProviderRegistry().register(
+      new NowPaymentsProvider({
+        apiKey: "test",
+        apiBaseUrl: "https://api-sandbox.nowpayments.io",
+        payCurrency: "usdttrc20",
+        payCurrencies: ["usdttrc20", "usdterc20"],
+      }),
+    );
+    expect(registry.availableMethodsFor({ country: null })).toEqual([
+      expect.objectContaining({
+        defaultPaymentCurrency: "usdttrc20",
+        paymentCurrencies: expect.arrayContaining([
+          expect.objectContaining({ code: "usdttrc20", label: "USDT TRC20" }),
+        ]),
+      }),
+    ]);
+    expect(() => registry.paymentCurrency("nowpayments", "btc")).toThrow("does not support");
+    const development = new PaymentProviderRegistry().register(new DevelopmentPaymentProvider());
+    expect(() => development.paymentCurrency("development", "btc")).toThrow("does not support");
+  });
+
+  it("only enables the development provider outside production runtime", () => {
+    expect(isDevelopmentProviderEnabled("development")).toBe(true);
+    expect(isDevelopmentProviderEnabled("test")).toBe(true);
+    expect(isDevelopmentProviderEnabled("production")).toBe(false);
   });
 });

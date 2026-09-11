@@ -7,6 +7,8 @@ import {
   parseUsdMinor,
   presentFormApiError,
   safeContinuation,
+  walletFundingUrl,
+  walletFundingUrlForCheckout,
 } from "./api-client";
 import { HONEYPOT_HEADER_NAME } from "./honeypot";
 
@@ -29,6 +31,18 @@ describe("frontend API presentation helpers", () => {
     );
     expect(safeContinuation(encoded, "/dashboard")).toBe("/dashboard");
     expect(safeContinuation(null, "/dashboard")).toBe("/dashboard");
+  });
+
+  it("keeps an encoded checkout context when routing to dedicated wallet funding", () => {
+    expect(walletFundingUrl("listing-1")).toBe(
+      "/dashboard/wallet/fund?return=%2Fdashboard%3Fbuy%3Dlisting-1",
+    );
+    expect(walletFundingUrl("//evil.example")).toBe(
+      "/dashboard/wallet/fund?return=%2Fdashboard%3Fbuy%3D%252F%252Fevil.example",
+    );
+    expect(walletFundingUrlForCheckout("listing-1", "checkout-1")).toBe(
+      "/dashboard/wallet/fund?return=%2Fdashboard%3Fbuy%3Dlisting-1%26checkout%3Dcheckout-1",
+    );
   });
 
   it("parses USD input into exact positive minor units", () => {

@@ -15,10 +15,14 @@ export interface NowPaymentsConfiguration {
   apiBaseUrl: string;
   ipnCallbackUrl?: string;
   payCurrency: string;
+  payCurrencies?: readonly string[];
   asset?: string;
   network?: string;
   /** NOWPayments' documented sandbox create-payment test case. */
   sandboxCase?: NowPaymentsSandboxCase;
+  displayName?: string;
+  imageUrl?: string;
+  description?: string;
 }
 
 /** Values documented by NOWPayments for its sandbox payment test procedure. */
@@ -41,6 +45,11 @@ interface PaymentData {
 
 export class NowPaymentsProvider implements PaymentProvider {
   readonly collectionCurrencies = ["USD"] as const;
+  readonly displayName: string;
+  readonly imageUrl: string;
+  readonly description: string;
+  readonly paymentCurrencies;
+  readonly defaultPaymentCurrency: string;
   readonly name: string;
 
   constructor(
@@ -49,6 +58,20 @@ export class NowPaymentsProvider implements PaymentProvider {
     private readonly http: NowPaymentsHttpClient = fetch,
   ) {
     this.name = name;
+    this.displayName = config.displayName ?? "NOWPayments";
+    this.imageUrl = config.imageUrl ?? "/images/payment/nowpayments.svg";
+    this.description = config.description ?? "Pay through NOWPayments.";
+    this.defaultPaymentCurrency = config.payCurrency.toLowerCase();
+    this.paymentCurrencies = [
+      ...new Set(
+        (config.payCurrencies ?? [config.payCurrency]).map((code) => ({
+          code: code.toLowerCase(),
+          label: formatCurrencyLabel(code),
+          asset: config.asset,
+          network: config.network,
+        })),
+      ),
+    ] as const;
   }
 
   referenceFor(input: { paymentId: Id; idempotencyKey: string }) {
@@ -60,12 +83,14 @@ export class NowPaymentsProvider implements PaymentProvider {
     amount: Money;
     idempotencyKey: string;
     buyerEmail: string;
+    paymentCurrency?: string;
   }): Promise<PaymentInitialization> {
+    const payCurrency = this.resolvePaymentCurrency(input.paymentCurrency);
     const reference = this.referenceFor(input);
     const requestBody = {
       price_amount: decimalAmount(input.amount),
       price_currency: input.amount.currency.toLowerCase(),
-      pay_currency: this.config.payCurrency.toLowerCase(),
+      pay_currency: payCurrency,
       order_id: reference,
       order_description: `Cliqero wallet funding ${reference}`,
       ...(this.config.ipnCallbackUrl ? { ipn_callback_url: this.config.ipnCallbackUrl } : {}),
@@ -97,7 +122,7 @@ export class NowPaymentsProvider implements PaymentProvider {
       providerPaymentId: String(data.payment_id),
       paymentAddress: data.pay_address,
       paymentAmount: String(data.pay_amount),
-      paymentCurrency: String(data.pay_currency ?? this.config.payCurrency).toUpperCase(),
+      paymentCurrency: String(data.pay_currency ?? payCurrency).toUpperCase(),
       asset: this.config.asset,
       network: this.config.network,
       expiresAt: data.expiration_estimate_date ?? undefined,
@@ -119,7 +144,10 @@ export class NowPaymentsProvider implements PaymentProvider {
       },
     );
     if (data.order_id !== input.reference) throw new Error("NOWPayments order reference mismatch");
-    if (String(data.pay_currency ?? "").toLowerCase() !== this.config.payCurrency.toLowerCase())
+    const expectedPaymentCurrency = (
+      input.initialization?.paymentCurrency ?? this.defaultPaymentCurrency
+    ).toLowerCase();
+    if (String(data.pay_currency ?? "").toLowerCase() !== expectedPaymentCurrency)
       throw new Error("NOWPayments payment currency mismatch");
     const currency = String(data.price_currency ?? input.expectedAmount.currency).toUpperCase();
     const price = decimalToMinor(data.price_amount);
@@ -134,6 +162,13 @@ export class NowPaymentsProvider implements PaymentProvider {
       amount: Money.of(price, currency),
       providerTransactionId: String(data.payment_id),
     };
+  }
+
+  private resolvePaymentCurrency(requested?: string) {
+    const value = (requested ?? this.defaultPaymentCurrency).trim().toLowerCase();
+    if (!this.paymentCurrencies.some((currency) => currency.code === value))
+      throw new Error(`NOWPayments payment currency is unsupported: ${requested ?? value}`);
+    return value;
   }
 
   verifyIpnSignature(rawBody: Uint8Array, signature: string | null): boolean {
@@ -193,6 +228,13 @@ export class NowPaymentsProvider implements PaymentProvider {
       );
     return body as T;
   }
+}
+
+function formatCurrencyLabel(code: string) {
+  const normalized = code.toLowerCase();
+  if (normalized === "usdttrc20") return "USDT TRC20";
+  if (normalized === "usdterc20") return "USDT ERC20";
+  return code.toUpperCase();
 }
 
 export function isNowPaymentsSandboxApi(apiBaseUrl: string): boolean {

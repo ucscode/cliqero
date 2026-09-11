@@ -21,6 +21,7 @@ describe("direct TRC20 provider", () => {
     });
     expect(result.metadata).toMatchObject({
       paymentAddress: "TReceiver",
+      paymentCurrency: "USDT",
       network: "TRC20",
       asset: "USDT",
     });

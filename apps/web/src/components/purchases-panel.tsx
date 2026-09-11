@@ -33,6 +33,12 @@ function accessLabel(purchase: Purchase): string {
   return "Complete payment to access";
 }
 
+function checkoutHref(purchase: Purchase): string {
+  const params = new URLSearchParams({ buy: purchase.listing_id });
+  if (purchase.checkout_id) params.set("checkout", purchase.checkout_id);
+  return `/dashboard?${params.toString()}`;
+}
+
 export function PurchasesPanel({ selectedId }: { selectedId?: string }) {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [selected, setSelected] = useState<Purchase | null>(null);
@@ -138,9 +144,18 @@ export function PurchasesPanel({ selectedId }: { selectedId?: string }) {
                     {accessLabel(purchase)}
                   </span>
                 )}
-                <Button asChild variant="secondary">
-                  <Link href={`/dashboard?section=purchases&purchase=${purchase.id}`}>Details</Link>
-                </Button>
+                {purchase.state === "pending" && (
+                  <Button asChild>
+                    <Link href={checkoutHref(purchase)}>Continue to checkout</Link>
+                  </Button>
+                )}
+                {purchase.state !== "pending" && (
+                  <Button asChild variant="secondary">
+                    <Link href={`/dashboard?section=purchases&purchase=${purchase.id}`}>
+                      Details
+                    </Link>
+                  </Button>
+                )}
               </div>
             </Card>
           ))}

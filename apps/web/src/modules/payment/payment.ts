@@ -55,6 +55,13 @@ export interface PaymentInitialization {
   metadata?: PaymentInitializationMetadata;
 }
 
+export interface PaymentCurrencyOption {
+  code: string;
+  label?: string;
+  asset?: string;
+  network?: string;
+}
+
 /** Provider instructions are persisted as opaque, non-secret funding metadata. */
 export interface PaymentInitializationMetadata {
   authorizationUrl?: string;
@@ -80,8 +87,14 @@ export interface PaymentVerification {
 }
 export interface PaymentProvider {
   readonly name: string;
+  readonly displayName: string;
+  readonly imageUrl: string;
+  readonly description: string;
   /** Currencies this provider collects in; this is distinct from canonical listing currency. */
   readonly collectionCurrencies?: readonly string[];
+  /** Optional selectable currencies used to settle a collection. */
+  readonly paymentCurrencies?: readonly PaymentCurrencyOption[];
+  readonly defaultPaymentCurrency?: string;
   readonly isEligible?: (context: PaymentProviderEligibilityContext) => boolean;
   readonly referenceFor?: (input: { paymentId: Id; idempotencyKey: string }) => string;
   initiate(input: {
@@ -90,6 +103,7 @@ export interface PaymentProvider {
     idempotencyKey: string;
     buyerEmail: string;
     country?: string | null;
+    paymentCurrency?: string;
   }): Promise<PaymentInitialization>;
   verify(input: {
     reference: string;
@@ -175,16 +189,53 @@ export class PaymentProviderRegistry {
         const currency = currencies.find((candidate) =>
           registration.isEligible({ ...context, currency: candidate }),
         );
-        return currency ? { provider: registration.provider, collectionCurrency: currency } : null;
+        return currency
+          ? {
+              provider: registration.provider,
+              collectionCurrency: currency,
+              collectionCurrencies: currencies.filter((candidate) =>
+                registration.isEligible({ ...context, currency: candidate }),
+              ),
+              paymentCurrencies: registration.provider.paymentCurrencies ?? [],
+              defaultPaymentCurrency: registration.provider.defaultPaymentCurrency,
+            }
+          : null;
       })
       .filter(
-        (method): method is { provider: PaymentProvider; collectionCurrency: string } =>
-          method !== null,
+        (
+          method,
+        ): method is {
+          provider: PaymentProvider;
+          collectionCurrency: string;
+          collectionCurrencies: string[];
+          paymentCurrencies: readonly PaymentCurrencyOption[];
+          defaultPaymentCurrency: string | undefined;
+        } => method !== null,
       );
   }
+
+  paymentCurrency(name: string, requested?: string) {
+    const provider = this.get(name);
+    const currencies = provider.paymentCurrencies ?? [];
+    if (!requested) return provider.defaultPaymentCurrency;
+    if (currencies.length === 0)
+      throw new Error(`Payment provider does not support selectable payment currency: ${name}`);
+    const normalized = requested.trim().toLowerCase();
+    const match = currencies.find((currency) => currency.code.toLowerCase() === normalized);
+    if (!match) throw new Error(`Payment provider does not support payment currency: ${requested}`);
+    return match.code;
+  }
 }
+
+export function isDevelopmentProviderEnabled(environment = process.env.NODE_ENV) {
+  return environment === "development" || environment === "test";
+}
+
 export class DevelopmentPaymentProvider implements PaymentProvider {
   readonly name = "development";
+  readonly displayName = "Development";
+  readonly imageUrl = "/images/payment/development.svg";
+  readonly description = "Development-only funding for local testing.";
   readonly collectionCurrencies = ["USD"] as const;
   referenceFor(input: { paymentId: Id; idempotencyKey: string }) {
     const digest = createHash("sha256")

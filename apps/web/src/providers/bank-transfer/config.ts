@@ -5,6 +5,9 @@ import type { BankTransferConfiguration, BankTransferAccount } from "./provider"
 
 const schema = z.object({
   enabled: z.boolean().default(false),
+  display_name: z.string().trim().min(1),
+  image_url: z.string().trim().min(1),
+  description: z.string().trim().min(1),
   config: z.object({
     accounts: z.array(
       z.object({
@@ -52,7 +55,12 @@ export function loadBankTransferConfiguration(path = "config/modules/payment/ban
     fields: account.fields,
     filters: account.filters,
   }));
-  const provider: BankTransferConfiguration = { accounts };
+  const provider: BankTransferConfiguration = {
+    accounts,
+    displayName: config.display_name,
+    imageUrl: config.image_url,
+    description: config.description,
+  };
   return {
     provider,
     filters: { countries: null, currencies: null } satisfies PaymentProviderFilters,

@@ -17,15 +17,25 @@ export interface DirectTrc20Configuration {
     apiBaseUrl: string;
     chainId?: number;
   };
+  displayName?: string;
+  imageUrl?: string;
+  description?: string;
 }
 
 export class DirectTrc20Provider implements PaymentProvider {
   readonly name = "usdt_trc20";
+  readonly displayName: string;
+  readonly imageUrl: string;
+  readonly description: string;
   readonly collectionCurrencies = ["USD"] as const;
   constructor(
     private readonly config: DirectTrc20Configuration,
     private readonly verifier: DirectTrc20Verifier,
-  ) {}
+  ) {
+    this.displayName = config.displayName ?? "Direct USDT TRC20";
+    this.imageUrl = config.imageUrl ?? "/images/payment/usdt-trc20.svg";
+    this.description = config.description ?? "Send USDT on the TRON TRC20 network directly.";
+  }
 
   referenceFor(input: { paymentId: Id }) {
     return `usdt-${input.paymentId}`;
@@ -43,7 +53,7 @@ export class DirectTrc20Provider implements PaymentProvider {
       metadata: {
         paymentAddress: this.config.walletAddress,
         paymentAmount: formatAmount(input.amount),
-        paymentCurrency: input.amount.currency,
+        paymentCurrency: "USDT",
         asset: "USDT",
         network: "TRC20",
         instructions: `Send exactly ${formatAmount(input.amount)} USDT on TRC20 to ${this.config.walletAddress}. Submit the blockchain transaction hash after sending.`,

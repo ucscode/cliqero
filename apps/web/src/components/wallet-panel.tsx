@@ -8,13 +8,13 @@ import {
   formatMinorUsd,
   parseUsdMinor,
   type FundingStatus,
+  type FundingMethod,
   type WalletSummary,
   type WalletTransaction,
 } from "@/lib/api-client";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Skeleton } from "./ui/skeleton";
@@ -52,13 +52,24 @@ function safeProviderUrl(value: string | null): string | null {
   }
 }
 
-export function WalletPanel({ returnTo }: { returnTo?: string }) {
+export function WalletPanel({
+  returnTo,
+  fundingPage = false,
+}: {
+  returnTo?: string;
+  fundingPage?: boolean;
+}) {
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [funding, setFunding] = useState<FundingStatus | null>(null);
-  const [fundOpen, setFundOpen] = useState(false);
+  const [fundOpen, setFundOpen] = useState(fundingPage);
   const [amount, setAmount] = useState("");
+  const [transactionHash, setTransactionHash] = useState("");
   const [providerError, setProviderError] = useState<string | null>(null);
+  const [fundingMethods, setFundingMethods] = useState<FundingMethod[]>([]);
+  const [provider, setProvider] = useState("");
+  const [paymentCurrency, setPaymentCurrency] = useState("");
+  const [collectionCurrency, setCollectionCurrency] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -114,7 +125,35 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
     return () => window.clearTimeout(timer);
   }, [funding?.id, loadWallet]);
 
-  const configuredProvider = process.env.NODE_ENV === "development" ? "development" : "paystack";
+  const selectedMethod = fundingMethods.find((method) => method.id === provider) ?? null;
+  const availablePaymentCurrencies = selectedMethod?.payment_currencies ?? [];
+
+  useEffect(() => {
+    if (!fundOpen && !fundingPage) return;
+    void apiFetch<{ methods: FundingMethod[] }>("/api/wallet/funding-methods")
+      .then(({ methods }) => {
+        if (!methods.every((method) => Array.isArray(method.collection_currencies)))
+          throw new Error("Funding method response is incomplete");
+        setFundingMethods(methods);
+        const first = methods[0];
+        setProvider((current) =>
+          methods.some((method) => method.id === current) ? current : (first?.id ?? ""),
+        );
+        if (first) {
+          setCollectionCurrency(first.collection_currencies[0] ?? "");
+          setPaymentCurrency(
+            first.default_payment_currency ?? first.payment_currencies[0]?.code ?? "",
+          );
+        }
+      })
+      .catch(() => setProviderError("We couldn't load funding methods right now."));
+  }, [fundOpen, fundingPage]);
+
+  useEffect(() => {
+    if (!fundingPage || loading) return;
+    document.getElementById("wallet-funding")?.scrollIntoView({ block: "start" });
+  }, [fundingPage, loading]);
+
   const providerUrl = safeProviderUrl(funding?.authorization_url ?? null);
   const pendingMessage = useMemo(() => {
     if (!funding) return null;
@@ -150,17 +189,50 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
             "idempotency-key": `wallet-funding-${crypto.randomUUID()}`,
             ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
           },
-          body: JSON.stringify({ amount_minor: amountMinor, provider: configuredProvider }),
+          body: JSON.stringify({
+            amount_minor: amountMinor,
+            provider,
+            collection_currency: collectionCurrency || selectedMethod?.collection_currencies[0],
+            ...(paymentCurrency ? { payment_currency: paymentCurrency } : {}),
+          }),
         },
       );
       const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${created.id}`);
       setFunding(latest);
       setFundOpen(false);
       setAmount("");
+      setPaymentCurrency("");
       setError(null);
     } catch (cause) {
       setProviderError(
         cause instanceof ApiClientError ? cause.message : "Funding could not be initiated.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitTransactionHash(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!funding) return;
+    setProviderError(null);
+    setSubmitting(true);
+    try {
+      const result = await apiFetch<{ id: string; state: FundingStatus["state"] }>(
+        `/api/wallet/fund/${funding.id}/transaction`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ transaction_hash: transactionHash }),
+        },
+      );
+      setFunding((current) => (current ? { ...current, state: result.state } : current));
+      setTransactionHash("");
+    } catch (cause) {
+      setProviderError(
+        cause instanceof ApiClientError
+          ? cause.message
+          : "Transaction hash could not be submitted.",
       );
     } finally {
       setSubmitting(false);
@@ -210,7 +282,11 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
             <Money minor={summary?.available_minor ?? "0"} currency="USD" />
           </p>
           <p className="text-sm text-slate-500">Ready for one-listing purchases.</p>
-          <Button onClick={() => setFundOpen(true)}>Fund wallet</Button>
+          {!fundingPage && (
+            <Button asChild>
+              <Link href="/dashboard/wallet/fund">Fund wallet</Link>
+            </Button>
+          )}
         </Card>
         <Card className="p-6 sm:p-8">
           <p className="eyebrow">In progress</p>
@@ -223,7 +299,7 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
       </section>
 
       {funding && (
-        <Card className="grid gap-3 p-5" aria-live="polite">
+        <Card className="grid gap-4 p-5" aria-live="polite">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="eyebrow">Funding activity</p>
@@ -234,7 +310,61 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
             </Badge>
           </div>
           <p>{pendingMessage}</p>
-          <Money minor={funding.amount_minor} currency={funding.currency} />
+          {funding.instructions && <p className="text-sm text-slate-600">{funding.instructions}</p>}
+          <div className="grid gap-2 rounded-lg bg-slate-50 p-4 text-sm">
+            <span>Funding amount</span>
+            <strong>
+              <Money minor={funding.amount_minor} currency={funding.currency} />
+            </strong>
+            {funding.provider === "usdt_trc20" && funding.payment_amount && (
+              <p>
+                Send exactly <strong>{funding.payment_amount} USDT</strong>
+              </p>
+            )}
+            {funding.payment_currency && (
+              <p>
+                Payment currency: <strong>{funding.payment_currency}</strong>
+              </p>
+            )}
+            {funding.network && <p>Network: {funding.network}</p>}
+            {funding.payment_address && (
+              <div className="grid gap-2">
+                <span>Payment address</span>
+                <code className="break-all rounded bg-white p-2 text-xs text-slate-700">
+                  {funding.payment_address}
+                </code>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void navigator.clipboard?.writeText(funding.payment_address ?? "")}
+                >
+                  Copy address
+                </Button>
+              </div>
+            )}
+            {funding.provider === "usdt_trc20" &&
+              (funding.state === "awaiting_payment" ||
+                funding.state === "verification_pending") && (
+                <form className="grid gap-2" onSubmit={submitTransactionHash}>
+                  <Label htmlFor="transaction-hash">Blockchain transaction hash</Label>
+                  <Input
+                    id="transaction-hash"
+                    value={transactionHash}
+                    onChange={(event) => setTransactionHash(event.target.value)}
+                    placeholder="Paste the transaction hash"
+                    disabled={submitting}
+                  />
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    disabled={submitting || !transactionHash.trim()}
+                  >
+                    {submitting ? "Submitting…" : "Submit transaction hash"}
+                  </Button>
+                </form>
+              )}
+            {funding.expires_at && <p>Expires: {new Date(funding.expires_at).toLocaleString()}</p>}
+          </div>
           <div className="flex flex-wrap gap-2">
             {providerUrl && (
               <a
@@ -256,6 +386,9 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
                 <Link href={returnTo}>Return to checkout</Link>
               </Button>
             )}
+            <Button asChild variant="ghost">
+              <Link href="/dashboard?section=wallet">Wallet overview</Link>
+            </Button>
           </div>
           {providerError && <Toast>{providerError}</Toast>}
         </Card>
@@ -309,16 +442,41 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
         )}
       </section>
 
-      <Dialog open={fundOpen} onOpenChange={setFundOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Fund your wallet</DialogTitle>
-          </DialogHeader>
+      {fundOpen && (
+        <Card className="grid gap-4 p-6 sm:p-8" id="wallet-funding" tabIndex={-1}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="eyebrow">Wallet funding</p>
+              <h2>Fund your Cliqero wallet</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {returnTo && (
+                <Button asChild variant="secondary">
+                  <Link href={returnTo}>Return to checkout</Link>
+                </Button>
+              )}
+              <Button asChild variant="ghost">
+                <Link href="/dashboard?section=wallet">Back to wallet</Link>
+              </Button>
+            </div>
+          </div>
           <form className="grid gap-3" onSubmit={submitFunding}>
-            <p>Funding is collected externally and becomes available after verification.</p>
+            <p>
+              Enter the amount to add in canonical USD. It becomes available after verification.
+            </p>
+            <div className="grid gap-1 rounded-lg bg-slate-50 p-4 text-sm">
+              <span>Available wallet balance</span>
+              <strong>
+                <Money minor={summary?.available_minor ?? "0"} currency="USD" />
+              </strong>
+              <span className="text-slate-500">
+                Pending: <Money minor={summary?.pending_minor ?? "0"} currency="USD" />
+              </span>
+            </div>
             <Label htmlFor="funding-amount">Amount in USD</Label>
             <Input
               id="funding-amount"
+              autoFocus={fundingPage}
               inputMode="decimal"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
@@ -328,14 +486,86 @@ export function WalletPanel({ returnTo }: { returnTo?: string }) {
             <span id="funding-help" className="text-xs text-slate-500">
               Enter a positive amount with up to two decimal places.
             </span>
+            <Label>Funding method</Label>
+            <div className="grid gap-3">
+              {fundingMethods.map((method) => (
+                <label
+                  className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white p-4 has-[:checked]:border-emerald-600 has-[:checked]:ring-1 has-[:checked]:ring-emerald-600"
+                  key={method.id}
+                >
+                  <input
+                    type="radio"
+                    name="funding-provider"
+                    value={method.id}
+                    checked={provider === method.id}
+                    onChange={() => {
+                      setProvider(method.id);
+                      setCollectionCurrency(method.collection_currencies[0] ?? "");
+                      setPaymentCurrency(
+                        method.default_payment_currency ?? method.payment_currencies[0]?.code ?? "",
+                      );
+                    }}
+                    disabled={submitting}
+                    required
+                  />
+                  <span className="grid flex-1 gap-2">
+                    <span className="flex items-center gap-3">
+                      <img className="h-8 w-8 rounded-md" src={method.image_url} alt="" />
+                      <strong>{method.display_name}</strong>
+                    </span>
+                    <span className="text-sm text-slate-600">{method.description}</span>
+                    <span className="text-xs text-slate-500">
+                      Account credit currency: {(method.collection_currencies ?? []).join(", ")}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {selectedMethod && selectedMethod.collection_currencies.length > 1 && (
+              <>
+                <Label htmlFor="funding-collection-currency">Collection currency</Label>
+                <select
+                  id="funding-collection-currency"
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  value={collectionCurrency}
+                  onChange={(event) => setCollectionCurrency(event.target.value)}
+                  disabled={submitting}
+                >
+                  {selectedMethod.collection_currencies.map((currency) => (
+                    <option value={currency} key={currency}>
+                      {currency}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            {availablePaymentCurrencies.length > 0 && (
+              <>
+                <Label htmlFor="funding-payment-currency">Payment currency</Label>
+                <select
+                  id="funding-payment-currency"
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  value={paymentCurrency}
+                  onChange={(event) => setPaymentCurrency(event.target.value)}
+                  disabled={submitting}
+                >
+                  {availablePaymentCurrencies.map((currency) => (
+                    <option value={currency.code} key={currency.code}>
+                      {currency.label ?? currency.code.toUpperCase()}
+                      {currency.network ? ` (${currency.network})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
             {providerError && <Toast>{providerError}</Toast>}
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || fundingMethods.length === 0 || !provider}>
               {submitting ? "Starting funding…" : "Start funding"}
             </Button>
             <HoneypotField />
           </form>
-        </DialogContent>
-      </Dialog>
+        </Card>
+      )}
     </div>
   );
 }

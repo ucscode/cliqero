@@ -12,6 +12,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const funding = await getContainer().funding.findById(id);
     if (!funding || funding.accountId !== account.id)
       return Response.json({ error: "Funding not found" }, { status: 404 });
+    const paymentDetailsVisible =
+      funding.state === "awaiting_payment" || funding.state === "verification_pending";
     return Response.json({
       id: funding.id,
       state: funding.state,
@@ -20,34 +22,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       currency: funding.canonicalAmount.currency,
       collection_amount_minor: funding.collectionAmount.minorAmount.toString(),
       collection_currency: funding.collectionAmount.currency,
-      authorization_url:
-        funding.state === "awaiting_payment"
-          ? (funding.providerInitialization?.authorizationUrl ?? null)
-          : null,
-      payment_address:
-        funding.state === "awaiting_payment"
-          ? (funding.providerInitialization?.paymentAddress ?? null)
-          : null,
-      payment_amount:
-        funding.state === "awaiting_payment"
-          ? (funding.providerInitialization?.paymentAmount ?? null)
-          : null,
-      payment_currency:
-        funding.state === "awaiting_payment"
-          ? (funding.providerInitialization?.paymentCurrency ?? null)
-          : null,
-      asset:
-        funding.state === "awaiting_payment"
-          ? (funding.providerInitialization?.asset ?? null)
-          : null,
-      network:
-        funding.state === "awaiting_payment"
-          ? (funding.providerInitialization?.network ?? null)
-          : null,
-      instructions:
-        funding.state === "awaiting_payment"
-          ? (funding.providerInitialization?.instructions ?? null)
-          : null,
+      authorization_url: paymentDetailsVisible
+        ? (funding.providerInitialization?.authorizationUrl ?? null)
+        : null,
+      payment_address: paymentDetailsVisible
+        ? (funding.providerInitialization?.paymentAddress ?? null)
+        : null,
+      payment_amount: paymentDetailsVisible
+        ? (funding.providerInitialization?.paymentAmount ?? null)
+        : null,
+      payment_currency: paymentDetailsVisible
+        ? (funding.providerInitialization?.paymentCurrency ?? null)
+        : null,
+      asset: paymentDetailsVisible ? (funding.providerInitialization?.asset ?? null) : null,
+      network: paymentDetailsVisible ? (funding.providerInitialization?.network ?? null) : null,
+      instructions: paymentDetailsVisible
+        ? (funding.providerInitialization?.instructions ?? null)
+        : null,
+      expires_at: paymentDetailsVisible
+        ? (funding.providerInitialization?.expiresAt ?? null)
+        : null,
       confirmed_at: funding.confirmedAt?.toISOString() ?? null,
     });
   } catch (error) {

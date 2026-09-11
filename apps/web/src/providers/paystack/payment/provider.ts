@@ -13,6 +13,9 @@ export interface PaystackConfiguration {
   secretKey: string;
   apiBaseUrl: string;
   callbackUrl?: string;
+  displayName?: string;
+  imageUrl?: string;
+  description?: string;
 }
 export type PaystackHttpClient = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -37,6 +40,9 @@ interface TransactionData {
 
 export class PaystackProvider implements PaymentProvider {
   readonly name = "paystack";
+  readonly displayName: string;
+  readonly imageUrl: string;
+  readonly description: string;
   readonly collectionCurrencies: readonly string[];
   referenceFor(input: { paymentId: Id; idempotencyKey: string }) {
     return `pay-${input.paymentId}`;
@@ -47,6 +53,9 @@ export class PaystackProvider implements PaymentProvider {
     collectionCurrencies: readonly string[] = ["NGN"],
   ) {
     this.collectionCurrencies = collectionCurrencies;
+    this.displayName = config.displayName ?? "Paystack";
+    this.imageUrl = config.imageUrl ?? "/images/payment/paystack.svg";
+    this.description = config.description ?? "Pay through Paystack.";
   }
 
   async initiate(input: {

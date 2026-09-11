@@ -9,6 +9,7 @@ const schema = z
       .string()
       .regex(/^[A-Z]{3}$/)
       .optional(),
+    payment_currency: z.string().min(1).optional(),
   })
   .strict();
 export async function POST(request: Request) {
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
       providerName: b.provider,
       idempotencyKey: key,
       collectionCurrency: b.collection_currency,
+      paymentCurrency: b.payment_currency,
     });
     return Response.json(
       {

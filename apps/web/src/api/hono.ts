@@ -2424,9 +2424,15 @@ export function createApiApp(
       );
     const methods = container.providers
       .availableMethodsFor({ country: p.account.country, currency: requested })
-      .map(({ provider, collectionCurrency }) => ({
-        id: provider.name,
-        collection_currency: collectionCurrency,
+      .filter((method): method is NonNullable<typeof method> => method !== null)
+      .map((method) => ({
+        id: method.provider.name,
+        display_name: method.provider.displayName,
+        image_url: method.provider.imageUrl,
+        description: method.provider.description,
+        collection_currencies: method.collectionCurrencies,
+        payment_currencies: method.paymentCurrencies,
+        default_payment_currency: method.defaultPaymentCurrency ?? null,
       }));
     return c.json({ methods }, 200);
   });

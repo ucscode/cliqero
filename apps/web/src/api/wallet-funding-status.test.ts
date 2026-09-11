@@ -30,7 +30,15 @@ function configure(owner = account.id) {
         canonicalAmount: { minorAmount: 1250n, currency: "USD" },
         collectionAmount: { minorAmount: 1250n, currency: "USD" },
         state: "awaiting_payment",
-        providerInitialization: { authorizationUrl: "https://pay.example.test/continue" },
+        providerInitialization: {
+          authorizationUrl: "https://pay.example.test/continue",
+          paymentAddress: "TReceiver",
+          paymentAmount: "12.50",
+          paymentCurrency: "USDT",
+          network: "TRC20",
+          instructions: "Send exactly 12.50 USDT.",
+          expiresAt: "2026-09-11T14:00:00.000Z",
+        },
       })),
     },
   };
@@ -48,6 +56,12 @@ describe("wallet funding status projection", () => {
       state: "awaiting_payment",
       amount_minor: "1250",
       authorization_url: "https://pay.example.test/continue",
+      payment_address: "TReceiver",
+      payment_amount: "12.50",
+      payment_currency: "USDT",
+      network: "TRC20",
+      instructions: "Send exactly 12.50 USDT.",
+      expires_at: "2026-09-11T14:00:00.000Z",
     });
   });
 

@@ -7,7 +7,7 @@ providers:
   filesystem:
     enabled: true
     # Absolute writable directory outside source control.
-    root: /var/lib/cliqero/media
+    root: "%env(MEDIA_ROOT)%"
     # Provider container identity stored with new objects.
     container: media
     # Browser-facing origin served by Cliqero's filesystem media route.

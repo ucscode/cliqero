@@ -79,8 +79,30 @@ export type FundingStatus = {
   currency: string;
   collection_amount_minor: string;
   collection_currency: string;
+  payment_address: string | null;
+  payment_amount: string | null;
+  payment_currency: string | null;
+  asset: string | null;
+  network: string | null;
+  instructions: string | null;
+  expires_at: string | null;
   authorization_url: string | null;
   confirmed_at: string | null;
+};
+
+export type FundingMethod = {
+  id: string;
+  display_name: string;
+  image_url: string;
+  description: string;
+  collection_currencies: string[];
+  payment_currencies: Array<{
+    code: string;
+    label?: string;
+    asset?: string;
+    network?: string;
+  }>;
+  default_payment_currency: string | null;
 };
 
 export type Purchase = {
@@ -105,6 +127,12 @@ export type CheckoutStatus = {
   state: "awaiting_funds" | "paid" | "failed";
   amount_minor: string;
   currency: string;
+};
+
+export type CheckoutQuote = {
+  required: { amount_minor: string; currency: string };
+  available: { amount_minor: string; currency: string };
+  shortfall: { amount_minor: string; currency: string };
 };
 
 export type ReferralPage = {
@@ -578,6 +606,20 @@ export function safeContinuation(value: string | null | undefined, fallback = "/
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\"))
     return fallback;
   return value;
+}
+
+/** Builds the internal funding route while retaining the listing checkout context. */
+export function walletFundingUrl(listingId: string): string {
+  return walletFundingUrlForCheckout(listingId);
+}
+
+export function walletFundingUrlForCheckout(listingId: string, checkoutId?: string): string {
+  const checkout = checkoutId ? `&checkout=${encodeURIComponent(checkoutId)}` : "";
+  const returnTo = safeContinuation(
+    `/dashboard?buy=${encodeURIComponent(listingId)}${checkout}`,
+    "/dashboard",
+  );
+  return `/dashboard/wallet/fund?return=${encodeURIComponent(returnTo)}`;
 }
 
 export function formatMinorUsd(minor: string | bigint): string {

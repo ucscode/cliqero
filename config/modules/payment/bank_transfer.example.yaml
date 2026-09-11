@@ -1,7 +1,10 @@
 # Manual bank-transfer funding instructions. No automatic confirmation is implied.
 # Copy to bank_transfer.yaml for local use; the non-example file is Git-ignored.
 # Keep enabled=false until receiving-account details have been reviewed.
-enabled: false
+enabled: true
+display_name: Bank transfer
+image_url: /images/payment/bank-transfer.svg
+description: Transfer funds from your bank account.
 config:
   # Each account is independently eligible; the first matching account is used.
   accounts:

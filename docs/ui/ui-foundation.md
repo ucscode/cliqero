@@ -17,6 +17,8 @@ second checkout on retry.
 `POST /api/wallet/fund` and observed through `GET /api/wallet/fund/{id}`. The provider's browser
 return is never treated as proof: the UI observes persisted funding state, and confirmed funding
 then becomes spendable only through the existing wallet-credit and availability workers.
+Funding opens at `/dashboard/wallet/fund`; the page keeps provider instructions visible after
+initiation and safely preserves a checkout return path.
 
 The buyer flow is deliberately stateful:
 

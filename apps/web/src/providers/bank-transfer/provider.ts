@@ -8,6 +8,9 @@ import type {
 
 export interface BankTransferConfiguration {
   accounts: readonly BankTransferAccount[];
+  displayName?: string;
+  imageUrl?: string;
+  description?: string;
 }
 
 export interface BankTransferField {
@@ -25,9 +28,15 @@ export interface BankTransferAccount {
 /** Manual bank transfer funding. Confirmation is deliberately never inferred from submission. */
 export class BankTransferProvider implements PaymentProvider {
   readonly name = "bank_transfer";
+  readonly displayName: string;
+  readonly imageUrl: string;
+  readonly description: string;
   readonly collectionCurrencies: readonly string[];
 
   constructor(private readonly config: BankTransferConfiguration) {
+    this.displayName = config.displayName ?? "Bank transfer";
+    this.imageUrl = config.imageUrl ?? "/images/payment/bank-transfer.svg";
+    this.description = config.description ?? "Transfer funds from your bank account.";
     this.collectionCurrencies = [
       ...new Set(config.accounts.flatMap((account) => account.filters?.currencies ?? ["USD"])),
     ];

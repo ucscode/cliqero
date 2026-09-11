@@ -19,7 +19,11 @@ import { AuthenticationService } from "@/modules/identity/authentication";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import { AccessService } from "@/modules/access/access";
 import { IntegrationService } from "@/modules/access/integrations";
-import { DevelopmentPaymentProvider, PaymentProviderRegistry } from "@/modules/payment/payment";
+import {
+  DevelopmentPaymentProvider,
+  isDevelopmentProviderEnabled,
+  PaymentProviderRegistry,
+} from "@/modules/payment/payment";
 import { PaystackProvider } from "@/providers/paystack/payment/provider";
 import { loadPaystackConfiguration } from "@/providers/paystack/payment/config";
 import { PaystackWebhookIngress } from "@/providers/paystack/payment/webhook";
@@ -216,7 +220,8 @@ export function createContainer(databaseUrl: string) {
     database,
     paystackPayout ? "paystack" : "development",
   );
-  const providers = new PaymentProviderRegistry().register(new DevelopmentPaymentProvider());
+  const providers = new PaymentProviderRegistry();
+  if (isDevelopmentProviderEnabled()) providers.register(new DevelopmentPaymentProvider());
   const paystackConfiguration = loadPaystackConfiguration();
   const paystack = paystackConfiguration
     ? new PaystackProvider(paystackConfiguration.provider)

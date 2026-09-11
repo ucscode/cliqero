@@ -19,6 +19,12 @@ referenced with `%env(NAME)%`, but secrets normally stay in the ignored YAML.
 
 Representative data is explicit development-only data:
 
+Payment provider configuration also owns the user-facing `display_name`,
+`image_url`, and `description` metadata. Enabled provider files must define
+these fields; their `config` sections remain server-side and must not contain
+values intended for the browser. Funding uses canonical USD for account
+credit, while collection and selectable payment currencies are provider facts.
+
 ```text
 just seed-catalogue
 just seed-blog

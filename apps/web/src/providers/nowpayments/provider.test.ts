@@ -13,6 +13,7 @@ const config = {
   network: "ERC20",
   asset: "USDT",
   sandboxCase: "success" as const,
+  payCurrencies: ["usdterc20", "usdttrc20"],
 };
 
 describe("NOWPayments provider", () => {
@@ -85,6 +86,59 @@ describe("NOWPayments provider", () => {
     });
     const request = (http.mock.calls[0] as unknown as [string | URL, RequestInit] | undefined)?.[1];
     expect(JSON.parse(String(request?.body))).not.toHaveProperty("case");
+  });
+
+  it("uses a selected allowlisted currency and verifies against the persisted selection", async () => {
+    const http = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          payment_id: 123,
+          payment_status: "waiting",
+          pay_address: "Taddress",
+          pay_amount: "10.25",
+          price_amount: 10.25,
+          price_currency: "usd",
+          pay_currency: "usdttrc20",
+          order_id: `np-${id}`,
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          payment_id: 123,
+          payment_status: "finished",
+          price_amount: 10.25,
+          price_currency: "usd",
+          pay_currency: "usdttrc20",
+          order_id: `np-${id}`,
+        }),
+      );
+    const provider = new NowPaymentsProvider(config, "nowpayments", http);
+    const result = await provider.initiate({
+      paymentId: id,
+      amount: Money.of(1025n, "USD"),
+      idempotencyKey: "funding-selected",
+      buyerEmail: "buyer@example.test",
+      paymentCurrency: "usdttrc20",
+    });
+    expect(JSON.parse(String((http.mock.calls[0] as any)[1].body)).pay_currency).toBe("usdttrc20");
+    expect(result.metadata?.paymentCurrency).toBe("USDTTRC20");
+    await expect(
+      provider.verify({
+        reference: `np-${id}`,
+        expectedAmount: Money.of(1025n, "USD"),
+        initialization: { providerPaymentId: "123", paymentCurrency: "USDTTRC20" },
+      }),
+    ).resolves.toMatchObject({ verified: true });
+    await expect(
+      provider.initiate({
+        paymentId: id,
+        amount: Money.of(1025n, "USD"),
+        idempotencyKey: "funding-unsupported",
+        buyerEmail: "buyer@example.test",
+        paymentCurrency: "dogecoin",
+      }),
+    ).rejects.toThrow("unsupported");
   });
 
   it("verifies only a finished payment and detects amount/reference mismatches", async () => {

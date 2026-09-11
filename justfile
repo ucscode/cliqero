@@ -93,7 +93,7 @@ test-unit:
 
 # Run the complete PostgreSQL integration suite
 test-integration:
-	TEST_DATABASE_URL="$${TEST_DATABASE_URL:-postgresql://cliqero:cliqero-local@localhost:5432/cliqero}" APP_URL=http://localhost:3000 BLOG_DATABASE_PATH=/tmp/cliqero-blog-integration.sqlite npm run test:integration --workspace @cliqero/web -- --no-file-parallelism
+	TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgresql://cliqero:cliqero-local@localhost:5432/cliqero}" APP_URL=http://localhost:3000 MEDIA_ROOT=/tmp/cliqero-media BLOG_DATABASE_PATH=/tmp/cliqero-blog-integration.sqlite npm run test:integration --workspace @cliqero/web -- --no-file-parallelism
 
 # Run TypeScript checks
 typecheck:

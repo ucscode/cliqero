@@ -14,6 +14,9 @@ const rawSchema = z.object({
 });
 const configSchema = z.object({
   enabled: z.boolean(),
+  display_name: z.string().trim().min(1),
+  image_url: z.string().trim().min(1),
+  description: z.string().trim().min(1),
   config: z.object({
     public_key: z.string().min(1),
     secret_key: z.string().min(1),
@@ -51,6 +54,9 @@ export function loadPaystackConfiguration(): LoadedPaystackConfiguration | null 
       secretKey: config.config.secret_key,
       apiBaseUrl: "https://api.paystack.co",
       callbackUrl: config.config.callback_url,
+      displayName: config.display_name,
+      imageUrl: config.image_url,
+      description: config.description,
     },
     filters: { countries, currencies },
   };

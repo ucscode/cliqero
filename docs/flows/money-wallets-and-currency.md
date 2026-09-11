@@ -149,3 +149,22 @@ The following are non-negotiable:
 - affiliate/referral modules do not move money;
 - listing changes do not mutate historical purchase snapshots;
 - manual administrative corrections use auditable compensating entries.
+
+# Wallet funding currencies
+
+Wallet funding keeps the collection currency (the fiat amount used for
+accounting, currently USD for the NOWPayments sandbox) separate from the
+payment currency selected at the provider. The funding-methods API returns the
+eligible providers and any provider-backed currency choices; the browser must
+not invent either list.
+
+NOWPayments uses `config.pay_currencies` as its server-side allowlist and
+`config.pay_currency` as the default. The selected currency is persisted with
+the funding initialization facts and is used during verification. The sandbox
+may use `sandbox_case: success`; the `case` field is sent only to the
+NOWPayments sandbox host. Direct `usdt_trc20` remains the custom direct-wallet
+method and is separate from NOWPayments. The authenticated funding-methods
+response uses `collection_currencies` (always an array), while funding status
+may expose the persisted provider payment instructions. Wallet funding is a
+dedicated `/dashboard/wallet/fund` page; its optional `return` path is accepted
+only when it is an internal continuation such as the preserved checkout.

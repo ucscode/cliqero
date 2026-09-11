@@ -39,7 +39,13 @@ const schema = z.object({
 
 export function loadMediaStorage() {
   const path = "config/storage/media.yaml";
-  const config = schema.parse(loadYamlConfiguration(path, process.env, { required: true }));
+  const environment = {
+    ...process.env,
+    MEDIA_ROOT:
+      process.env.MEDIA_ROOT ??
+      (process.env.NODE_ENV === "test" ? "/tmp/cliqero-media" : "/var/lib/cliqero/media"),
+  };
+  const config = schema.parse(loadYamlConfiguration(path, environment, { required: true }));
   const registry = new ObjectStorageRegistry(config.default_provider);
   const filesystem = config.providers.filesystem;
   if (filesystem?.enabled)

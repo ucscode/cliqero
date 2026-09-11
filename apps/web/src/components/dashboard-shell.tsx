@@ -10,7 +10,9 @@ import {
   ApiClientError,
   formatMinorUsd,
   safeContinuation,
+  walletFundingUrlForCheckout,
   type CheckoutStatus,
+  type CheckoutQuote,
   type AccountAccess,
   type EarningsSummary,
   type Listing,
@@ -70,12 +72,19 @@ const referralNavigation = navigation.filter((item) =>
   ["promote", "referrals"].includes(item.section),
 );
 
-export function DashboardShell() {
+export function DashboardShell({
+  dedicatedWalletFunding = false,
+}: {
+  dedicatedWalletFunding?: boolean;
+}) {
   const session = authClient.useSession();
   const { refetch: refetchSession } = session;
   const params = useSearchParams();
-  const section = params.get("section") ?? (params.get("buy") ? "checkout" : "overview");
+  const section = dedicatedWalletFunding
+    ? "wallet"
+    : (params.get("section") ?? (params.get("buy") ? "checkout" : "overview"));
   const buy = params.get("buy");
+  const checkoutId = params.get("checkout") ?? undefined;
   const selectedPurchase = params.get("purchase") ?? undefined;
   const returnTo = safeContinuation(params.get("return"), "");
   const [profile, setProfile] = useState<{ username: string; email: string } | null>(null);
@@ -135,15 +144,18 @@ export function DashboardShell() {
   const title =
     section === "checkout"
       ? "Checkout"
-      : section === "withdrawals"
-        ? "Withdrawals"
-        : section === "settings"
-          ? "Settings"
-          : (navigation.find((item) => item.section === section)?.label ?? "Dashboard");
+      : section === "wallet" && dedicatedWalletFunding
+        ? "Fund wallet"
+        : section === "withdrawals"
+          ? "Withdrawals"
+          : section === "settings"
+            ? "Settings"
+            : (navigation.find((item) => item.section === section)?.label ?? "Dashboard");
   const providerDisplayName = authDisplayName(session.data.user);
   const content =
     section === "wallet" ? (
       <WalletPanel
+        fundingPage={dedicatedWalletFunding}
         returnTo={returnTo || (buy ? `/dashboard?buy=${encodeURIComponent(buy)}` : undefined)}
       />
     ) : section === "purchases" ? (
@@ -160,7 +172,7 @@ export function DashboardShell() {
       <SettingsPanel />
     ) : buy ? (
       listing ? (
-        <CheckoutFlow listing={listing} />
+        <CheckoutFlow listing={listing} checkoutId={checkoutId} />
       ) : (
         <Skeleton className="h-48 w-full" />
       )
@@ -450,13 +462,17 @@ function EmailVerificationNotice({ email }: { email: string }) {
   );
 }
 
-function CheckoutFlow({ listing }: { listing: Listing }) {
+function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checkoutId?: string }) {
+  const router = useRouter();
   const [checkout, setCheckout] = useState<CheckoutStatus | null>(null);
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [started, setStarted] = useState(false);
+  const [started, setStarted] = useState(Boolean(checkoutId));
+  const [existingCheckoutLoading, setExistingCheckoutLoading] = useState(Boolean(checkoutId));
   const [shortfallMinor, setShortfallMinor] = useState<string | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
   const storageKey = `cliqero.checkout.${listing.id}`;
 
@@ -467,6 +483,54 @@ function CheckoutFlow({ listing }: { listing: Listing }) {
       idempotencyKey.current = null;
     }
   }, [storageKey]);
+
+  useEffect(() => {
+    let active = true;
+    // The initial network read intentionally establishes the loading state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBalanceLoading(true);
+    setBalanceError(null);
+    void apiFetch<CheckoutQuote>(`/api/checkout?listing_id=${encodeURIComponent(listing.id)}`)
+      .then((quote) => {
+        if (!active) return;
+        setWallet({
+          currency: "USD",
+          available_minor: quote.available.amount_minor,
+          pending_minor: "0",
+        });
+        setShortfallMinor(quote.shortfall.amount_minor);
+      })
+      .catch(() => {
+        if (active) setBalanceError("We couldn't load your wallet balance right now.");
+      })
+      .finally(() => {
+        if (active) setBalanceLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [listing.id]);
+
+  useEffect(() => {
+    if (!checkoutId) return;
+    let active = true;
+    void apiFetch<CheckoutStatus>(`/api/checkout/${checkoutId}`)
+      .then((current) => {
+        if (!active) return;
+        setCheckout(current);
+        setStarted(true);
+      })
+      .catch(() => {
+        if (active)
+          setError("We couldn't load this checkout. Please return to Purchases and try again.");
+      })
+      .finally(() => {
+        if (active) setExistingCheckoutLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [checkoutId]);
 
   useEffect(() => {
     const checkoutId = checkout?.id;
@@ -529,6 +593,9 @@ function CheckoutFlow({ listing }: { listing: Listing }) {
       });
       setShortfallMinor(result.shortfall.amount_minor);
       setStarted(true);
+      if (BigInt(result.shortfall.amount_minor) > 0n) {
+        router.push(walletFundingUrlForCheckout(listing.id, result.id));
+      }
     } catch (cause) {
       setError(cause instanceof ApiClientError ? cause.message : "Checkout could not be created.");
     } finally {
@@ -537,59 +604,93 @@ function CheckoutFlow({ listing }: { listing: Listing }) {
   }
 
   return (
-    <Card className="grid gap-4 p-5">
-      <p className="eyebrow">One listing, one checkout</p>
-      <h2>{listing.title}</h2>
-      <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
-      {!started ? (
-        <>
-          <p>Use your available Cliqero wallet balance to complete this purchase.</p>
-          <Button onClick={startCheckout} disabled={busy}>
-            {busy ? "Creating checkout…" : "Continue to wallet checkout"}
-          </Button>
-        </>
-      ) : checkout?.state === "awaiting_funds" ? (
-        <>
-          <Badge variant="destructive">Awaiting funds</Badge>
-          <p>
-            {shortfallMinor && BigInt(shortfallMinor) > 0n
-              ? `You need ${formatMinorUsd(shortfallMinor)} more in your available wallet.`
-              : "Your checkout is waiting for available wallet funds."}
+    <div className="grid gap-4">
+      <Card className="bg-emerald-50/70 p-5 sm:p-6">
+        <p className="text-sm text-slate-600">Available wallet balance</p>
+        {balanceLoading ? (
+          <p className="mt-2 text-sm text-slate-600" role="status">
+            Loading available wallet balance…
           </p>
-          {wallet && (
-            <p className="text-sm text-slate-600">
-              Available wallet: <Money minor={wallet.available_minor} currency={wallet.currency} />
-            </p>
-          )}
-          <Button asChild>
-            <Link
-              href={`/dashboard?section=wallet&return=${encodeURIComponent(`/dashboard?buy=${listing.id}`)}`}
+        ) : balanceError ? (
+          <p className="mt-2 text-sm text-red-700" role="alert">
+            {balanceError}
+          </p>
+        ) : (
+          <p className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
+            <Money minor={wallet?.available_minor ?? "0"} currency="USD" />
+          </p>
+        )}
+      </Card>
+      <Card className="grid gap-4 p-5">
+        <p className="eyebrow">One listing, one checkout</p>
+        <h2>{listing.title}</h2>
+        <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
+        {!started ? (
+          <>
+            <div className="grid gap-1 text-sm text-slate-600">
+              <p>
+                Purchase total:{" "}
+                <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
+              </p>
+              {!balanceLoading &&
+                !balanceError &&
+                shortfallMinor &&
+                (BigInt(shortfallMinor) > 0n ? (
+                  <p>You need {formatMinorUsd(shortfallMinor)} more to complete this purchase.</p>
+                ) : (
+                  <p>Your wallet balance covers this purchase.</p>
+                ))}
+            </div>
+            <Button
+              onClick={startCheckout}
+              disabled={
+                busy ||
+                balanceLoading ||
+                existingCheckoutLoading ||
+                !!balanceError ||
+                (!!checkoutId && !!error)
+              }
             >
-              Fund wallet
-            </Link>
-          </Button>
-          <p className="text-sm text-slate-500">
-            This checkout is preserved while your funding settles.
-          </p>
-        </>
-      ) : checkout?.state === "paid" ? (
-        <>
-          <Badge variant="default">Payment confirmed</Badge>
-          <p>Wallet debit is complete. Your entitlement is being prepared separately.</p>
-          <Button asChild>
-            <Link href="/dashboard?section=purchases">View purchases</Link>
-          </Button>
-        </>
-      ) : (
-        <>
-          <Badge variant="secondary">Checkout unavailable</Badge>
-          <p>{error ?? "This checkout could not be completed."}</p>
-          <Button variant="secondary" onClick={() => setStarted(false)}>
-            Try again
-          </Button>
-        </>
-      )}
-      {error && <Toast>{error}</Toast>}
-    </Card>
+              {busy
+                ? "Creating checkout…"
+                : existingCheckoutLoading
+                  ? "Loading checkout…"
+                  : wallet && shortfallMinor && BigInt(shortfallMinor) > 0n
+                    ? "Fund wallet"
+                    : "Continue to wallet checkout"}
+            </Button>
+          </>
+        ) : checkout?.state === "awaiting_funds" ? (
+          <>
+            <Badge variant="destructive">Awaiting funds</Badge>
+            <p>
+              {shortfallMinor && BigInt(shortfallMinor) > 0n
+                ? `You need ${formatMinorUsd(shortfallMinor)} more in your available wallet.`
+                : "Your checkout is waiting for available wallet funds."}
+            </p>
+            <p className="text-sm text-slate-500">
+              This checkout is preserved while your funding settles.
+            </p>
+          </>
+        ) : checkout?.state === "paid" ? (
+          <>
+            <Badge variant="default">Payment confirmed</Badge>
+            <p>Wallet debit is complete. Your entitlement is being prepared separately.</p>
+            <Button asChild>
+              <Link href="/dashboard?section=purchases">View purchases</Link>
+            </Button>
+          </>
+        ) : (
+          <>
+            <Badge variant="secondary">Checkout unavailable</Badge>
+            <p>{error ?? "This checkout could not be completed."}</p>
+            <Button variant="secondary" onClick={() => setStarted(false)}>
+              Try again
+            </Button>
+          </>
+        )}
+        {error && <Toast>{error}</Toast>}
+      </Card>
+    </div>
   );
 }

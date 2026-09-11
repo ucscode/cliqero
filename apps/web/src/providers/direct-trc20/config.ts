@@ -9,6 +9,9 @@ const filters = z.object({
 });
 const schema = z.object({
   enabled: z.boolean().default(false),
+  display_name: z.string().trim().min(1),
+  image_url: z.string().trim().min(1),
+  description: z.string().trim().min(1),
   config: z.object({
     wallet_address: z.string().min(1),
     confirmations_required: z.number().int().positive().default(12),
@@ -29,6 +32,9 @@ export function loadDirectTrc20Configuration(path: string) {
   validateFilters(parsed.filters, path);
   return {
     provider: {
+      displayName: parsed.display_name,
+      imageUrl: parsed.image_url,
+      description: parsed.description,
       walletAddress: parsed.config.wallet_address,
       confirmationsRequired: parsed.config.confirmations_required,
       tokenContract: parsed.config.token_contract,

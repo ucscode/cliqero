@@ -311,6 +311,9 @@ suite("wallet-first durable commerce", () => {
       const name = `verify-${label.replaceAll(" ", "-")}`;
       const provider: PaymentProvider = {
         name,
+        displayName: name,
+        imageUrl: "/images/payment/development.svg",
+        description: "Test provider",
         collectionCurrencies: ["USD"],
         referenceFor: ({ paymentId }) => `ref-${paymentId}`,
         initiate: async (input) => ({ reference: `ref-${input.paymentId}` }),
@@ -345,6 +348,9 @@ suite("wallet-first durable commerce", () => {
     let calls = 0;
     const provider: PaymentProvider = {
       name: "stale-development",
+      displayName: "Stale development",
+      imageUrl: "/images/payment/development.svg",
+      description: "Test provider",
       collectionCurrencies: ["USD"],
       referenceFor: ({ paymentId }) => `stable-${paymentId}`,
       initiate: async (input) => {

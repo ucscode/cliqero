@@ -1,6 +1,9 @@
 # NOWPayments standard API (sandbox: https://api-sandbox.nowpayments.io).
 # Copy to nowpayments.yaml locally. Set enabled=true only after filling secrets.
 enabled: false
+display_name: NOWPayments
+image_url: /images/payment/nowpayments.svg
+description: Pay through NOWPayments.
 config:
   # Server-side credentials; never commit the local file or expose these values.
   api_key: api_key_here
@@ -10,6 +13,9 @@ config:
   ipn_callback_url: https://example.test/api/payments/nowpayments/ipn
   # The provider settlement currency requested from NOWPayments.
   pay_currency: usdttrc20
+  # Allowlist of currencies customers may choose at funding time.
+  pay_currencies:
+    - usdttrc20
   # Sandbox-only test case from NOWPayments' official sandbox procedure.
   # This is sent as `case: success` only when api_base_url is the sandbox host;
   # it is never sent to the live API. Remove/comment this for live operation.

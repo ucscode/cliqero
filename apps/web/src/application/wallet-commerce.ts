@@ -28,6 +28,7 @@ export class FundingService {
     providerName: string;
     idempotencyKey: string;
     collectionCurrency?: string;
+    paymentCurrency?: string;
   }) {
     if (input.amountMinor <= 0n) throw new Error("Funding amount must be positive");
     const existing = await this.funding.findByIdempotency(input.accountId, input.idempotencyKey);
@@ -42,6 +43,7 @@ export class FundingService {
       country: account.country,
       currency: collectionCurrency,
     });
+    const paymentCurrency = this.providers.paymentCurrency(provider.name, input.paymentCurrency);
     const canonical = Money.of(input.amountMinor, "USD");
     const quote =
       collectionCurrency === "USD" ? undefined : await this.rates.quote("USD", collectionCurrency);
@@ -68,6 +70,7 @@ export class FundingService {
         : undefined,
       state: "initialization_pending",
       idempotencyKey: input.idempotencyKey,
+      providerInitialization: paymentCurrency ? { paymentCurrency } : undefined,
     };
     return this.uow.transaction(async () => {
       const prior = await this.funding.findByIdempotency(input.accountId, input.idempotencyKey);
@@ -136,6 +139,7 @@ export class FundingInitializationProcessor {
         idempotencyKey: claim.idempotencyKey,
         buyerEmail,
         country: account.country,
+        paymentCurrency: claim.providerInitialization?.paymentCurrency,
       });
       if (result.reference !== claim.providerReference)
         throw new ProviderOperationError(

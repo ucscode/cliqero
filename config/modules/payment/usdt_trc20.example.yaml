@@ -1,6 +1,9 @@
 # Direct USDT funding on TRON mainnet (TRC20), verified from public chain data.
 # Copy to usdt_trc20.yaml locally and keep enabled=false until configured.
 enabled: false
+display_name: Direct USDT TRC20
+image_url: /images/payment/usdt-trc20.svg
+description: Send USDT on the TRON TRC20 network directly to the configured receiving wallet.
 config:
   # Fill with a dedicated production receiving address (never a private key).
   wallet_address: "YOUR_TRC20_RECEIVING_WALLET"

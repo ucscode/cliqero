@@ -11,6 +11,9 @@ describe("bank transfer configuration", () => {
     writeFileSync(
       path,
       `enabled: true
+display_name: Bank transfer
+image_url: /images/payment/bank-transfer.svg
+description: Transfer funds from your bank account.
 config:
   accounts:
     - id: custom

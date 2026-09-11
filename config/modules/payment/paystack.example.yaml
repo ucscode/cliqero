@@ -6,6 +6,9 @@
 # When false, Paystack is not registered and provider-specific values are not
 # resolved or required. When true, all required values under config are validated.
 enabled: false
+display_name: Paystack
+image_url: /images/payment/paystack.svg
+description: Pay with Paystack.
 
 # Provider-specific settings passed to the Paystack payment adapter.
 config:
