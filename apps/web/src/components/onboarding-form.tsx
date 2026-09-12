@@ -67,7 +67,7 @@ export function OnboardingForm() {
         },
         body: JSON.stringify({
           username,
-          country: country || null,
+          country,
           ...(!hasPassword ? { password } : {}),
         }),
       });

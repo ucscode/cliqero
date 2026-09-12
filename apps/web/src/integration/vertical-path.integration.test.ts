@@ -21,11 +21,13 @@ suite("persisted commerce and access vertical path", () => {
       email: "seller@example.com",
       username: "seller",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const buyer = await app.authentication.register({
       email: "buyer@example.com",
       username: "buyer",
       password: "correct-horse-staple",
+      country: "NG",
     });
     const listing = await app.listingService.createPublished(seller, {
       title: "Private destination",

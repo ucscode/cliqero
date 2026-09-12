@@ -3,47 +3,51 @@ import {
   DevelopmentPaymentProvider,
   isDevelopmentProviderEnabled,
   PaymentProviderRegistry,
+  registerDevelopmentPaymentProvider,
 } from "./payment";
 import { PaystackProvider } from "@/providers/paystack/payment/provider";
 import { NowPaymentsProvider } from "@/providers/nowpayments/provider";
 import { BankTransferProvider } from "@/providers/bank-transfer/provider";
 import { DirectTrc20Provider } from "@/providers/direct-trc20/provider";
 import type { DirectTrc20Verifier } from "@/providers/direct-trc20/verifier";
-const context = (country: string | null, currency: string) => ({ country, currency });
+const context = (country: string | null) => ({ country });
 describe("payment provider eligibility", () => {
-  it("applies enabled country and currency filters", () => {
+  it("applies enabled country filters without a currency", () => {
     const registry = new PaymentProviderRegistry().register(new DevelopmentPaymentProvider(), {
       enabled: true,
-      filters: { countries: ["NG"], currencies: ["NGN"] },
+      filters: { countries: ["NG"] },
     });
-    expect(registry.availableFor(context("NG", "NGN"))).toHaveLength(1);
-    expect(registry.availableFor(context("GH", "NGN"))).toHaveLength(0);
-    expect(registry.availableFor(context("NG", "USD"))).toHaveLength(0);
+    expect(registry.availableFor(context("NG"))).toHaveLength(1);
+    expect(registry.availableFor(context("GH"))).toHaveLength(0);
   });
-  it("evaluates Paystack filters against collection currency", () => {
+  it("keeps Paystack collection currency separate from country eligibility", () => {
     const registry = new PaymentProviderRegistry().register(
       new PaystackProvider({ secretKey: "test", apiBaseUrl: "https://api.paystack.co" }),
-      { filters: { countries: ["NG"], currencies: ["NGN"] } },
+      { filters: { countries: ["NG"] } },
     );
     expect(registry.collectionCurrency("paystack")).toBe("NGN");
-    expect(registry.availableFor(context("NG", "NGN"))).toHaveLength(1);
+    expect(registry.availableFor(context("NG"))).toHaveLength(1);
+    expect(registry.availableMethodsFor({ country: "NG" })[0].collectionCurrencies).toEqual([
+      "NGN",
+    ]);
+    expect(registry.availableFor(context("US"))).toHaveLength(0);
   });
   it("treats null filters as unrestricted and disabled providers as unavailable", () => {
     const registry = new PaymentProviderRegistry().register(new DevelopmentPaymentProvider(), {
       enabled: false,
-      filters: { countries: null, currencies: null },
+      filters: { countries: null },
     });
-    expect(registry.availableFor(context(null, "USD"))).toHaveLength(0);
+    expect(registry.availableFor(context(null))).toHaveLength(0);
     const open = new PaymentProviderRegistry().register(new DevelopmentPaymentProvider(), {
-      filters: { countries: null, currencies: null },
+      filters: { countries: null },
     });
-    expect(open.availableFor(context(null, "USD"))).toHaveLength(1);
+    expect(open.availableFor(context(null))).toHaveLength(1);
   });
   it("rejects a manually selected ineligible provider", () => {
     const registry = new PaymentProviderRegistry().register(new DevelopmentPaymentProvider(), {
-      filters: { countries: ["NG"], currencies: null },
+      filters: { countries: ["NG"] },
     });
-    expect(() => registry.get("development", context("GH", "USD"))).toThrow("unavailable");
+    expect(() => registry.get("development", context("GH"))).toThrow("unavailable");
   });
 
   it("exposes the direct customer method identifiers", () => {
@@ -75,25 +79,53 @@ describe("payment provider eligibility", () => {
             {
               id: "default",
               fields: [{ key: "bank", label: "Bank", value: "Bank" }],
-              filters: { countries: null, currencies: ["USD"] },
+              filters: { countries: null },
             },
           ],
         }),
         {
-          filters: { countries: null, currencies: ["USD"] },
+          filters: { countries: null },
         },
       );
-    expect(registry.availableFor(context(null, "USD")).map((provider) => provider.name)).toEqual([
+    expect(registry.availableFor(context(null)).map((provider) => provider.name)).toEqual([
       "nowpayments",
       "usdt_trc20",
       "bank_transfer",
     ]);
   });
 
-  it("selects each provider's configured collection currency when none is requested", () => {
+  it("applies bank provider country visibility before account selection", () => {
+    const registry = new PaymentProviderRegistry().register(
+      new BankTransferProvider({
+        currencyMapping: { enabled: true },
+        accounts: [
+          {
+            id: "ng",
+            fields: [{ key: "bank", label: "Bank", value: "Nigeria" }],
+            filters: { countries: ["NG"] },
+          },
+          {
+            id: "us",
+            fields: [{ key: "bank", label: "Bank", value: "United States" }],
+            filters: { countries: ["US"] },
+          },
+        ],
+      }),
+      { filters: { countries: ["NG", "US"] } },
+    );
+    expect(registry.availableMethodsFor({ country: "NG" })[0].collectionCurrencies).toEqual([
+      "NGN",
+    ]);
+    expect(registry.availableMethodsFor({ country: "US" })[0].collectionCurrencies).toEqual([
+      "USD",
+    ]);
+    expect(registry.availableMethodsFor({ country: "FR" })).toEqual([]);
+  });
+
+  it("selects each provider's collection currency when none is requested", () => {
     const registry = new PaymentProviderRegistry().register(
       new PaystackProvider({ secretKey: "test", apiBaseUrl: "https://api.paystack.co" }),
-      { filters: { countries: ["NG"], currencies: ["NGN"] } },
+      { filters: { countries: ["NG"] } },
     );
     expect(registry.availableMethodsFor({ country: "NG" })).toEqual([
       expect.objectContaining({ collectionCurrency: "NGN" }),
@@ -126,5 +158,23 @@ describe("payment provider eligibility", () => {
     expect(isDevelopmentProviderEnabled("development")).toBe(true);
     expect(isDevelopmentProviderEnabled("test")).toBe(true);
     expect(isDevelopmentProviderEnabled("production")).toBe(false);
+  });
+
+  it("keeps the development provider out of the production registry", () => {
+    const production = registerDevelopmentPaymentProvider(
+      new PaymentProviderRegistry(),
+      "production",
+    );
+    expect(production.availableMethodsFor({ country: null })).toEqual([]);
+
+    const development = registerDevelopmentPaymentProvider(
+      new PaymentProviderRegistry(),
+      "development",
+    );
+    expect(development.availableMethodsFor({ country: null })).toEqual([
+      expect.objectContaining({
+        provider: expect.objectContaining({ name: "development", environmentOnly: "development" }),
+      }),
+    ]);
   });
 });

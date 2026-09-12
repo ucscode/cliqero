@@ -22,6 +22,7 @@ suite("wallet-first durable commerce", () => {
       email: "wallet.seller@example.com",
       username: "walletseller",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const buyer = await app.authentication.register({
       email: "wallet.buyer@example.com",
@@ -153,11 +154,13 @@ suite("wallet-first durable commerce", () => {
       email: `policy-parent-${newId()}@example.com`,
       username: `pp${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
+      country: "NG",
     });
     const promoter = await app.authentication.register({
       email: `policy-promoter-${newId()}@example.com`,
       username: `pr${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
+      country: "NG",
     });
     await app.referralGraphService.establish(promoter.id, parent.id);
     const listing = await app.listingService.createPublished(seller, {

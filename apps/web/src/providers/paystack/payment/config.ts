@@ -3,10 +3,11 @@ import type { PaystackConfiguration } from "./provider";
 import type { PaymentProviderFilters } from "@/modules/payment/payment";
 import { parseYamlConfiguration, resolveEnvironmentPlaceholders } from "@/config/yaml";
 
-const filterSchema = z.object({
-  countries: z.array(z.string()).nullable().default(null),
-  currencies: z.array(z.string()).nullable().default(null),
-});
+const filterSchema = z
+  .object({
+    countries: z.array(z.string()).nullable().default(null),
+  })
+  .strict();
 const rawSchema = z.object({
   enabled: z.boolean().default(false),
   config: z.record(z.string(), z.unknown()).default({}),
@@ -22,7 +23,7 @@ const configSchema = z.object({
     secret_key: z.string().min(1),
     callback_url: z.url(),
   }),
-  filters: filterSchema.default({ countries: null, currencies: null }),
+  filters: filterSchema.default({ countries: null }),
 });
 
 export interface LoadedPaystackConfiguration {
@@ -40,14 +41,10 @@ export function loadPaystackConfiguration(): LoadedPaystackConfiguration | null 
     throw new Error(
       "Paystack payment configuration requires public_key, secret_key, and callback_url when enabled",
     );
-  const countries = config.filters?.countries ?? null,
-    currencies = config.filters?.currencies ?? null;
+  const countries = config.filters?.countries ?? null;
   for (const code of countries ?? [])
     if (!/^[A-Z]{2}$/.test(code))
       throw new Error("Paystack countries filters must use uppercase ISO alpha-2 codes");
-  for (const code of currencies ?? [])
-    if (!/^[A-Z]{3}$/.test(code))
-      throw new Error("Paystack currencies filters must use uppercase ISO 4217 codes");
   return {
     provider: {
       publicKey: config.config.public_key,
@@ -58,6 +55,6 @@ export function loadPaystackConfiguration(): LoadedPaystackConfiguration | null 
       imageUrl: config.image_url,
       description: config.description,
     },
-    filters: { countries, currencies },
+    filters: { countries },
   };
 }

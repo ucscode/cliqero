@@ -65,11 +65,26 @@ suite("Better Auth and Cliqero identity boundary", () => {
     });
   });
 
+  it("requires country during registration", async () => {
+    await expect(
+      app.authentication.register({
+        email: "missing-country@example.com",
+        username: "missingcountry",
+        password: "correct-horse-battery",
+      }),
+    ).rejects.toMatchObject({
+      code: "validation_error",
+      status: 400,
+      fields: { country: "Choose a country to continue." },
+    });
+  });
+
   it("compensates a newly-created Better Auth identity when the username is already taken", async () => {
     await app.authentication.register({
       email: "first@example.com",
       username: "claimedusername",
       password: "correct-horse-battery",
+      country: "NG",
     });
 
     await expect(
@@ -77,6 +92,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
         email: "second@example.com",
         username: "claimedusername",
         password: "correct-horse-battery",
+        country: "NG",
       }),
     ).rejects.toMatchObject({
       code: "username_taken",
@@ -111,6 +127,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       email: "existing@example.com",
       username: "existinguser",
       password: "correct-horse-battery",
+      country: "NG",
     });
 
     await expect(
@@ -118,6 +135,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
         email: "existing@example.com",
         username: "anotheruser",
         password: "correct-horse-battery",
+        country: "NG",
       }),
     ).rejects.toMatchObject({ code: "registration_failed" });
 
@@ -143,6 +161,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       email,
       username: "loginuser",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const result = await app.authentication.login(email, "correct-horse-battery");
     expect((await app.authentication.authenticate(result.token))?.id).toBe(account.id);
@@ -161,6 +180,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       email,
       username: "console_reset",
       password: "console-reset-password-a",
+      country: "NG",
     });
     const authUserId = (
       await app.database.query<{ auth_user_id: string }>(
@@ -185,6 +205,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       email,
       username: "browserreset",
       password: "password-before-reset",
+      country: "NG",
     });
     await app.authentication.auth.api.requestPasswordReset({
       body: { email, redirectTo: "http://localhost:3000/reset-password" },
@@ -216,6 +237,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       email,
       username: "compatreset",
       password: "password-before-reset",
+      country: "NG",
     });
     await app.authentication.auth.handler(
       new Request("http://localhost:3000/api/auth/request-password-reset", {
@@ -270,6 +292,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       email,
       username: "cookieuser",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const response = await app.authentication.auth.handler(
       new Request("http://localhost:3000/api/auth/sign-in/email", {
@@ -383,6 +406,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       email: "taken-onboarding@example.com",
       username: "takenonboarding",
       password: "existing-password",
+      country: "NG",
     });
     const result = await app.authentication.auth.api.signUpEmail({
       body: {

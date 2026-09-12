@@ -41,6 +41,13 @@ interface PaymentData {
   price_currency?: string | null;
   order_id?: string | null;
   expiration_estimate_date?: string | null;
+  asset?: string | null;
+  network?: string | null;
+}
+
+interface MinimumAmountData {
+  min_amount?: number | string | null;
+  fiat_equivalent?: number | string | null;
 }
 
 export class NowPaymentsProvider implements PaymentProvider {
@@ -62,13 +69,14 @@ export class NowPaymentsProvider implements PaymentProvider {
     this.imageUrl = config.imageUrl ?? "/images/payment/nowpayments.svg";
     this.description = config.description ?? "Pay through NOWPayments.";
     this.defaultPaymentCurrency = config.payCurrency.toLowerCase();
+    const configuredCurrencies = config.payCurrencies ?? [config.payCurrency];
     this.paymentCurrencies = [
       ...new Set(
-        (config.payCurrencies ?? [config.payCurrency]).map((code) => ({
+        configuredCurrencies.map((code) => ({
           code: code.toLowerCase(),
           label: formatCurrencyLabel(code),
-          asset: config.asset,
-          network: config.network,
+          asset: configuredCurrencies.length === 1 ? config.asset : undefined,
+          network: configuredCurrencies.length === 1 ? config.network : undefined,
         })),
       ),
     ] as const;
@@ -76,6 +84,41 @@ export class NowPaymentsProvider implements PaymentProvider {
 
   referenceFor(input: { paymentId: Id; idempotencyKey: string }) {
     return `np-${input.paymentId}`;
+  }
+
+  async minimumPaymentAmount(input: { currencyFrom: string; currencyTo: string }) {
+    const currencyFrom = input.currencyFrom.trim().toLowerCase();
+    const currencyTo = input.currencyTo.trim().toLowerCase();
+    if (!currencyFrom || !currencyTo)
+      throw new ProviderOperationError(
+        this.name,
+        "transaction.minimum_amount",
+        undefined,
+        undefined,
+        "NOWPayments minimum amount currencies are missing",
+        "minimum_amount_invalid",
+      );
+    const query = new URLSearchParams({
+      currency_from: currencyFrom,
+      currency_to: currencyTo,
+      fiat_equivalent: currencyFrom,
+    });
+    const data = await this.request<MinimumAmountData>(
+      `/v1/min-amount?${query.toString()}`,
+      { method: "GET" },
+      "transaction.minimum_amount",
+    );
+    const minimum = decimalToCeilingMinor(data.fiat_equivalent);
+    if (minimum === null)
+      throw new ProviderOperationError(
+        this.name,
+        "transaction.minimum_amount",
+        undefined,
+        undefined,
+        "NOWPayments returned an invalid minimum amount",
+        "minimum_amount_invalid",
+      );
+    return Money.of(minimum, currencyFrom.toUpperCase());
   }
 
   async initiate(input: {
@@ -87,8 +130,10 @@ export class NowPaymentsProvider implements PaymentProvider {
   }): Promise<PaymentInitialization> {
     const payCurrency = this.resolvePaymentCurrency(input.paymentCurrency);
     const reference = this.referenceFor(input);
+    const priceAmount = decimalAmount(input.amount);
+    const priceAmountMarker = "__cliqero_price_amount__";
     const requestBody = {
-      price_amount: decimalAmount(input.amount),
+      price_amount: priceAmountMarker,
       price_currency: input.amount.currency.toLowerCase(),
       pay_currency: payCurrency,
       order_id: reference,
@@ -98,10 +143,14 @@ export class NowPaymentsProvider implements PaymentProvider {
         ? { case: this.config.sandboxCase }
         : {}),
     };
-    const data = await this.request<PaymentData>("/v1/payment", {
-      method: "POST",
-      body: JSON.stringify(requestBody),
-    });
+    const data = await this.request<PaymentData>(
+      "/v1/payment",
+      {
+        method: "POST",
+        body: JSON.stringify(requestBody).replace(JSON.stringify(priceAmountMarker), priceAmount),
+      },
+      "transaction.initialize",
+    );
     if (String(data.payment_id).length === 0 || data.order_id !== reference)
       throw new ProviderOperationError(
         this.name,
@@ -123,8 +172,12 @@ export class NowPaymentsProvider implements PaymentProvider {
       paymentAddress: data.pay_address,
       paymentAmount: String(data.pay_amount),
       paymentCurrency: String(data.pay_currency ?? payCurrency).toUpperCase(),
-      asset: this.config.asset,
-      network: this.config.network,
+      ...(data.asset || (this.paymentCurrencies.length === 1 && this.config.asset)
+        ? { asset: data.asset ?? this.config.asset }
+        : {}),
+      ...(data.network || (this.paymentCurrencies.length === 1 && this.config.network)
+        ? { network: data.network ?? this.config.network }
+        : {}),
       expiresAt: data.expiration_estimate_date ?? undefined,
     };
     return { reference, metadata };
@@ -142,6 +195,7 @@ export class NowPaymentsProvider implements PaymentProvider {
       {
         method: "GET",
       },
+      "transaction.verify",
     );
     if (data.order_id !== input.reference) throw new Error("NOWPayments order reference mismatch");
     const expectedPaymentCurrency = (
@@ -184,7 +238,7 @@ export class NowPaymentsProvider implements PaymentProvider {
     return presented.length === expected.length && timingSafeEqual(presented, expected);
   }
 
-  private async request<T>(path: string, init: RequestInit): Promise<T> {
+  private async request<T>(path: string, init: RequestInit, operation: string): Promise<T> {
     let response: Response;
     try {
       response = await this.http(new URL(path, this.config.apiBaseUrl), {
@@ -198,7 +252,7 @@ export class NowPaymentsProvider implements PaymentProvider {
     } catch {
       throw new ProviderOperationError(
         this.name,
-        path.includes("/payment/") ? "transaction.verify" : "transaction.initialize",
+        operation,
         undefined,
         undefined,
         "Provider transport failure",
@@ -212,22 +266,71 @@ export class NowPaymentsProvider implements PaymentProvider {
     } catch {
       throw new ProviderOperationError(
         this.name,
-        path.includes("/payment/") ? "transaction.verify" : "transaction.initialize",
+        operation,
         response.status,
         undefined,
         "Invalid provider response",
       );
     }
-    if (!response.ok || !body || typeof body !== "object")
+    if (!response.ok || !body || typeof body !== "object") {
+      const diagnostic = providerErrorDiagnostic(body);
       throw new ProviderOperationError(
         this.name,
-        path.includes("/payment/") ? "transaction.verify" : "transaction.initialize",
+        operation,
         response.status,
-        undefined,
-        "Provider rejected request",
+        diagnostic.providerStatus,
+        diagnostic.providerMessage,
+        diagnostic.providerCode,
       );
+    }
     return body as T;
   }
+}
+
+function providerErrorDiagnostic(body: unknown) {
+  if (!body || typeof body !== "object" || Array.isArray(body))
+    return { providerMessage: "Provider rejected request" };
+  const value = body as Record<string, unknown>;
+  const nested =
+    value.error && typeof value.error === "object" && !Array.isArray(value.error)
+      ? (value.error as Record<string, unknown>)
+      : {};
+  const message = firstString(
+    value.message,
+    value.error_message,
+    value.detail,
+    nested.message,
+    nested.error_message,
+    nested.detail,
+  );
+  const code = firstString(
+    value.code,
+    value.error_code,
+    value.errorCode,
+    nested.code,
+    nested.error_code,
+    nested.errorCode,
+  );
+  return {
+    providerStatus:
+      typeof value.status === "boolean"
+        ? value.status
+        : typeof nested.status === "boolean"
+          ? nested.status
+          : undefined,
+    providerMessage: sanitizeDiagnostic(message ?? "Provider rejected request"),
+    providerCode: code ? sanitizeDiagnostic(code) : undefined,
+  };
+}
+
+function firstString(...values: unknown[]) {
+  return values
+    .find((value): value is string => typeof value === "string" && Boolean(value.trim()))
+    ?.trim();
+}
+
+function sanitizeDiagnostic(value: string) {
+  return value.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 1000);
 }
 
 function formatCurrencyLabel(code: string) {
@@ -245,8 +348,10 @@ export function isNowPaymentsSandboxApi(apiBaseUrl: string): boolean {
   }
 }
 
-function decimalAmount(money: Money): number {
-  return Number(money.minorAmount) / 100;
+function decimalAmount(money: Money): string {
+  const whole = money.minorAmount / 100n;
+  const fraction = (money.minorAmount % 100n).toString().padStart(2, "0");
+  return `${whole}.${fraction}`;
 }
 
 function decimalToMinor(value: unknown): bigint | null {
@@ -255,6 +360,16 @@ function decimalToMinor(value: unknown): bigint | null {
   if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return null;
   const [whole, fraction = ""] = text.split(".");
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
+}
+
+function decimalToCeilingMinor(value: unknown): bigint | null {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const text = String(value).trim();
+  if (!/^\d+(?:\.\d+)?$/.test(text)) return null;
+  const [whole, fraction = ""] = text.split(".");
+  const cents = fraction.slice(0, 2).padEnd(2, "0");
+  const remainder = fraction.slice(2).replace(/0+$/, "");
+  return BigInt(whole) * 100n + BigInt(cents) + (remainder ? 1n : 0n);
 }
 
 function sortJson(value: unknown): string {

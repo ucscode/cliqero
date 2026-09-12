@@ -1,6 +1,31 @@
 import { z } from "zod";
 import { apiError, authenticatedAccount } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
+import { formatMinorMoney, Money } from "@/modules/money/money";
+
+export function customerFailureMessage(funding: {
+  providerInitialization?: {
+    failureCode?: string;
+    failureMessage?: string;
+    failureAmountMinor?: string;
+    failureCurrency?: string;
+  };
+}) {
+  const initialization = funding.providerInitialization;
+  if (initialization?.failureCode === "AMOUNT_MINIMAL_ERROR") {
+    const amount = initialization.failureAmountMinor;
+    const currency = initialization.failureCurrency;
+    if (amount && currency && /^[1-9]\d*$/.test(amount) && /^[A-Z]{3}$/.test(currency))
+      return `The minimum funding amount is ${formatMinorMoney(Money.of(BigInt(amount), currency))}.`;
+    const legacy = initialization.failureMessage?.match(
+      /^The minimum funding amount is ([1-9]\d*) ([A-Z]{3})\.$/,
+    );
+    if (legacy) {
+      return `The minimum funding amount is ${formatMinorMoney(Money.of(BigInt(legacy[1]), legacy[2]))}.`;
+    }
+  }
+  return initialization?.failureMessage ?? null;
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const account = await authenticatedAccount(request);
@@ -18,10 +43,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       id: funding.id,
       state: funding.state,
       provider: funding.providerName,
+      provider_display_name:
+        funding.providerInitialization?.providerDisplayName ??
+        (typeof getContainer().providers?.displayName === "function"
+          ? getContainer().providers.displayName(funding.providerName)
+          : "Payment provider"),
+      funding_reference: funding.providerReference,
       amount_minor: funding.canonicalAmount.minorAmount.toString(),
       currency: funding.canonicalAmount.currency,
       collection_amount_minor: funding.collectionAmount.minorAmount.toString(),
       collection_currency: funding.collectionAmount.currency,
+      provider_account_id: paymentDetailsVisible
+        ? (funding.providerInitialization?.providerAccountId ?? null)
+        : null,
+      provider_account_snapshot: paymentDetailsVisible
+        ? (funding.providerInitialization?.providerAccountSnapshot ?? null)
+        : null,
       authorization_url: paymentDetailsVisible
         ? (funding.providerInitialization?.authorizationUrl ?? null)
         : null,
@@ -42,6 +79,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       expires_at: paymentDetailsVisible
         ? (funding.providerInitialization?.expiresAt ?? null)
         : null,
+      error_code: funding.providerInitialization?.failureCode ?? null,
+      error_message: customerFailureMessage(funding),
       confirmed_at: funding.confirmedAt?.toISOString() ?? null,
     });
   } catch (error) {

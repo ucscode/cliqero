@@ -28,6 +28,7 @@ import { Toast } from "./toast";
 import { Money } from "./money";
 import { PurchasesPanel } from "./purchases-panel";
 import { WalletPanel } from "./wallet-panel";
+import { FundingHistoryPanel } from "./funding-history-panel";
 import { PromotePanel } from "./promote-panel";
 import { ReferralsPanel } from "./referrals-panel";
 import { EarningsPanel } from "./earnings-panel";
@@ -74,19 +75,32 @@ const referralNavigation = navigation.filter((item) =>
 
 export function DashboardShell({
   dedicatedWalletFunding = false,
+  fundingProvider,
+  fundingAmount,
+  fundingHistoryPage = false,
 }: {
   dedicatedWalletFunding?: boolean;
+  fundingProvider?: string;
+  fundingAmount?: string;
+  fundingHistoryPage?: boolean;
 }) {
   const session = authClient.useSession();
   const { refetch: refetchSession } = session;
   const params = useSearchParams();
-  const section = dedicatedWalletFunding
-    ? "wallet"
-    : (params.get("section") ?? (params.get("buy") ? "checkout" : "overview"));
+  const section =
+    dedicatedWalletFunding || fundingHistoryPage
+      ? "wallet"
+      : (params.get("section") ?? (params.get("buy") ? "checkout" : "overview"));
   const buy = params.get("buy");
   const checkoutId = params.get("checkout") ?? undefined;
+  const fundingId = params.get("funding") ?? undefined;
   const selectedPurchase = params.get("purchase") ?? undefined;
-  const returnTo = safeContinuation(params.get("return"), "");
+  const checkoutContinuation = buy
+    ? `/dashboard?buy=${encodeURIComponent(buy)}${
+        checkoutId ? `&checkout=${encodeURIComponent(checkoutId)}` : ""
+      }`
+    : undefined;
+  const returnTo = safeContinuation(params.get("return"), checkoutContinuation ?? "");
   const [profile, setProfile] = useState<{ username: string; email: string } | null>(null);
   const [accountAccess, setAccountAccess] = useState<AccountAccess | null>(null);
   const [listing, setListing] = useState<Listing | null>(null);
@@ -140,45 +154,50 @@ export function DashboardShell({
         </Button>
       </main>
     );
-
   const title =
     section === "checkout"
       ? "Checkout"
-      : section === "wallet" && dedicatedWalletFunding
-        ? "Fund wallet"
-        : section === "withdrawals"
-          ? "Withdrawals"
-          : section === "settings"
-            ? "Settings"
-            : (navigation.find((item) => item.section === section)?.label ?? "Dashboard");
+      : section === "wallet" && fundingHistoryPage
+        ? "Funding history"
+        : section === "wallet" && dedicatedWalletFunding
+          ? "Fund wallet"
+          : section === "withdrawals"
+            ? "Withdrawals"
+            : section === "settings"
+              ? "Settings"
+              : (navigation.find((item) => item.section === section)?.label ?? "Dashboard");
   const providerDisplayName = authDisplayName(session.data.user);
-  const content =
-    section === "wallet" ? (
-      <WalletPanel
-        fundingPage={dedicatedWalletFunding}
-        returnTo={returnTo || (buy ? `/dashboard?buy=${encodeURIComponent(buy)}` : undefined)}
-      />
-    ) : section === "purchases" ? (
-      <PurchasesPanel selectedId={selectedPurchase} />
-    ) : section === "promote" ? (
-      <PromotePanel />
-    ) : section === "referrals" ? (
-      <ReferralsPanel />
-    ) : section === "earnings" ? (
-      <EarningsPanel />
-    ) : section === "withdrawals" ? (
-      <WithdrawalsPanel />
-    ) : section === "settings" ? (
-      <SettingsPanel />
-    ) : buy ? (
-      listing ? (
-        <CheckoutFlow listing={listing} checkoutId={checkoutId} />
-      ) : (
-        <Skeleton className="h-48 w-full" />
-      )
+  const content = fundingHistoryPage ? (
+    <FundingHistoryPanel />
+  ) : section === "wallet" ? (
+    <WalletPanel
+      fundingPage={dedicatedWalletFunding}
+      fundingProvider={fundingProvider}
+      fundingAmount={fundingAmount}
+      fundingId={fundingId}
+      returnTo={returnTo || checkoutContinuation}
+    />
+  ) : section === "purchases" ? (
+    <PurchasesPanel selectedId={selectedPurchase} />
+  ) : section === "promote" ? (
+    <PromotePanel />
+  ) : section === "referrals" ? (
+    <ReferralsPanel />
+  ) : section === "earnings" ? (
+    <EarningsPanel />
+  ) : section === "withdrawals" ? (
+    <WithdrawalsPanel />
+  ) : section === "settings" ? (
+    <SettingsPanel />
+  ) : buy ? (
+    listing ? (
+      <CheckoutFlow listing={listing} checkoutId={checkoutId} />
     ) : (
-      <DashboardOverview profile={profile} />
-    );
+      <Skeleton className="h-48 w-full" />
+    )
+  ) : (
+    <DashboardOverview profile={profile} />
+  );
 
   return (
     <SidebarProvider>
@@ -281,7 +300,7 @@ function DashboardOverview({ profile }: { profile: { username: string; email: st
         <Card className="p-5">
           <p className="eyebrow">Available wallet</p>
           <h2 className="my-2 text-3xl font-semibold tracking-tight">
-            <Money minor={wallet?.available_minor ?? "0"} currency="USD" />
+            {wallet ? <Money minor={wallet.available_minor} currency="USD" /> : "Unavailable"}
           </h2>
           <Link
             className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
@@ -617,7 +636,7 @@ function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checkoutId?: 
           </p>
         ) : (
           <p className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
-            <Money minor={wallet?.available_minor ?? "0"} currency="USD" />
+            {wallet ? <Money minor={wallet.available_minor} currency="USD" /> : "Unavailable"}
           </p>
         )}
       </Card>

@@ -1,6 +1,6 @@
 import { newId } from "@/kernel/ids";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import { Money } from "@/modules/money/money";
+import { formatMinorMoney, Money } from "@/modules/money/money";
 import { ExactCurrencyConverter } from "@/modules/money/exchange";
 import type { ExchangeRateService } from "@/modules/money/exchange-service";
 import type { PaymentProviderRegistry } from "@/modules/payment/payment";
@@ -22,42 +22,76 @@ export class FundingService {
     private accounts: AccountReader,
     private uow: UnitOfWork,
   ) {}
-  async create(input: {
+  private async resolvePreparation(input: {
     accountId: string;
     amountMinor: bigint;
     providerName: string;
-    idempotencyKey: string;
     collectionCurrency?: string;
     paymentCurrency?: string;
+    fundingOptionId?: string;
+    requireFundingOption?: boolean;
   }) {
     if (input.amountMinor <= 0n) throw new Error("Funding amount must be positive");
-    const existing = await this.funding.findByIdempotency(input.accountId, input.idempotencyKey);
-    if (existing) return existing;
     const account = await this.accounts.findById?.(input.accountId);
     if (!account) throw new Error("Account not found");
-    const collectionCurrency = this.providers.collectionCurrency(
-      input.providerName,
-      input.collectionCurrency,
-    );
+    if (!account.country) throw new Error("Account country is required for funding");
+    const unscopedProvider = this.providers.get(input.providerName);
+    const fundingOptions = unscopedProvider.fundingOptions?.({ country: account.country }) ?? [];
+    const selectedFundingOption = input.fundingOptionId
+      ? fundingOptions.find((option) => option.id === input.fundingOptionId)
+      : undefined;
+    if (input.fundingOptionId && !selectedFundingOption)
+      throw new Error("The selected receiving account is not eligible");
+    if (input.requireFundingOption && fundingOptions.length > 0 && !selectedFundingOption)
+      throw new Error("Select a receiving bank account");
+    if (
+      selectedFundingOption &&
+      input.collectionCurrency &&
+      input.collectionCurrency.toUpperCase() !== selectedFundingOption.collectionCurrency
+    )
+      throw new Error("The selected receiving account controls the collection currency");
+    const collectionCurrency =
+      selectedFundingOption?.collectionCurrency ??
+      fundingOptions[0]?.collectionCurrency ??
+      this.providers.collectionCurrency(input.providerName, input.collectionCurrency);
     const provider = this.providers.get(input.providerName, {
       country: account.country,
-      currency: collectionCurrency,
     });
-    const paymentCurrency = this.providers.paymentCurrency(provider.name, input.paymentCurrency);
-    const canonical = Money.of(input.amountMinor, "USD");
+    return {
+      country: account.country,
+      provider,
+      collectionCurrency,
+      paymentCurrency: this.providers.paymentCurrency(provider.name, input.paymentCurrency),
+      canonicalAmount: Money.of(input.amountMinor, "USD"),
+      fundingOptionId: selectedFundingOption?.id,
+      fundingOptions,
+    };
+  }
+  private async prepareResolved(
+    resolved: Awaited<ReturnType<FundingService["resolvePreparation"]>>,
+  ) {
+    const providerPreparation = await resolved.provider.prepareFunding?.({
+      canonicalAmount: resolved.canonicalAmount,
+      collectionCurrency: resolved.collectionCurrency,
+      paymentCurrency: resolved.paymentCurrency,
+      fundingOptionId: resolved.fundingOptionId,
+      country: resolved.country,
+    });
+    if (providerPreparation)
+      return {
+        collectionAmount: providerPreparation.collectionAmount,
+        paymentCurrency: providerPreparation.paymentCurrency ?? resolved.paymentCurrency,
+        conversionSnapshot: providerPreparation.conversionSnapshot,
+      };
     const quote =
-      collectionCurrency === "USD" ? undefined : await this.rates.quote("USD", collectionCurrency);
-    const collection = quote ? new ExactCurrencyConverter().convert(canonical, quote) : canonical;
-    const id = newId();
-    const value: FundingTransaction = {
-      id,
-      accountId: input.accountId,
-      providerName: provider.name,
-      providerReference:
-        provider.referenceFor?.({ paymentId: id, idempotencyKey: input.idempotencyKey }) ??
-        `pay-${id}`,
-      canonicalAmount: canonical,
-      collectionAmount: collection,
+      resolved.collectionCurrency === "USD"
+        ? undefined
+        : await this.rates.quote("USD", resolved.collectionCurrency);
+    return {
+      collectionAmount: quote
+        ? new ExactCurrencyConverter().convert(resolved.canonicalAmount, quote)
+        : resolved.canonicalAmount,
+      paymentCurrency: resolved.paymentCurrency,
       conversionSnapshot: quote
         ? {
             fromCurrency: quote.fromCurrency,
@@ -68,15 +102,92 @@ export class FundingService {
             observedAt: quote.observedAt,
           }
         : undefined,
+    };
+  }
+  async prepare(input: {
+    accountId: string;
+    amountMinor: bigint;
+    providerName: string;
+    collectionCurrency?: string;
+    paymentCurrency?: string;
+    fundingOptionId?: string;
+  }) {
+    const resolved = await this.resolvePreparation(input);
+    const prepared = await this.prepareResolved(resolved);
+    return {
+      provider: resolved.provider.name,
+      canonicalAmount: resolved.canonicalAmount,
+      collectionAmount: prepared.collectionAmount,
+      paymentCurrency: prepared.paymentCurrency,
+      conversionSnapshot: prepared.conversionSnapshot,
+      fundingOptions: resolved.fundingOptions,
+    };
+  }
+
+  async create(input: {
+    accountId: string;
+    amountMinor: bigint;
+    providerName: string;
+    idempotencyKey: string;
+    collectionCurrency?: string;
+    paymentCurrency?: string;
+    fundingOptionId?: string;
+  }) {
+    if (input.amountMinor <= 0n) throw new Error("Funding amount must be positive");
+    const resolved = await this.resolvePreparation({ ...input, requireFundingOption: true });
+    const existing = await this.funding.findByIdempotency(input.accountId, input.idempotencyKey);
+    const canonical = resolved.canonicalAmount;
+    if (existing) {
+      const existingPaymentCurrency = existing.providerInitialization?.paymentCurrency;
+      if (
+        existing.providerName !== resolved.provider.name ||
+        !existing.canonicalAmount.equals(canonical) ||
+        existing.collectionAmount.currency !== resolved.collectionCurrency ||
+        (existingPaymentCurrency ?? undefined) !== (resolved.paymentCurrency ?? undefined)
+      )
+        throw new Error("Idempotency key conflicts with existing funding request");
+      return existing;
+    }
+    const prepared = await this.prepareResolved(resolved);
+    const id = newId();
+    const value: FundingTransaction = {
+      id,
+      accountId: input.accountId,
+      providerName: resolved.provider.name,
+      providerReference:
+        resolved.provider.referenceFor?.({ paymentId: id, idempotencyKey: input.idempotencyKey }) ??
+        `pay-${id}`,
+      canonicalAmount: canonical,
+      collectionAmount: prepared.collectionAmount,
+      conversionSnapshot: prepared.conversionSnapshot,
       state: "initialization_pending",
       idempotencyKey: input.idempotencyKey,
-      providerInitialization: paymentCurrency ? { paymentCurrency } : undefined,
+      providerInitialization: {
+        providerDisplayName: resolved.provider.displayName,
+        ...(prepared.paymentCurrency ? { paymentCurrency: prepared.paymentCurrency } : {}),
+        ...(resolved.fundingOptionId ? { providerAccountId: resolved.fundingOptionId } : {}),
+      },
     };
     return this.uow.transaction(async () => {
       const prior = await this.funding.findByIdempotency(input.accountId, input.idempotencyKey);
       if (prior) return prior;
       await this.funding.save(value);
       return value;
+    });
+  }
+
+  async cancel(input: { accountId: string; fundingId: string }) {
+    return this.uow.transaction(async () => {
+      const funding = await this.funding.findById(input.fundingId, { forUpdate: true });
+      if (!funding || funding.accountId !== input.accountId) throw new Error("Funding not found");
+      if (funding.state !== "initialization_pending" && funding.state !== "awaiting_payment")
+        throw new Error("Funding cannot be cancelled in its current state");
+      const previousState = funding.state;
+      funding.state = "cancelled";
+      funding.initializationClaimedAt = undefined;
+      await this.funding.save(funding);
+      await this.funding.recordCancellation?.(funding.id, funding.accountId, previousState);
+      return funding;
     });
   }
 
@@ -133,13 +244,33 @@ export class FundingInitializationProcessor {
     const buyerEmail = await this.accounts.findAuthenticationEmail?.(claim.accountId);
     if (!buyerEmail) throw new Error("Authentication email not found");
     try {
-      const result = await this.providers.get(claim.providerName).initiate({
+      const provider = this.providers.get(claim.providerName);
+      const paymentCurrency = claim.providerInitialization?.paymentCurrency;
+      if (provider.minimumPaymentAmount && paymentCurrency) {
+        const minimum = await provider.minimumPaymentAmount({
+          currencyFrom: claim.collectionAmount.currency,
+          currencyTo: paymentCurrency,
+        });
+        if (claim.collectionAmount.minorAmount < minimum.minorAmount)
+          throw new ProviderOperationError(
+            claim.providerName,
+            "transaction.minimum_amount",
+            undefined,
+            undefined,
+            `The minimum funding amount is ${formatMinorMoney(minimum)}.`,
+            "AMOUNT_MINIMAL_ERROR",
+            "rejection",
+            { amountMinor: minimum.minorAmount.toString(), currency: minimum.currency },
+          );
+      }
+      const result = await provider.initiate({
         paymentId: claim.id,
         amount: claim.collectionAmount,
         idempotencyKey: claim.idempotencyKey,
         buyerEmail,
         country: account.country,
         paymentCurrency: claim.providerInitialization?.paymentCurrency,
+        fundingOptionId: claim.providerInitialization?.providerAccountId,
       });
       if (result.reference !== claim.providerReference)
         throw new ProviderOperationError(
@@ -165,6 +296,7 @@ export class FundingInitializationProcessor {
           operation: "transaction.initialize",
         });
         f.providerInitialization = {
+          ...f.providerInitialization,
           authorizationUrl: result.authorizationUrl,
           accessCode: result.accessCode,
           ...result.metadata,
@@ -197,9 +329,19 @@ export class FundingInitializationProcessor {
           await this.operations?.recordFundingFailure({
             fundingId: claim.id,
             provider: claim.providerName,
-            operation: "transaction.initialize",
+            operation: diagnostic.operation,
             error: diagnostic,
           });
+          if (error instanceof ProviderOperationError)
+            f.providerInitialization = {
+              ...f.providerInitialization,
+              failureCode: error.providerCode,
+              failureMessage: error.providerMessage,
+              ...(error.details?.amountMinor
+                ? { failureAmountMinor: error.details.amountMinor }
+                : {}),
+              ...(error.details?.currency ? { failureCurrency: error.details.currency } : {}),
+            };
           f.state = diagnostic.kind === "ambiguous" ? "reconciliation_pending" : "blocked";
           f.initializationClaimedAt = undefined;
           await this.funding.save(f);
@@ -320,8 +462,8 @@ export class WalletService {
   summary(accountId: string) {
     return this.wallets.summary(accountId);
   }
-  history(accountId: string) {
-    return this.wallets.history(accountId);
+  history(accountId: string, limit?: number) {
+    return this.wallets.history(accountId, limit);
   }
 }
 

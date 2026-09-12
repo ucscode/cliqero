@@ -1,4 +1,5 @@
 import { getContainer } from "@/infrastructure/container";
+import { siteConfig } from "@/config/site";
 
 export const runtime = "nodejs";
 function page(title: string, message: string, status = 200) {
@@ -7,6 +8,17 @@ function page(title: string, message: string, status = 200) {
     { status, headers: { "content-type": "text/html; charset=utf-8" } },
   );
 }
+
+export function fundingStatusUrl(fundingId: string) {
+  const url = new URL("/dashboard/wallet/fund", siteConfig.url);
+  url.searchParams.set("funding", fundingId);
+  return url;
+}
+
+function redirectToFunding(fundingId: string) {
+  return Response.redirect(fundingStatusUrl(fundingId), 303);
+}
+
 export async function GET(request: Request) {
   const query = new URL(request.url).searchParams;
   const reference = query.get("reference") ?? query.get("trxref");
@@ -16,8 +28,7 @@ export async function GET(request: Request) {
     const container = getContainer();
     const funding = await container.funding.findByProviderReference("paystack", reference);
     if (funding) {
-      if (funding.state === "confirmed")
-        return page("Funding confirmed", "Your wallet funding has already been confirmed.");
+      if (funding.state === "confirmed") return redirectToFunding(funding.id);
       await container.database.transaction(async () => {
         const locked = await container.funding.findById(funding.id, { forUpdate: true });
         if (locked && locked.state === "awaiting_payment") {
@@ -25,10 +36,7 @@ export async function GET(request: Request) {
           await container.funding.save(locked);
         }
       });
-      return page(
-        "Funding processing",
-        "Your payment is being verified. Wallet crediting continues independently after confirmation.",
-      );
+      return redirectToFunding(funding.id);
     }
     const payment = await container.payments.findByProviderReference("paystack", reference);
     if (!payment)
@@ -38,7 +46,7 @@ export async function GET(request: Request) {
       await container.payments.save(payment);
     }
     return page("Payment processing", "This historical payment is being verified.");
-  } catch (error) {
+  } catch {
     return page("Payment unavailable", "We could not complete this payment callback.", 400);
   }
 }

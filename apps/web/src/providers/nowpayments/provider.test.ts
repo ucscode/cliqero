@@ -17,6 +17,50 @@ const config = {
 };
 
 describe("NOWPayments provider", () => {
+  it("looks up the selected pair minimum in the requested fiat equivalent", async () => {
+    const http = vi.fn(async () =>
+      Response.json({ min_amount: "1.001973", fiat_equivalent: "1.01" }),
+    );
+    const provider = new NowPaymentsProvider(config, "nowpayments", http);
+
+    await expect(
+      provider.minimumPaymentAmount({ currencyFrom: "USD", currencyTo: "USDTTRC20" }),
+    ).resolves.toEqual(Money.of(101n, "USD"));
+    expect(http).toHaveBeenCalledWith(
+      expect.objectContaining({
+        href: "https://api-sandbox.nowpayments.io/v1/min-amount?currency_from=usd&currency_to=usdttrc20&fiat_equivalent=usd",
+      }),
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ "x-api-key": "test-key" }),
+      }),
+    );
+  });
+
+  it("rejects malformed minimum responses and minimum lookup transport failures", async () => {
+    const malformed = new NowPaymentsProvider(
+      config,
+      "nowpayments",
+      vi.fn(async () => Response.json({ min_amount: "1.001973" })),
+    );
+    await expect(
+      malformed.minimumPaymentAmount({ currencyFrom: "USD", currencyTo: "USDTTRC20" }),
+    ).rejects.toMatchObject({ providerCode: "minimum_amount_invalid" });
+
+    const unavailable = new NowPaymentsProvider(
+      config,
+      "nowpayments",
+      vi.fn(async () => {
+        throw new Error("network down");
+      }),
+    );
+    await expect(
+      unavailable.minimumPaymentAmount({ currencyFrom: "USD", currencyTo: "USDTTRC20" }),
+    ).rejects.toMatchObject({
+      operation: "transaction.minimum_amount",
+      kind: "ambiguous",
+    });
+  });
   it("creates a payment and persists address/network instructions", async () => {
     const http = vi.fn(async () =>
       Response.json({
@@ -42,9 +86,9 @@ describe("NOWPayments provider", () => {
       providerPaymentId: "123",
       paymentAddress: "0xabc",
       paymentCurrency: "USDTERC20",
-      asset: "USDT",
-      network: "ERC20",
     });
+    expect(result.metadata).not.toHaveProperty("asset");
+    expect(result.metadata).not.toHaveProperty("network");
     expect(http).toHaveBeenCalledWith(
       expect.objectContaining({ href: "https://api-sandbox.nowpayments.io/v1/payment" }),
       expect.objectContaining({
@@ -57,6 +101,55 @@ describe("NOWPayments provider", () => {
       case: "success",
       pay_currency: "usdterc20",
       ipn_callback_url: "https://public.example.test/api/payments/nowpayments/ipn",
+    });
+  });
+
+  it("preserves safe structured diagnostics from a rejected provider response", async () => {
+    const http = vi.fn(async () =>
+      Response.json(
+        {
+          status: false,
+          code: "AMOUNT_TOO_SMALL",
+          message: "The amount is below the minimum.",
+          api_key: "must-not-be-persisted",
+        },
+        { status: 400 },
+      ),
+    );
+    const provider = new NowPaymentsProvider(config, "nowpayments", http);
+
+    await expect(
+      provider.initiate({
+        paymentId: id,
+        amount: Money.of(100n, "USD"),
+        idempotencyKey: "rejected-payment",
+        buyerEmail: "buyer@example.test",
+      }),
+    ).rejects.toMatchObject({
+      httpStatus: 400,
+      providerStatus: false,
+      providerCode: "AMOUNT_TOO_SMALL",
+      providerMessage: "The amount is below the minimum.",
+    });
+  });
+
+  it("reads diagnostics nested under the provider error field", async () => {
+    const http = vi.fn(async () =>
+      Response.json({ error: { code: "MINIMUM_AMOUNT", message: "Too small" } }, { status: 400 }),
+    );
+    const provider = new NowPaymentsProvider(config, "nowpayments", http);
+
+    await expect(
+      provider.initiate({
+        paymentId: id,
+        amount: Money.of(100n, "USD"),
+        idempotencyKey: "nested-rejected-payment",
+        buyerEmail: "buyer@example.test",
+      }),
+    ).rejects.toMatchObject({
+      httpStatus: 400,
+      providerCode: "MINIMUM_AMOUNT",
+      providerMessage: "Too small",
     });
   });
 
@@ -192,6 +285,30 @@ describe("NOWPayments provider", () => {
         initialization: { providerPaymentId: "123" },
       }),
     ).rejects.toThrow("currency mismatch");
+  });
+
+  it("formats large minor amounts without floating-point conversion", async () => {
+    const http = vi.fn(async () =>
+      Response.json({
+        payment_id: 123,
+        payment_status: "waiting",
+        pay_address: "Taddress",
+        pay_amount: "9007199254740993",
+        price_amount: "9007199254740993.01",
+        price_currency: "usd",
+        pay_currency: "usdterc20",
+        order_id: `np-${id}`,
+      }),
+    );
+    const provider = new NowPaymentsProvider(config, "nowpayments", http);
+    await provider.initiate({
+      paymentId: id,
+      amount: Money.of(900719925474099301n, "USD"),
+      idempotencyKey: "large-amount",
+      buyerEmail: "buyer@example.test",
+    });
+    const request = (http.mock.calls[0] as unknown as [string | URL, RequestInit])[1];
+    expect(String(request.body)).toContain('"price_amount":9007199254740993.01');
   });
 
   it("validates the documented sorted-JSON IPN signature", () => {

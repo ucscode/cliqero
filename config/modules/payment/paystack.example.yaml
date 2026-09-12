@@ -38,13 +38,3 @@ filters:
   # Do not use names (Nigeria), alpha-3 codes (NGA), or "NG,GH" strings.
   countries:
     - NG
-
-  # null means no additional configured collection-currency restriction.
-  # Otherwise use a YAML list of uppercase ISO 4217 three-letter codes, e.g.:
-  # currencies:
-  #   - NGN  # Nigerian naira
-  #   - USD  # United States dollar
-  # These are provider collection currencies, not the listing's canonical
-  # currency; Cliqero accounting remains canonical USD.
-  currencies:
-    - NGN

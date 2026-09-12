@@ -26,6 +26,8 @@ Entitlement and distribution are independent consequences of a completed wallet-
 
 The commercial worker isolates both processor families and individual records. Discovery or processing failure is logged with the processor family and durable work ID, then processing continues with healthy records and unrelated capabilities. Durable state remains discoverable on the next iteration; exceptions are not silently discarded.
 
+The wallet overview keeps active funding concise and links each item to its own persisted funding status page. A persisted funding URL is an exclusive status mode: it never renders the generic funding-creation form. During initialization the status page shows indeterminate progress and a refresh action; failed or blocked attempts remain visible with their persisted reason. The dedicated funding page offers all bank accounts eligible for the authenticated account country, and the selected account controls and snapshots its collection currency and opaque receiving fields.
+
 The canonical buyer entry point is `/access/{purchaseId}`. It authenticates ownership and a current entitlement, then issues the existing opaque random source grant and redirects to the listing destination. Funding provider, FX source, and distribution progress are irrelevant to access.
 
 Historical provider-backed checkout payments remain stored as legacy records. They are not converted into funding and cannot create wallet balance without an authoritative confirmed funding fact.

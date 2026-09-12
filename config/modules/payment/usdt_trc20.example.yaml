@@ -19,5 +19,3 @@ config:
     # token_contract: TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs
 filters:
   countries: null
-  currencies:
-    - USD

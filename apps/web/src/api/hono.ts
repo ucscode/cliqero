@@ -163,7 +163,13 @@ const operatorFundingDetailSchema = operatorFundingSummarySchema.extend({
       observedAt: z.string(),
     })
     .nullable(),
-  providerInitialization: z.object({ authorizationUrl: z.string().nullable() }).nullable(),
+  providerInitialization: z
+    .object({
+      authorizationUrl: z.string().nullable(),
+      providerAccountId: z.string().optional(),
+      providerAccountSnapshot: z.unknown().optional(),
+    })
+    .nullable(),
   operations: z.array(
     z.object({
       id: z.string().uuid(),
@@ -2416,20 +2422,19 @@ export function createApiApp(
   app.get("/api/wallet/funding-methods", async (c) => {
     const p = requirePrincipal(c);
     if (!(p instanceof Object) || !("accountId" in p)) return p;
-    const requested = c.req.query("currency")?.trim().toUpperCase();
-    if (requested && !/^[A-Z]{3}$/.test(requested))
+    if (!p.account.country)
       return c.json(
-        { error: "Currency must be a three-letter code", code: "invalid_request" },
-        400,
+        { error: "Account country is required for funding", code: "country_required" },
+        409,
       );
     const methods = container.providers
-      .availableMethodsFor({ country: p.account.country, currency: requested })
-      .filter((method): method is NonNullable<typeof method> => method !== null)
+      .availableMethodsFor({ country: p.account.country })
       .map((method) => ({
         id: method.provider.name,
         display_name: method.provider.displayName,
         image_url: method.provider.imageUrl,
         description: method.provider.description,
+        test_only: method.provider.environmentOnly ?? null,
         collection_currencies: method.collectionCurrencies,
         payment_currencies: method.paymentCurrencies,
         default_payment_currency: method.defaultPaymentCurrency ?? null,

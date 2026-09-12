@@ -47,6 +47,6 @@ export interface WalletRepository {
   makeCreditAvailable(id: Id): Promise<void>;
   findDebitByCheckout(checkoutId: Id): Promise<WalletDebit | null>;
   createDebit(debit: WalletDebit): Promise<void>;
-  history(accountId: Id): Promise<readonly WalletTransaction[]>;
+  history(accountId: Id, limit?: number): Promise<readonly WalletTransaction[]>;
   lockAccount(accountId: Id): Promise<void>;
 }

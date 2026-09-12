@@ -12,6 +12,7 @@ export type Listing = {
   id: string;
   title: string;
   description: string;
+  test_only: "development" | "test" | null;
   price: { minor_amount: string; currency: string };
   metadata: Record<string, unknown>;
   state?: "draft" | "published" | "archived";
@@ -51,6 +52,45 @@ export type WalletSummary = {
   currency: "USD";
   available_minor: string;
   pending_minor: string;
+  active_funding?: ActiveFunding | null;
+  active_fundings?: ActiveFunding[];
+};
+
+export type ActiveFunding = {
+  id: string;
+  state: FundingStatus["state"];
+  provider: string;
+  provider_display_name?: string;
+  funding_reference?: string;
+  amount_minor: string;
+  currency: string;
+  authorization_url: string | null;
+  payment_address: string | null;
+  payment_amount: string | null;
+  payment_currency: string | null;
+  network: string | null;
+  instructions: string | null;
+  expires_at: string | null;
+};
+
+export type FundingPreparation = {
+  provider: string;
+  amount_minor: string;
+  currency: string;
+  collection_amount_minor: string;
+  collection_currency: string;
+  payment_currency: string | null;
+  funding_options: Array<{
+    id: string;
+    collection_currency: string;
+    fields: Array<{ key: string; label: string; value: string }>;
+  }>;
+  conversion: {
+    from_currency: string;
+    to_currency: string;
+    rate: string;
+    observed_at: string;
+  } | null;
 };
 
 export type WalletTransaction = {
@@ -73,12 +113,17 @@ export type FundingStatus = {
     | "confirmed"
     | "failed"
     | "blocked"
+    | "cancelled"
     | "reconciliation_pending";
   provider: string;
+  provider_display_name: string;
+  funding_reference: string;
   amount_minor: string;
   currency: string;
   collection_amount_minor: string;
   collection_currency: string;
+  provider_account_id: string | null;
+  provider_account_snapshot: unknown;
   payment_address: string | null;
   payment_amount: string | null;
   payment_currency: string | null;
@@ -86,6 +131,8 @@ export type FundingStatus = {
   network: string | null;
   instructions: string | null;
   expires_at: string | null;
+  error_code: string | null;
+  error_message: string | null;
   authorization_url: string | null;
   confirmed_at: string | null;
 };
@@ -95,6 +142,7 @@ export type FundingMethod = {
   display_name: string;
   image_url: string;
   description: string;
+  test_only: "development" | "test" | null;
   collection_currencies: string[];
   payment_currencies: Array<{
     code: string;
@@ -613,22 +661,64 @@ export function walletFundingUrl(listingId: string): string {
   return walletFundingUrlForCheckout(listingId);
 }
 
+export function canonicalWalletFundingUrl(returnTo?: string | null): string {
+  const continuation = safeContinuation(returnTo, "/dashboard");
+  return `/dashboard/wallet/fund?return=${encodeURIComponent(continuation)}`;
+}
+
+export function providerFundingPreparationUrl(
+  provider: string,
+  amount: string,
+  returnTo?: string | null,
+): string {
+  const continuation = returnTo
+    ? `&return=${encodeURIComponent(safeContinuation(returnTo, "/dashboard"))}`
+    : "";
+  return `/dashboard/wallet/fund/${encodeURIComponent(provider)}?amount=${encodeURIComponent(amount)}${continuation}`;
+}
+
 export function walletFundingUrlForCheckout(listingId: string, checkoutId?: string): string {
   const checkout = checkoutId ? `&checkout=${encodeURIComponent(checkoutId)}` : "";
   const returnTo = safeContinuation(
     `/dashboard?buy=${encodeURIComponent(listingId)}${checkout}`,
     "/dashboard",
   );
-  return `/dashboard/wallet/fund?return=${encodeURIComponent(returnTo)}`;
+  return canonicalWalletFundingUrl(returnTo);
 }
 
 export function formatMinorUsd(minor: string | bigint): string {
+  return formatMinorCurrency(minor, "USD");
+}
+
+export function formatMinorCurrency(minor: string | bigint, currency: string): string {
   const value = typeof minor === "bigint" ? minor : BigInt(minor);
   const sign = value < 0n ? "-" : "";
   const absolute = value < 0n ? -value : value;
   const dollars = absolute / 100n;
   const cents = (absolute % 100n).toString().padStart(2, "0");
-  return `${sign}$${dollars.toLocaleString("en-US")}.${cents}`;
+  const normalized = currency.trim().toUpperCase();
+  return normalized === "USD"
+    ? `${sign}$${dollars.toLocaleString("en-US")}.${cents}`
+    : `${sign}${normalized} ${dollars.toLocaleString("en-US")}.${cents}`;
+}
+
+/** Customer-facing exchange-rate display; conversion keeps the full rate string internally. */
+export function formatExchangeRate(rate: string, currency: string): string {
+  const normalized = currency.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(normalized) || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(rate))
+    throw new Error("Exchange rate is invalid");
+  const [wholePart, fraction = ""] = rate.split(".");
+  const roundedFraction = fraction.padEnd(3, "0");
+  let whole = BigInt(wholePart);
+  let cents = BigInt(roundedFraction.slice(0, 2));
+  if (Number(roundedFraction[2]) >= 5) {
+    cents += 1n;
+    if (cents === 100n) {
+      whole += 1n;
+      cents = 0n;
+    }
+  }
+  return `${normalized} ${whole.toLocaleString("en-US")}.${cents.toString().padStart(2, "0")}`;
 }
 
 export function parseUsdMinor(value: string): string {

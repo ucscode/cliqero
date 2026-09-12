@@ -3,10 +3,11 @@ import { parseYamlConfiguration, resolveEnvironmentPlaceholders } from "@/config
 import type { PaymentProviderFilters } from "@/modules/payment/payment";
 import type { DirectTrc20Configuration } from "./provider";
 
-const filters = z.object({
-  countries: z.array(z.string()).nullable().default(null),
-  currencies: z.array(z.string()).nullable().default(null),
-});
+const filters = z
+  .object({
+    countries: z.array(z.string()).nullable().default(null),
+  })
+  .strict();
 const schema = z.object({
   enabled: z.boolean().default(false),
   display_name: z.string().trim().min(1),
@@ -22,7 +23,7 @@ const schema = z.object({
       api_base_url: z.url(),
     }),
   }),
-  filters: filters.default({ countries: null, currencies: ["USD"] }),
+  filters: filters.default({ countries: null }),
 });
 export function loadDirectTrc20Configuration(path: string) {
   const value = parseYamlConfiguration(path);
@@ -47,14 +48,8 @@ export function loadDirectTrc20Configuration(path: string) {
     filters: parsed.filters as PaymentProviderFilters,
   };
 }
-function validateFilters(
-  value: { countries: string[] | null; currencies: string[] | null },
-  path: string,
-) {
+function validateFilters(value: { countries: string[] | null }, path: string) {
   for (const code of value.countries ?? [])
     if (!/^[A-Z]{2}$/.test(code))
       throw new Error(`${path} countries must use uppercase ISO alpha-2 codes`);
-  for (const code of value.currencies ?? [])
-    if (!/^[A-Z]{3}$/.test(code))
-      throw new Error(`${path} currencies must use uppercase ISO alpha-3 codes`);
 }

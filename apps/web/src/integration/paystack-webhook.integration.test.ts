@@ -92,11 +92,13 @@ suite("Paystack webhook to commerce consequence", () => {
       email: "paystack-seller@example.com",
       username: "paystack_seller",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const buyer = await app.authentication.register({
       email: "paystack-buyer@example.com",
       username: "paystack_buyer",
       password: "correct-horse-staple",
+      country: "NG",
     });
     const listing = await app.listingService.createPublished(seller, {
       title: "Paystack listing",

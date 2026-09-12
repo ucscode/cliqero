@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Id } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
+import { ExactCurrencyConverter } from "@/modules/money/exchange";
+import type { ExchangeRateService } from "@/modules/money/exchange-service";
 import type {
   PaymentInitialization,
   PaymentProvider,
@@ -51,11 +53,37 @@ export class PaystackProvider implements PaymentProvider {
     private readonly config: PaystackConfiguration,
     private readonly http: PaystackHttpClient = fetch,
     collectionCurrencies: readonly string[] = ["NGN"],
+    private readonly rates?: ExchangeRateService,
   ) {
     this.collectionCurrencies = collectionCurrencies;
     this.displayName = config.displayName ?? "Paystack";
     this.imageUrl = config.imageUrl ?? "/images/payment/paystack.svg";
     this.description = config.description ?? "Pay through Paystack.";
+  }
+
+  async prepareFunding(input: {
+    canonicalAmount: Money;
+    collectionCurrency: string;
+    paymentCurrency?: string;
+  }) {
+    const collectionCurrency = input.collectionCurrency.trim().toUpperCase();
+    if (!this.collectionCurrencies.includes(collectionCurrency))
+      throw new Error(`Paystack does not support collection currency: ${collectionCurrency}`);
+    if (collectionCurrency === input.canonicalAmount.currency)
+      return { collectionAmount: input.canonicalAmount };
+    if (!this.rates) throw new Error("Paystack exchange rate service is unavailable");
+    const quote = await this.rates.quote(input.canonicalAmount.currency, collectionCurrency);
+    return {
+      collectionAmount: new ExactCurrencyConverter().convert(input.canonicalAmount, quote),
+      conversionSnapshot: {
+        fromCurrency: quote.fromCurrency,
+        toCurrency: quote.toCurrency,
+        rate: quote.rate,
+        source: quote.source,
+        sourceDate: quote.sourceDate,
+        observedAt: quote.observedAt,
+      },
+    };
   }
 
   async initiate(input: {

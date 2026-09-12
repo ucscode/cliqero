@@ -3,7 +3,7 @@ import { getContainer } from "@/infrastructure/container";
 export async function GET(request: Request) {
   const a = await authenticatedAccount(request);
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const values = await getContainer().wallet.history(a.id);
+  const values = await getContainer().wallet.history(a.id, 10);
   return Response.json({
     transactions: values.map((v) => ({
       id: v.id,

@@ -5,15 +5,20 @@ enabled: true
 display_name: Bank transfer
 image_url: /images/payment/bank-transfer.svg
 description: Transfer funds from your bank account.
+filters:
+  # Provider-level visibility only; accounts apply their own country filters.
+  countries: [NG, US]
 config:
-  # Each account is independently eligible; the first matching account is used.
+  # Optional country-to-fiat preparation mapping. Accounting remains USD.
+  currency_mapping:
+    enabled: true
+  # All country-eligible accounts are offered as choices; the customer selects one.
   accounts:
 
     - id: nigeria_ngn
-      # Use uppercase ISO country/currency codes. null means unrestricted.
+      # Use uppercase ISO country codes. null means unrestricted.
       filters:
         countries: [NG]
-        currencies: [NGN]
       # Ordered opaque fields shown to the customer; keys have no bank semantics.
       fields:
         - key: bank_name
@@ -35,7 +40,10 @@ config:
     - id: international_usd
       filters:
         countries: null
-        currencies: [USD]
+      currency_mapping:
+        enabled: true
+        overrides:
+          NG: USD
       fields:
         - key: bank_name
           label: Bank Name

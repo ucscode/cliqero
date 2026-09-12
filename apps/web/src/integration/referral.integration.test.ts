@@ -25,6 +25,7 @@ suite("referral graph and trusted purchase attribution", () => {
       email: `${prefix}-${sequence}@example.com`,
       username: `${prefix}_${sequence}`,
       password: "correct-horse-battery",
+      country: "NG",
     });
   }
   async function tree() {

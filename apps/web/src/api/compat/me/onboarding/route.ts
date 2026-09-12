@@ -6,11 +6,7 @@ import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 
 const bodySchema = z.object({
   username: usernameSchema,
-  country: z
-    .string()
-    .regex(/^[A-Za-z]{2}$/)
-    .nullable()
-    .optional(),
+  country: z.string().regex(/^[A-Za-z]{2}$/, "Choose a valid country."),
   password: z
     .string()
     .min(PASSWORD_MIN_LENGTH, `Password must contain at least ${PASSWORD_MIN_LENGTH} characters.`)

@@ -11,13 +11,13 @@ afterEach(() => {
     rmSync(directory, { recursive: true, force: true });
 });
 
-function writeConfig(sandboxCase: string, currencies = "usdttrc20") {
+function writeConfig(sandboxCase: string, currencies = "usdttrc20", callback = "") {
   const directory = mkdtempSync(join(tmpdir(), "cliqero-nowpayments-config-"));
   directories.push(directory);
   const path = join(directory, "nowpayments.yaml");
   writeFileSync(
     path,
-    `enabled: true\ndisplay_name: NOWPayments\nimage_url: /images/payment/nowpayments.svg\ndescription: Pay through NOWPayments.\nconfig:\n  api_key: test-key\n  api_base_url: https://api-sandbox.nowpayments.io\n  pay_currency: usdttrc20\n  pay_currencies: [${currencies}]\n  sandbox_case: ${sandboxCase}\n`,
+    `enabled: true\ndisplay_name: NOWPayments\nimage_url: /images/payment/nowpayments.svg\ndescription: Pay through NOWPayments.\nconfig:\n  api_key: test-key\n  api_base_url: https://api-sandbox.nowpayments.io\n  ${callback ? `ipn_callback_url: ${callback}\n  ` : ""}pay_currency: usdttrc20\n  pay_currencies: [${currencies}]\n  sandbox_case: ${sandboxCase}\n`,
   );
   return path;
 }
@@ -42,5 +42,31 @@ describe("NOWPayments configuration", () => {
     expect(() => loadNowPaymentsConfiguration(writeConfig("success", "usdterc20"))).toThrow(
       "pay_currency must be included",
     );
+  });
+
+  it("resolves and normalizes a tunnel-backed IPN callback", () => {
+    const result = loadNowPaymentsConfiguration(
+      writeConfig("success", "usdttrc20", '"%env(TUNNEL_URL)%/api/payments/nowpayments/ipn"'),
+      { TUNNEL_URL: "https://tunnel.example/" },
+    );
+    expect(result?.provider.ipnCallbackUrl).toBe(
+      "https://tunnel.example/api/payments/nowpayments/ipn",
+    );
+  });
+
+  it("reports a missing tunnel variable for an enabled callback configuration", () => {
+    expect(() =>
+      loadNowPaymentsConfiguration(
+        writeConfig("success", "usdttrc20", '"%env(TUNNEL_URL)%/api/payments/nowpayments/ipn"'),
+        {},
+      ),
+    ).toThrow('Missing environment variable "TUNNEL_URL"');
+  });
+
+  it("leaves a static callback URL unchanged", () => {
+    const result = loadNowPaymentsConfiguration(
+      writeConfig("success", "usdttrc20", "https://example.test/api/ipn"),
+    );
+    expect(result?.provider.ipnCallbackUrl).toBe("https://example.test/api/ipn");
   });
 });

@@ -96,7 +96,11 @@ export type OperatorFundingDetail = OperatorFundingSummary & {
     sourceDate: string;
     observedAt: string;
   } | null;
-  providerInitialization: { authorizationUrl: string | null } | null;
+  providerInitialization: {
+    authorizationUrl: string | null;
+    providerAccountId?: string;
+    providerAccountSnapshot?: unknown;
+  } | null;
   operations: OperatorFundingOperation[];
   events: OperatorFundingEvent[];
   evidence: {
@@ -243,7 +247,11 @@ export class OperatorFundingService {
                 f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
                 f.state,f.created_at,f.updated_at,f.confirmed_at,f.conversion_snapshot,
                 case when f.provider_initialization is null then null
-                     else jsonb_build_object('authorizationUrl', f.provider_initialization->>'authorizationUrl') end provider_initialization,
+                     else jsonb_build_object('authorizationUrl', f.provider_initialization->>'authorizationUrl')
+                          || case when f.provider_initialization ? 'providerAccountId'
+                                  then jsonb_build_object('providerAccountId', f.provider_initialization->>'providerAccountId',
+                                                          'providerAccountSnapshot', f.provider_initialization->'providerAccountSnapshot')
+                                  else '{}'::jsonb end end provider_initialization,
                 c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
                 c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at
            from funding_capability.funding_transactions f
@@ -300,6 +308,12 @@ export class OperatorFundingService {
               typeof row.provider_initialization.authorizationUrl === "string"
                 ? row.provider_initialization.authorizationUrl
                 : null,
+            ...(typeof row.provider_initialization.providerAccountId === "string"
+              ? { providerAccountId: row.provider_initialization.providerAccountId }
+              : {}),
+            ...(row.provider_initialization.providerAccountSnapshot
+              ? { providerAccountSnapshot: row.provider_initialization.providerAccountSnapshot }
+              : {}),
           }
         : null,
       operations: operations.map((operation) => ({

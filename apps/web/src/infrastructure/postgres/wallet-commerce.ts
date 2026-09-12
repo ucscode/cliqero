@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { Money } from "@/modules/money/money";
 import type { SqlExecutor } from "./database";
 import type {
   FundingRepository,
+  FundingHistoryPage,
   FundingState,
   FundingTransaction,
 } from "@/modules/funding/funding";
@@ -26,6 +28,58 @@ export class PostgresFundingRepository implements FundingRepository {
   }
   findByProviderReference(provider: string, reference: string) {
     return this.find("f.provider_name=$1 and f.provider_reference=$2", [provider, reference]);
+  }
+  async findActiveForAccount(accountId: string) {
+    const rows = (
+      await this.sql.query<any>(
+        `select f.*,f.uuid as id,a.uuid as account_uuid from funding_capability.funding_transactions f join identity_capability.accounts a on a.id=f.account_id where a.uuid=$1 and f.state in ('initialization_pending','initializing','awaiting_payment','verification_pending') order by f.updated_at desc,f.id desc`,
+        [accountId],
+      )
+    ).rows;
+    return rows.map((row) => this.map(row));
+  }
+  async findHistoryForAccount(input: {
+    accountId: string;
+    cursor?: string;
+    limit?: number;
+    state?: FundingState;
+    active?: boolean;
+  }): Promise<FundingHistoryPage> {
+    const limit = Math.max(1, Math.min(input.limit ?? 20, 50));
+    const rows = (
+      await this.sql.query<any>(
+        `select f.*,f.uuid as id,a.uuid as account_uuid from funding_capability.funding_transactions f join identity_capability.accounts a on a.id=f.account_id
+         where a.uuid=$1 and ($2::timestamptz is null or f.created_at < $2)
+           and ($3::text is null or f.state=$3)
+           and (not $4::boolean or f.state in ('initialization_pending','initializing','awaiting_payment','verification_pending'))
+         order by f.created_at desc,f.id desc limit $5`,
+        [
+          input.accountId,
+          input.cursor ?? null,
+          input.state ?? null,
+          input.active ?? false,
+          limit + 1,
+        ],
+      )
+    ).rows;
+    const items = rows.slice(0, limit).map((row) => this.map(row));
+    return {
+      items,
+      nextCursor: rows.length > limit ? (items.at(-1)?.createdAt?.toISOString() ?? null) : null,
+    };
+  }
+  async recordCancellation(fundingId: string, accountId: string, previousState: FundingState) {
+    await this.sql.query(
+      `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
+       values((select id from identity_capability.accounts where uuid=$1),'funding.cancelled','funding_transaction',$2,$3::jsonb,$4::jsonb,$5)`,
+      [
+        accountId,
+        fundingId,
+        JSON.stringify({ state: previousState }),
+        JSON.stringify({ state: "cancelled" }),
+        randomUUID(),
+      ],
+    );
   }
   async findWork(state: FundingState, limit = 50) {
     const rows = (
@@ -107,6 +161,7 @@ export class PostgresFundingRepository implements FundingRepository {
       providerInitialization: r.provider_initialization ?? undefined,
       confirmedAt: r.confirmed_at ?? undefined,
       initializationClaimedAt: r.initialization_claimed_at ?? undefined,
+      createdAt: r.created_at ?? undefined,
     } as FundingTransaction;
   }
 }
@@ -173,7 +228,7 @@ export class PostgresWalletRepository implements WalletRepository {
       [v.id, v.accountId, v.checkoutId, v.amount.minorAmount.toString(), v.amount.currency],
     );
   }
-  async history(accountId: string) {
+  async history(accountId: string, limit = 10) {
     const rows = (
       await this.sql.query<any>(
         `select 'funding_credit' kind,c.uuid as id,f.uuid as source_id,c.amount_minor,c.currency,c.state,c.created_at
@@ -183,8 +238,8 @@ export class PostgresWalletRepository implements WalletRepository {
          select 'purchase_debit',d.uuid,c.uuid,d.amount_minor,d.currency,'complete',d.created_at
            from wallet_capability.debits d join checkout_capability.checkouts c on c.id=d.checkout_id
           where d.account_id=(select id from identity_capability.accounts where uuid=$1)
-          order by created_at desc`,
-        [accountId],
+          order by created_at desc limit $2`,
+        [accountId, Math.max(1, Math.min(limit, 50))],
       )
     ).rows;
     return rows.map((r) => ({

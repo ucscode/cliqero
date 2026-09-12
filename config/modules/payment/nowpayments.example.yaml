@@ -10,7 +10,8 @@ config:
   ipn_secret: ipn_secret_here
   # Use the sandbox URL for acceptance testing; callback must be reachable by NOWPayments.
   api_base_url: https://api-sandbox.nowpayments.io
-  ipn_callback_url: https://example.test/api/payments/nowpayments/ipn
+  # Set TUNNEL_URL to a public origin for local sandbox IPN delivery.
+  ipn_callback_url: "%env(TUNNEL_URL)%/api/payments/nowpayments/ipn"
   # The provider settlement currency requested from NOWPayments.
   pay_currency: usdttrc20
   # Allowlist of currencies customers may choose at funding time.
@@ -21,7 +22,5 @@ config:
   # it is never sent to the live API. Remove/comment this for live operation.
   # sandbox_case: success
 filters:
-  # These are customer eligibility filters, not accounting-currency conversion rules.
+  # Customer visibility only; these filters do not select a fiat currency.
   countries: null
-  currencies:
-    - USD

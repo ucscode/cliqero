@@ -2,3 +2,4 @@ services:
   outbox-worker:
     environment:
       NODE_ENV: development
+      TUNNEL_URL: ${TUNNEL_URL:-}

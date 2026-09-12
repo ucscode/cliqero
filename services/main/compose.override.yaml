@@ -8,6 +8,7 @@ services:
     command: npm run dev --workspace @cliqero/web -- --hostname 0.0.0.0
     environment:
       NODE_ENV: development
+      TUNNEL_URL: ${TUNNEL_URL:-}
     volumes:
       # Mount the repository in development so source, content, package manifests,
       # lockfile, and repository scripts stay live and host-authoritative.

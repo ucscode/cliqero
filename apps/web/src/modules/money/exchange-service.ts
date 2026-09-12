@@ -16,8 +16,9 @@ export class ExchangeRateService {
   constructor(
     private readonly providers: readonly ExchangeRateProvider[],
     private readonly cache: ExchangeRateCache,
-    private readonly freshTtlMs = 6 * 60 * 60_000,
+    private readonly freshTtlMs = 24 * 60 * 60_000,
     private readonly staleTtlMs = 48 * 60 * 60_000,
+    private readonly now: () => number = Date.now,
   ) {}
   async quote(fromCurrency: string, toCurrency: string): Promise<ExchangeRateQuote> {
     const from = fromCurrency.trim().toUpperCase(),
@@ -25,7 +26,7 @@ export class ExchangeRateService {
     if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to) || from === to)
       throw new DomainInvariantError("Unsupported conversion pair");
     const cached = await this.cache.get(from, to);
-    const now = Date.now();
+    const now = this.now();
     if (cached && now - (cached.fetchedAt ?? cached.observedAt).getTime() <= this.freshTtlMs)
       return cached;
     for (const provider of this.providers) {

@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiClientError,
   apiFetch,
+  canonicalWalletFundingUrl,
   formatMinorUsd,
   minorToUsdInput,
   parseUsdMinor,
+  providerFundingPreparationUrl,
   presentFormApiError,
   safeContinuation,
   walletFundingUrl,
@@ -42,6 +44,21 @@ describe("frontend API presentation helpers", () => {
     );
     expect(walletFundingUrlForCheckout("listing-1", "checkout-1")).toBe(
       "/dashboard/wallet/fund?return=%2Fdashboard%3Fbuy%3Dlisting-1%26checkout%3Dcheckout-1",
+    );
+    expect(canonicalWalletFundingUrl("/dashboard?buy=listing-1&checkout=checkout-1")).toBe(
+      "/dashboard/wallet/fund?return=%2Fdashboard%3Fbuy%3Dlisting-1%26checkout%3Dcheckout-1",
+    );
+    expect(canonicalWalletFundingUrl("https://evil.example")).toBe(
+      "/dashboard/wallet/fund?return=%2Fdashboard",
+    );
+  });
+
+  it("builds a provider preparation route without creating funding", () => {
+    expect(providerFundingPreparationUrl("nowpayments", "25.00")).toBe(
+      "/dashboard/wallet/fund/nowpayments?amount=25.00",
+    );
+    expect(providerFundingPreparationUrl("paystack", "25.00", "/dashboard?buy=item-1")).toBe(
+      "/dashboard/wallet/fund/paystack?amount=25.00&return=%2Fdashboard%3Fbuy%3Ditem-1",
     );
   });
 

@@ -25,11 +25,13 @@ suite("provider-neutral payout execution", () => {
       email: `seller-${newId().slice(0, 6)}@example.com`,
       username: `sell${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
+      country: "NG",
     });
     const buyer = await app.authentication.register({
       email: `buyer-${newId().slice(0, 6)}@example.com`,
       username: `buy${newId().slice(0, 8)}`,
       password: "correct-horse-battery",
+      country: "NG",
     });
     const listing = await app.listingService.createPublished(seller, {
       title: "Payout",

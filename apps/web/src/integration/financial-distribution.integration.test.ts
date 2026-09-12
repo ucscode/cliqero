@@ -32,6 +32,7 @@ suite("purchase financial distribution", () => {
       email: `${label}@example.com`,
       username: label,
       password: "correct-horse-battery",
+      country: "NG",
     });
   }
   async function completed(attributionSource?: string) {

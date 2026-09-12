@@ -77,7 +77,6 @@ export class CheckoutService {
     );
     const provider = this.providers.get(input.providerName, {
       country: buyer?.country ?? null,
-      currency: collectionCurrency,
     });
     const prepared = await this.uow.transaction(async () => {
       const claimed = await this.idempotency.begin("checkout", input.idempotencyKey);

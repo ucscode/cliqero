@@ -10,6 +10,7 @@ const schema = z
       .regex(/^[A-Z]{3}$/)
       .optional(),
     payment_currency: z.string().min(1).optional(),
+    bank_account_id: z.string().min(1).optional(),
   })
   .strict();
 export async function POST(request: Request) {
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       idempotencyKey: key,
       collectionCurrency: b.collection_currency,
       paymentCurrency: b.payment_currency,
+      fundingOptionId: b.bank_account_id,
     });
     return Response.json(
       {

@@ -78,7 +78,7 @@ export function AuthForm({
                 email,
                 username,
                 password,
-                country: country || undefined,
+                country,
                 ...captchaTokenPayload(captchaToken),
               }),
             });

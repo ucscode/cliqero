@@ -15,8 +15,13 @@ export function CountrySelect({
 }) {
   return (
     <div className="grid gap-2">
-      <Label htmlFor="country">Country (optional)</Label>
-      <Select id="country" value={value} onChange={(event) => onChange(event.target.value)}>
+      <Label htmlFor="country">Country</Label>
+      <Select
+        id="country"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required
+      >
         <option value="">Select a country</option>
         {countries.map((country) => (
           <option key={country.code} value={country.code}>

@@ -25,21 +25,25 @@ suite("listing review visibility", () => {
       email: "review-owner@example.com",
       username: "review_owner",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const approvedAuthor = await app.authentication.register({
       email: "review-approved-author@example.com",
       username: "review_approved_author",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const authorA = await app.authentication.register({
       email: "review-author-a@example.com",
       username: "review_author_a",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const authorB = await app.authentication.register({
       email: "review-author-b@example.com",
       username: "review_author_b",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const listing = await app.listingService.createPublished(owner, {
       title: "Reviewable listing",
@@ -92,16 +96,19 @@ suite("listing review visibility", () => {
       email: "aggregate-owner@example.com",
       username: "aggregate_owner",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const approvedAuthor = await app.authentication.register({
       email: "aggregate-approved@example.com",
       username: "aggregate_approved",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const pendingAuthor = await app.authentication.register({
       email: "aggregate-pending@example.com",
       username: "aggregate_pending",
       password: "correct-horse-battery",
+      country: "NG",
     });
     const listing = await app.listingService.createPublished(owner, {
       title: "Aggregate listing",

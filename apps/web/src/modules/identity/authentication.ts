@@ -56,7 +56,7 @@ export class AuthenticationService {
     assertPasswordMinimum(input.password);
     const email = input.email.trim().toLowerCase();
     const username = normalizeUsername(input.username);
-    const country = normalizeCountry(input.country);
+    const country = requireCountry(input.country);
     // A complete Cliqero identity always has a bridge row. An unlinked Better
     // Auth user is therefore an abandoned pre-provisioning artifact (for
     // example from an interrupted development attempt), never an OAuth user
@@ -197,7 +197,7 @@ export class AuthenticationService {
     input: { username: string; country?: string | null; password?: string },
     headers?: Headers,
   ): Promise<Account> {
-    const country = normalizeCountry(input.country);
+    const country = requireCountry(input.country);
     const hasPassword = await this.betterAuth.hasPasswordCredential(authUserId);
     if (!hasPassword && !input.password)
       throw new PublicApplicationError(
@@ -240,6 +240,15 @@ export class AuthenticationService {
       throw error;
     }
   }
+}
+
+function requireCountry(country: string | null | undefined): string {
+  const normalized = normalizeCountry(country);
+  if (!normalized)
+    throw new PublicApplicationError("Choose a country to continue.", "validation_error", 400, {
+      country: "Choose a country to continue.",
+    });
+  return normalized;
 }
 
 /** Kept for machine integration credentials; user sessions use Better Auth. */

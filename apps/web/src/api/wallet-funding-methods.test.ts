@@ -11,23 +11,27 @@ const principal = {
 
 describe("wallet funding-method API contract", () => {
   it("returns plural collection currencies without the legacy singular field", async () => {
+    let receivedContext: unknown;
     const app = createApiApp({
       principalResolver: { resolve: async () => principal },
       providers: {
-        availableMethodsFor: () => [
-          {
-            provider: {
-              name: "usdt_trc20",
-              displayName: "Direct USDT TRC20",
-              imageUrl: "/images/payment/usdt-trc20.svg",
-              description: "Send USDT on the TRON TRC20 network directly.",
+        availableMethodsFor: (context: unknown) => {
+          receivedContext = context;
+          return [
+            {
+              provider: {
+                name: "usdt_trc20",
+                displayName: "Direct USDT TRC20",
+                imageUrl: "/images/payment/usdt-trc20.svg",
+                description: "Send USDT on the TRON TRC20 network directly.",
+              },
+              collectionCurrency: "USD",
+              collectionCurrencies: ["USD"],
+              paymentCurrencies: [],
+              defaultPaymentCurrency: undefined,
             },
-            collectionCurrency: "USD",
-            collectionCurrencies: ["USD"],
-            paymentCurrencies: [],
-            defaultPaymentCurrency: undefined,
-          },
-        ],
+          ];
+        },
       },
     } as any);
 
@@ -38,6 +42,7 @@ describe("wallet funding-method API contract", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(receivedContext).toEqual({ country: "NG" });
     expect(await response.json()).toEqual({
       methods: [
         {
@@ -45,6 +50,7 @@ describe("wallet funding-method API contract", () => {
           display_name: "Direct USDT TRC20",
           image_url: "/images/payment/usdt-trc20.svg",
           description: "Send USDT on the TRON TRC20 network directly.",
+          test_only: null,
           collection_currencies: ["USD"],
           payment_currencies: [],
           default_payment_currency: null,
@@ -76,5 +82,32 @@ describe("wallet funding-method API contract", () => {
 
     const response = await app.fetch(new Request("http://localhost/api/wallet/funding-methods"));
     expect((await response.json()).methods[0].collection_currencies).toEqual(["USD", "NGN"]);
+  });
+
+  it("surfaces a provider's test-only marker without making it a client security boundary", async () => {
+    const app = createApiApp({
+      principalResolver: { resolve: async () => principal },
+      providers: {
+        availableMethodsFor: () => [
+          {
+            provider: {
+              name: "development",
+              displayName: "Development",
+              imageUrl: "/images/payment/development.svg",
+              description: "Development-only funding for local testing.",
+              environmentOnly: "development",
+            },
+            collectionCurrency: "USD",
+            collectionCurrencies: ["USD"],
+            paymentCurrencies: [],
+            defaultPaymentCurrency: undefined,
+          },
+        ],
+      },
+    } as any);
+
+    const response = await app.fetch(new Request("http://localhost/api/wallet/funding-methods"));
+
+    expect((await response.json()).methods[0].test_only).toBe("development");
   });
 });

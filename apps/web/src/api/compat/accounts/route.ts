@@ -12,10 +12,7 @@ const bodySchema = z.object({
   password: z
     .string()
     .min(PASSWORD_MIN_LENGTH, `Password must contain at least ${PASSWORD_MIN_LENGTH} characters.`),
-  country: z
-    .string()
-    .regex(/^[A-Za-z]{2}$/, "Choose a valid country.")
-    .optional(),
+  country: z.string().regex(/^[A-Za-z]{2}$/, "Choose a valid country."),
   captchaToken: z.string().optional(),
 });
 export async function POST(request: Request) {

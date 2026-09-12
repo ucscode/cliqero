@@ -20,9 +20,8 @@ import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import { AccessService } from "@/modules/access/access";
 import { IntegrationService } from "@/modules/access/integrations";
 import {
-  DevelopmentPaymentProvider,
-  isDevelopmentProviderEnabled,
   PaymentProviderRegistry,
+  registerDevelopmentPaymentProvider,
 } from "@/modules/payment/payment";
 import { PaystackProvider } from "@/providers/paystack/payment/provider";
 import { loadPaystackConfiguration } from "@/providers/paystack/payment/config";
@@ -161,6 +160,8 @@ export function createContainer(databaseUrl: string) {
   const exchangeRates = new ExchangeRateService(
     [new FrankfurterProvider(), new FawazProvider()],
     new PostgresExchangeRateCache(database),
+    configuredDurationMs(process.env.EXCHANGE_RATE_CACHE_TTL_MS, 24 * 60 * 60_000),
+    configuredDurationMs(process.env.EXCHANGE_RATE_CACHE_STALE_TTL_MS, 48 * 60 * 60_000),
   );
   const purchases = new PostgresPurchaseRepository(database);
   const entitlements = new PostgresEntitlementRepository(database);
@@ -220,11 +221,10 @@ export function createContainer(databaseUrl: string) {
     database,
     paystackPayout ? "paystack" : "development",
   );
-  const providers = new PaymentProviderRegistry();
-  if (isDevelopmentProviderEnabled()) providers.register(new DevelopmentPaymentProvider());
+  const providers = registerDevelopmentPaymentProvider(new PaymentProviderRegistry());
   const paystackConfiguration = loadPaystackConfiguration();
   const paystack = paystackConfiguration
-    ? new PaystackProvider(paystackConfiguration.provider)
+    ? new PaystackProvider(paystackConfiguration.provider, fetch, undefined, exchangeRates)
     : null;
   if (paystack)
     providers.register(paystack, { enabled: true, filters: paystackConfiguration!.filters });
@@ -443,6 +443,14 @@ export function createContainer(databaseUrl: string) {
     operatorTreasury: new OperatorTreasuryService(database),
     blog: getBlogService(),
   };
+}
+
+function configuredDurationMs(value: string | undefined, fallback: number) {
+  if (!value?.trim()) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0)
+    throw new Error("Exchange-rate cache TTL must be a positive integer in milliseconds");
+  return parsed;
 }
 export type ApplicationContainer = ReturnType<typeof createContainer>;
 

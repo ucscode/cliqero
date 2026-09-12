@@ -60,6 +60,9 @@ import * as referralUplines from "@/api/compat/referrals/uplines/route";
 import * as wallet from "@/api/compat/wallet/route";
 import * as walletFunding from "@/api/compat/wallet/fund/route";
 import * as walletFundingById from "@/api/compat/wallet/fund/[id]/route";
+import * as walletFundingCancel from "@/api/compat/wallet/fund/[id]/cancel/route";
+import * as walletFundingPrepare from "@/api/compat/wallet/funding/prepare/route";
+import * as walletFundingHistory from "@/api/compat/wallet/funding/route";
 import * as walletTransactions from "@/api/compat/wallet/transactions/route";
 import * as withdrawals from "@/api/compat/withdrawals/route";
 import * as withdrawalById from "@/api/compat/withdrawals/[id]/route";
@@ -157,7 +160,10 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/referrals/parent", module: referralParent },
   { pattern: "/api/referrals/uplines", module: referralUplines },
   { pattern: "/api/wallet/fund", module: walletFunding },
+  { pattern: "/api/wallet/fund/:id/cancel", module: walletFundingCancel },
   { pattern: "/api/wallet/fund/:id", module: walletFundingById },
+  { pattern: "/api/wallet/funding/prepare", module: walletFundingPrepare },
+  { pattern: "/api/wallet/funding", module: walletFundingHistory },
   { pattern: "/api/wallet/transactions", module: walletTransactions },
   { pattern: "/api/wallet", module: wallet },
   { pattern: "/api/withdrawals/policy", module: withdrawalPolicy },
@@ -220,7 +226,10 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern === "/api/me/listings") return { mode: "account", scope: "catalogue:read" };
   if (pattern === "/api/wallet") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/transactions") return { mode: "account", scope: "wallet:read" };
+  if (pattern === "/api/wallet/funding/prepare") return { mode: "account", scope: "wallet:fund" };
+  if (pattern === "/api/wallet/funding") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/fund/:id") return { mode: "account", scope: "wallet:read" };
+  if (pattern === "/api/wallet/fund/:id/cancel") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/wallet/fund") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/checkout") return { mode: "account", scope: "checkout:create" };
   if (pattern === "/api/checkout/:id" || pattern.startsWith("/api/purchases"))
