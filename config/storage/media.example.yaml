@@ -4,15 +4,19 @@
 default_provider: filesystem
 
 providers:
-  # Filesystem root and container are required. public_base_url is required for
-  # public visibility; a private filesystem may omit it or include it, but it
-  # is ignored because visibility is authoritative.
+  # Filesystem requires only root. container is optional logical metadata; when
+  # omitted, Cliqero uses the instance name. It does not change the disk path.
+  #
+  # For public filesystem storage, public_base_url must point at Cliqero's
+  # built-in public media route: <APP_URL>/media/<instance-name>.
+  # Using an arbitrary path (for example /vision/filesystem) will not work
+  # unless a matching application route is implemented.
   filesystem:
     provider: filesystem
     visibility: public
     config:
       root: "%env(MEDIA_ROOT)%"
-      container: media
+      # container: media
       public_base_url: "%env(APP_URL)%/media/filesystem"
 
   # Supabase requires endpoint, bucket, and service_key. It needs no separate
