@@ -51,6 +51,18 @@ URL. Private instances remain available to authenticated server-side reads but
 are rejected by public URL generation and the public listing-media route.
 Supabase uses its Storage REST API, and R2 uses signed S3-compatible requests.
 
+For filesystem instances, `root` is the physical storage directory. `container`
+is optional logical locator metadata only: it does not create a directory level
+or change where bytes are written. When omitted, Cliqero uses the storage
+instance name as the persisted container identity.
+
+Public filesystem URLs are served by Cliqero's built-in route
+`/media/<instance-name>/<object-key>`. Therefore a public filesystem
+`public_base_url` must resolve to `<APP_URL>/media/<instance-name>`. Setting an
+arbitrary path such as `/vision/filesystem` only changes generated URLs; it does
+not create a corresponding application route and will result in 404 responses
+unless such a route is implemented separately.
+
 The default filesystem root is `/var/lib/cliqero/media`, mounted as the
 persistent `media-data` Compose volume. New filesystem objects use the
 configured instance and container identities, while listing object keys remain
