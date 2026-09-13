@@ -34,7 +34,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!z.uuid().safeParse(id).success)
     return Response.json({ error: "Not found" }, { status: 404 });
   try {
-    const funding = await getContainer().funding.findById(id);
+    const container = getContainer();
+    const funding = await container.funding.findById(id);
     if (!funding || funding.accountId !== account.id)
       return Response.json({ error: "Funding not found" }, { status: 404 });
     const paymentDetailsVisible =
@@ -42,14 +43,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       funding.state === "initializing" ||
       funding.state === "awaiting_payment" ||
       funding.state === "verification_pending";
+    const evidence =
+      funding.providerName === "bank_transfer" &&
+      typeof container.bankTransferEvidence?.findForFunding === "function"
+        ? await container.bankTransferEvidence.findForFunding(account.id, id)
+        : null;
     return Response.json({
       id: funding.id,
       state: funding.state,
       provider: funding.providerName,
       provider_display_name:
         funding.providerInitialization?.providerDisplayName ??
-        (typeof getContainer().providers?.displayName === "function"
-          ? getContainer().providers.displayName(funding.providerName)
+        (typeof container.providers?.displayName === "function"
+          ? container.providers.displayName(funding.providerName)
           : "Payment provider"),
       customer_action:
         typeof getContainer().providers?.customerActionLabel === "function"
@@ -89,6 +95,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       error_code: funding.providerInitialization?.failureCode ?? null,
       error_message: customerFailureMessage(funding),
       confirmed_at: funding.confirmedAt?.toISOString() ?? null,
+      evidence: evidence
+        ? {
+            id: evidence.id,
+            transfer_reference: evidence.transferReference,
+            customer_note: evidence.customerNote,
+            proof: evidence.proof
+              ? {
+                  original_filename: evidence.proof.originalFilename,
+                  mime_type: evidence.proof.mimeType,
+                  byte_size: evidence.proof.byteSize,
+                }
+              : null,
+            created_at: evidence.createdAt,
+          }
+        : null,
     });
   } catch (error) {
     return apiError(error);

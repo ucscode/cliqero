@@ -5,7 +5,6 @@ import { getContainer } from "@/infrastructure/container";
 const schema = z
   .object({
     transfer_reference: z.preprocess(emptyToUndefined, z.string().max(200).optional()),
-    proof_image_url: z.preprocess(emptyToUndefined, z.string().url().max(2048).optional()),
     customer_note: z.preprocess(emptyToUndefined, z.string().max(2000).optional()),
   })
   .strict();
@@ -21,11 +20,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!z.uuid().safeParse(id).success)
     return Response.json({ error: "Funding not found" }, { status: 404 });
   try {
-    const body = schema.parse(await request.json());
+    const form = await request.formData();
+    const file = form.get("proof_file");
+    if (file !== null && !(file instanceof File)) throw new Error("Evidence file is invalid");
+    const body = schema.parse({
+      transfer_reference: form.get("transfer_reference"),
+      customer_note: form.get("customer_note"),
+    });
     const evidence = await getContainer().bankTransferEvidence.submit(account.id, id, {
       transferReference: body.transfer_reference,
-      proofImageUrl: body.proof_image_url,
       customerNote: body.customer_note,
+      proofFile:
+        file instanceof File
+          ? {
+              bytes: new Uint8Array(await file.arrayBuffer()),
+              mimeType: file.type,
+              filename: file.name,
+            }
+          : undefined,
     });
     return Response.json(
       {
@@ -33,6 +45,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         funding_id: evidence.fundingId,
         state: evidence.state,
         created_at: evidence.createdAt,
+        proof: evidence.proof
+          ? {
+              original_filename: evidence.proof.originalFilename,
+              mime_type: evidence.proof.mimeType,
+              byte_size: evidence.proof.byteSize,
+            }
+          : null,
       },
       { status: 201 },
     );

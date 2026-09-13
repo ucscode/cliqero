@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { QueryResult } from "pg";
-import { BankTransferEvidenceService } from "./bank-transfer-evidence";
+import {
+  BankTransferEvidenceService,
+  validateProofFile,
+  type BankTransferProofFile,
+} from "./bank-transfer-evidence";
 
 const fundingId = "00000000-0000-4000-8000-000000000001";
 const accountId = "00000000-0000-4000-8000-000000000002";
@@ -106,40 +110,114 @@ describe("bank-transfer evidence", () => {
     expect(statements.some((sql) => sql.includes("insert into kernel.audit_records"))).toBe(true);
   });
 
+  it.each([[{ transferReference: "bank-ref" }, "bank-ref", null]])(
+    "accepts a single meaningful evidence field: %o",
+    async (input, reference, proof) => {
+      const service = new BankTransferEvidenceService({
+        query: async <T extends object>(sql: string) => {
+          if (sql.includes("select uuid as id,transfer_reference")) return result<T>([]);
+          if (sql.includes("returning uuid"))
+            return result<T>([{ id: "evidence-id", created_at: new Date() }] as T[]);
+          if (sql.includes("from funding_capability.funding_transactions"))
+            return result<T>([
+              {
+                id: fundingId,
+                account_id: 7,
+                provider_name: "bank_transfer",
+                state: "awaiting_payment",
+              },
+            ] as T[]);
+          if (sql.includes("select uuid from identity_capability.accounts"))
+            return result<T>([{ uuid: accountId }] as T[]);
+          return result<T>([]) as QueryResult<T>;
+        },
+      });
+      await expect(service.submit(accountId, fundingId, input)).resolves.toMatchObject({
+        state: "verification_pending",
+        transferReference: reference,
+        proofImageUrl: proof,
+        customerNote: null,
+      });
+    },
+  );
+
   it.each([
-    [{ transferReference: "bank-ref" }, "bank-ref", null, null],
-    [
-      { proofImageUrl: "https://example.test/receipt.png" },
-      null,
-      "https://example.test/receipt.png",
-      null,
-    ],
-  ])("accepts a single meaningful evidence field: %o", async (input, reference, proof, note) => {
-    const service = new BankTransferEvidenceService({
-      query: async <T extends object>(sql: string) => {
-        if (sql.includes("select uuid as id,transfer_reference")) return result<T>([]);
-        if (sql.includes("returning uuid"))
-          return result<T>([{ id: "evidence-id", created_at: new Date() }] as T[]);
-        if (sql.includes("from funding_capability.funding_transactions"))
-          return result<T>([
-            {
-              id: fundingId,
-              account_id: 7,
-              provider_name: "bank_transfer",
-              state: "awaiting_payment",
-            },
-          ] as T[]);
-        if (sql.includes("select uuid from identity_capability.accounts"))
-          return result<T>([{ uuid: accountId }] as T[]);
-        return result<T>([]) as QueryResult<T>;
+    ["image/png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+    ["application/pdf", new TextEncoder().encode("%PDF-1.7")],
+  ])("accepts %s proof files", async (mimeType, bytes) => {
+    const stored = {
+      provider: "filesystem",
+      container: "media",
+      key: "funding-evidence/funding/receipt",
+      byteSize: bytes.byteLength,
+      mimeType,
+    };
+    const put = vi.fn(async () => stored);
+    const service = new BankTransferEvidenceService(
+      {
+        query: async <T extends object>(sql: string) => {
+          if (sql.includes("select uuid as id,transfer_reference")) return result<T>([]);
+          if (sql.includes("returning uuid"))
+            return result<T>([{ id: "evidence-id", created_at: new Date() }] as T[]);
+          if (sql.includes("from funding_capability.funding_transactions"))
+            return result<T>([
+              {
+                id: fundingId,
+                account_id: 7,
+                provider_name: "bank_transfer",
+                state: "awaiting_payment",
+              },
+            ] as T[]);
+          if (sql.includes("select uuid from identity_capability.accounts"))
+            return result<T>([{ uuid: accountId }] as T[]);
+          return result<T>([]) as QueryResult<T>;
+        },
+      },
+      undefined,
+      {
+        default: () => ({
+          name: "filesystem",
+          put,
+          delete: async () => undefined,
+          publicUrl: () => "",
+        }),
+        get: () => ({
+          name: "filesystem",
+          put,
+          delete: async () => undefined,
+          publicUrl: () => "",
+        }),
+      } as any,
+    );
+    const file: BankTransferProofFile = { bytes, mimeType, filename: "receipt" };
+    await expect(service.submit(accountId, fundingId, { proofFile: file })).resolves.toMatchObject({
+      state: "verification_pending",
+      proof: {
+        provider: "filesystem",
+        container: "media",
+        mimeType,
+        byteSize: String(bytes.byteLength),
       },
     });
-    await expect(service.submit(accountId, fundingId, input)).resolves.toMatchObject({
-      state: "verification_pending",
-      transferReference: reference,
-      proofImageUrl: proof,
-      customerNote: note,
-    });
+    expect(put).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: expect.stringMatching(/^funding-evidence\//),
+        bytes,
+        mimeType,
+      }),
+    );
+  });
+
+  it("rejects unsupported or spoofed proof files before storage", () => {
+    expect(() => validateProofFile({ bytes: new Uint8Array([1]), mimeType: "text/plain" })).toThrow(
+      "Unsupported evidence file type",
+    );
+    expect(() =>
+      validateProofFile({
+        bytes: new Uint8Array([1, 2, 3]),
+        mimeType: "application/pdf",
+      }),
+    ).toThrow("does not match");
   });
 
   it("returns existing evidence without creating a duplicate", async () => {

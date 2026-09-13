@@ -264,10 +264,12 @@ describe("provider-owned funding preparation", () => {
   it("snapshots the selected bank account fields at funding creation", async () => {
     let created: any;
     const bank = new BankTransferProvider({
+      instruction: "Use the provider instruction.",
       currencyMapping: { enabled: true },
       accounts: [
         {
           id: "ng-account",
+          instruction: "Use the account instruction.",
           fields: [
             { key: "bank_name", label: "Bank Name", value: "Example Bank" },
             { key: "custom_route", label: "Custom route", value: "ROUTE-123", copyable: false },
@@ -315,6 +317,7 @@ describe("provider-owned funding preparation", () => {
       providerAccountSnapshot: {
         id: "ng-account",
         collectionCurrency: "NGN",
+        instruction: "Use the account instruction.",
         fields: [
           { key: "bank_name", label: "Bank Name", value: "Example Bank" },
           { key: "custom_route", label: "Custom route", value: "ROUTE-123", copyable: false },

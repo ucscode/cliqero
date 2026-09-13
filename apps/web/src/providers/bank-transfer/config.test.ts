@@ -15,8 +15,10 @@ display_name: Bank transfer
 image_url: /images/payment/bank-transfer.svg
 description: Transfer funds from your bank account.
 config:
+  instruction: Use the provider instruction.
   accounts:
     - id: custom
+      instruction: Use the account instruction.
       filters:
         countries: [NG]
       currency_mapping:
@@ -37,6 +39,7 @@ config:
       const loaded = loadBankTransferConfiguration(path);
       expect(loaded?.provider.accounts[0]).toMatchObject({
         id: "custom",
+        instruction: "Use the account instruction.",
         fields: [
           { key: "wire_routing", label: "Whatever the bank calls this", value: "123" },
           {
@@ -47,6 +50,7 @@ config:
           },
         ],
       });
+      expect(loaded?.provider.instruction).toBe("Use the provider instruction.");
       expect(loaded?.provider.accounts[0].currencyMapping).toEqual({
         enabled: true,
         overrides: { NG: "GBP" },

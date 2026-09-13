@@ -436,7 +436,7 @@ export function createContainer(databaseUrl: string) {
     operatorAccounts: new OperatorAccountService(database),
     capabilityAdministration: new CapabilityAdministrationService(database, database),
     operatorFunding: new OperatorFundingService(database, database),
-    bankTransferEvidence: new BankTransferEvidenceService(database, database),
+    bankTransferEvidence: new BankTransferEvidenceService(database, database, objectStorage),
     operatorDistributions: new OperatorDistributionService(database),
     operatorEarnings: new OperatorEarningsService(database),
     operatorWithdrawals: new OperatorWithdrawalService(database),

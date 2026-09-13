@@ -17,6 +17,7 @@ const schema = z.object({
   description: z.string().trim().min(1),
   filters: paymentProviderFiltersSchema.default({ countries: null }),
   config: z.object({
+    instruction: z.string().trim().min(1).optional(),
     currency_mapping: z
       .object({
         enabled: z.boolean().default(false),
@@ -27,6 +28,7 @@ const schema = z.object({
     accounts: z.array(
       z.object({
         id: z.string().regex(/^[a-z0-9_-]{1,50}$/),
+        instruction: z.string().trim().min(1).optional(),
         filters: paymentProviderFiltersSchema.default({ countries: null }),
         currency_mapping: z
           .object({
@@ -64,6 +66,7 @@ export function loadBankTransferConfiguration(path = "config/modules/payment/ban
   }
   const accounts: BankTransferAccount[] = config.config.accounts.map((account) => ({
     id: account.id,
+    ...(account.instruction ? { instruction: account.instruction } : {}),
     fields: account.fields,
     filters: account.filters,
     currencyMapping: validateCurrencyMappingConfig(
@@ -72,6 +75,7 @@ export function loadBankTransferConfiguration(path = "config/modules/payment/ban
   }));
   const provider: BankTransferConfiguration = {
     accounts,
+    ...(config.config.instruction ? { instruction: config.config.instruction } : {}),
     currencyMapping: validateCurrencyMappingConfig(
       config.config.currency_mapping as CurrencyMappingConfig | undefined,
     ),

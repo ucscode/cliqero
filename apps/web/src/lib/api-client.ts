@@ -142,6 +142,17 @@ export type FundingStatus = {
   error_message: string | null;
   authorization_url: string | null;
   confirmed_at: string | null;
+  evidence: {
+    id: string;
+    transfer_reference: string | null;
+    customer_note: string | null;
+    proof: {
+      original_filename: string | null;
+      mime_type: string;
+      byte_size: string;
+    } | null;
+    created_at: string;
+  } | null;
 };
 
 export type FundingMethod = {

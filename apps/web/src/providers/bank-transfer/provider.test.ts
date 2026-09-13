@@ -5,6 +5,8 @@ import { BankTransferProvider } from "./provider";
 describe("bank transfer funding provider", () => {
   it("returns explicit persisted instructions and never self-confirms", async () => {
     const provider = new BankTransferProvider({
+      instruction:
+        "Use the Reference ID as the narration/description for your bank transfer so we can match your payment.",
       currencyMapping: { enabled: true },
       accounts: [
         {
@@ -13,6 +15,11 @@ describe("bank transfer funding provider", () => {
             { key: "bank_name", label: "Bank Name", value: "Example International Bank" },
             { key: "swift", label: "SWIFT / BIC", value: "EXAMPLEBIC" },
             { key: "iban", label: "IBAN", value: "XX00EXAMPLE" },
+            {
+              key: "custom_instruction",
+              label: "Transfer instruction",
+              value: "Include the funding reference in the transfer narration.",
+            },
           ],
           filters: { countries: null },
         },
@@ -33,7 +40,14 @@ describe("bank transfer funding provider", () => {
     expect(initialized.metadata?.instructions).not.toContain("SWIFT / BIC: EXAMPLEBIC");
     expect(initialized.metadata?.instructions).not.toContain("IBAN: XX00EXAMPLE");
     expect(initialized.metadata?.providerAccountSnapshot).toMatchObject({
-      fields: [{ key: "bank_name" }, { key: "swift" }, { key: "iban" }],
+      instruction:
+        "Use the Reference ID as the narration/description for your bank transfer so we can match your payment.",
+      fields: [
+        { key: "bank_name" },
+        { key: "swift" },
+        { key: "iban" },
+        { key: "custom_instruction" },
+      ],
     });
     const verification = await provider.verify({
       reference: initialized.reference,
@@ -45,6 +59,7 @@ describe("bank transfer funding provider", () => {
 
   it("exposes every country-eligible account and requires an explicit choice", async () => {
     const provider = new BankTransferProvider({
+      instruction: "Use the provider instruction.",
       currencyMapping: { enabled: true },
       accounts: [
         {
@@ -54,6 +69,7 @@ describe("bank transfer funding provider", () => {
         },
         {
           id: "ngn-ng-2",
+          instruction: "Use the account-specific instruction.",
           fields: [{ key: "custom", label: "Local instructions", value: "Nigeria Bank 2" }],
           filters: { countries: ["NG"] },
         },
@@ -74,6 +90,11 @@ describe("bank transfer funding provider", () => {
     expect(
       provider.fundingOptions({ country: "NG" }).map((option) => option.collectionCurrency),
     ).toEqual(["NGN", "NGN", "USD"]);
+    expect(provider.fundingOptions({ country: "NG" }).map((option) => option.instruction)).toEqual([
+      "Use the provider instruction.",
+      "Use the account-specific instruction.",
+      "Use the provider instruction.",
+    ]);
     expect(provider.eligibleAccounts({ country: "GB" })).toHaveLength(1);
     expect(provider.fundingOptions({ country: "GB" })[0].collectionCurrency).toBe("GBP");
     await expect(
@@ -106,7 +127,11 @@ describe("bank transfer funding provider", () => {
     ).resolves.toMatchObject({
       metadata: {
         providerAccountId: "ngn-ng-2",
-        providerAccountSnapshot: { id: "ngn-ng-2", collectionCurrency: "NGN" },
+        providerAccountSnapshot: {
+          id: "ngn-ng-2",
+          collectionCurrency: "NGN",
+          instruction: "Use the account-specific instruction.",
+        },
       },
     });
   });
@@ -122,6 +147,31 @@ describe("bank transfer funding provider", () => {
       ],
     });
     expect(provider.eligibleAccounts({ country: null })).toHaveLength(1);
+  });
+
+  it("omits the specific instruction when neither level is configured", async () => {
+    const provider = new BankTransferProvider({
+      accounts: [
+        {
+          id: "local",
+          fields: [{ key: "bank_name", label: "Bank", value: "Local Bank" }],
+          filters: { countries: null },
+        },
+      ],
+    });
+    const initialized = await provider.initiate({
+      paymentId: "00000000-0000-4000-8000-000000000003",
+      amount: Money.of(1000n, "USD"),
+      idempotencyKey: "bank-3",
+      buyerEmail: "buyer@example.test",
+    });
+
+    expect(initialized.metadata?.instructions).toBeUndefined();
+    expect(initialized.metadata?.providerAccountSnapshot).toEqual({
+      id: "local",
+      collectionCurrency: "USD",
+      fields: [{ key: "bank_name", label: "Bank", value: "Local Bank" }],
+    });
   });
 
   it("falls back to USD when country-currency mapping is disabled", () => {

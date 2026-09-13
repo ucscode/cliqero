@@ -14,6 +14,9 @@ config:
   # Optional country-to-fiat preparation mapping. Accounting remains USD.
   currency_mapping:
     enabled: true
+  # Specific transfer guidance; account instructions override this value.
+  # This is separate from the opaque fields rendered below.
+  instruction: Use the Reference ID as the narration/description for your bank transfer so we can match your payment.
   # All country-eligible accounts are offered as choices; the customer selects one.
   accounts:
 
@@ -22,6 +25,8 @@ config:
       filters:
         countries:
           - NG
+      # Optional account-specific instruction; fields remain completely opaque.
+      instruction: Include the funding reference in the Nigeria transfer narration.
       # Ordered opaque fields shown to the customer; keys have no bank semantics.
       fields:
         - key: bank_name

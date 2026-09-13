@@ -36,6 +36,7 @@ function configure(owner = account.id, state = "awaiting_payment", providerName 
           providerAccountSnapshot: {
             id: "account-1",
             collectionCurrency: "NGN",
+            instruction: "Use the account instruction.",
             fields: [
               { key: "bank_name", label: "Bank", value: "Example Bank", copyable: false },
               { key: "routing", label: "Routing", value: "ROUTE-1", copyable: true },
@@ -71,6 +72,7 @@ describe("wallet funding status projection", () => {
       provider_account_snapshot: {
         id: "account-1",
         collectionCurrency: "NGN",
+        instruction: "Use the account instruction.",
         fields: [
           { key: "bank_name", label: "Bank", value: "Example Bank", copyable: false },
           { key: "routing", label: "Routing", value: "ROUTE-1", copyable: true },

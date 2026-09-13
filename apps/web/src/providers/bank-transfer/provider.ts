@@ -14,6 +14,7 @@ import type {
 
 export interface BankTransferConfiguration {
   accounts: readonly BankTransferAccount[];
+  instruction?: string;
   currencyMapping?: CurrencyMappingConfig;
   displayName?: string;
   imageUrl?: string;
@@ -29,6 +30,7 @@ export interface BankTransferField {
 
 export interface BankTransferAccount {
   id: string;
+  instruction?: string;
   fields: readonly BankTransferField[];
   filters: { countries: string[] | null };
   currencyMapping?: CurrencyMappingConfig;
@@ -74,6 +76,9 @@ export class BankTransferProvider implements PaymentProvider {
           provider: this.config.currencyMapping,
           account: account.currencyMapping,
         }),
+        ...((account.instruction ?? this.config.instruction)
+          ? { instruction: account.instruction ?? this.config.instruction }
+          : {}),
         fields: account.fields,
       }));
   }
@@ -121,6 +126,7 @@ export class BankTransferProvider implements PaymentProvider {
     if (!option || option.collectionCurrency !== input.amount.currency)
       throw new Error("The selected receiving account controls the collection currency");
     const reference = this.referenceFor(input);
+    const instruction = account.instruction ?? this.config.instruction;
     return {
       reference,
       metadata: {
@@ -128,11 +134,11 @@ export class BankTransferProvider implements PaymentProvider {
         providerAccountSnapshot: {
           id: account.id,
           collectionCurrency: input.amount.currency,
+          ...(instruction ? { instruction } : {}),
           fields: account.fields,
         },
         paymentCurrency: input.amount.currency,
-        instructions:
-          "Use the Reference ID as the narration/description for your bank transfer so we can match your payment.",
+        ...(instruction ? { instructions: instruction } : {}),
       },
     };
   }

@@ -76,20 +76,15 @@ function snapshotFields(value: unknown): BankStatusField[] {
   );
 }
 
+export function snapshotInstruction(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const instruction = (value as { instruction?: unknown }).instruction;
+  return typeof instruction === "string" && instruction.trim() ? instruction : null;
+}
+
 export function bankStatusFieldRows(fields: readonly BankStatusField[]) {
-  return fields.filter((field) => !isDuplicateReferenceInstruction(field.value));
+  return [...fields];
 }
-
-function isDuplicateReferenceInstruction(value: string) {
-  const normalized = value.toLowerCase();
-  return (
-    normalized.includes("reference") &&
-    (normalized.includes("narration") || normalized.includes("description"))
-  );
-}
-
-const bankTransferInstruction =
-  "Use the Reference ID as the narration/description for your bank transfer so we can match your payment.";
 
 export function fundingStatusMessage(
   funding: Pick<FundingStatus, "provider" | "state" | "expires_at" | "error_message">,
@@ -131,6 +126,10 @@ export function canSubmitBankTransferEvidence(
       funding.state === "awaiting_payment" ||
       funding.state === "verification_pending")
   );
+}
+
+export function shouldPollFunding(funding: Pick<FundingStatus, "provider" | "state">) {
+  return funding.provider !== "bank_transfer" && !terminalFundingStates.has(funding.state);
 }
 
 export function walletPanelComposition(fundingPage: boolean, persistedFunding = false) {
@@ -199,7 +198,7 @@ export function WalletPanel({
   const [amount, setAmount] = useState(fundingAmount ?? "");
   const [transactionHash, setTransactionHash] = useState("");
   const [transferReference, setTransferReference] = useState("");
-  const [proofImageUrl, setProofImageUrl] = useState("");
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [customerNote, setCustomerNote] = useState("");
   const [evidenceMessage, setEvidenceMessage] = useState<string | null>(null);
   const [providerError, setProviderError] = useState<string | null>(null);
@@ -313,7 +312,15 @@ export function WalletPanel({
 
   useEffect(() => {
     const fundingId = funding?.id;
-    if (!fundingId) return;
+    const fundingProvider = funding?.provider;
+    const fundingState = funding?.state;
+    if (
+      !fundingId ||
+      !fundingProvider ||
+      !fundingState ||
+      !shouldPollFunding({ provider: fundingProvider, state: fundingState })
+    )
+      return;
     let attempts = 0;
     let timeout: number | undefined;
     const poll = async () => {
@@ -323,7 +330,7 @@ export function WalletPanel({
         const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
         setFunding(latest);
         if (latest.state === "confirmed") void loadWallet(true);
-        if (terminalFundingStates.has(latest.state)) {
+        if (!shouldPollFunding(latest)) {
           setPollingNotice(null);
           return;
         }
@@ -347,7 +354,7 @@ export function WalletPanel({
     return () => {
       if (timeout) window.clearTimeout(timeout);
     };
-  }, [funding?.id, loadWallet]);
+  }, [funding?.id, funding?.provider, funding?.state, loadWallet]);
 
   const selectedMethod = fundingMethods.find((method) => method.id === provider) ?? null;
   const methodsToRender = providerPreparation
@@ -436,12 +443,13 @@ export function WalletPanel({
     Date.parse(funding.expires_at) <= currentTime,
   );
   const canContinueProvider = funding?.state === "awaiting_payment" && providerUrl;
-  const bankEvidenceAllowed = canSubmitBankTransferEvidence(funding);
+  const bankEvidenceAllowed = canSubmitBankTransferEvidence(funding) && !funding?.evidence;
   const pendingMessage = useMemo(
     () => (funding ? fundingStatusMessage(funding, currentTime) : null),
     [currentTime, funding],
   );
   const bankFields = bankStatusFieldRows(snapshotFields(funding?.provider_account_snapshot));
+  const bankInstruction = snapshotInstruction(funding?.provider_account_snapshot);
   const activeFundings =
     summary?.active_fundings ?? (summary?.active_funding ? [summary.active_funding] : []);
 
@@ -534,24 +542,26 @@ export function WalletPanel({
     setEvidenceMessage(null);
     const evidence = {
       transfer_reference: transferReference.trim(),
-      proof_image_url: proofImageUrl.trim(),
       customer_note: customerNote.trim(),
     };
-    if (!evidence.transfer_reference && !evidence.proof_image_url && !evidence.customer_note) {
-      setProviderError("Add a transfer reference, proof image URL, or note before submitting.");
+    if (!evidence.transfer_reference && !proofFile && !evidence.customer_note) {
+      setProviderError("Add a transfer reference, proof file, or note before submitting.");
       return;
     }
     setSubmitting(true);
     try {
+      const body = new FormData();
+      body.set("transfer_reference", evidence.transfer_reference);
+      body.set("customer_note", evidence.customer_note);
+      if (proofFile) body.set("proof_file", proofFile);
       await apiFetch(`/api/wallet/fund/${funding.id}/evidence`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(evidence),
+        body,
       });
       const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${funding.id}`);
       setFunding(latest);
       setTransferReference("");
-      setProofImageUrl("");
+      setProofFile(null);
       setCustomerNote("");
       setEvidenceMessage("Evidence submitted. Your bank transfer is awaiting manual verification.");
     } catch (cause) {
@@ -847,6 +857,12 @@ export function WalletPanel({
                 receiving details are shown.
               </p>
             )}
+            {funding.provider === "bank_transfer" && bankInstruction && (
+              <div className="grid gap-1 border-t border-slate-200 pt-3">
+                <span className="text-slate-600">Transfer instruction</span>
+                <strong className="whitespace-pre-line">{bankInstruction}</strong>
+              </div>
+            )}
             {!paymentSessionExpired && funding.payment_address && (
               <div className="grid gap-1">
                 <span className="text-slate-600">Payment address</span>
@@ -882,10 +898,18 @@ export function WalletPanel({
                   </Button>
                 </form>
               )}
-            {funding.provider === "bank_transfer" && funding.instructions && (
-              <p className="border-t border-slate-200 pt-3 text-sm font-medium text-amber-900">
-                {bankTransferInstruction}
-              </p>
+            {funding.provider === "bank_transfer" && funding.evidence && (
+              <div className="grid gap-1 border-t border-slate-200 pt-4 text-sm" role="status">
+                <strong>Evidence submitted</strong>
+                <span className="text-slate-600">
+                  Your bank transfer is awaiting manual verification.
+                </span>
+                {funding.evidence.proof && (
+                  <span className="text-slate-600">
+                    Proof file: {funding.evidence.proof.original_filename ?? "Uploaded file"}
+                  </span>
+                )}
+              </div>
             )}
             {bankEvidenceAllowed && (
               <form
@@ -911,16 +935,18 @@ export function WalletPanel({
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label htmlFor="bank-proof-image-url">Proof image URL</Label>
+                  <Label htmlFor="bank-proof-file">Transaction proof file</Label>
                   <Input
-                    id="bank-proof-image-url"
-                    type="url"
-                    value={proofImageUrl}
-                    onChange={(event) => setProofImageUrl(event.target.value)}
-                    maxLength={2048}
+                    id="bank-proof-file"
+                    name="proof_file"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(event) => setProofFile(event.target.files?.[0] ?? null)}
                     disabled={submitting}
-                    placeholder="https://…"
                   />
+                  <p className="text-xs text-slate-500">
+                    PNG, JPEG, WEBP, GIF, or PDF up to 10 MB.
+                  </p>
                 </div>
                 <div className="grid gap-1">
                   <Label htmlFor="bank-customer-note">Note</Label>

@@ -103,6 +103,7 @@ export class FundingService {
     return {
       id: option.id,
       collectionCurrency: option.collectionCurrency,
+      ...(option.instruction ? { instruction: option.instruction } : {}),
       fields: option.fields.map((field) => ({ ...field })),
     };
   }

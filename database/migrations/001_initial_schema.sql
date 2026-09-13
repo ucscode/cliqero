@@ -509,9 +509,15 @@ CREATE TABLE funding_capability.funding_evidence (
     transfer_reference text,
     proof_image_url text,
     customer_note text,
+    proof_storage_provider text,
+    proof_storage_container text,
+    proof_object_key text,
+    proof_original_filename text,
+    proof_mime_type text,
+    proof_byte_size bigint,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     id bigint NOT NULL,
-    CONSTRAINT funding_evidence_meaningful_check CHECK ((nullif(btrim(transfer_reference), '') IS NOT NULL OR nullif(btrim(proof_image_url), '') IS NOT NULL OR nullif(btrim(customer_note), '') IS NOT NULL)),
+    CONSTRAINT funding_evidence_meaningful_check CHECK ((nullif(btrim(transfer_reference), '') IS NOT NULL OR nullif(btrim(proof_image_url), '') IS NOT NULL OR nullif(btrim(customer_note), '') IS NOT NULL OR nullif(btrim(proof_object_key), '') IS NOT NULL)),
     CONSTRAINT funding_evidence_funding_unique UNIQUE (funding_id)
 );
 

@@ -107,6 +107,14 @@ export type OperatorFundingDetail = OperatorFundingSummary & {
     id: string;
     transferReference: string | null;
     proofImageUrl: string | null;
+    proof: {
+      provider: string;
+      container: string;
+      key: string;
+      originalFilename: string | null;
+      mimeType: string;
+      byteSize: string;
+    } | null;
     customerNote: string | null;
     createdAt: string;
   } | null;
@@ -272,7 +280,9 @@ export class OperatorFundingService {
     ).rows;
     const evidence = (
       await this.sql.query<any>(
-        `select uuid as id,transfer_reference,proof_image_url,customer_note,created_at
+        `select uuid as id,transfer_reference,proof_image_url,customer_note,
+                proof_storage_provider,proof_storage_container,proof_object_key,
+                proof_original_filename,proof_mime_type,proof_byte_size,created_at
            from funding_capability.funding_evidence
           where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)`,
         [id],
@@ -345,6 +355,19 @@ export class OperatorFundingService {
             id: evidence.id,
             transferReference: evidence.transfer_reference ?? null,
             proofImageUrl: evidence.proof_image_url ?? null,
+            proof:
+              evidence.proof_storage_provider &&
+              evidence.proof_storage_container &&
+              evidence.proof_object_key
+                ? {
+                    provider: evidence.proof_storage_provider,
+                    container: evidence.proof_storage_container,
+                    key: evidence.proof_object_key,
+                    originalFilename: evidence.proof_original_filename ?? null,
+                    mimeType: evidence.proof_mime_type,
+                    byteSize: String(evidence.proof_byte_size),
+                  }
+                : null,
             customerNote: evidence.customer_note ?? null,
             createdAt: new Date(evidence.created_at).toISOString(),
           }

@@ -6,6 +6,8 @@ import {
   fundingActionLabel,
   fundingStatusMessage,
   formatTimeRemaining,
+  snapshotInstruction,
+  shouldPollFunding,
   validatedPreparationAmount,
   walletActivityLabel,
   walletActivityState,
@@ -57,6 +59,26 @@ describe("wallet page composition", () => {
       showFundingForm: true,
     });
     expect(walletPanelComposition(true, true).showFundingForm).toBe(false);
+  });
+});
+
+describe("bank transfer snapshot presentation", () => {
+  it("reads the specific instruction separately from opaque fields", () => {
+    expect(
+      snapshotInstruction({
+        instruction: "Include the funding reference in the transfer narration.",
+        fields: [
+          {
+            key: "custom_instruction",
+            label: "Transfer instruction",
+            value: "This remains an opaque configured field.",
+          },
+        ],
+      }),
+    ).toBe("Include the funding reference in the transfer narration.");
+    expect(
+      snapshotInstruction({ fields: [{ key: "instruction", value: "Do not infer this" }] }),
+    ).toBe(null);
   });
 });
 
@@ -151,7 +173,7 @@ describe("customer-facing funding presentation", () => {
     ).toBe("Contacting payment provider.");
   });
 
-  it("keeps bank fields as separate rows and hides duplicate reference instructions", () => {
+  it("renders every configured bank field, including opaque instructions", () => {
     expect(
       bankStatusFieldRows([
         { key: "bank", label: "Bank name", value: "Example Bank" },
@@ -165,7 +187,20 @@ describe("customer-facing funding presentation", () => {
     ).toEqual([
       { key: "bank", label: "Bank name", value: "Example Bank" },
       { key: "account", label: "Account number", value: "0000000000", copyable: true },
+      {
+        key: "custom",
+        label: "Custom instruction",
+        value: "Include the funding reference in the transfer narration.",
+      },
     ]);
+  });
+
+  it("does not run recurring polling for bank transfer", () => {
+    expect(shouldPollFunding({ provider: "bank_transfer", state: "awaiting_payment" })).toBe(false);
+    expect(shouldPollFunding({ provider: "paystack", state: "awaiting_payment" })).toBe(true);
+    expect(shouldPollFunding({ provider: "nowpayments", state: "verification_pending" })).toBe(
+      true,
+    );
   });
 
   it("preserves arbitrary bank field order and copy metadata for rendering", () => {

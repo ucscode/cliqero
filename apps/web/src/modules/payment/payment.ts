@@ -32,6 +32,8 @@ export interface PaymentPreparation {
 export interface PaymentFundingOption {
   id: string;
   collectionCurrency: string;
+  /** Optional provider-specific instruction captured with the funding snapshot. */
+  instruction?: string;
   fields: readonly {
     key: string;
     label: string;
