@@ -20,6 +20,8 @@ import {
 
 describe("bank-transfer evidence visibility", () => {
   it.each([
+    ["bank_transfer", "initialization_pending", true],
+    ["bank_transfer", "initializing", true],
     ["bank_transfer", "awaiting_payment", true],
     ["bank_transfer", "verification_pending", true],
     ["bank_transfer", "confirmed", false],

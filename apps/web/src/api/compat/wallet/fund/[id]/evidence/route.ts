@@ -4,11 +4,15 @@ import { getContainer } from "@/infrastructure/container";
 
 const schema = z
   .object({
-    transfer_reference: z.string().max(200).optional(),
-    proof_image_url: z.string().url().max(2048).optional(),
-    customer_note: z.string().max(2000).optional(),
+    transfer_reference: z.preprocess(emptyToUndefined, z.string().max(200).optional()),
+    proof_image_url: z.preprocess(emptyToUndefined, z.string().url().max(2048).optional()),
+    customer_note: z.preprocess(emptyToUndefined, z.string().max(2000).optional()),
   })
   .strict();
+
+function emptyToUndefined(value: unknown) {
+  return value === "" ? undefined : value;
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const account = await authenticatedAccount(request);

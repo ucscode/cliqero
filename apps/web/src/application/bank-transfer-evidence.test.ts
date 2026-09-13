@@ -9,6 +9,64 @@ function result<T extends object>(rows: T[]): QueryResult<T> {
 }
 
 describe("bank-transfer evidence", () => {
+  it("accepts evidence from a newly-created pending funding", async () => {
+    const service = new BankTransferEvidenceService({
+      query: async <T extends object>(sql: string) => {
+        if (sql.includes("select uuid as id,transfer_reference")) return result<T>([]);
+        if (sql.includes("returning uuid"))
+          return result<T>([{ id: "evidence-id", created_at: new Date() }] as T[]);
+        if (
+          sql.includes("from funding_capability.funding_transactions") &&
+          !sql.includes("funding_evidence")
+        )
+          return result<T>([
+            {
+              id: fundingId,
+              account_id: 7,
+              provider_name: "bank_transfer",
+              state: "initialization_pending",
+            },
+          ] as T[]);
+        if (sql.includes("select uuid from identity_capability.accounts"))
+          return result<T>([{ uuid: accountId }] as T[]);
+        return result<T>([]) as QueryResult<T>;
+      },
+    });
+
+    await expect(
+      service.submit(accountId, fundingId, { transferReference: "bank-ref" }),
+    ).resolves.toMatchObject({ state: "verification_pending", transferReference: "bank-ref" });
+  });
+
+  it("accepts evidence while bank details are being initialized", async () => {
+    const service = new BankTransferEvidenceService({
+      query: async <T extends object>(sql: string) => {
+        if (sql.includes("select uuid as id,transfer_reference")) return result<T>([]);
+        if (sql.includes("returning uuid"))
+          return result<T>([{ id: "evidence-id", created_at: new Date() }] as T[]);
+        if (
+          sql.includes("from funding_capability.funding_transactions") &&
+          !sql.includes("funding_evidence")
+        )
+          return result<T>([
+            {
+              id: fundingId,
+              account_id: 7,
+              provider_name: "bank_transfer",
+              state: "initializing",
+            },
+          ] as T[]);
+        if (sql.includes("select uuid from identity_capability.accounts"))
+          return result<T>([{ uuid: accountId }] as T[]);
+        return result<T>([]) as QueryResult<T>;
+      },
+    });
+
+    await expect(
+      service.submit(accountId, fundingId, { customerNote: "Transfer sent" }),
+    ).resolves.toMatchObject({ state: "verification_pending", customerNote: "Transfer sent" });
+  });
+
   it("requires meaningful evidence and moves owned bank funding to review", async () => {
     const statements: string[] = [];
     const service = new BankTransferEvidenceService({

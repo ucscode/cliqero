@@ -61,6 +61,7 @@ import * as wallet from "@/api/compat/wallet/route";
 import * as walletFunding from "@/api/compat/wallet/fund/route";
 import * as walletFundingById from "@/api/compat/wallet/fund/[id]/route";
 import * as walletFundingCancel from "@/api/compat/wallet/fund/[id]/cancel/route";
+import * as walletFundingEvidence from "@/api/compat/wallet/fund/[id]/evidence/route";
 import * as walletFundingPrepare from "@/api/compat/wallet/funding/prepare/route";
 import * as walletFundingHistory from "@/api/compat/wallet/funding/route";
 import * as walletTransactions from "@/api/compat/wallet/transactions/route";
@@ -161,6 +162,7 @@ const routes: LegacyRoute[] = [
   { pattern: "/api/referrals/uplines", module: referralUplines },
   { pattern: "/api/wallet/fund", module: walletFunding },
   { pattern: "/api/wallet/fund/:id/cancel", module: walletFundingCancel },
+  { pattern: "/api/wallet/fund/:id/evidence", module: walletFundingEvidence },
   { pattern: "/api/wallet/fund/:id", module: walletFundingById },
   { pattern: "/api/wallet/funding/prepare", module: walletFundingPrepare },
   { pattern: "/api/wallet/funding", module: walletFundingHistory },
@@ -230,6 +232,7 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern === "/api/wallet/funding") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/fund/:id") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/fund/:id/cancel") return { mode: "account", scope: "wallet:fund" };
+  if (pattern === "/api/wallet/fund/:id/evidence") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/wallet/fund") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/checkout") return { mode: "account", scope: "checkout:create" };
   if (pattern === "/api/checkout/:id" || pattern.startsWith("/api/purchases"))

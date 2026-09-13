@@ -126,7 +126,10 @@ export function canSubmitBankTransferEvidence(
 ) {
   return (
     funding?.provider === "bank_transfer" &&
-    (funding.state === "awaiting_payment" || funding.state === "verification_pending")
+    (funding.state === "initialization_pending" ||
+      funding.state === "initializing" ||
+      funding.state === "awaiting_payment" ||
+      funding.state === "verification_pending")
   );
 }
 

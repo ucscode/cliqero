@@ -58,7 +58,12 @@ export class BankTransferEvidenceService {
           createdAt: new Date(existing.created_at).toISOString(),
           state: "verification_pending" as const,
         };
-      if (funding.state !== "awaiting_payment" && funding.state !== "verification_pending")
+      if (
+        funding.state !== "initialization_pending" &&
+        funding.state !== "initializing" &&
+        funding.state !== "awaiting_payment" &&
+        funding.state !== "verification_pending"
+      )
         throw new Error("Funding is not available for evidence");
 
       const inserted = (

@@ -38,7 +38,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!funding || funding.accountId !== account.id)
       return Response.json({ error: "Funding not found" }, { status: 404 });
     const paymentDetailsVisible =
-      funding.state === "awaiting_payment" || funding.state === "verification_pending";
+      funding.state === "initialization_pending" ||
+      funding.state === "initializing" ||
+      funding.state === "awaiting_payment" ||
+      funding.state === "verification_pending";
     return Response.json({
       id: funding.id,
       state: funding.state,

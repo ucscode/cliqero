@@ -841,6 +841,15 @@ describe("Hono API foundation", () => {
       mode: "account",
       scope: "withdrawals:manage",
     });
+    expect(
+      getLegacyRouteAccess(
+        "/api/wallet/fund/00000000-0000-4000-8000-000000000001/evidence",
+        "POST",
+      ),
+    ).toEqual({
+      mode: "account",
+      scope: "wallet:fund",
+    });
     const publicDetail = authorizeLegacyRequest(
       new Request("http://localhost/api/listings/00000000-0000-4000-8000-000000000001", {
         method: "GET",
