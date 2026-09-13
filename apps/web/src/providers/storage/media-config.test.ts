@@ -45,6 +45,27 @@ providers:
     }
   });
 
+  it("uses the filesystem instance name as container identity when container is omitted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
+    try {
+      const storageRoot = join(root, "objects");
+      const config = join(root, "config.yaml");
+      await writeFile(
+        config,
+        `default_provider: local_files\nproviders:\n  local_files:\n    provider: filesystem\n    visibility: private\n    config:\n      root: ${storageRoot}\n`,
+      );
+      const registry = loadMediaStorage(config, environment);
+      const stored = await registry.default().put({
+        key: "proofs/test.png",
+        bytes: new Uint8Array([1]),
+        mimeType: "image/png",
+      });
+      expect(stored.container).toBe("local_files");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     ["public filesystem", "filesystem", "root: /tmp/cliqero-media\n      container: media"],
     [
