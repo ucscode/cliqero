@@ -66,6 +66,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       currency: funding.canonicalAmount.currency,
       collection_amount_minor: funding.collectionAmount.minorAmount.toString(),
       collection_currency: funding.collectionAmount.currency,
+      conversion: funding.conversionSnapshot
+        ? {
+            from_currency: funding.conversionSnapshot.fromCurrency,
+            to_currency: funding.conversionSnapshot.toCurrency,
+            rate: funding.conversionSnapshot.rate,
+            observed_at: funding.conversionSnapshot.observedAt.toISOString(),
+          }
+        : null,
       provider_account_id: paymentDetailsVisible
         ? (funding.providerInitialization?.providerAccountId ?? null)
         : null,

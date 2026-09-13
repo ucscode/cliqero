@@ -127,6 +127,7 @@ const fundingStateSchema = z.enum([
   "confirmed",
   "failed",
   "blocked",
+  "expired",
   "reconciliation_pending",
 ]);
 const operatorFundingWalletCreditSchema = z.object({
@@ -2474,7 +2475,8 @@ export function createApiApp(
     if (!reference) return c.json({ error: "Invalid notification", code: "invalid_request" }, 400);
     const funding = await container.funding.findByProviderReference(providerName, reference);
     if (!funding) return c.json({ error: "Not found", code: "not_found" }, 404);
-    if (funding.state === "confirmed" || funding.state === "failed") return c.body(null, 204);
+    if (funding.state === "confirmed" || funding.state === "failed" || funding.state === "expired")
+      return c.body(null, 204);
     await container.database.transaction(async () => {
       const locked = await container.funding.findById(funding.id, { forUpdate: true });
       if (

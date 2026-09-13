@@ -19,6 +19,7 @@ describe("direct TRC20 provider", () => {
       idempotencyKey: "key",
       buyerEmail: "buyer@example.test",
     });
+    expect(result.reference).toBe("usdt-00000000-0000-4000-8000-000000000001");
     expect(result.metadata).toMatchObject({
       paymentAddress: "TReceiver",
       paymentCurrency: "USDT",

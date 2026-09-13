@@ -120,6 +120,7 @@ export type FundingStatus = {
     | "failed"
     | "blocked"
     | "cancelled"
+    | "expired"
     | "reconciliation_pending";
   provider: string;
   provider_display_name: string;
@@ -129,6 +130,12 @@ export type FundingStatus = {
   currency: string;
   collection_amount_minor: string;
   collection_currency: string;
+  conversion: {
+    from_currency: string;
+    to_currency: string;
+    rate: string;
+    observed_at: string;
+  } | null;
   provider_account_id: string | null;
   provider_account_snapshot: unknown;
   payment_address: string | null;
@@ -323,6 +330,7 @@ export type OperatorFundingState =
   | "confirmed"
   | "failed"
   | "blocked"
+  | "expired"
   | "reconciliation_pending";
 
 export type OperatorFundingWalletCredit = {

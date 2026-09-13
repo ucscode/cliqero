@@ -11,6 +11,7 @@ const states: FundingState[] = [
   "failed",
   "blocked",
   "cancelled",
+  "expired",
   "reconciliation_pending",
 ];
 

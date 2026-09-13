@@ -30,6 +30,14 @@ function configure(owner = account.id, state = "awaiting_payment", providerName 
         providerReference: "dev-reference",
         canonicalAmount: { minorAmount: 1250n, currency: "USD" },
         collectionAmount: { minorAmount: 1250n, currency: "USD" },
+        conversionSnapshot: {
+          fromCurrency: "USD",
+          toCurrency: "NGN",
+          rate: "1326.475",
+          source: "private-rate-source",
+          sourceDate: "2026-09-13",
+          observedAt: new Date("2026-09-13T08:00:00.000Z"),
+        },
         state,
         providerInitialization: {
           authorizationUrl: "https://pay.example.test/continue",
@@ -62,12 +70,21 @@ describe("wallet funding status projection", () => {
       params: Promise.resolve({ id: fundingId }),
     });
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
+    const body = await response.json();
+    expect(body).toMatchObject({
       id: fundingId,
       state: "awaiting_payment",
       provider_display_name: "Development",
       funding_reference: "dev-reference",
       amount_minor: "1250",
+      collection_amount_minor: "1250",
+      collection_currency: "USD",
+      conversion: {
+        from_currency: "USD",
+        to_currency: "NGN",
+        rate: "1326.475",
+        observed_at: "2026-09-13T08:00:00.000Z",
+      },
       authorization_url: "https://pay.example.test/continue",
       provider_account_snapshot: {
         id: "account-1",
@@ -85,6 +102,7 @@ describe("wallet funding status projection", () => {
       instructions: "Send exactly 12.50 USDT.",
       expires_at: "2026-09-11T14:00:00.000Z",
     });
+    expect(JSON.stringify(body)).not.toContain("private-rate-source");
   });
 
   it("projects the persisted bank snapshot before provider initialization", async () => {
@@ -134,6 +152,24 @@ describe("wallet funding status projection", () => {
     expect(await response.json()).toMatchObject({
       authorization_url: null,
       provider_account_snapshot: null,
+    });
+  });
+
+  it("hides provider payment details after expiry", async () => {
+    configure(account.id, "expired", "nowpayments");
+    const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
+      params: Promise.resolve({ id: fundingId }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      state: "expired",
+      authorization_url: null,
+      provider_account_snapshot: null,
+      payment_address: null,
+      payment_amount: null,
+      payment_currency: null,
+      expires_at: null,
     });
   });
 

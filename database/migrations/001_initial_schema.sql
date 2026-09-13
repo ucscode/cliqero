@@ -497,7 +497,7 @@ CREATE TABLE funding_capability.funding_transactions (
     CONSTRAINT funding_amount_positive CHECK (((canonical_amount_minor > 0) AND (collection_amount_minor > 0))),
     CONSTRAINT funding_canonical_usd CHECK ((canonical_currency = 'USD'::text)),
     CONSTRAINT funding_currency_format CHECK ((collection_currency ~ '^[A-Z]{3}$'::text)),
-    CONSTRAINT funding_state_valid CHECK ((state = ANY (ARRAY['initialization_pending'::text, 'initializing'::text, 'awaiting_payment'::text, 'verification_pending'::text, 'confirmed'::text, 'failed'::text, 'blocked'::text, 'cancelled'::text, 'reconciliation_pending'::text])))
+    CONSTRAINT funding_state_valid CHECK ((state = ANY (ARRAY['initialization_pending'::text, 'initializing'::text, 'awaiting_payment'::text, 'verification_pending'::text, 'confirmed'::text, 'failed'::text, 'blocked'::text, 'cancelled'::text, 'expired'::text, 'reconciliation_pending'::text])))
 );
 
 -- Customer-submitted bank-transfer evidence is supporting material only; it
@@ -2783,6 +2783,8 @@ CREATE INDEX funding_initialization_claimable_idx ON funding_capability.funding_
 --
 
 CREATE INDEX funding_work_idx ON funding_capability.funding_transactions USING btree (state, updated_at, id);
+
+CREATE INDEX funding_nowpayments_expiry_idx ON funding_capability.funding_transactions USING btree ((provider_initialization ->> 'expiresAt'::text)) WHERE ((provider_name = 'nowpayments'::text) AND (state = 'awaiting_payment'::text) AND ((provider_initialization ->> 'expiresAt'::text) IS NOT NULL));
 
 
 --

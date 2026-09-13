@@ -370,7 +370,7 @@ export class FundingVerificationProcessor {
     private uow: UnitOfWork,
     private operations?: PostgresPaymentOperationsRepository,
   ) {}
-  async process(id: string) {
+  async process(id: string, options: { expireUnsuccessful?: boolean; now?: Date } = {}) {
     const f = await this.funding.findById(id);
     if (!f || !(f.state === "verification_pending" || f.state === "awaiting_payment")) return null;
     let result;
@@ -410,13 +410,29 @@ export class FundingVerificationProcessor {
     return this.uow.transaction(async () => {
       const locked = await this.funding.findById(id, { forUpdate: true });
       if (!locked || locked.state === "confirmed") return locked;
+      const shouldExpire =
+        options.expireUnsuccessful === true &&
+        isExpiredNowPaymentsFunding(locked, options.now ?? new Date());
+      const factsMatch =
+        result.reference === locked.providerReference &&
+        result.amount.minorAmount === locked.collectionAmount.minorAmount &&
+        result.amount.currency === locked.collectionAmount.currency;
       if (!result.verified && isFundingPendingStatus(result.status)) {
         locked.state =
-          locked.state === "verification_pending" ? "verification_pending" : "awaiting_payment";
+          shouldExpire && factsMatch
+            ? "expired"
+            : locked.state === "verification_pending"
+              ? "verification_pending"
+              : "awaiting_payment";
         await this.funding.save(locked);
         return locked;
       }
       if (mismatch) {
+        if (shouldExpire && factsMatch) {
+          locked.state = "expired";
+          await this.funding.save(locked);
+          return locked;
+        }
         const code =
           !result.verified || result.status !== "success"
             ? "verification_unsuccessful"
@@ -451,6 +467,42 @@ export class FundingVerificationProcessor {
       return locked;
     });
   }
+}
+
+export class FundingExpiryProcessor {
+  constructor(
+    private funding: FundingRepository,
+    private verification: FundingVerificationProcessor,
+    private clock: () => Date = () => new Date(),
+  ) {}
+  findWork(limit = 50) {
+    const now = this.clock();
+    return (
+      this.funding.findExpiredNowPayments?.(now, limit) ??
+      Promise.resolve([] as FundingTransaction[])
+    );
+  }
+  async process(id: string) {
+    const now = this.clock();
+    const funding = await this.funding.findById(id);
+    if (!isExpiredNowPaymentsFunding(funding, now)) return null;
+    return this.verification.process(id, { expireUnsuccessful: true, now });
+  }
+}
+
+function isExpiredNowPaymentsFunding(
+  funding: FundingTransaction | null,
+  now: Date,
+): funding is FundingTransaction {
+  if (
+    !funding ||
+    funding.providerName !== "nowpayments" ||
+    funding.state !== "awaiting_payment" ||
+    !funding.providerInitialization?.expiresAt
+  )
+    return false;
+  const expiresAt = Date.parse(funding.providerInitialization.expiresAt);
+  return !Number.isNaN(expiresAt) && expiresAt <= now.getTime();
 }
 
 function isFundingPendingStatus(status: string) {

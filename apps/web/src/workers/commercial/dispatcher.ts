@@ -31,6 +31,11 @@ export class CommercialWorkflowDispatcher {
       (item) => this.app.fundingInitialization.process(item.id),
     );
     processed += await this.family(
+      "funding-expiry",
+      () => this.app.fundingExpiry.findWork(),
+      (item) => this.app.fundingExpiry.process(item.id),
+    );
+    processed += await this.family(
       "funding-verification",
       () => this.app.funding.findWork("verification_pending"),
       (item) => this.app.fundingVerification.process(item.id),

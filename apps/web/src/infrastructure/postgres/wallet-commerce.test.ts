@@ -4,11 +4,11 @@ import { PostgresFundingRepository, PostgresWalletRepository } from "./wallet-co
 
 const accountId = "00000000-0000-4000-8000-000000000001";
 
-function fundingRow(id: string, state: string) {
+function fundingRow(id: string, state: string, providerName = "paystack") {
   return {
     id,
     account_uuid: accountId,
-    provider_name: "paystack",
+    provider_name: providerName,
     provider_reference: `pay-${id}`,
     canonical_amount_minor: "1000",
     canonical_currency: "USD",
@@ -48,6 +48,45 @@ describe("Postgres wallet and funding projections", () => {
       "00000000-0000-4000-8000-000000000012",
     ]);
     expect(query).toHaveBeenCalledWith(expect.stringContaining("state in"), [accountId]);
+    expect(query.mock.calls[0]?.[0]).not.toContain("'expired'");
+  });
+
+  it("discovers bounded, expired NOWPayments sessions from persisted provider expiry", async () => {
+    const query = vi.fn(async (statement: string) =>
+      statement.includes("provider_name='nowpayments'")
+        ? {
+            rows: [
+              fundingRow("00000000-0000-4000-8000-000000000014", "awaiting_payment", "nowpayments"),
+            ],
+          }
+        : { rows: [] },
+    );
+    const repository = new PostgresFundingRepository({ query } as never);
+    const expired = await repository.findExpiredNowPayments(
+      new Date("2026-09-13T10:00:00.000Z"),
+      500,
+    );
+
+    expect(expired.map((funding) => funding.id)).toEqual(["00000000-0000-4000-8000-000000000014"]);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("expiresAt"), [
+      "2026-09-13T10:00:00.000Z",
+      50,
+    ]);
+  });
+
+  it("keeps expired funding in normal history while excluding it from active history", async () => {
+    const expiredRow = fundingRow("00000000-0000-4000-8000-000000000015", "expired", "nowpayments");
+    const query = vi.fn(async (_statement: string, values: unknown[]) =>
+      values[3] === false ? { rows: [expiredRow] } : { rows: [] },
+    );
+    const repository = new PostgresFundingRepository({ query } as never);
+
+    const history = await repository.findHistoryForAccount({ accountId });
+    const activeHistory = await repository.findHistoryForAccount({ accountId, active: true });
+
+    expect(history.items.map((funding) => funding.state)).toEqual(["expired"]);
+    expect(activeHistory.items).toEqual([]);
+    expect(query.mock.calls[1]?.[0]).toContain("state in");
   });
 
   it("bounds recent wallet activity even when a larger limit is requested", async () => {

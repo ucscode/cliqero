@@ -9,6 +9,7 @@ type FundingState =
   | "confirmed"
   | "failed"
   | "blocked"
+  | "expired"
   | "reconciliation_pending";
 
 type Cursor = { createdAt: string; id: string };

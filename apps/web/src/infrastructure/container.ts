@@ -86,6 +86,7 @@ import {
   FundingService,
   FundingInitializationProcessor,
   FundingVerificationProcessor,
+  FundingExpiryProcessor,
   WalletService,
   WalletCheckoutService,
 } from "@/application/wallet-commerce";
@@ -304,6 +305,7 @@ export function createContainer(databaseUrl: string) {
     database,
     paymentOperations,
   );
+  const fundingExpiry = new FundingExpiryProcessor(funding, fundingVerification);
   const wallet = new WalletService(walletRepository);
   const walletCredit = new WalletCreditProcessor(funding, walletRepository, database);
   const walletAvailability = new WalletAvailabilityProcessor(walletRepository, database);
@@ -376,6 +378,7 @@ export function createContainer(databaseUrl: string) {
     fundingService,
     fundingInitialization,
     fundingVerification,
+    fundingExpiry,
     wallet,
     walletRepository,
     walletCredit,

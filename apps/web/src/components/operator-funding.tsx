@@ -28,6 +28,7 @@ const states: Array<{ value: OperatorFundingState; label: string }> = [
   { value: "confirmed", label: "Confirmed" },
   { value: "failed", label: "Failed" },
   { value: "blocked", label: "Blocked" },
+  { value: "expired", label: "Expired" },
   { value: "reconciliation_pending", label: "Reconciliation pending" },
 ];
 

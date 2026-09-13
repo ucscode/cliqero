@@ -42,6 +42,7 @@ const terminalFundingStates = new Set([
   "failed",
   "blocked",
   "cancelled",
+  "expired",
   "reconciliation_pending",
 ]);
 
@@ -101,6 +102,8 @@ export function fundingStatusMessage(
     return "Complete the payment to continue.";
   }
   if (funding.state === "verification_pending") return "Your payment is being verified.";
+  if (funding.state === "expired")
+    return "This payment session has expired. Start a new funding attempt.";
   if (funding.state === "failed" || funding.state === "blocked")
     return (
       funding.error_message ??
@@ -438,9 +441,10 @@ export function WalletPanel({
       ? null
       : safeProviderUrl(funding?.authorization_url ?? null);
   const paymentSessionExpired = Boolean(
-    funding?.provider === "nowpayments" &&
-    funding.expires_at &&
-    Date.parse(funding.expires_at) <= currentTime,
+    funding?.state === "expired" ||
+    (funding?.provider === "nowpayments" &&
+      funding.expires_at &&
+      Date.parse(funding.expires_at) <= currentTime),
   );
   const canContinueProvider = funding?.state === "awaiting_payment" && providerUrl;
   const bankEvidenceAllowed = canSubmitBankTransferEvidence(funding) && !funding?.evidence;
@@ -781,12 +785,32 @@ export function WalletPanel({
                 <Money minor={funding.amount_minor} currency={funding.currency} />
               </strong>
             </div>
+            {!paymentSessionExpired && funding.conversion && (
+              <>
+                <div className="grid gap-1">
+                  <span className="text-slate-600">Payment amount</span>
+                  <strong>
+                    <Money
+                      minor={funding.collection_amount_minor}
+                      currency={funding.collection_currency}
+                    />
+                  </strong>
+                </div>
+                <div className="grid gap-1">
+                  <span className="text-slate-600">Exchange rate</span>
+                  <strong>
+                    {formatExchangeRate(funding.conversion.rate, funding.conversion.to_currency)} /{" "}
+                    {funding.conversion.from_currency}
+                  </strong>
+                </div>
+              </>
+            )}
             {!paymentSessionExpired && funding.payment_amount && (
               <div className="grid gap-1">
                 <span className="text-slate-600">Payment amount</span>
                 <CopyValue
                   label="payment amount"
-                  value={`${funding.payment_amount} ${funding.payment_currency ?? ""}`.trim()}
+                  value={funding.payment_amount}
                   displayValue={
                     <strong>
                       {funding.payment_amount} {funding.payment_currency ?? ""}
@@ -961,7 +985,7 @@ export function WalletPanel({
                 </Button>
               </form>
             )}
-            {funding.expires_at && (
+            {funding.expires_at && funding.state !== "expired" && !paymentSessionExpired && (
               <p className="text-sm font-medium text-slate-700" role="timer">
                 {formatTimeRemaining(funding.expires_at, currentTime)} · Expires:{" "}
                 {new Date(funding.expires_at).toLocaleString()}
@@ -1001,7 +1025,9 @@ export function WalletPanel({
                 Cancel funding
               </Button>
             ) : null}
-            {(funding.state === "blocked" || funding.state === "failed") && (
+            {(funding.state === "blocked" ||
+              funding.state === "failed" ||
+              funding.state === "expired") && (
               <Button asChild variant="secondary">
                 <Link href={canonicalWalletFundingUrl(returnTo ?? "/dashboard/wallet/fund")}>
                   Start a new funding attempt

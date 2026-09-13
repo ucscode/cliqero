@@ -14,6 +14,7 @@ export type FundingState =
   | "failed"
   | "blocked"
   | "cancelled"
+  | "expired"
   | "reconciliation_pending";
 export interface FundingTransaction {
   id: Id;
@@ -48,6 +49,7 @@ export interface FundingRepository {
     active?: boolean;
   }): Promise<FundingHistoryPage>;
   findWork(state: FundingState, limit?: number): Promise<readonly FundingTransaction[]>;
+  findExpiredNowPayments?(now: Date, limit?: number): Promise<readonly FundingTransaction[]>;
   findInitializationWork(staleBefore: Date, limit?: number): Promise<readonly FundingTransaction[]>;
   claimInitialization(
     id: Id,

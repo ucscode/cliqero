@@ -88,6 +88,7 @@ export function FundingHistoryPanel() {
             <option value="failed">Failed</option>
             <option value="blocked">Blocked</option>
             <option value="cancelled">Cancelled</option>
+            <option value="expired">Expired</option>
             <option value="reconciliation_pending">Reconciliation pending</option>
           </select>
         </label>

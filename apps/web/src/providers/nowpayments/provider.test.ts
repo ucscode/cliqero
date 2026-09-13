@@ -71,6 +71,7 @@ describe("NOWPayments provider", () => {
         price_currency: "usd",
         pay_currency: "usdterc20",
         order_id: `np-${id}`,
+        expiration_estimate_date: "2026-09-13T09:00:00.000Z",
       }),
     );
     const provider = new NowPaymentsProvider(config, "nowpayments", http);
@@ -86,6 +87,7 @@ describe("NOWPayments provider", () => {
       providerPaymentId: "123",
       paymentAddress: "0xabc",
       paymentCurrency: "USDTERC20",
+      expiresAt: "2026-09-13T09:00:00.000Z",
     });
     expect(result.metadata).not.toHaveProperty("asset");
     expect(result.metadata).not.toHaveProperty("network");
@@ -102,6 +104,35 @@ describe("NOWPayments provider", () => {
       pay_currency: "usdterc20",
       ipn_callback_url: "https://public.example.test/api/payments/nowpayments/ipn",
     });
+  });
+
+  it("does not invent an expiry when NOWPayments omits its provider deadline", async () => {
+    const provider = new NowPaymentsProvider(
+      config,
+      "nowpayments",
+      vi.fn(async () =>
+        Response.json({
+          payment_id: 123,
+          payment_status: "waiting",
+          pay_address: "Taddress",
+          pay_amount: "10.25",
+          price_amount: 10.25,
+          price_currency: "usd",
+          pay_currency: "usdttrc20",
+          order_id: `np-${id}`,
+        }),
+      ),
+    );
+
+    const result = await provider.initiate({
+      paymentId: id,
+      amount: Money.of(1025n, "USD"),
+      idempotencyKey: "funding-without-provider-expiry",
+      buyerEmail: "buyer@example.test",
+      paymentCurrency: "usdttrc20",
+    });
+
+    expect(result.metadata?.expiresAt).toBeUndefined();
   });
 
   it("preserves safe structured diagnostics from a rejected provider response", async () => {

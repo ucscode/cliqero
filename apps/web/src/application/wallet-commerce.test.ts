@@ -5,7 +5,12 @@ import { PaymentProviderRegistry, type PaymentProvider } from "@/modules/payment
 import { PaystackProvider } from "@/providers/paystack/payment/provider";
 import { NowPaymentsProvider } from "@/providers/nowpayments/provider";
 import { BankTransferProvider } from "@/providers/bank-transfer/provider";
-import { FundingInitializationProcessor, FundingService } from "./wallet-commerce";
+import {
+  FundingExpiryProcessor,
+  FundingInitializationProcessor,
+  FundingService,
+  FundingVerificationProcessor,
+} from "./wallet-commerce";
 
 const accountId = "00000000-0000-4000-8000-000000000001";
 const fundingId = "00000000-0000-4000-8000-000000000002";
@@ -162,6 +167,133 @@ describe("funding minimum preflight", () => {
       failureCurrency: "USD",
     });
     expect(initiate).not.toHaveBeenCalled();
+  });
+});
+
+describe("NOWPayments funding expiry", () => {
+  const now = new Date("2026-09-13T10:00:00.000Z");
+
+  function harness(
+    expiresAt: string,
+    result: { verified: boolean; status: string; reference?: string; amount?: Money },
+    providerName = "nowpayments",
+  ) {
+    let current = existingFunding({
+      providerName,
+      providerInitialization: { expiresAt },
+    });
+    const verify = vi.fn(async () => ({
+      verified: result.verified,
+      status: result.status,
+      reference: result.reference ?? current.providerReference,
+      amount: result.amount ?? current.collectionAmount,
+    }));
+    const repository = {
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const paymentProvider: PaymentProvider = {
+      ...provider,
+      name: providerName,
+      verify,
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register(paymentProvider),
+      { transaction: async (operation) => operation() },
+    );
+    const expiry = new FundingExpiryProcessor(repository as never, verification, () => now);
+    return { current: () => current, expiry, verify };
+  }
+
+  it("does not verify a future-expiry session", async () => {
+    const test = harness("2026-09-13T10:01:00.000Z", {
+      verified: false,
+      status: "pending",
+    });
+
+    await expect(test.expiry.process(fundingId)).resolves.toBeNull();
+    expect(test.verify).not.toHaveBeenCalled();
+    expect(test.current().state).toBe("awaiting_payment");
+  });
+
+  it("performs final verification and expires an unresolved session", async () => {
+    const test = harness("2026-09-13T09:59:00.000Z", {
+      verified: false,
+      status: "expired",
+    });
+
+    await expect(test.expiry.process(fundingId)).resolves.toMatchObject({ state: "expired" });
+    expect(test.verify).toHaveBeenCalledTimes(1);
+    expect(test.current().state).toBe("expired");
+  });
+
+  it("confirms a successful final verification instead of expiring", async () => {
+    const test = harness("2026-09-13T09:59:00.000Z", {
+      verified: true,
+      status: "success",
+    });
+
+    await expect(test.expiry.process(fundingId)).resolves.toMatchObject({ state: "confirmed" });
+    expect(test.current().state).toBe("confirmed");
+  });
+
+  it("never expires a funding that was confirmed before the final lock", async () => {
+    const awaiting = existingFunding({
+      providerName: "nowpayments",
+      providerInitialization: { expiresAt: "2026-09-13T09:59:00.000Z" },
+    });
+    const confirmed = existingFunding({
+      providerName: "nowpayments",
+      state: "confirmed",
+      providerInitialization: { expiresAt: "2026-09-13T09:59:00.000Z" },
+    });
+    let lockRead = false;
+    const repository = {
+      findById: async (_id: string, options?: { forUpdate?: boolean }) => {
+        if (options?.forUpdate) {
+          lockRead = true;
+          return confirmed;
+        }
+        return awaiting;
+      },
+      save: async () => undefined,
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "nowpayments",
+        verify: async () => ({
+          verified: false,
+          status: "expired",
+          reference: confirmed.providerReference,
+          amount: confirmed.collectionAmount,
+        }),
+      }),
+      { transaction: async (operation) => operation() },
+    );
+    await expect(
+      verification.process(fundingId, { expireUnsuccessful: true, now }),
+    ).resolves.toMatchObject({ state: "confirmed" });
+    expect(lockRead).toBe(true);
+  });
+
+  it("does not apply NOWPayments expiry rules to other providers", async () => {
+    const test = harness(
+      "2026-09-13T09:59:00.000Z",
+      {
+        verified: false,
+        status: "expired",
+      },
+      "paystack",
+    );
+
+    await expect(test.expiry.process(fundingId)).resolves.toBeNull();
+    expect(test.verify).not.toHaveBeenCalled();
+    expect(test.current().state).toBe("awaiting_payment");
   });
 });
 
@@ -431,10 +563,12 @@ describe("customer funding cancellation", () => {
   it("cancels only the selected pending attempt and never confirmed value", async () => {
     const siblingId = "00000000-0000-4000-8000-000000000003";
     const confirmedId = "00000000-0000-4000-8000-000000000004";
+    const expiredId = "00000000-0000-4000-8000-000000000005";
     const records = new Map<string, any>([
       [fundingId, existingFunding()],
       [siblingId, existingFunding({ id: siblingId, providerReference: "reference-2" })],
       [confirmedId, existingFunding({ id: confirmedId, state: "confirmed" })],
+      [expiredId, existingFunding({ id: expiredId, state: "expired" })],
     ]);
     const cancellations: Array<{ id: string; previousState: string }> = [];
     const repository = {
@@ -460,6 +594,9 @@ describe("customer funding cancellation", () => {
     expect(records.get(confirmedId)?.state).toBe("confirmed");
     expect(cancellations).toEqual([{ id: fundingId, previousState: "awaiting_payment" }]);
     await expect(service.cancel({ accountId, fundingId: confirmedId })).rejects.toThrow(
+      "cannot be cancelled",
+    );
+    await expect(service.cancel({ accountId, fundingId: expiredId })).rejects.toThrow(
       "cannot be cancelled",
     );
   });

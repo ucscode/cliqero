@@ -17,6 +17,7 @@ export const fundingStatePresentation: Record<
   failed: { label: "Payment unsuccessful", tone: "danger" },
   blocked: { label: "Action needed", tone: "warning" },
   cancelled: { label: "Cancelled", tone: "neutral" },
+  expired: { label: "Expired", tone: "neutral" },
   reconciliation_pending: { label: "Action needed", tone: "warning" },
 };
 

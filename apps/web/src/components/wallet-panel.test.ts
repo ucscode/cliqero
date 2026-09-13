@@ -13,7 +13,12 @@ import {
   walletActivityState,
   walletPanelComposition,
 } from "./wallet-panel";
-import { formatMinorAmount, formatMinorCurrency, type FundingStatus } from "@/lib/api-client";
+import {
+  formatExchangeRate,
+  formatMinorAmount,
+  formatMinorCurrency,
+  type FundingStatus,
+} from "@/lib/api-client";
 import { copyValueActionLabel } from "./copy-value";
 import {
   initialPaymentCurrency,
@@ -28,6 +33,7 @@ describe("bank-transfer evidence visibility", () => {
     ["bank_transfer", "verification_pending", true],
     ["bank_transfer", "confirmed", false],
     ["bank_transfer", "failed", false],
+    ["bank_transfer", "expired", false],
     ["paystack", "awaiting_payment", false],
     ["nowpayments", "verification_pending", false],
     ["usdt_trc20", "awaiting_payment", false],
@@ -144,6 +150,12 @@ describe("customer-facing funding presentation", () => {
     expect(formatMinorAmount("1000")).toBe("10.00");
   });
 
+  it("formats a persisted Paystack conversion for customer display", () => {
+    expect(formatMinorCurrency("3316200", "NGN")).toBe("NGN 33,162.00");
+    expect(formatMinorCurrency("2500", "USD")).toBe("$25.00");
+    expect(formatExchangeRate("1326.475", "NGN")).toBe("NGN 1,326.48");
+  });
+
   it("uses provider display names and customer success states in activity", () => {
     expect(walletActivityLabel({ type: "funding_credit", provider_display_name: "Paystack" })).toBe(
       "Paystack funding",
@@ -180,6 +192,14 @@ describe("customer-facing funding presentation", () => {
         error_message: null,
       }),
     ).toBe("Contacting payment provider.");
+    expect(
+      fundingStatusMessage({
+        provider: "nowpayments",
+        state: "expired",
+        expires_at: null,
+        error_message: null,
+      }),
+    ).toBe("This payment session has expired. Start a new funding attempt.");
   });
 
   it("renders every configured bank field, including opaque instructions", () => {
@@ -210,6 +230,7 @@ describe("customer-facing funding presentation", () => {
     expect(shouldPollFunding({ provider: "nowpayments", state: "verification_pending" })).toBe(
       true,
     );
+    expect(shouldPollFunding({ provider: "nowpayments", state: "expired" })).toBe(false);
   });
 
   it("preserves arbitrary bank field order and copy metadata for rendering", () => {

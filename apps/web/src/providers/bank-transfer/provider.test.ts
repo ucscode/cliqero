@@ -31,7 +31,7 @@ describe("bank transfer funding provider", () => {
       idempotencyKey: "bank-1",
       buyerEmail: "buyer@example.test",
     });
-    expect(initialized.reference).toMatch(/^bank-/);
+    expect(initialized.reference).toBe("bank-00000000-0000-4000-8000-000000000001");
     expect(initialized.metadata?.instructions).not.toContain("12.50 USD");
     expect(initialized.metadata?.providerAccountId).toBe("intl-usd");
     expect(initialized.metadata?.instructions).toBe(
