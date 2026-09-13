@@ -211,7 +211,7 @@ suite("listing management and media", () => {
         ...original,
         name: original.name,
         put: (input) => original.put(input),
-        publicUrl: (locator) => original.publicUrl(locator),
+        publicUrl: (locator) => original.publicUrl!(locator),
         delete: vi.fn(async () => {
           throw new Error("temporary storage outage");
         }),
@@ -383,7 +383,7 @@ suite("listing management and media", () => {
     const failsSecond: ObjectStorageProvider = {
       ...original,
       name: original.name,
-      publicUrl: (l) => original.publicUrl(l),
+      publicUrl: (l) => original.publicUrl!(l),
       delete: (l) => original.delete(l),
       put: async (input) => {
         puts++;

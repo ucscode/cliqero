@@ -19,6 +19,7 @@ export interface BankTransferConfiguration {
   displayName?: string;
   imageUrl?: string;
   description?: string;
+  mediaProvider?: string;
 }
 
 export interface BankTransferField {

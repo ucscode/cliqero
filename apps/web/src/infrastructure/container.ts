@@ -99,6 +99,8 @@ import {
 import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing-media";
 import { PostgresListingReviewRepository } from "@/infrastructure/postgres/listing-reviews";
 import { loadMediaStorage } from "@/providers/storage/media-config";
+import { requirePrivateStorage } from "@/providers/storage/media-config";
+import { storefrontConfig, resolveStorefrontMediaProvider } from "@/config/storefront";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing-media";
 import { ListingTransferService } from "@/application/listing-transfer";
 import { ListingReviewService } from "@/application/listing-reviews";
@@ -132,11 +134,13 @@ export function createContainer(databaseUrl: string) {
   const reviews = new PostgresListingReviewRepository(database);
   const listingMediaRepository = new PostgresListingMediaRepository(database);
   const objectStorage = loadMediaStorage();
+  const storefrontStorage = resolveStorefrontMediaProvider(storefrontConfig, objectStorage);
   const listingMedia = new ListingMediaService(
     listings,
     listingMediaRepository,
     objectStorage,
     database,
+    storefrontStorage.name,
   );
   const listingMediaDeletion = new ListingMediaDeletionProcessor(
     listingMediaRepository,
@@ -249,6 +253,12 @@ export function createContainer(databaseUrl: string) {
     });
   }
   const bankTransfer = loadBankTransferConfiguration();
+  const bankEvidenceStorageName = bankTransfer?.provider.mediaProvider;
+  if (bankTransfer) {
+    if (!bankEvidenceStorageName)
+      throw new Error("Bank-transfer evidence storage instance is required");
+    requirePrivateStorage(objectStorage, bankEvidenceStorageName);
+  }
   if (bankTransfer)
     providers.register(new BankTransferProvider(bankTransfer.provider), {
       filters: bankTransfer.filters,
@@ -439,7 +449,12 @@ export function createContainer(databaseUrl: string) {
     operatorAccounts: new OperatorAccountService(database),
     capabilityAdministration: new CapabilityAdministrationService(database, database),
     operatorFunding: new OperatorFundingService(database, database),
-    bankTransferEvidence: new BankTransferEvidenceService(database, database, objectStorage),
+    bankTransferEvidence: new BankTransferEvidenceService(
+      database,
+      database,
+      objectStorage,
+      bankEvidenceStorageName,
+    ),
     operatorDistributions: new OperatorDistributionService(database),
     operatorEarnings: new OperatorEarningsService(database),
     operatorWithdrawals: new OperatorWithdrawalService(database),

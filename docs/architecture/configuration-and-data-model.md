@@ -15,6 +15,12 @@ Tracked `*.example.yaml` files document supported provider configuration. Real Y
 
 YAML can explicitly reference environment values with `%env(NAME)%`; environment variables do not implicitly override YAML authority.
 
+Object storage configuration uses named instances. The `providers` map key is
+the persisted storage instance identity; the nested `provider` value is only
+the driver implementation. `visibility: public` permits public URL generation,
+while `visibility: private` is reserved for server-side access. Module-level
+`media_provider` values reference these instance keys.
+
 ## Deployment values
 
 Environment variables cover concerns such as application URL, PostgreSQL bootstrap connection, Better Auth bootstrap values, ports, and persistent paths. See [Installation and Configuration](../operations/installation-and-configuration.md).

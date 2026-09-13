@@ -18,6 +18,10 @@ const schema = z.object({
   filters: paymentProviderFiltersSchema.default({ countries: null }),
   config: z.object({
     instruction: z.string().trim().min(1).optional(),
+    media_provider: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/)
+      .optional(),
     currency_mapping: z
       .object({
         enabled: z.boolean().default(false),
@@ -82,6 +86,7 @@ export function loadBankTransferConfiguration(path = "config/modules/payment/ban
     displayName: config.display_name,
     imageUrl: config.image_url,
     description: config.description,
+    mediaProvider: config.config.media_provider,
   };
   return {
     provider,

@@ -1,31 +1,39 @@
-# Platform-wide object storage for uploaded media and files.
-# Listing media is one consumer; its keys use the listings/ prefix.
-# Existing records retain their persisted provider/container identity.
+# The map key is an arbitrary storage instance identity and is what gets
+# persisted in storage_provider/proof_storage_provider. The nested provider
+# selects the driver; modules reference the instance key, not the driver name.
 default_provider: filesystem
 
 providers:
+  # Filesystem root and container are required. public_base_url is required for
+  # public visibility; a private filesystem may omit it or include it, but it
+  # is ignored because visibility is authoritative.
   filesystem:
-    enabled: true
-    # Absolute writable directory outside source control.
-    root: "%env(MEDIA_ROOT)%"
-    # Provider container identity stored with new objects.
-    container: media
-    # Browser-facing origin served by Cliqero's filesystem media route.
-    public_base_url: "%env(APP_URL)%/media/filesystem"
+    provider: filesystem
+    visibility: public
+    config:
+      root: "%env(MEDIA_ROOT)%"
+      container: media
+      public_base_url: "%env(APP_URL)%/media/filesystem"
 
+  # Supabase requires endpoint, bucket, and service_key. It needs no separate
+  # public_base_url; visibility alone controls whether public URLs are allowed.
   supabase:
-    enabled: false
-    endpoint: https://project-ref.supabase.co
-    bucket: media
-    # Sensitive server-side service-role key; use a real value only locally.
-    service_key: supabase_service_role_example
+    provider: supabase
+    visibility: private
+    config:
+      endpoint: https://project-ref.supabase.co
+      bucket: media
+      service_key: supabase_service_role_example
 
-  cloudflare-r2:
-    enabled: false
-    endpoint: https://account-id.r2.cloudflarestorage.com
-    bucket: media
-    # Public R2 bucket/custom-domain origin.
-    public_base_url: https://media.example.com
-    access_key_id: r2_access_key_example
-    # Sensitive S3-compatible secret; use a real value only locally.
-    secret_access_key: r2_secret_key_example
+  # R2 requires endpoint, bucket, access_key_id, and secret_access_key.
+  # public_base_url is required for public visibility, optional for private
+  # visibility, and never overrides the visibility setting.
+  cloudflare:
+    provider: cloudflare-r2
+    visibility: public
+    config:
+      endpoint: https://account-id.r2.cloudflarestorage.com
+      bucket: media
+      public_base_url: https://media.example.com
+      access_key_id: r2_access_key_example
+      secret_access_key: r2_secret_key_example

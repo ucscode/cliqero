@@ -146,8 +146,8 @@ describe("bank-transfer evidence", () => {
     ["application/pdf", new TextEncoder().encode("%PDF-1.7")],
   ])("accepts %s proof files", async (mimeType, bytes) => {
     const stored = {
-      provider: "filesystem",
-      container: "media",
+      provider: "payment_evidence",
+      container: "payment-evidence",
       key: "funding-evidence/funding/receipt",
       byteSize: bytes.byteLength,
       mimeType,
@@ -176,25 +176,28 @@ describe("bank-transfer evidence", () => {
       undefined,
       {
         default: () => ({
-          name: "filesystem",
+          name: "payment_evidence",
+          visibility: "private",
           put,
           delete: async () => undefined,
           publicUrl: () => "",
         }),
         get: () => ({
-          name: "filesystem",
+          name: "payment_evidence",
+          visibility: "private",
           put,
           delete: async () => undefined,
           publicUrl: () => "",
         }),
       } as any,
+      "payment_evidence",
     );
     const file: BankTransferProofFile = { bytes, mimeType, filename: "receipt" };
     await expect(service.submit(accountId, fundingId, { proofFile: file })).resolves.toMatchObject({
       state: "verification_pending",
       proof: {
-        provider: "filesystem",
-        container: "media",
+        provider: "payment_evidence",
+        container: "payment-evidence",
         mimeType,
         byteSize: String(bytes.byteLength),
       },
@@ -206,6 +209,51 @@ describe("bank-transfer evidence", () => {
         mimeType,
       }),
     );
+  });
+
+  it("rejects a public storage instance for bank-transfer proof", async () => {
+    const service = new BankTransferEvidenceService(
+      {
+        query: async <T extends object>(sql: string) => {
+          if (sql.includes("select uuid as id,transfer_reference")) return result<T>([]);
+          if (
+            sql.includes("from funding_capability.funding_transactions") &&
+            !sql.includes("funding_evidence")
+          )
+            return result<T>([
+              {
+                id: fundingId,
+                account_id: 7,
+                provider_name: "bank_transfer",
+                state: "awaiting_payment",
+              },
+            ] as T[]);
+          if (sql.includes("select uuid from identity_capability.accounts"))
+            return result<T>([{ uuid: accountId }] as T[]);
+          return result<T>([]) as QueryResult<T>;
+        },
+      },
+      undefined,
+      {
+        get: () => ({
+          name: "public_media",
+          visibility: "public",
+          put: vi.fn(),
+          delete: async () => undefined,
+          publicUrl: () => "https://public.example/receipt",
+        }),
+      } as any,
+      "public_media",
+    );
+
+    await expect(
+      service.submit(accountId, fundingId, {
+        proofFile: {
+          bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+          mimeType: "image/png",
+        },
+      }),
+    ).rejects.toThrow("must be private");
   });
 
   it("rejects unsupported or spoofed proof files before storage", () => {

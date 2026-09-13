@@ -16,6 +16,7 @@ image_url: /images/payment/bank-transfer.svg
 description: Transfer funds from your bank account.
 config:
   instruction: Use the provider instruction.
+  media_provider: payment_evidence
   accounts:
     - id: custom
       instruction: Use the account instruction.
@@ -51,6 +52,7 @@ config:
         ],
       });
       expect(loaded?.provider.instruction).toBe("Use the provider instruction.");
+      expect(loaded?.provider.mediaProvider).toBe("payment_evidence");
       expect(loaded?.provider.accounts[0].currencyMapping).toEqual({
         enabled: true,
         overrides: { NG: "GBP" },

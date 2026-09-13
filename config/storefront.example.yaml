@@ -1,3 +1,8 @@
+# Optional public storage instance for listing media. 
+# Omit to use media.default_provider.
+# ---------------------------
+# media_provider: filesystem
+# -------------------------
 home:
   featured_limit: 6
 catalogue:

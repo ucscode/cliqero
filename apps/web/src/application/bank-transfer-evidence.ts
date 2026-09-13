@@ -47,6 +47,7 @@ export class BankTransferEvidenceService {
     private readonly sql: SqlExecutor,
     private readonly uow: UnitOfWork = { transaction: (operation) => operation() },
     private readonly storage?: ObjectStorageRegistry,
+    private readonly storageInstanceName?: string,
   ) {}
 
   async findForFunding(accountId: string, fundingId: string): Promise<BankTransferEvidence | null> {
@@ -114,8 +115,12 @@ export class BankTransferEvidenceService {
           throw new Error("Funding is not available for evidence");
 
         if (proofFile) {
-          if (!this.storage) throw new Error("Evidence storage is unavailable");
-          stored = await this.storage.default().put({
+          if (!this.storage || !this.storageInstanceName)
+            throw new Error("Evidence storage instance is unavailable");
+          const provider = this.storage.get(this.storageInstanceName);
+          if (provider.visibility !== "private")
+            throw new Error("Bank-transfer evidence storage must be private");
+          stored = await provider.put({
             key: `funding-evidence/${fundingId}/${randomUUID()}${proofExtension(proofFile.mimeType)}`,
             bytes: proofFile.bytes,
             mimeType: proofFile.mimeType,

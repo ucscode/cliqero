@@ -11,6 +11,8 @@ filters:
     - NG
     - US
 config:
+  # Named private media.yaml instance for sensitive transfer evidence.
+  media_provider: supabase
   # Optional country-to-fiat preparation mapping. Accounting remains USD.
   currency_mapping:
     enabled: true

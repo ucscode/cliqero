@@ -31,6 +31,7 @@ export interface ListingMediaRepository {
     container: string,
     key: string,
   ): Promise<ListingMedia | null>;
+  findByStorageProviderAndKey?(provider: string, key: string): Promise<ListingMedia | null>;
   listByListing(listingId: Id, includeDeleted?: boolean): Promise<readonly ListingMedia[]>;
   listByListings(listingIds: readonly Id[]): Promise<ReadonlyMap<Id, readonly ListingMedia[]>>;
   save(media: ListingMedia): Promise<void>;

@@ -21,6 +21,15 @@ export class PostgresListingMediaRepository implements ListingMediaRepository {
     ).rows[0];
     return row ? map(row) : null;
   }
+  async findByStorageProviderAndKey(provider: string, key: string) {
+    const row = (
+      await this.sql.query<any>(
+        `select m.*,m.uuid as id,(select uuid from listing_capability.listings where id=m.listing_id) as listing_id from listing_capability.media m where storage_provider=$1 and object_key=$2 and m.state='active'`,
+        [provider, key],
+      )
+    ).rows[0];
+    return row ? map(row) : null;
+  }
   async listByListing(listingId: string, includeDeleted = false) {
     return (
       await this.sql.query<any>(

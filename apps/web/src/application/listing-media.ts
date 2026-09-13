@@ -13,7 +13,12 @@ export class ListingMediaService {
     private media: ListingMediaRepository,
     private storage: ObjectStorageRegistry,
     private uow: UnitOfWork,
-  ) {}
+    private storefrontProviderName = storage.default().name,
+  ) {
+    const provider = storage.get(storefrontProviderName);
+    if (provider.visibility === "private" || !provider.publicUrl)
+      throw new Error(`Storefront media storage must be public: ${storefrontProviderName}`);
+  }
   async create(
     owner: Account,
     listingId: string,
@@ -30,7 +35,7 @@ export class ListingMediaService {
     await this.owned(owner, listingId, catalogue);
     const image = inspectImage(input.bytes, input.mimeType);
     const id = newId(),
-      provider = this.storage.default(),
+      provider = this.storage.get(this.storefrontProviderName),
       key = generatedObjectKey(listingId, id, image.mimeType);
     const stored = await provider.put({ key, bytes: input.bytes, mimeType: image.mimeType });
     const value: ListingMedia = {
@@ -171,7 +176,7 @@ export class ListingMediaService {
     return this.requestDeletion(actor, listingId, id, true);
   }
   publicUrl(value: ListingMedia) {
-    return this.storage.get(value.storageProvider).publicUrl({
+    return this.storage.publicUrl({
       provider: value.storageProvider,
       container: value.storageContainer,
       key: value.objectKey,

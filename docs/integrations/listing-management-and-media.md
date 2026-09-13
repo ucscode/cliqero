@@ -37,28 +37,35 @@ Deletion first commits `deletion_pending` and immediately reindexes the remainin
 
 Media storage is platform-wide infrastructure configured in
 `config/storage/media.yaml`; copy the tracked `config/storage/media.example.yaml`
-template. Listing media is one consumer of the shared object-storage registry;
-future file-based capabilities should use the same registry rather than adding
-another provider configuration. Supported providers are `filesystem`,
-`supabase`, and `cloudflare-r2`. Supabase uses its Storage REST API and public
-bucket URL. R2 uses signed S3-compatible requests and a configured
-browser-facing bucket/custom-domain URL. Credentials never enter media records
-or API responses.
+template. Each map key under `providers` is a storage instance identity, while
+that instance's `provider` field selects the driver implementation. Persisted
+`storage_provider` values contain the instance key, so multiple filesystem,
+Supabase, or R2 instances can coexist without rewriting existing records.
+Listing media uses `storefront.media_provider` when present and otherwise uses
+`media.default_provider`; the selected instance must be public. Bank-transfer
+proofs use `bank_transfer.config.media_provider`, which must name a configured
+private instance. Credentials never enter media records or API responses.
+
+The `visibility` field controls whether an instance may produce a public object
+URL. Private instances remain available to authenticated server-side reads but
+are rejected by public URL generation and the public listing-media route.
+Supabase uses its Storage REST API, and R2 uses signed S3-compatible requests.
 
 The default filesystem root is `/var/lib/cliqero/media`, mounted as the
 persistent `media-data` Compose volume. New filesystem objects use the
-configured `media` container identity, while listing object keys remain
+configured instance and container identities, while listing object keys remain
 namespaced under `listings/<listing-id>/...`. The real YAML file is ignored and
 must be provisioned per environment; the example is the tracked schema
 template. The application requires the real configuration at runtime rather
 than silently substituting provider credentials or paths in TypeScript.
 
 Existing development databases may contain listing-media records with the old
-`listing-media` container identity. The filesystem route continues to resolve
-those persisted identities during the transition. Renaming the Compose volume
-does not copy the old local Docker volume; for a pre-production checkout,
-rerun the development catalogue seed (or copy the old volume contents into the
-new media volume) after this change.
+`filesystem` instance and `listing-media` container identity. The compatibility
+filesystem instance and the legacy route continue to resolve those persisted
+identities during the transition. Renaming the Compose volume does not copy the
+old local Docker volume; for a pre-production checkout, rerun the development
+catalogue seed (or copy the old volume contents into the new media volume) after
+this change.
 
 ## Import/export
 

@@ -2,15 +2,19 @@ import { createHash, createHmac } from "node:crypto";
 import type { ObjectLocator, ObjectStorageProvider } from "@/modules/storage/object-storage";
 
 export class CloudflareR2ObjectStorageProvider implements ObjectStorageProvider {
-  readonly name = "cloudflare-r2";
+  readonly visibility: "public" | "private";
   constructor(
+    readonly name: string,
     private endpoint: string,
     private bucket: string,
-    private publicBaseUrl: string,
+    private publicBaseUrl: string | undefined,
     private accessKeyId: string,
     private secretAccessKey: string,
+    visibility: "public" | "private" = "public",
     private transport: typeof fetch = fetch,
-  ) {}
+  ) {
+    this.visibility = visibility;
+  }
   async put(input: { key: string; bytes: Uint8Array; mimeType: string }) {
     const response = await this.request("PUT", input.key, input.bytes, input.mimeType);
     if (!response.ok) throw new Error(`Cloudflare R2 upload failed (${response.status})`);
@@ -33,7 +37,22 @@ export class CloudflareR2ObjectStorageProvider implements ObjectStorageProvider 
       throw new Error(`Cloudflare R2 deletion failed (${response.status})`);
   }
   publicUrl(locator: ObjectLocator) {
+    if (this.visibility !== "public" || !this.publicBaseUrl)
+      throw new Error(`Object storage instance is not publicly addressable: ${this.name}`);
     return `${this.publicBaseUrl.replace(/\/$/, "")}/${locator.key.split("/").map(encodeURIComponent).join("/")}`;
+  }
+  async read(locator: ObjectLocator) {
+    const response = await this.request(
+      "GET",
+      locator.key,
+      new Uint8Array(),
+      "application/octet-stream",
+    );
+    if (!response.ok) throw new Error(`Cloudflare R2 read failed (${response.status})`);
+    return {
+      bytes: new Uint8Array(await response.arrayBuffer()),
+      mimeType: response.headers.get("content-type") ?? "application/octet-stream",
+    };
   }
   private async request(method: string, key: string, body: Uint8Array, contentType: string) {
     const url = new URL(
@@ -61,7 +80,7 @@ export class CloudflareR2ObjectStorageProvider implements ObjectStorageProvider 
         "x-amz-date": date,
         authorization: `AWS4-HMAC-SHA256 Credential=${this.accessKeyId}/${scope}, SignedHeaders=${signed}, Signature=${signature}`,
       },
-      body: method === "DELETE" ? undefined : (body as unknown as BodyInit),
+      body: method === "GET" || method === "DELETE" ? undefined : (body as unknown as BodyInit),
     });
   }
 }
