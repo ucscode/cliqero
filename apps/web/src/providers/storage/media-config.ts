@@ -17,7 +17,7 @@ const storageConfig = z.discriminatedUnion("provider", [
     config: z
       .object({
         root: z.string().min(1),
-        container: z.string().min(1).default("media"),
+        container: z.string().min(1).optional(),
         public_base_url: z.url().optional(),
       })
       .strict(),
@@ -102,7 +102,7 @@ function createProvider(
       name,
       instance.config.root,
       instance.config.public_base_url,
-      instance.config.container,
+      instance.config.container ?? name,
       instance.visibility,
     );
   if (instance.provider === "supabase")
