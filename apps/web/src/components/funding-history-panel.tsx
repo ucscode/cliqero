@@ -8,6 +8,7 @@ import { Badge } from "./ui/badge";
 import { Card } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { Toast } from "./toast";
+import { presentFundingState, fundingToneClass } from "@/modules/funding/presentation";
 
 type FundingHistoryItem = {
   id: string;
@@ -24,7 +25,7 @@ type FundingHistoryItem = {
 };
 
 function displayState(state: string) {
-  return state.replaceAll("_", " ");
+  return presentFundingState(state).label;
 }
 
 export function FundingHistoryPanel() {
@@ -115,7 +116,10 @@ export function FundingHistoryPanel() {
                   Collected{" "}
                   {formatMinorCurrency(item.collection_amount_minor, item.collection_currency)}
                 </span>
-                <Badge variant={item.state === "confirmed" ? "default" : "secondary"}>
+                <Badge
+                  variant={item.state === "failed" ? "destructive" : "secondary"}
+                  className={fundingToneClass(presentFundingState(item.state).tone)}
+                >
                   {displayState(item.state)}
                 </Badge>
                 {[

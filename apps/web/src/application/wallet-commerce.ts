@@ -3,7 +3,7 @@ import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { formatMinorMoney, Money } from "@/modules/money/money";
 import { ExactCurrencyConverter } from "@/modules/money/exchange";
 import type { ExchangeRateService } from "@/modules/money/exchange-service";
-import type { PaymentProviderRegistry } from "@/modules/payment/payment";
+import type { PaymentFundingOption, PaymentProviderRegistry } from "@/modules/payment/payment";
 import type { AccountReader } from "@/modules/identity/account";
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
 import type { WalletRepository } from "@/modules/wallet/wallet";
@@ -26,7 +26,6 @@ export class FundingService {
     accountId: string;
     amountMinor: bigint;
     providerName: string;
-    collectionCurrency?: string;
     paymentCurrency?: string;
     fundingOptionId?: string;
     requireFundingOption?: boolean;
@@ -35,8 +34,8 @@ export class FundingService {
     const account = await this.accounts.findById?.(input.accountId);
     if (!account) throw new Error("Account not found");
     if (!account.country) throw new Error("Account country is required for funding");
-    const unscopedProvider = this.providers.get(input.providerName);
-    const fundingOptions = unscopedProvider.fundingOptions?.({ country: account.country }) ?? [];
+    const provider = this.providers.get(input.providerName, { country: account.country });
+    const fundingOptions = provider.fundingOptions?.({ country: account.country }) ?? [];
     const selectedFundingOption = input.fundingOptionId
       ? fundingOptions.find((option) => option.id === input.fundingOptionId)
       : undefined;
@@ -44,19 +43,13 @@ export class FundingService {
       throw new Error("The selected receiving account is not eligible");
     if (input.requireFundingOption && fundingOptions.length > 0 && !selectedFundingOption)
       throw new Error("Select a receiving bank account");
-    if (
-      selectedFundingOption &&
-      input.collectionCurrency &&
-      input.collectionCurrency.toUpperCase() !== selectedFundingOption.collectionCurrency
-    )
-      throw new Error("The selected receiving account controls the collection currency");
     const collectionCurrency =
-      selectedFundingOption?.collectionCurrency ??
-      fundingOptions[0]?.collectionCurrency ??
-      this.providers.collectionCurrency(input.providerName, input.collectionCurrency);
-    const provider = this.providers.get(input.providerName, {
-      country: account.country,
-    });
+      provider.collectionCurrencyFor?.({
+        country: account.country,
+        fundingOptionId: selectedFundingOption?.id,
+      }) ??
+      provider.collectionCurrencies?.[0] ??
+      "USD";
     return {
       country: account.country,
       provider,
@@ -104,11 +97,19 @@ export class FundingService {
         : undefined,
     };
   }
+
+  private snapshotFundingOption(option: PaymentFundingOption | undefined) {
+    if (!option) return undefined;
+    return {
+      id: option.id,
+      collectionCurrency: option.collectionCurrency,
+      fields: option.fields.map((field) => ({ ...field })),
+    };
+  }
   async prepare(input: {
     accountId: string;
     amountMinor: bigint;
     providerName: string;
-    collectionCurrency?: string;
     paymentCurrency?: string;
     fundingOptionId?: string;
   }) {
@@ -129,7 +130,6 @@ export class FundingService {
     amountMinor: bigint;
     providerName: string;
     idempotencyKey: string;
-    collectionCurrency?: string;
     paymentCurrency?: string;
     fundingOptionId?: string;
   }) {
@@ -150,6 +150,9 @@ export class FundingService {
     }
     const prepared = await this.prepareResolved(resolved);
     const id = newId();
+    const providerAccountSnapshot = this.snapshotFundingOption(
+      resolved.fundingOptions.find((option) => option.id === resolved.fundingOptionId),
+    );
     const value: FundingTransaction = {
       id,
       accountId: input.accountId,
@@ -166,6 +169,7 @@ export class FundingService {
         providerDisplayName: resolved.provider.displayName,
         ...(prepared.paymentCurrency ? { paymentCurrency: prepared.paymentCurrency } : {}),
         ...(resolved.fundingOptionId ? { providerAccountId: resolved.fundingOptionId } : {}),
+        ...(providerAccountSnapshot ? { providerAccountSnapshot } : {}),
       },
     };
     return this.uow.transaction(async () => {
@@ -300,6 +304,12 @@ export class FundingInitializationProcessor {
           authorizationUrl: result.authorizationUrl,
           accessCode: result.accessCode,
           ...result.metadata,
+          ...(f.providerInitialization?.providerAccountId
+            ? { providerAccountId: f.providerInitialization.providerAccountId }
+            : {}),
+          ...(f.providerInitialization?.providerAccountSnapshot
+            ? { providerAccountSnapshot: f.providerInitialization.providerAccountSnapshot }
+            : {}),
         };
         f.state = "awaiting_payment";
         f.initializationClaimedAt = undefined;

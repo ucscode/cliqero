@@ -24,6 +24,7 @@ export interface BankTransferField {
   key: string;
   label: string;
   value: string;
+  copyable?: boolean;
 }
 
 export interface BankTransferAccount {
@@ -39,6 +40,7 @@ export class BankTransferProvider implements PaymentProvider {
   readonly displayName: string;
   readonly imageUrl: string;
   readonly description: string;
+  readonly customerActionLabel = "Get bank details";
   readonly collectionCurrencies: readonly string[];
 
   constructor(
@@ -78,6 +80,14 @@ export class BankTransferProvider implements PaymentProvider {
 
   collectionCurrenciesFor(input: { country: string | null }) {
     return [...new Set(this.fundingOptions(input).map((option) => option.collectionCurrency))];
+  }
+
+  collectionCurrencyFor(input: { country: string | null; fundingOptionId?: string }) {
+    const options = this.fundingOptions(input);
+    const selected = input.fundingOptionId
+      ? options.find((option) => option.id === input.fundingOptionId)
+      : undefined;
+    return selected?.collectionCurrency ?? options[0]?.collectionCurrency ?? "USD";
   }
 
   isEligible(input: { country: string | null }) {
@@ -121,14 +131,8 @@ export class BankTransferProvider implements PaymentProvider {
           fields: account.fields,
         },
         paymentCurrency: input.amount.currency,
-        instructions: [
-          `Transfer ${input.amount.minorAmount / 100n}.${(input.amount.minorAmount % 100n).toString().padStart(2, "0")} ${input.amount.currency}`,
-          ...account.fields.map((field) => `${field.label}: ${field.value}`),
-          `Funding reference: ${reference}`,
-          "When making the transfer, enter this funding reference in your bank's narration or reference field.",
-        ]
-          .filter(Boolean)
-          .join("\n"),
+        instructions:
+          "Use the Reference ID as the narration/description for your bank transfer so we can match your payment.",
       },
     };
   }

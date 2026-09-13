@@ -1,6 +1,8 @@
 import type { Id } from "@/kernel/ids";
 import type { Money } from "@/modules/money/money";
 
+export const WALLET_OVERVIEW_ACTIVITY_LIMIT = 5;
+
 export interface WalletSummary {
   currency: "USD";
   available: Money;
@@ -30,6 +32,7 @@ export type WalletTransaction =
       amount: Money;
       state: "pending" | "available";
       createdAt: Date;
+      providerDisplayName?: string;
     }
   | {
       kind: "purchase_debit";

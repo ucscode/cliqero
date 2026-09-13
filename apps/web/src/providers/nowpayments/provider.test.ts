@@ -9,11 +9,10 @@ const config = {
   ipnSecret: "ipn-secret",
   apiBaseUrl: "https://api-sandbox.nowpayments.io",
   ipnCallbackUrl: "https://public.example.test/api/payments/nowpayments/ipn",
-  payCurrency: "usdterc20",
   network: "ERC20",
   asset: "USDT",
   sandboxCase: "success" as const,
-  payCurrencies: ["usdterc20", "usdttrc20"],
+  payCurrencies: ["usdterc20", "usdttrc20", "btc", "eth"],
 };
 
 describe("NOWPayments provider", () => {
@@ -80,6 +79,7 @@ describe("NOWPayments provider", () => {
       amount: Money.of(1025n, "USD"),
       idempotencyKey: "funding-1",
       buyerEmail: "buyer@example.test",
+      paymentCurrency: "usdterc20",
     });
     expect(result.reference).toBe(`np-${id}`);
     expect(result.metadata).toMatchObject({
@@ -124,6 +124,7 @@ describe("NOWPayments provider", () => {
         amount: Money.of(100n, "USD"),
         idempotencyKey: "rejected-payment",
         buyerEmail: "buyer@example.test",
+        paymentCurrency: "usdterc20",
       }),
     ).rejects.toMatchObject({
       httpStatus: 400,
@@ -145,6 +146,7 @@ describe("NOWPayments provider", () => {
         amount: Money.of(100n, "USD"),
         idempotencyKey: "nested-rejected-payment",
         buyerEmail: "buyer@example.test",
+        paymentCurrency: "usdterc20",
       }),
     ).rejects.toMatchObject({
       httpStatus: 400,
@@ -176,6 +178,7 @@ describe("NOWPayments provider", () => {
       amount: Money.of(1025n, "USD"),
       idempotencyKey: "funding-live",
       buyerEmail: "buyer@example.test",
+      paymentCurrency: "usdterc20",
     });
     const request = (http.mock.calls[0] as unknown as [string | URL, RequestInit] | undefined)?.[1];
     expect(JSON.parse(String(request?.body))).not.toHaveProperty("case");
@@ -234,6 +237,55 @@ describe("NOWPayments provider", () => {
     ).rejects.toThrow("unsupported");
   });
 
+  it("requires a selected currency and never falls back during initialization", async () => {
+    const http = vi.fn(async () =>
+      Response.json({
+        payment_id: 123,
+        pay_address: "Taddress",
+        pay_amount: "10.25",
+        order_id: `np-${id}`,
+      }),
+    );
+    const provider = new NowPaymentsProvider(config, "nowpayments", http);
+
+    await expect(
+      provider.initiate({
+        paymentId: id,
+        amount: Money.of(1025n, "USD"),
+        idempotencyKey: "funding-missing-currency",
+        buyerEmail: "buyer@example.test",
+      }),
+    ).rejects.toThrow("payment currency is required");
+    expect(http).not.toHaveBeenCalled();
+  });
+
+  it("sends each selected configured currency as the singular API pay_currency", async () => {
+    const http = vi.fn(async () =>
+      Response.json({
+        payment_id: 123,
+        payment_status: "waiting",
+        pay_address: "Taddress",
+        pay_amount: "10.25",
+        pay_currency: "btc",
+        order_id: `np-${id}`,
+      }),
+    );
+    const provider = new NowPaymentsProvider(config, "nowpayments", http);
+
+    for (const currency of ["btc", "eth", "usdttrc20"]) {
+      http.mockClear();
+      await provider.initiate({
+        paymentId: id,
+        amount: Money.of(1025n, "USD"),
+        idempotencyKey: `funding-${currency}`,
+        buyerEmail: "buyer@example.test",
+        paymentCurrency: currency,
+      });
+      const request = (http.mock.calls[0] as unknown as [string | URL, RequestInit])[1];
+      expect(JSON.parse(String(request.body)).pay_currency).toBe(currency);
+    }
+  });
+
   it("verifies only a finished payment and detects amount/reference mismatches", async () => {
     const http = vi.fn(async () =>
       Response.json({
@@ -249,7 +301,7 @@ describe("NOWPayments provider", () => {
     const verified = await provider.verify({
       reference: `np-${id}`,
       expectedAmount: Money.of(1025n, "USD"),
-      initialization: { providerPaymentId: "123" },
+      initialization: { providerPaymentId: "123", paymentCurrency: "usdterc20" },
     });
     expect(verified.verified).toBe(true);
     expect(verified.status).toBe("success");
@@ -265,7 +317,7 @@ describe("NOWPayments provider", () => {
 
   it("rejects a payment on the wrong USDT network/currency", async () => {
     const provider = new NowPaymentsProvider(
-      { ...config, payCurrency: "usdttrc20", network: "TRC20" },
+      { ...config, network: "TRC20" },
       "nowpayments",
       vi.fn(async () =>
         Response.json({
@@ -282,7 +334,7 @@ describe("NOWPayments provider", () => {
       provider.verify({
         reference: `np-${id}`,
         expectedAmount: Money.of(1025n, "USD"),
-        initialization: { providerPaymentId: "123" },
+        initialization: { providerPaymentId: "123", paymentCurrency: "usdttrc20" },
       }),
     ).rejects.toThrow("currency mismatch");
   });
@@ -306,6 +358,7 @@ describe("NOWPayments provider", () => {
       amount: Money.of(900719925474099301n, "USD"),
       idempotencyKey: "large-amount",
       buyerEmail: "buyer@example.test",
+      paymentCurrency: "usdterc20",
     });
     const request = (http.mock.calls[0] as unknown as [string | URL, RequestInit])[1];
     expect(String(request.body)).toContain('"price_amount":9007199254740993.01');

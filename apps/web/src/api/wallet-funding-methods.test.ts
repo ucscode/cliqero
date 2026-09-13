@@ -28,7 +28,7 @@ describe("wallet funding-method API contract", () => {
               collectionCurrency: "USD",
               collectionCurrencies: ["USD"],
               paymentCurrencies: [],
-              defaultPaymentCurrency: undefined,
+              customerActionLabel: "Create payment",
             },
           ];
         },
@@ -53,7 +53,7 @@ describe("wallet funding-method API contract", () => {
           test_only: null,
           collection_currencies: ["USD"],
           payment_currencies: [],
-          default_payment_currency: null,
+          customer_action: "Create payment",
         },
       ],
     });
@@ -74,7 +74,6 @@ describe("wallet funding-method API contract", () => {
             collectionCurrency: "USD",
             collectionCurrencies: ["USD", "NGN"],
             paymentCurrencies: [],
-            defaultPaymentCurrency: undefined,
           },
         ],
       },
@@ -100,7 +99,6 @@ describe("wallet funding-method API contract", () => {
             collectionCurrency: "USD",
             collectionCurrencies: ["USD"],
             paymentCurrencies: [],
-            defaultPaymentCurrency: undefined,
           },
         ],
       },

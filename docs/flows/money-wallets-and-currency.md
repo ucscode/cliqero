@@ -78,9 +78,17 @@ Provider retries must not create duplicate purchases, entitlements, commissions,
 
 The code currently registers Paystack, NOWPayments-managed crypto, direct-wallet `usdt_trc20`, and `bank_transfer` when their configuration is enabled. Provider eligibility is filtered by enabled state, account country, and provider-specific rules; collection and payment currencies are resolved during provider preparation. Direct TRC20 funding snapshots the receiving wallet, network, asset, and expected amount, then verifies a customer-submitted transaction hash against configured blockchain infrastructure.
 
-For acceptance testing, NOWPayments Sandbox supports its official create-payment `case: success` procedure through `sandbox_case: success`. The field is sent only to the sandbox API (never live), with `usdttrc20` as the current test currency; IPN testing requires a publicly reachable callback and uses no real funds.
+For acceptance testing, NOWPayments Sandbox supports its official create-payment `case: success` procedure through `sandbox_case: success`. The field is sent only to the sandbox API (never live), with the selected currency coming from the configured `pay_currencies` allowlist; IPN testing requires a publicly reachable callback and uses no real funds.
 
 Providers implement a generic payment capability. Listing, purchase, entitlement, referral, and ledger code must not import Paystack- or TRON-specific logic.
+
+Paystack eligibility and currency capability are separate. `filters.countries`
+controls which customers may use the integration; `config.currencies` is the
+provider-owned collection allowlist and `config.default_currency` must be one
+of its values. The shared country-to-currency mapping supplies only a
+customer-facing preference. If that preference is unsupported, preparation
+falls back to the configured Paystack default; the canonical wallet credit
+remains USD and any conversion is persisted as an immutable snapshot.
 
 Bank transfer is configured as one `bank_transfer` method containing independent receiving accounts. Provider and account filters use country eligibility only; optional country-currency mapping is a separate preparation capability. Each account has ordered opaque display fields; Cliqero does not validate or attach semantics to banking-specific field keys. The funding page offers every account eligible for the authenticated account country; the customer selects the receiving account, which controls resolved collection currency. Initialization persists the selected account identifier, account snapshot, and rendered instructions with the funding record; existing funding does not depend on later mutable configuration.
 
@@ -158,17 +166,34 @@ The following are non-negotiable:
 
 Wallet funding keeps the collection currency (the fiat amount used for
 accounting, currently USD for the NOWPayments sandbox) separate from the
-payment currency selected at the provider. The funding-methods API returns the
-eligible providers and any provider-backed currency choices; the browser must
-not invent either list.
+payment currency selected at the provider. The customer submits only a
+canonical USD amount and provider for generic funding. Provider preparation
+resolves the collection currency and returns it as a quote/funding fact; the
+browser must not invent or select that currency.
 
-NOWPayments uses `config.pay_currencies` as its server-side allowlist and
-`config.pay_currency` as the default. The selected currency is persisted with
+NOWPayments uses `config.pay_currencies` as its server-side allowlist. A
+customer must select one configured currency (or use the only configured
+currency when there is exactly one). That selected currency is persisted with
 the funding initialization facts and is used during verification. The sandbox
 may use `sandbox_case: success`; the `case` field is sent only to the
 NOWPayments sandbox host. Direct `usdt_trc20` remains the custom direct-wallet
 method and is separate from NOWPayments. The authenticated funding-methods
-response uses `collection_currencies` (always an array), while funding status
-may expose the persisted provider payment instructions. Wallet funding is a
+response uses `collection_currencies` (always an array) as provider capability
+metadata, not as a customer selector. Bank transfer exposes receiving-account
+choice and NOWPayments exposes its provider-specific payment-currency choice.
+Funding status may expose the persisted provider payment instructions. Wallet funding is a
 dedicated `/dashboard/wallet/fund` page; its optional `return` path is accepted
 only when it is an internal continuation such as the preserved checkout.
+
+Generic funding entry uses “Review payment”; provider preparation uses
+provider-owned actions such as “Pay now”, “Create payment”, and “Get bank
+details”. Funding states are translated through one customer-facing label and
+semantic-tone map. NOWPayments status shows exact amount/currency/network/
+address details, automatic detection guidance, refresh, and an authoritative
+expiry countdown. Bank fields remain opaque and may opt into `copyable`
+presentation metadata; the funding reference and narration
+instruction remain separate platform values. The wallet overview shows the
+latest five activity entries, uses persisted provider display names such as
+“Paystack funding”, and presents “Funded”/“Completed” instead of internal
+ledger states. The dedicated funding status page does not render overview
+history or the large overview balance-card composition.

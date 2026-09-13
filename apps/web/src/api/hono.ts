@@ -2437,7 +2437,7 @@ export function createApiApp(
         test_only: method.provider.environmentOnly ?? null,
         collection_currencies: method.collectionCurrencies,
         payment_currencies: method.paymentCurrencies,
-        default_payment_currency: method.defaultPaymentCurrency ?? null,
+        customer_action: method.customerActionLabel,
       }));
     return c.json({ methods }, 200);
   });

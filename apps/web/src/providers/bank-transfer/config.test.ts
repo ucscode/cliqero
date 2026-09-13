@@ -30,6 +30,7 @@ config:
         - key: custom_note
           label: Custom note
           value: Send reference
+          copyable: true
 `,
     );
     try {
@@ -38,7 +39,12 @@ config:
         id: "custom",
         fields: [
           { key: "wire_routing", label: "Whatever the bank calls this", value: "123" },
-          { key: "custom_note", label: "Custom note", value: "Send reference" },
+          {
+            key: "custom_note",
+            label: "Custom note",
+            value: "Send reference",
+            copyable: true,
+          },
         ],
       });
       expect(loaded?.provider.accounts[0].currencyMapping).toEqual({
@@ -75,6 +81,34 @@ config:
     );
     try {
       expect(loadBankTransferConfiguration(path)?.filters).toEqual({ countries: ["NG", "US"] });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects the removed important field metadata", () => {
+    const directory = mkdtempSync(join(tmpdir(), "cliqero-bank-config-"));
+    const path = join(directory, "bank.yaml");
+    writeFileSync(
+      path,
+      `enabled: true
+display_name: Bank transfer
+image_url: /images/payment/bank-transfer.svg
+description: Transfer funds from your bank account.
+config:
+  accounts:
+    - id: local
+      filters:
+        countries: null
+      fields:
+        - key: bank_name
+          label: Bank
+          value: Example Bank
+          important: true
+`,
+    );
+    try {
+      expect(() => loadBankTransferConfiguration(path)).toThrow(/Unrecognized key.*important/);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

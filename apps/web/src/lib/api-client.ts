@@ -83,7 +83,12 @@ export type FundingPreparation = {
   funding_options: Array<{
     id: string;
     collection_currency: string;
-    fields: Array<{ key: string; label: string; value: string }>;
+    fields: Array<{
+      key: string;
+      label: string;
+      value: string;
+      copyable?: boolean;
+    }>;
   }>;
   conversion: {
     from_currency: string;
@@ -101,6 +106,7 @@ export type WalletTransaction = {
   amount_minor: string;
   currency: string;
   created_at: string;
+  provider_display_name?: string | null;
 };
 
 export type FundingStatus = {
@@ -117,6 +123,7 @@ export type FundingStatus = {
     | "reconciliation_pending";
   provider: string;
   provider_display_name: string;
+  customer_action: string | null;
   funding_reference: string;
   amount_minor: string;
   currency: string;
@@ -150,7 +157,7 @@ export type FundingMethod = {
     asset?: string;
     network?: string;
   }>;
-  default_payment_currency: string | null;
+  customer_action?: string;
 };
 
 export type Purchase = {
@@ -664,6 +671,12 @@ export function walletFundingUrl(listingId: string): string {
 export function canonicalWalletFundingUrl(returnTo?: string | null): string {
   const continuation = safeContinuation(returnTo, "/dashboard");
   return `/dashboard/wallet/fund?return=${encodeURIComponent(continuation)}`;
+}
+
+export function walletFundingStatusUrl(fundingId: string, returnTo?: string | null): string {
+  const query = new URLSearchParams({ funding: fundingId });
+  if (returnTo) query.set("return", safeContinuation(returnTo, "/dashboard"));
+  return `/dashboard/wallet/fund?${query.toString()}`;
 }
 
 export function providerFundingPreparationUrl(

@@ -8,9 +8,11 @@ import {
   ApiClientError,
   canonicalWalletFundingUrl,
   formatExchangeRate,
+  formatMinorCurrency,
   formatMinorUsd,
   parseUsdMinor,
   providerFundingPreparationUrl,
+  walletFundingStatusUrl,
   type ActiveFunding,
   type FundingStatus,
   type FundingMethod,
@@ -30,8 +32,10 @@ import { Toast } from "./toast";
 import { Money } from "./money";
 import { HoneypotField } from "./honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
-import { FundingProviderPreparation } from "./funding-provider-preparation";
+import { FundingProviderPreparation, initialPaymentCurrency } from "./funding-provider-preparation";
+import { CopyValue } from "./copy-value";
 import { LoaderCircle } from "lucide-react";
+import { fundingToneClass, presentFundingState } from "@/modules/funding/presentation";
 
 const terminalFundingStates = new Set([
   "confirmed",
@@ -40,24 +44,6 @@ const terminalFundingStates = new Set([
   "cancelled",
   "reconciliation_pending",
 ]);
-
-function fundingLabel(state: FundingStatus["state"]): string {
-  switch (state) {
-    case "initialization_pending":
-    case "initializing":
-      return "Preparing funding";
-    case "awaiting_payment":
-      return "Awaiting payment";
-    case "verification_pending":
-      return "Verifying payment";
-    case "confirmed":
-      return "Funding confirmed";
-    case "cancelled":
-      return "Funding cancelled";
-    default:
-      return "Funding needs attention";
-  }
-}
 
 function safeProviderUrl(value: string | null): string | null {
   if (!value) return null;
@@ -69,18 +55,70 @@ function safeProviderUrl(value: string | null): string | null {
   }
 }
 
-function snapshotFields(value: unknown) {
+type BankStatusField = {
+  key: string;
+  label: string;
+  value: string;
+  copyable?: boolean;
+};
+
+function snapshotFields(value: unknown): BankStatusField[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
   const fields = (value as { fields?: unknown }).fields;
   if (!Array.isArray(fields)) return [];
   return fields.filter(
-    (field): field is { key: string; label: string; value: string } =>
+    (field): field is BankStatusField =>
       Boolean(field) &&
       typeof field === "object" &&
       typeof (field as { key?: unknown }).key === "string" &&
       typeof (field as { label?: unknown }).label === "string" &&
       typeof (field as { value?: unknown }).value === "string",
   );
+}
+
+export function bankStatusFieldRows(fields: readonly BankStatusField[]) {
+  return fields.filter((field) => !isDuplicateReferenceInstruction(field.value));
+}
+
+function isDuplicateReferenceInstruction(value: string) {
+  const normalized = value.toLowerCase();
+  return (
+    normalized.includes("reference") &&
+    (normalized.includes("narration") || normalized.includes("description"))
+  );
+}
+
+const bankTransferInstruction =
+  "Use the Reference ID as the narration/description for your bank transfer so we can match your payment.";
+
+export function fundingStatusMessage(
+  funding: Pick<FundingStatus, "provider" | "state" | "expires_at" | "error_message">,
+  now = Date.now(),
+) {
+  if (funding.state === "initialization_pending") return "Preparing payment.";
+  if (funding.state === "initializing") return "Contacting payment provider.";
+  if (funding.state === "awaiting_payment") {
+    if (funding.expires_at && Date.parse(funding.expires_at) <= now)
+      return "This provider payment session has expired. Start a new funding attempt.";
+    if (funding.provider === "bank_transfer") return "Use the details below to make your transfer.";
+    if (funding.provider === "nowpayments")
+      return "Send the exact amount below. Cliqero will detect the payment automatically.";
+    return "Complete the payment to continue.";
+  }
+  if (funding.state === "verification_pending") return "Your payment is being verified.";
+  if (funding.state === "failed" || funding.state === "blocked")
+    return (
+      funding.error_message ??
+      "This funding attempt could not be completed. You can start a new attempt."
+    );
+  if (funding.state === "cancelled") return "This funding attempt was cancelled.";
+  if (funding.state === "confirmed")
+    return "Your funding is confirmed. Wallet availability will update as the credit settles.";
+  return null;
+}
+
+export function fundingActionLabel(funding: Pick<FundingStatus, "customer_action">) {
+  return funding.customer_action ?? "Continue";
 }
 
 export function canSubmitBankTransferEvidence(
@@ -115,6 +153,27 @@ export function validatedPreparationAmount(value: string | undefined): string | 
   }
 }
 
+export function formatTimeRemaining(expiresAt: string, now = Date.now()) {
+  const remaining = Math.max(0, Date.parse(expiresAt) - now);
+  if (remaining === 0) return "Expired";
+  const totalSeconds = Math.ceil(remaining / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `Expires in ${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+export function walletActivityLabel(
+  transaction: Pick<WalletTransaction, "type" | "provider_display_name">,
+) {
+  return transaction.type === "funding_credit"
+    ? `${transaction.provider_display_name ?? "Wallet"} funding`
+    : "Listing purchase";
+}
+
+export function walletActivityState(state: WalletTransaction["state"]) {
+  return state === "available" ? "Funded" : state === "complete" ? "Completed" : "Pending";
+}
+
 export function WalletPanel({
   returnTo,
   fundingPage = false,
@@ -136,7 +195,6 @@ export function WalletPanel({
   const [fundOpen, setFundOpen] = useState(fundingPage);
   const [amount, setAmount] = useState(fundingAmount ?? "");
   const [transactionHash, setTransactionHash] = useState("");
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [transferReference, setTransferReference] = useState("");
   const [proofImageUrl, setProofImageUrl] = useState("");
   const [customerNote, setCustomerNote] = useState("");
@@ -148,7 +206,6 @@ export function WalletPanel({
   const [provider, setProvider] = useState("");
   const [fundingOptionId, setFundingOptionId] = useState("");
   const [paymentCurrency, setPaymentCurrency] = useState("");
-  const [collectionCurrency, setCollectionCurrency] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [activityLoading, setActivityLoading] = useState(!fundingPage);
   const [refreshing, setRefreshing] = useState(false);
@@ -156,7 +213,7 @@ export function WalletPanel({
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [preparationError, setPreparationError] = useState<string | null>(null);
-  const [currentTime] = useState(() => Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const persistedFunding = fundingPage && Boolean(fundingId);
   const composition = walletPanelComposition(fundingPage, persistedFunding);
   const showActivity = composition.showActivity;
@@ -303,8 +360,6 @@ export function WalletPanel({
     if (!fundOpen && !fundingPage) return;
     void apiFetch<{ methods: FundingMethod[] }>("/api/wallet/funding-methods")
       .then(({ methods }) => {
-        if (!methods.every((method) => Array.isArray(method.collection_currencies)))
-          throw new Error("Funding method response is incomplete");
         setFundingMethods(methods);
         const first = methods[0];
         setProvider(
@@ -316,10 +371,7 @@ export function WalletPanel({
           methods.find((method) => method.id === fundingProvider) ??
           (fundingProvider ? null : first);
         if (selected) {
-          setCollectionCurrency(selected.collection_currencies[0] ?? "");
-          setPaymentCurrency(
-            selected.default_payment_currency ?? selected.payment_currencies[0]?.code ?? "",
-          );
+          setPaymentCurrency(initialPaymentCurrency(selected));
         }
       })
       .catch(() => setProviderError("We couldn't load funding methods right now."));
@@ -333,7 +385,6 @@ export function WalletPanel({
       provider: fundingProvider,
     });
     if (fundingOptionId) query.set("bank_account_id", fundingOptionId);
-    if (collectionCurrency) query.set("collection_currency", collectionCurrency);
     if (paymentCurrency) query.set("payment_currency", paymentCurrency);
     void apiFetch<FundingPreparation>(`/api/wallet/funding/prepare?${query.toString()}`)
       .then((result) => {
@@ -353,7 +404,6 @@ export function WalletPanel({
       active = false;
     };
   }, [
-    collectionCurrency,
     fixedAmountMinor,
     fundingProvider,
     paymentCurrency,
@@ -361,6 +411,12 @@ export function WalletPanel({
     selectedMethod,
     fundingOptionId,
   ]);
+
+  useEffect(() => {
+    if (!funding?.expires_at) return;
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [funding?.expires_at]);
 
   useEffect(() => {
     if (!fundingPage || summaryLoading) return;
@@ -371,25 +427,18 @@ export function WalletPanel({
     funding?.expires_at && Date.parse(funding.expires_at) <= currentTime
       ? null
       : safeProviderUrl(funding?.authorization_url ?? null);
+  const paymentSessionExpired = Boolean(
+    funding?.provider === "nowpayments" &&
+    funding.expires_at &&
+    Date.parse(funding.expires_at) <= currentTime,
+  );
   const canContinueProvider = funding?.state === "awaiting_payment" && providerUrl;
   const bankEvidenceAllowed = canSubmitBankTransferEvidence(funding);
-  const pendingMessage = useMemo(() => {
-    if (!funding) return null;
-    if (funding.state === "confirmed")
-      return "Your funding is confirmed. Wallet availability will update as the credit settles.";
-    if (funding.state === "awaiting_payment")
-      return funding.expires_at && Date.parse(funding.expires_at) <= currentTime
-        ? "This provider payment session has expired. Start a new funding attempt."
-        : "Complete the provider payment, then return here while Cliqero verifies it.";
-    if (funding.state === "verification_pending") return "Your payment is being verified.";
-    if (funding.state === "failed" || funding.state === "blocked")
-      return (
-        funding.error_message ??
-        "This funding attempt could not be completed. You can start a new attempt."
-      );
-    if (funding.state === "cancelled") return "This funding attempt was cancelled.";
-    return "Your funding request is being prepared.";
-  }, [currentTime, funding]);
+  const pendingMessage = useMemo(
+    () => (funding ? fundingStatusMessage(funding, currentTime) : null),
+    [currentTime, funding],
+  );
+  const bankFields = bankStatusFieldRows(snapshotFields(funding?.provider_account_snapshot));
   const activeFundings =
     summary?.active_fundings ?? (summary?.active_funding ? [summary.active_funding] : []);
 
@@ -427,7 +476,6 @@ export function WalletPanel({
           body: JSON.stringify({
             amount_minor: amountMinor,
             provider: fundingProvider,
-            collection_currency: collectionCurrency || selectedMethod?.collection_currencies[0],
             ...(fundingOptionId ? { bank_account_id: fundingOptionId } : {}),
             ...(paymentCurrency ? { payment_currency: paymentCurrency } : {}),
           }),
@@ -439,6 +487,7 @@ export function WalletPanel({
       setFundOpen(false);
       setAmount("");
       setPaymentCurrency("");
+      router.replace(walletFundingStatusUrl(created.id, returnTo));
     } catch (cause) {
       setProviderError(
         cause instanceof ApiClientError ? cause.message : "Funding could not be initiated.",
@@ -532,15 +581,6 @@ export function WalletPanel({
       );
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function copyPaymentValue(value: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopyFeedback(`${label} copied`);
-    } catch {
-      setCopyFeedback("Copy unavailable; select the value manually.");
     }
   }
 
@@ -649,15 +689,20 @@ export function WalletPanel({
               <p className="eyebrow">Payment method</p>
               <p className="font-semibold">{funding.provider_display_name ?? "Payment provider"}</p>
               <p className="eyebrow mt-3">Status</p>
-              <h2>{fundingLabel(funding.state)}</h2>
+              <h2>{presentFundingState(funding.state).label}</h2>
             </div>
-            <Badge variant={funding.state === "confirmed" ? "default" : "destructive"}>
-              {funding.state.replaceAll("_", " ")}
+            <Badge
+              variant={
+                presentFundingState(funding.state).tone === "danger" ? "destructive" : "secondary"
+              }
+              className={fundingToneClass(presentFundingState(funding.state).tone)}
+            >
+              {presentFundingState(funding.state).label}
             </Badge>
           </div>
           <p>{pendingMessage}</p>
           {(funding.state === "initialization_pending" || funding.state === "initializing") && (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
               <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
               <span>
                 {funding.state === "initialization_pending"
@@ -680,56 +725,137 @@ export function WalletPanel({
               {pollingNotice}
             </p>
           )}
-          {funding.instructions && (
-            <p className="whitespace-pre-line text-sm text-slate-600">{funding.instructions}</p>
-          )}
-          <div className="grid gap-2 rounded-lg bg-slate-50 p-4 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span>Funding reference</span>
-              <code className="break-all rounded bg-white px-2 py-1 text-xs text-slate-700">
-                {funding.funding_reference ?? funding.id}
-              </code>
-            </div>
-            <span>Funding amount</span>
-            <strong>
-              <Money minor={funding.amount_minor} currency={funding.currency} />
-            </strong>
-            {funding.provider === "usdt_trc20" && funding.payment_amount && (
-              <p>
-                Send exactly <strong>{funding.payment_amount} USDT</strong>
-              </p>
+          {funding.provider !== "bank_transfer" &&
+            funding.instructions &&
+            !paymentSessionExpired && (
+              <p className="whitespace-pre-line text-sm text-slate-600">{funding.instructions}</p>
             )}
-            {funding.payment_currency && (
-              <p>
-                Payment currency: <strong>{funding.payment_currency}</strong>
-              </p>
-            )}
-            {funding.network && <p>Network: {funding.network}</p>}
-            {funding.provider === "bank_transfer" &&
-              snapshotFields(funding.provider_account_snapshot).length > 0 && (
-                <div className="grid gap-2 border-t border-slate-200 pt-3">
-                  <strong>Receiving bank details</strong>
-                  {snapshotFields(funding.provider_account_snapshot).map((field) => (
-                    <div className="flex flex-wrap justify-between gap-3" key={field.key}>
-                      <span className="text-slate-600">{field.label}</span>
-                      <strong className="text-right">{field.value}</strong>
-                    </div>
-                  ))}
+          {funding.provider === "nowpayments" &&
+            (funding.state === "awaiting_payment" || funding.state === "verification_pending") &&
+            !(funding.expires_at && Date.parse(funding.expires_at) <= currentTime) && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+                <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
+                <div className="grid gap-1">
+                  <strong>Waiting for payment</strong>
                 </div>
-              )}
-            {funding.payment_address && (
-              <div className="grid gap-2">
-                <span>Payment address</span>
-                <code className="break-all rounded bg-white p-2 text-xs text-slate-700">
-                  {funding.payment_address}
-                </code>
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => void copyPaymentValue(funding.payment_address ?? "", "Address")}
+                  size="sm"
+                  onClick={() => void refreshFunding()}
+                  disabled={refreshing}
                 >
-                  {copyFeedback === "Address copied" ? "Copied" : "Copy address"}
+                  {refreshing ? "Refreshing…" : "Refresh status"}
                 </Button>
+              </div>
+            )}
+          <div className="grid gap-4 rounded-lg bg-slate-50 p-4 text-sm">
+            <div className="grid gap-1">
+              <span className="text-slate-600">Reference ID</span>
+              <CopyValue
+                label="reference ID"
+                value={funding.funding_reference ?? funding.id}
+                displayValue={
+                  <code className="break-all rounded bg-white px-2 py-1 text-xs text-slate-700">
+                    {funding.funding_reference ?? funding.id}
+                  </code>
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <span className="text-slate-600">Funding amount</span>
+              <strong>
+                <Money minor={funding.amount_minor} currency={funding.currency} />
+              </strong>
+            </div>
+            {!paymentSessionExpired && funding.payment_amount && (
+              <div className="grid gap-1">
+                <span className="text-slate-600">Payment amount</span>
+                <CopyValue
+                  label="payment amount"
+                  value={`${funding.payment_amount} ${funding.payment_currency ?? ""}`.trim()}
+                  displayValue={
+                    <strong>
+                      {funding.payment_amount} {funding.payment_currency ?? ""}
+                    </strong>
+                  }
+                />
+              </div>
+            )}
+            {!paymentSessionExpired && funding.payment_currency && (
+              <div className="grid gap-1">
+                <span className="text-slate-600">Payment currency</span>
+                <strong>{funding.payment_currency}</strong>
+              </div>
+            )}
+            {!paymentSessionExpired && funding.network && (
+              <div className="grid gap-1">
+                <span className="text-slate-600">Network</span>
+                <strong>{funding.network}</strong>
+              </div>
+            )}
+            {funding.provider === "bank_transfer" && (
+              <div className="grid gap-1 border-t border-slate-200 pt-3">
+                <span className="text-slate-600">Transfer amount</span>
+                <CopyValue
+                  label="transfer amount"
+                  value={formatMinorCurrency(
+                    funding.collection_amount_minor,
+                    funding.collection_currency,
+                  )}
+                  displayValue={
+                    <strong>
+                      <Money
+                        minor={funding.collection_amount_minor}
+                        currency={funding.collection_currency}
+                      />
+                    </strong>
+                  }
+                />
+              </div>
+            )}
+            {funding.provider === "bank_transfer" && bankFields.length > 0 && (
+              <div className="grid gap-4 border-t border-slate-200 pt-3">
+                <strong>Receiving bank details</strong>
+                {bankFields.map((field) => (
+                  <div
+                    className="grid gap-1 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] sm:items-center sm:gap-3"
+                    key={field.key}
+                  >
+                    <span className="text-slate-600">{field.label}</span>
+                    <div className="min-w-0">
+                      {field.copyable ? (
+                        <CopyValue
+                          label={field.label}
+                          value={field.value}
+                          displayValue={<strong className="break-all">{field.value}</strong>}
+                        />
+                      ) : (
+                        <strong className="block break-all">{field.value}</strong>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {funding.provider === "bank_transfer" && bankFields.length === 0 && (
+              <p className="border-t border-amber-200 pt-3 text-sm text-amber-900" role="status">
+                Bank details are unavailable for this saved funding attempt. Do not transfer until
+                receiving details are shown.
+              </p>
+            )}
+            {!paymentSessionExpired && funding.payment_address && (
+              <div className="grid gap-1">
+                <span className="text-slate-600">Payment address</span>
+                <CopyValue
+                  label="payment address"
+                  value={funding.payment_address}
+                  displayValue={
+                    <code className="break-all rounded bg-white p-2 text-xs text-slate-700">
+                      {funding.payment_address}
+                    </code>
+                  }
+                />
               </div>
             )}
             {funding.provider === "usdt_trc20" &&
@@ -753,6 +879,11 @@ export function WalletPanel({
                   </Button>
                 </form>
               )}
+            {funding.provider === "bank_transfer" && funding.instructions && (
+              <p className="border-t border-slate-200 pt-3 text-sm font-medium text-amber-900">
+                {bankTransferInstruction}
+              </p>
+            )}
             {bankEvidenceAllowed && (
               <form
                 className="grid gap-3 border-t border-slate-200 pt-4"
@@ -804,17 +935,17 @@ export function WalletPanel({
                 </Button>
               </form>
             )}
-            {funding.expires_at && <p>Expires: {new Date(funding.expires_at).toLocaleString()}</p>}
+            {funding.expires_at && (
+              <p className="text-sm font-medium text-slate-700" role="timer">
+                {formatTimeRemaining(funding.expires_at, currentTime)} · Expires:{" "}
+                {new Date(funding.expires_at).toLocaleString()}
+              </p>
+            )}
           </div>
-          {copyFeedback && (
-            <p className="text-sm text-emerald-800" role="status">
-              {copyFeedback}
-            </p>
-          )}
           <div className="flex flex-wrap gap-2">
             {canContinueProvider && (
               <Button asChild>
-                <a href={providerUrl}>Continue to provider</a>
+                <a href={providerUrl}>{fundingActionLabel(funding)}</a>
               </Button>
             )}
             {process.env.NODE_ENV !== "production" &&
@@ -886,7 +1017,7 @@ export function WalletPanel({
             </div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="ghost">
-                <Link href="/dashboard/wallet/funding">View funding history</Link>
+                <Link href="/dashboard/wallet/funding">View all activity</Link>
               </Button>
               <Button variant="ghost" onClick={() => void loadWallet(true)} disabled={refreshing}>
                 Refresh
@@ -918,11 +1049,7 @@ export function WalletPanel({
                     {transaction.type === "funding_credit" ? "+" : "−"}
                   </div>
                   <div className="grid gap-1">
-                    <strong>
-                      {transaction.type === "funding_credit"
-                        ? "Wallet funding"
-                        : "Listing purchase"}
-                    </strong>
+                    <strong>{walletActivityLabel(transaction)}</strong>
                     <span className="text-xs text-slate-500">
                       {new Date(transaction.created_at).toLocaleString()}
                     </span>
@@ -930,7 +1057,7 @@ export function WalletPanel({
                   <div className="grid justify-items-end gap-1">
                     <Money minor={transaction.amount_minor} currency={transaction.currency} />
                     <Badge variant={transaction.state === "available" ? "default" : "secondary"}>
-                      {transaction.state}
+                      {walletActivityState(transaction.state)}
                     </Badge>
                   </div>
                 </article>
@@ -1036,12 +1163,7 @@ export function WalletPanel({
                           setPreparation(null);
                           setFundingOptions([]);
                           setPreparationError(null);
-                          setCollectionCurrency(method.collection_currencies[0] ?? "");
-                          setPaymentCurrency(
-                            method.default_payment_currency ??
-                              method.payment_currencies[0]?.code ??
-                              "",
-                          );
+                          setPaymentCurrency(initialPaymentCurrency(method));
                         }}
                         className={providerPreparation ? "sr-only" : undefined}
                         disabled={submitting}
@@ -1069,16 +1191,8 @@ export function WalletPanel({
                   fundingOptionId={fundingOptionId}
                   onFundingOptionChange={(value) => {
                     setFundingOptionId(value);
-                    const option = bankFundingOptions.find((candidate) => candidate.id === value);
-                    if (option) setCollectionCurrency(option.collection_currency);
                     setPreparation(null);
                     setPreparationError(null);
-                  }}
-                  collectionCurrency={collectionCurrency}
-                  onCollectionCurrencyChange={(value) => {
-                    setPreparation(null);
-                    setPreparationError(null);
-                    setCollectionCurrency(value);
                   }}
                   paymentCurrency={paymentCurrency}
                   onPaymentCurrencyChange={(value) => {
@@ -1131,7 +1245,11 @@ export function WalletPanel({
                   (providerPreparation && !preparation)
                 }
               >
-                {submitting ? "Starting funding…" : providerPreparation ? "Proceed" : "Continue"}
+                {submitting
+                  ? "Starting funding…"
+                  : providerPreparation
+                    ? (selectedMethod?.customer_action ?? "Create funding")
+                    : "Review payment"}
               </Button>
               <HoneypotField />
             </form>

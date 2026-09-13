@@ -4,18 +4,18 @@ import {
   validateCurrencyMappingConfig,
   type CurrencyMappingConfig,
 } from "@/modules/money/country-currency";
-import type { PaymentProviderFilters } from "@/modules/payment/payment";
 import type { BankTransferConfiguration, BankTransferAccount } from "./provider";
+import {
+  parsePaymentProviderFilters,
+  paymentProviderFiltersSchema,
+} from "@/modules/payment/provider-configuration";
 
 const schema = z.object({
   enabled: z.boolean().default(false),
   display_name: z.string().trim().min(1),
   image_url: z.string().trim().min(1),
   description: z.string().trim().min(1),
-  filters: z
-    .object({ countries: z.array(z.string()).nullable().default(null) })
-    .strict()
-    .default({ countries: null }),
+  filters: paymentProviderFiltersSchema.default({ countries: null }),
   config: z.object({
     currency_mapping: z
       .object({
@@ -27,12 +27,7 @@ const schema = z.object({
     accounts: z.array(
       z.object({
         id: z.string().regex(/^[a-z0-9_-]{1,50}$/),
-        filters: z
-          .object({
-            countries: z.array(z.string()).nullable().default(null),
-          })
-          .strict()
-          .default({ countries: null }),
+        filters: paymentProviderFiltersSchema.default({ countries: null }),
         currency_mapping: z
           .object({
             enabled: z.boolean().default(false),
@@ -41,11 +36,14 @@ const schema = z.object({
           .strict()
           .optional(),
         fields: z.array(
-          z.object({
-            key: z.string().regex(/^[a-z0-9_-]{1,80}$/),
-            label: z.string().trim().min(1).max(120),
-            value: z.string().trim().min(1).max(2000),
-          }),
+          z
+            .object({
+              key: z.string().regex(/^[a-z0-9_-]{1,80}$/),
+              label: z.string().trim().min(1).max(120),
+              value: z.string().trim().min(1).max(2000),
+              copyable: z.boolean().default(false),
+            })
+            .strict(),
         ),
       }),
     ),
@@ -58,17 +56,11 @@ export function loadBankTransferConfiguration(path = "config/modules/payment/ban
   const config = schema.parse(resolveEnvironmentPlaceholders(value, process.env, path));
   if (!config.enabled) return null;
   const ids = new Set<string>();
-  for (const code of config.filters.countries ?? [])
-    if (!/^[A-Z]{2}$/.test(code))
-      throw new Error(`${path} countries must use uppercase ISO alpha-2 codes`);
+  const filters = parsePaymentProviderFilters(config.filters, path);
   for (const account of config.config.accounts) {
     if (ids.has(account.id)) throw new Error(`${path} account IDs must be unique`);
     ids.add(account.id);
-    for (const code of account.filters.countries ?? [])
-      if (!/^[A-Z]{2}$/.test(code))
-        throw new Error(
-          `${path} account ${account.id} countries must use uppercase ISO alpha-2 codes`,
-        );
+    parsePaymentProviderFilters(account.filters, `${path} account ${account.id}`);
   }
   const accounts: BankTransferAccount[] = config.config.accounts.map((account) => ({
     id: account.id,
@@ -89,6 +81,6 @@ export function loadBankTransferConfiguration(path = "config/modules/payment/ban
   };
   return {
     provider,
-    filters: config.filters satisfies PaymentProviderFilters,
+    filters,
   };
 }

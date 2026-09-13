@@ -32,7 +32,12 @@ export interface PaymentPreparation {
 export interface PaymentFundingOption {
   id: string;
   collectionCurrency: string;
-  fields: readonly { key: string; label: string; value: string }[];
+  fields: readonly {
+    key: string;
+    label: string;
+    value: string;
+    copyable?: boolean;
+  }[];
 }
 export interface PaymentRecord {
   id: Id;
@@ -108,12 +113,20 @@ export interface PaymentProvider {
   readonly displayName: string;
   readonly imageUrl: string;
   readonly description: string;
+  /** Short action shown before provider-specific payment details are created. */
+  readonly customerActionLabel?: string;
   /** Currencies this provider collects in; this is distinct from canonical listing currency. */
   readonly collectionCurrencies?: readonly string[];
+  /** Provider fallback when no customer-country preference is supported. */
+  readonly defaultCollectionCurrency?: string;
   /** Optional selectable currencies used to settle a collection. */
   readonly paymentCurrencies?: readonly PaymentCurrencyOption[];
-  readonly defaultPaymentCurrency?: string;
   readonly currencyMapping?: CurrencyMappingConfig;
+  /** Provider-owned resolution of the fiat collection currency for funding. */
+  readonly collectionCurrencyFor?: (input: {
+    country: string | null;
+    fundingOptionId?: string;
+  }) => string;
   readonly collectionCurrenciesFor?: (input: { country: string | null }) => readonly string[];
   readonly isEligible?: (context: PaymentProviderEligibilityContext) => boolean;
   /** Optional provider-specific preflight check for dynamic payment minimums. */
@@ -124,7 +137,8 @@ export interface PaymentProvider {
   /** Optional provider-owned canonical-to-collection preparation. */
   readonly prepareFunding?: (input: {
     canonicalAmount: Money;
-    collectionCurrency: string;
+    /** Internal provider-resolved fact; never a generic browser input. */
+    collectionCurrency?: string;
     paymentCurrency?: string;
     fundingOptionId?: string;
     country?: string | null;
@@ -193,7 +207,7 @@ export class PaymentProviderRegistry {
       return normalized;
     }
     if (currencies.length === 1) return currencies[0];
-    return "USD";
+    return registration.provider.defaultCollectionCurrency ?? currencies[0] ?? "USD";
   }
   get(name: string, context?: PaymentProviderEligibilityContext): PaymentProvider {
     const registration = this.providers.get(name);
@@ -203,6 +217,9 @@ export class PaymentProviderRegistry {
   }
   displayName(name: string) {
     return this.get(name).displayName;
+  }
+  customerActionLabel(name: string) {
+    return this.get(name).customerActionLabel ?? "Create funding";
   }
   availableFor(context: PaymentProviderEligibilityContext) {
     return [...this.providers.values()]
@@ -221,7 +238,7 @@ export class PaymentProviderRegistry {
           collectionCurrency: currencies[0] ?? "USD",
           collectionCurrencies: currencies,
           paymentCurrencies: registration.provider.paymentCurrencies ?? [],
-          defaultPaymentCurrency: registration.provider.defaultPaymentCurrency,
+          customerActionLabel: registration.provider.customerActionLabel ?? "Create funding",
         };
       });
   }
@@ -229,7 +246,12 @@ export class PaymentProviderRegistry {
   paymentCurrency(name: string, requested?: string) {
     const provider = this.get(name);
     const currencies = provider.paymentCurrencies ?? [];
-    if (!requested) return provider.defaultPaymentCurrency;
+    if (!requested) {
+      if (currencies.length === 1) return currencies[0].code;
+      if (currencies.length > 1)
+        throw new Error(`Payment provider requires a payment currency selection: ${name}`);
+      return undefined;
+    }
     if (currencies.length === 0)
       throw new Error(`Payment provider does not support selectable payment currency: ${name}`);
     const normalized = requested.trim().toLowerCase();

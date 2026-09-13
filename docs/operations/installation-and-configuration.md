@@ -107,6 +107,27 @@ External payment providers are incoming-funding adapters. They add verified fund
 
 Provider implementations and configuration are optional/removable. Payment-provider configuration is independent from payout-provider configuration even when the same external company supports both capabilities.
 
+Use YAML block-style sequences and mappings. Avoid flow-style collections in maintained configuration files.
+
+Payment-module examples use the same top-level eligibility shape:
+
+```yaml
+enabled: true
+display_name: Provider name
+image_url: /images/payment/provider.svg
+description: Provider description.
+filters:
+  countries: null
+config:
+  # Provider-specific settings belong here.
+```
+
+`filters.countries` gates provider visibility for the authenticated customer's
+country only; it does not filter currencies or invoke country-currency
+mapping. Bank transfer applies its separate `accounts[].filters.countries`
+after the provider-level filter to choose receiving accounts. `countries: null`
+means unrestricted visibility.
+
 ## Referral policy
 
 Referral distribution is configured independently from payment providers in `config/hierarchy/distribution.yaml`.

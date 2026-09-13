@@ -231,11 +231,11 @@ export class PostgresWalletRepository implements WalletRepository {
   async history(accountId: string, limit = 10) {
     const rows = (
       await this.sql.query<any>(
-        `select 'funding_credit' kind,c.uuid as id,f.uuid as source_id,c.amount_minor,c.currency,c.state,c.created_at
+        `select 'funding_credit' kind,c.uuid as id,f.uuid as source_id,c.amount_minor,c.currency,c.state,c.created_at,f.provider_initialization->>'providerDisplayName' as provider_display_name
            from wallet_capability.credits c join funding_capability.funding_transactions f on f.id=c.funding_id
           where c.account_id=(select id from identity_capability.accounts where uuid=$1)
          union all
-         select 'purchase_debit',d.uuid,c.uuid,d.amount_minor,d.currency,'complete',d.created_at
+         select 'purchase_debit',d.uuid,c.uuid,d.amount_minor,d.currency,'complete',d.created_at,null::text
            from wallet_capability.debits d join checkout_capability.checkouts c on c.id=d.checkout_id
           where d.account_id=(select id from identity_capability.accounts where uuid=$1)
           order by created_at desc limit $2`,
@@ -249,6 +249,7 @@ export class PostgresWalletRepository implements WalletRepository {
       amount: Money.of(BigInt(r.amount_minor), r.currency),
       state: r.state,
       createdAt: r.created_at,
+      ...(r.provider_display_name ? { providerDisplayName: r.provider_display_name } : {}),
     })) as WalletTransaction[];
   }
   private credit(r: any) {

@@ -2,16 +2,14 @@ import { z } from "zod";
 import { authenticatedAccount, apiError } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
 
-const querySchema = z.object({
-  amount_minor: z.string().regex(/^[1-9][0-9]*$/),
-  provider: z.string().min(1),
-  collection_currency: z
-    .string()
-    .regex(/^[A-Z]{3}$/)
-    .optional(),
-  payment_currency: z.string().min(1).optional(),
-  bank_account_id: z.string().min(1).optional(),
-});
+const querySchema = z
+  .object({
+    amount_minor: z.string().regex(/^[1-9][0-9]*$/),
+    provider: z.string().min(1),
+    payment_currency: z.string().min(1).optional(),
+    bank_account_id: z.string().min(1).optional(),
+  })
+  .strict();
 
 export async function GET(request: Request) {
   const account = await authenticatedAccount(request);
@@ -22,7 +20,6 @@ export async function GET(request: Request) {
       accountId: account.id,
       amountMinor: BigInt(query.amount_minor),
       providerName: query.provider,
-      collectionCurrency: query.collection_currency,
       paymentCurrency: query.payment_currency,
       fundingOptionId: query.bank_account_id,
     });

@@ -25,14 +25,16 @@ describe("bank transfer funding provider", () => {
       buyerEmail: "buyer@example.test",
     });
     expect(initialized.reference).toMatch(/^bank-/);
-    expect(initialized.metadata?.instructions).toContain("12.50 USD");
+    expect(initialized.metadata?.instructions).not.toContain("12.50 USD");
     expect(initialized.metadata?.providerAccountId).toBe("intl-usd");
-    expect(initialized.metadata?.instructions).toContain("Funding reference: bank-");
-    expect(initialized.metadata?.instructions).toContain(
-      "enter this funding reference in your bank's narration",
+    expect(initialized.metadata?.instructions).toBe(
+      "Use the Reference ID as the narration/description for your bank transfer so we can match your payment.",
     );
-    expect(initialized.metadata?.instructions).toContain("SWIFT / BIC: EXAMPLEBIC");
-    expect(initialized.metadata?.instructions).toContain("IBAN: XX00EXAMPLE");
+    expect(initialized.metadata?.instructions).not.toContain("SWIFT / BIC: EXAMPLEBIC");
+    expect(initialized.metadata?.instructions).not.toContain("IBAN: XX00EXAMPLE");
+    expect(initialized.metadata?.providerAccountSnapshot).toMatchObject({
+      fields: [{ key: "bank_name" }, { key: "swift" }, { key: "iban" }],
+    });
     const verification = await provider.verify({
       reference: initialized.reference,
       expectedAmount: Money.of(1250n, "USD"),
@@ -120,5 +122,20 @@ describe("bank transfer funding provider", () => {
       ],
     });
     expect(provider.eligibleAccounts({ country: null })).toHaveLength(1);
+  });
+
+  it("falls back to USD when country-currency mapping is disabled", () => {
+    const provider = new BankTransferProvider({
+      currencyMapping: { enabled: false },
+      accounts: [
+        {
+          id: "local",
+          fields: [{ key: "bank_name", label: "Bank", value: "Local Bank" }],
+          filters: { countries: ["NG"] },
+        },
+      ],
+    });
+
+    expect(provider.collectionCurrencyFor({ country: "NG", fundingOptionId: "local" })).toBe("USD");
   });
 });

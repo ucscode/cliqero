@@ -27,6 +27,7 @@ export class DirectTrc20Provider implements PaymentProvider {
   readonly displayName: string;
   readonly imageUrl: string;
   readonly description: string;
+  readonly customerActionLabel = "Create payment";
   readonly collectionCurrencies = ["USD"] as const;
   constructor(
     private readonly config: DirectTrc20Configuration,

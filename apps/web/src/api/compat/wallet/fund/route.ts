@@ -5,10 +5,6 @@ const schema = z
   .object({
     amount_minor: z.string().regex(/^[1-9][0-9]*$/),
     provider: z.string().min(1),
-    collection_currency: z
-      .string()
-      .regex(/^[A-Z]{3}$/)
-      .optional(),
     payment_currency: z.string().min(1).optional(),
     bank_account_id: z.string().min(1).optional(),
   })
@@ -25,7 +21,6 @@ export async function POST(request: Request) {
       amountMinor: BigInt(b.amount_minor),
       providerName: b.provider,
       idempotencyKey: key,
-      collectionCurrency: b.collection_currency,
       paymentCurrency: b.payment_currency,
       fundingOptionId: b.bank_account_id,
     });

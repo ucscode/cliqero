@@ -7,6 +7,8 @@ const config = {
   secretKey: "sk_test_secret",
   apiBaseUrl: "https://api.paystack.co",
   callbackUrl: "https://cliqero.example/callback",
+  currencies: ["NGN", "USD"],
+  defaultCurrency: "USD",
 };
 describe("PaystackProvider", () => {
   it("maps checkout initialization using server-owned subunits, email, currency, and reference", async () => {
@@ -46,6 +48,22 @@ describe("PaystackProvider", () => {
   });
   it("preserves exact minor units without floating point conversion", () => {
     expect(toPaystackSubunit(Money.of(10_000_000_000_000_001n, "USD"))).toBe("10000000000000001");
+  });
+  it("orders the supported capability by country preference and provider fallback", () => {
+    const provider = new PaystackProvider(config, vi.fn());
+    expect(provider.collectionCurrenciesFor({ country: "NG" })).toEqual(["NGN", "USD"]);
+    expect(provider.collectionCurrenciesFor({ country: "GH" })).toEqual(["USD", "NGN"]);
+    expect(provider.collectionCurrenciesFor({ country: "US" })).toEqual(["USD", "NGN"]);
+    expect(provider.collectionCurrencyFor({ country: "NG" })).toBe("NGN");
+    expect(provider.collectionCurrencyFor({ country: "GH" })).toBe("USD");
+  });
+  it("uses the provider default when a mapped country currency is unsupported", async () => {
+    const provider = new PaystackProvider(config, vi.fn());
+    const result = await provider.prepareFunding({
+      canonicalAmount: Money.of(1000n, "USD"),
+      country: "GH",
+    });
+    expect(result.collectionAmount).toEqual(Money.of(1000n, "USD"));
   });
   it("maps authoritative verification facts", async () => {
     const http = vi.fn(async () =>

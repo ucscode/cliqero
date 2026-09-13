@@ -37,9 +37,10 @@ export async function GET(request: Request) {
         id: funding.id,
         provider: funding.providerName,
         provider_display_name:
-          typeof getContainer().providers.displayName === "function"
+          funding.providerInitialization?.providerDisplayName ??
+          (typeof getContainer().providers.displayName === "function"
             ? getContainer().providers.displayName(funding.providerName)
-            : funding.providerName,
+            : funding.providerName),
         funding_reference: funding.providerReference,
         state: funding.state,
         amount_minor: funding.canonicalAmount.minorAmount.toString(),

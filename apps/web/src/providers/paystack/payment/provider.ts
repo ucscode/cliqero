@@ -9,6 +9,10 @@ import type {
   PaymentVerification,
 } from "@/modules/payment/payment";
 import { ProviderOperationError } from "@/kernel/provider-error";
+import {
+  loadCountryCurrencyResolver,
+  type CountryCurrencyResolver,
+} from "@/modules/money/country-currency";
 
 export interface PaystackConfiguration {
   publicKey?: string;
@@ -18,6 +22,8 @@ export interface PaystackConfiguration {
   displayName?: string;
   imageUrl?: string;
   description?: string;
+  currencies?: readonly string[];
+  defaultCurrency?: string;
 }
 export type PaystackHttpClient = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -46,6 +52,8 @@ export class PaystackProvider implements PaymentProvider {
   readonly imageUrl: string;
   readonly description: string;
   readonly collectionCurrencies: readonly string[];
+  readonly defaultCollectionCurrency: string;
+  readonly customerActionLabel = "Pay now";
   referenceFor(input: { paymentId: Id; idempotencyKey: string }) {
     return `pay-${input.paymentId}`;
   }
@@ -54,8 +62,16 @@ export class PaystackProvider implements PaymentProvider {
     private readonly http: PaystackHttpClient = fetch,
     collectionCurrencies: readonly string[] = ["NGN"],
     private readonly rates?: ExchangeRateService,
+    private readonly countryCurrencies: CountryCurrencyResolver = loadCountryCurrencyResolver(),
   ) {
-    this.collectionCurrencies = collectionCurrencies;
+    this.collectionCurrencies = normalizeCurrencies(config.currencies ?? collectionCurrencies);
+    this.defaultCollectionCurrency = normalizeCurrency(
+      config.defaultCurrency ?? this.collectionCurrencies[0],
+    );
+    if (!this.collectionCurrencies.includes(this.defaultCollectionCurrency))
+      throw new Error(
+        "Paystack default collection currency must be configured as an allowed currency",
+      );
     this.displayName = config.displayName ?? "Paystack";
     this.imageUrl = config.imageUrl ?? "/images/payment/paystack.svg";
     this.description = config.description ?? "Pay through Paystack.";
@@ -63,10 +79,13 @@ export class PaystackProvider implements PaymentProvider {
 
   async prepareFunding(input: {
     canonicalAmount: Money;
-    collectionCurrency: string;
+    collectionCurrency?: string;
     paymentCurrency?: string;
+    country?: string | null;
   }) {
-    const collectionCurrency = input.collectionCurrency.trim().toUpperCase();
+    const collectionCurrency =
+      input.collectionCurrency?.trim().toUpperCase() ||
+      this.collectionCurrenciesFor({ country: input.country ?? null })[0];
     if (!this.collectionCurrencies.includes(collectionCurrency))
       throw new Error(`Paystack does not support collection currency: ${collectionCurrency}`);
     if (collectionCurrency === input.canonicalAmount.currency)
@@ -84,6 +103,23 @@ export class PaystackProvider implements PaymentProvider {
         observedAt: quote.observedAt,
       },
     };
+  }
+
+  collectionCurrencyFor(input: { country: string | null }) {
+    return this.collectionCurrenciesFor(input)[0] ?? this.defaultCollectionCurrency;
+  }
+
+  collectionCurrenciesFor(input: { country: string | null }) {
+    const preferred = this.countryCurrencies.resolve(input.country, {
+      provider: { enabled: true },
+    });
+    return [
+      ...new Set([
+        ...(this.collectionCurrencies.includes(preferred) ? [preferred] : []),
+        this.defaultCollectionCurrency,
+        ...this.collectionCurrencies,
+      ]),
+    ];
   }
 
   async initiate(input: {
@@ -196,6 +232,19 @@ export class PaystackProvider implements PaymentProvider {
       );
     return envelope.data;
   }
+}
+
+function normalizeCurrency(currency: string) {
+  const normalized = currency.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(normalized))
+    throw new Error("Paystack currency must be an ISO-style code");
+  return normalized;
+}
+
+function normalizeCurrencies(currencies: readonly string[]) {
+  const normalized = [...new Set(currencies.map(normalizeCurrency))];
+  if (normalized.length === 0) throw new Error("Paystack currencies must not be empty");
+  return normalized;
 }
 
 export function toPaystackSubunit(money: Money): string {

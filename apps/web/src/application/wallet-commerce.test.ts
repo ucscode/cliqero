@@ -3,6 +3,8 @@ import { Money } from "@/modules/money/money";
 import type { ExchangeRateService } from "@/modules/money/exchange-service";
 import { PaymentProviderRegistry, type PaymentProvider } from "@/modules/payment/payment";
 import { PaystackProvider } from "@/providers/paystack/payment/provider";
+import { NowPaymentsProvider } from "@/providers/nowpayments/provider";
+import { BankTransferProvider } from "@/providers/bank-transfer/provider";
 import { FundingInitializationProcessor, FundingService } from "./wallet-commerce";
 
 const accountId = "00000000-0000-4000-8000-000000000001";
@@ -14,7 +16,6 @@ const provider: PaymentProvider = {
   description: "Test provider",
   collectionCurrencies: ["USD"],
   paymentCurrencies: [{ code: "usdttrc20" }],
-  defaultPaymentCurrency: "usdttrc20",
   initiate: async () => ({ reference: "reference" }),
   verify: async ({ reference, expectedAmount }) => ({
     verified: false,
@@ -214,6 +215,212 @@ describe("provider-owned funding preparation", () => {
     });
     expect(providerRate).toHaveBeenCalledWith("USD", "NGN");
     expect(coreRate).not.toHaveBeenCalled();
+  });
+
+  it("derives a bank account's collection currency without a generic currency input", async () => {
+    const bank = new BankTransferProvider({
+      currencyMapping: { enabled: true },
+      accounts: [
+        {
+          id: "ng-account",
+          fields: [{ key: "bank_name", label: "Bank", value: "Example Bank" }],
+          filters: { countries: ["NG"] },
+        },
+      ],
+    });
+    const registry = new PaymentProviderRegistry().register(bank, {
+      filters: { countries: ["NG"] },
+    });
+    const service = new FundingService(
+      {} as never,
+      registry,
+      {
+        quote: async () => ({
+          fromCurrency: "USD",
+          toCurrency: "NGN",
+          rate: "1600",
+          source: "test-rate",
+          observedAt: new Date("2026-09-12T10:00:00Z"),
+        }),
+      } as unknown as ExchangeRateService,
+      {
+        findById: async () => ({ id: accountId, username: "buyer", country: "NG" }),
+        exists: async () => true,
+      },
+      {} as never,
+    );
+
+    const prepared = await service.prepare({
+      accountId,
+      amountMinor: 2500n,
+      providerName: "bank_transfer",
+      fundingOptionId: "ng-account",
+    });
+
+    expect(prepared.collectionAmount.currency).toBe("NGN");
+    expect(prepared.collectionAmount.minorAmount).toBe(4000000n);
+  });
+
+  it("snapshots the selected bank account fields at funding creation", async () => {
+    let created: any;
+    const bank = new BankTransferProvider({
+      currencyMapping: { enabled: true },
+      accounts: [
+        {
+          id: "ng-account",
+          fields: [
+            { key: "bank_name", label: "Bank Name", value: "Example Bank" },
+            { key: "custom_route", label: "Custom route", value: "ROUTE-123", copyable: false },
+            { key: "account_number", label: "Account Number", value: "0000000000", copyable: true },
+          ],
+          filters: { countries: ["NG"] },
+        },
+      ],
+    });
+    const repository = {
+      findByIdempotency: async () => null,
+      save: async (value: any) => {
+        created = value;
+      },
+    };
+    const service = new FundingService(
+      repository as never,
+      new PaymentProviderRegistry().register(bank, { filters: { countries: ["NG"] } }),
+      {
+        quote: async () => ({
+          fromCurrency: "USD",
+          toCurrency: "NGN",
+          rate: "1600",
+          source: "test-rate",
+          observedAt: new Date("2026-09-12T10:00:00Z"),
+        }),
+      } as unknown as ExchangeRateService,
+      {
+        findById: async () => ({ id: accountId, username: "buyer", country: "NG" }),
+        exists: async () => true,
+      },
+      { transaction: async (operation) => operation() },
+    );
+
+    await service.create({
+      accountId,
+      amountMinor: 2500n,
+      providerName: "bank_transfer",
+      fundingOptionId: "ng-account",
+      idempotencyKey: "bank-snapshot-1",
+    });
+
+    expect(created.providerInitialization).toMatchObject({
+      providerAccountId: "ng-account",
+      providerAccountSnapshot: {
+        id: "ng-account",
+        collectionCurrency: "NGN",
+        fields: [
+          { key: "bank_name", label: "Bank Name", value: "Example Bank" },
+          { key: "custom_route", label: "Custom route", value: "ROUTE-123", copyable: false },
+          { key: "account_number", label: "Account Number", value: "0000000000", copyable: true },
+        ],
+      },
+    });
+  });
+
+  it("keeps the creation snapshot when provider config changes before initialization", async () => {
+    let funding: any;
+    const oldBank = new BankTransferProvider({
+      accounts: [
+        {
+          id: "ng-account",
+          fields: [{ key: "account_number", label: "Account Number", value: "1234567890" }],
+          filters: { countries: ["NG"] },
+        },
+      ],
+    });
+    const repository = {
+      findByIdempotency: async () => null,
+      findById: async () => funding,
+      save: async (value: any) => {
+        funding = value;
+      },
+      claimInitialization: async () => {
+        funding = { ...funding, state: "initializing", initializationClaimedAt: new Date() };
+        return funding;
+      },
+    };
+    const service = new FundingService(
+      repository as never,
+      new PaymentProviderRegistry().register(oldBank),
+      {} as never,
+      {
+        findById: async () => ({ id: accountId, username: "buyer", country: "NG" }),
+        exists: async () => true,
+      },
+      { transaction: async (operation) => operation() },
+    );
+
+    await service.create({
+      accountId,
+      amountMinor: 2500n,
+      providerName: "bank_transfer",
+      fundingOptionId: "ng-account",
+      idempotencyKey: "bank-snapshot-2",
+    });
+    const originalSnapshot = funding.providerInitialization.providerAccountSnapshot;
+    const changedBank = new BankTransferProvider({
+      accounts: [
+        {
+          id: "ng-account",
+          fields: [{ key: "account_number", label: "Account Number", value: "9876543210" }],
+          filters: { countries: ["NG"] },
+        },
+      ],
+    });
+    const processor = new FundingInitializationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register(changedBank),
+      {
+        findById: async () => ({ id: accountId, username: "buyer", country: "NG" }),
+        findAuthenticationEmail: async () => "buyer@example.test",
+        exists: async () => true,
+      },
+      { transaction: async (operation) => operation() },
+    );
+
+    await processor.process(funding.id);
+
+    expect(funding.providerInitialization.providerAccountSnapshot).toEqual(originalSnapshot);
+  });
+
+  it("persists the selected NOWPayments currency on the funding record", async () => {
+    const repository = {
+      findByIdempotency: async () => null,
+      save: async (value: any) => value,
+    };
+    const service = new FundingService(
+      repository as never,
+      new PaymentProviderRegistry().register(
+        new NowPaymentsProvider({
+          apiKey: "test",
+          apiBaseUrl: "https://api-sandbox.nowpayments.io",
+          payCurrencies: ["btc", "eth", "usdttrc20"],
+        }),
+      ),
+      {} as never,
+      {
+        findById: async () => ({ id: accountId, username: "buyer", country: "NG" }),
+        exists: async () => true,
+      },
+      { transaction: async (operation) => operation() },
+    );
+
+    const created = await service.create({
+      accountId,
+      amountMinor: 1000n,
+      providerName: "nowpayments",
+      idempotencyKey: "now-btc-selection",
+      paymentCurrency: "btc",
+    });
+
+    expect(created.providerInitialization?.paymentCurrency).toBe("btc");
   });
 });
 

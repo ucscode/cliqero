@@ -27,6 +27,13 @@ config:
   # override YAML. APP_URL should be the public origin, not APP_PORT.
   callback_url: "%env(APP_URL)%/payments/paystack/callback"
 
+  # Customer-facing fiat collection capability. The customer's country may
+  # prefer one of these currencies, but never expands this allowed list.
+  currencies:
+    - NGN
+    - USD
+  default_currency: USD
+
 # Platform-level eligibility restrictions evaluated before checkout. These
 # filters do not replace Paystack's own technical validation.
 filters:

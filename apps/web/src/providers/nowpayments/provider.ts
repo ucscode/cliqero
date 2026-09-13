@@ -14,8 +14,7 @@ export interface NowPaymentsConfiguration {
   ipnSecret?: string;
   apiBaseUrl: string;
   ipnCallbackUrl?: string;
-  payCurrency: string;
-  payCurrencies?: readonly string[];
+  payCurrencies: readonly string[];
   asset?: string;
   network?: string;
   /** NOWPayments' documented sandbox create-payment test case. */
@@ -56,8 +55,8 @@ export class NowPaymentsProvider implements PaymentProvider {
   readonly imageUrl: string;
   readonly description: string;
   readonly paymentCurrencies;
-  readonly defaultPaymentCurrency: string;
   readonly name: string;
+  readonly customerActionLabel = "Create payment";
 
   constructor(
     private readonly config: NowPaymentsConfiguration,
@@ -68,8 +67,11 @@ export class NowPaymentsProvider implements PaymentProvider {
     this.displayName = config.displayName ?? "NOWPayments";
     this.imageUrl = config.imageUrl ?? "/images/payment/nowpayments.svg";
     this.description = config.description ?? "Pay through NOWPayments.";
-    this.defaultPaymentCurrency = config.payCurrency.toLowerCase();
-    const configuredCurrencies = config.payCurrencies ?? [config.payCurrency];
+    const configuredCurrencies = [...config.payCurrencies].map((currency) =>
+      currency.trim().toLowerCase(),
+    );
+    if (configuredCurrencies.length === 0)
+      throw new Error("NOWPayments requires at least one configured payment currency");
     this.paymentCurrencies = [
       ...new Set(
         configuredCurrencies.map((code) => ({
@@ -198,9 +200,10 @@ export class NowPaymentsProvider implements PaymentProvider {
       "transaction.verify",
     );
     if (data.order_id !== input.reference) throw new Error("NOWPayments order reference mismatch");
-    const expectedPaymentCurrency = (
-      input.initialization?.paymentCurrency ?? this.defaultPaymentCurrency
-    ).toLowerCase();
+    const persistedPaymentCurrency = input.initialization?.paymentCurrency?.trim();
+    if (!persistedPaymentCurrency)
+      throw new Error("NOWPayments persisted payment currency is missing");
+    const expectedPaymentCurrency = persistedPaymentCurrency.toLowerCase();
     if (String(data.pay_currency ?? "").toLowerCase() !== expectedPaymentCurrency)
       throw new Error("NOWPayments payment currency mismatch");
     const currency = String(data.price_currency ?? input.expectedAmount.currency).toUpperCase();
@@ -219,7 +222,8 @@ export class NowPaymentsProvider implements PaymentProvider {
   }
 
   private resolvePaymentCurrency(requested?: string) {
-    const value = (requested ?? this.defaultPaymentCurrency).trim().toLowerCase();
+    const value = requested?.trim().toLowerCase();
+    if (!value) throw new Error("NOWPayments payment currency is required");
     if (!this.paymentCurrencies.some((currency) => currency.code === value))
       throw new Error(`NOWPayments payment currency is unsupported: ${requested ?? value}`);
     return value;

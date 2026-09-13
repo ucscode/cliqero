@@ -48,6 +48,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         (typeof getContainer().providers?.displayName === "function"
           ? getContainer().providers.displayName(funding.providerName)
           : "Payment provider"),
+      customer_action:
+        typeof getContainer().providers?.customerActionLabel === "function"
+          ? getContainer().providers.customerActionLabel(funding.providerName)
+          : null,
       funding_reference: funding.providerReference,
       amount_minor: funding.canonicalAmount.minorAmount.toString(),
       currency: funding.canonicalAmount.currency,

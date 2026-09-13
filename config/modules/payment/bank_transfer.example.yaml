@@ -7,7 +7,9 @@ image_url: /images/payment/bank-transfer.svg
 description: Transfer funds from your bank account.
 filters:
   # Provider-level visibility only; accounts apply their own country filters.
-  countries: [NG, US]
+  countries:
+    - NG
+    - US
 config:
   # Optional country-to-fiat preparation mapping. Accounting remains USD.
   currency_mapping:
@@ -18,7 +20,8 @@ config:
     - id: nigeria_ngn
       # Use uppercase ISO country codes. null means unrestricted.
       filters:
-        countries: [NG]
+        countries:
+          - NG
       # Ordered opaque fields shown to the customer; keys have no bank semantics.
       fields:
         - key: bank_name
@@ -32,6 +35,7 @@ config:
         - key: account_number
           label: Account Number
           value: "0000000000"
+          copyable: true
 
         - key: custom_instruction
           label: Transfer instruction
@@ -56,14 +60,17 @@ config:
         - key: account_number
           label: Account Number
           value: "0000000000"
+          copyable: true
 
         - key: swift
           label: SWIFT / BIC
           value: EXAMPLEX
+          copyable: true
 
         - key: iban
           label: IBAN
           value: XX00EXAMPLE0000000000
+          copyable: true
 
         - key: bank_address
           label: Bank Address

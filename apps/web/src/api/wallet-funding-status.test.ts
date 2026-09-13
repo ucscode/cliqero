@@ -35,7 +35,10 @@ function configure(owner = account.id) {
           authorizationUrl: "https://pay.example.test/continue",
           providerAccountSnapshot: {
             id: "account-1",
-            fields: [{ key: "bank_name", label: "Bank", value: "Example Bank" }],
+            fields: [
+              { key: "bank_name", label: "Bank", value: "Example Bank", copyable: false },
+              { key: "routing", label: "Routing", value: "ROUTE-1", copyable: true },
+            ],
           },
           paymentAddress: "TReceiver",
           paymentAmount: "12.50",
@@ -66,7 +69,10 @@ describe("wallet funding status projection", () => {
       authorization_url: "https://pay.example.test/continue",
       provider_account_snapshot: {
         id: "account-1",
-        fields: [{ key: "bank_name", label: "Bank", value: "Example Bank" }],
+        fields: [
+          { key: "bank_name", label: "Bank", value: "Example Bank", copyable: false },
+          { key: "routing", label: "Routing", value: "ROUTE-1", copyable: true },
+        ],
       },
       payment_address: "TReceiver",
       payment_amount: "12.50",

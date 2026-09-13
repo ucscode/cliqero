@@ -11,6 +11,7 @@ import {
   safeContinuation,
   walletFundingUrl,
   walletFundingUrlForCheckout,
+  walletFundingStatusUrl,
 } from "./api-client";
 import { HONEYPOT_HEADER_NAME } from "./honeypot";
 
@@ -50,6 +51,12 @@ describe("frontend API presentation helpers", () => {
     );
     expect(canonicalWalletFundingUrl("https://evil.example")).toBe(
       "/dashboard/wallet/fund?return=%2Fdashboard",
+    );
+    expect(walletFundingStatusUrl("funding-1", "/dashboard?buy=item-1")).toBe(
+      "/dashboard/wallet/fund?funding=funding-1&return=%2Fdashboard%3Fbuy%3Ditem-1",
+    );
+    expect(walletFundingStatusUrl("funding-1", "https://evil.example")).toBe(
+      "/dashboard/wallet/fund?funding=funding-1&return=%2Fdashboard",
     );
   });
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { Money } from "@/modules/money/money";
 import { PostgresFundingRepository, PostgresWalletRepository } from "./wallet-commerce";
 
 const accountId = "00000000-0000-4000-8000-000000000001";
@@ -56,5 +57,41 @@ describe("Postgres wallet and funding projections", () => {
     await repository.history(accountId, 500);
 
     expect(query).toHaveBeenCalledWith(expect.stringContaining("limit $2"), [accountId, 50]);
+  });
+
+  it("serializes persisted bank account snapshots with ordered field metadata", async () => {
+    const query = vi.fn<(statement: string, values: unknown[]) => Promise<{ rows: unknown[] }>>(
+      async () => ({ rows: [] }),
+    );
+    const repository = new PostgresFundingRepository({ query } as never);
+    const snapshot = {
+      id: "ng-account",
+      collectionCurrency: "NGN",
+      fields: [
+        { key: "first", label: "First", value: "one" },
+        { key: "second", label: "Second", value: "two", copyable: true },
+      ],
+    };
+
+    await repository.save({
+      id: "00000000-0000-4000-8000-000000000013",
+      accountId,
+      providerName: "bank_transfer",
+      providerReference: "bank-reference",
+      canonicalAmount: Money.of(1000n, "USD"),
+      collectionAmount: Money.of(1326500n, "NGN"),
+      state: "awaiting_payment",
+      idempotencyKey: "bank-snapshot-repository",
+      providerInitialization: {
+        providerAccountId: "ng-account",
+        providerAccountSnapshot: snapshot,
+      },
+    });
+
+    const values = query.mock.calls[0]?.[1] as unknown[];
+    expect(JSON.parse(String(values[11]))).toMatchObject({
+      providerAccountId: "ng-account",
+      providerAccountSnapshot: snapshot,
+    });
   });
 });
