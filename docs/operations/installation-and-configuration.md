@@ -158,6 +158,12 @@ PostgreSQL volume applies this baseline without replaying historical migration
 steps. Blog content has its own independent SQLite migration under the web
 application and is never part of this PostgreSQL bootstrap.
 
+During active development, while destructive database reset is acceptable,
+schema changes must be folded into `database/migrations/001_initial_schema.sql`.
+Do not add numbered incremental migrations. Start preserving incremental
+migration history only when the project reaches a stage where existing deployed
+database state must be upgraded non-destructively.
+
 Normal `just dev-down` / `just prod-down` stops containers without deleting persistent volumes. `just dev-clean` runs volume removal and is destructive.
 
 ## Blog initialization

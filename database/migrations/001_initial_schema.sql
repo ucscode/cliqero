@@ -497,7 +497,7 @@ CREATE TABLE funding_capability.funding_transactions (
     CONSTRAINT funding_amount_positive CHECK (((canonical_amount_minor > 0) AND (collection_amount_minor > 0))),
     CONSTRAINT funding_canonical_usd CHECK ((canonical_currency = 'USD'::text)),
     CONSTRAINT funding_currency_format CHECK ((collection_currency ~ '^[A-Z]{3}$'::text)),
-    CONSTRAINT funding_state_valid CHECK ((state = ANY (ARRAY['initialization_pending'::text, 'initializing'::text, 'awaiting_payment'::text, 'verification_pending'::text, 'confirmed'::text, 'failed'::text, 'blocked'::text, 'reconciliation_pending'::text])))
+    CONSTRAINT funding_state_valid CHECK ((state = ANY (ARRAY['initialization_pending'::text, 'initializing'::text, 'awaiting_payment'::text, 'verification_pending'::text, 'confirmed'::text, 'failed'::text, 'blocked'::text, 'cancelled'::text, 'reconciliation_pending'::text])))
 );
 
 -- Customer-submitted bank-transfer evidence is supporting material only; it
@@ -524,10 +524,6 @@ CREATE TABLE funding_capability.funding_evidence (
 ALTER TABLE funding_capability.funding_evidence ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     SEQUENCE NAME funding_capability.funding_evidence_id_seq
 );
-
-ALTER TABLE ONLY funding_capability.funding_evidence
-    ADD CONSTRAINT funding_evidence_funding_fk FOREIGN KEY (funding_id) REFERENCES funding_capability.funding_transactions(id),
-    ADD CONSTRAINT funding_evidence_account_fk FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id);
 
 CREATE INDEX funding_evidence_account_idx ON funding_capability.funding_evidence USING btree (account_id, created_at DESC);
 
@@ -3325,6 +3321,15 @@ ALTER TABLE ONLY entitlement_capability.entitlements
 
 ALTER TABLE ONLY funding_capability.funding_transactions
     ADD CONSTRAINT funding_transactions_account_fk FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id);
+
+
+--
+-- Name: funding_evidence funding_evidence_funding_fk; Type: FK CONSTRAINT; Schema: funding_capability; Owner: -
+--
+
+ALTER TABLE ONLY funding_capability.funding_evidence
+    ADD CONSTRAINT funding_evidence_funding_fk FOREIGN KEY (funding_id) REFERENCES funding_capability.funding_transactions(id),
+    ADD CONSTRAINT funding_evidence_account_fk FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id);
 
 
 --

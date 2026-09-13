@@ -13,7 +13,7 @@ import {
   walletActivityState,
   walletPanelComposition,
 } from "./wallet-panel";
-import type { FundingStatus } from "@/lib/api-client";
+import { formatMinorAmount, formatMinorCurrency, type FundingStatus } from "@/lib/api-client";
 import { copyValueActionLabel } from "./copy-value";
 import {
   initialPaymentCurrency,
@@ -135,6 +135,15 @@ describe("provider preparation context", () => {
 });
 
 describe("customer-facing funding presentation", () => {
+  it("keeps the transfer copy value separate from its formatted display", () => {
+    const collectionAmountMinor = "3316200";
+    const collectionCurrency = "NGN";
+
+    expect(formatMinorCurrency(collectionAmountMinor, collectionCurrency)).toBe("NGN 33,162.00");
+    expect(formatMinorAmount(collectionAmountMinor)).toBe("33162.00");
+    expect(formatMinorAmount("1000")).toBe("10.00");
+  });
+
   it("uses provider display names and customer success states in activity", () => {
     expect(walletActivityLabel({ type: "funding_credit", provider_display_name: "Paystack" })).toBe(
       "Paystack funding",

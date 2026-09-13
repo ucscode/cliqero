@@ -714,6 +714,16 @@ export function formatMinorUsd(minor: string | bigint): string {
   return formatMinorCurrency(minor, "USD");
 }
 
+/** Formats minor units as an ungrouped decimal value for copying or form input. */
+export function formatMinorAmount(minor: string | bigint): string {
+  const value = typeof minor === "bigint" ? minor : BigInt(minor);
+  const sign = value < 0n ? "-" : "";
+  const absolute = value < 0n ? -value : value;
+  const whole = absolute / 100n;
+  const cents = (absolute % 100n).toString().padStart(2, "0");
+  return `${sign}${whole}.${cents}`;
+}
+
 export function formatMinorCurrency(minor: string | bigint, currency: string): string {
   const value = typeof minor === "bigint" ? minor : BigInt(minor);
   const sign = value < 0n ? "-" : "";

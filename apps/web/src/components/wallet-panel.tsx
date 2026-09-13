@@ -8,7 +8,7 @@ import {
   ApiClientError,
   canonicalWalletFundingUrl,
   formatExchangeRate,
-  formatMinorCurrency,
+  formatMinorAmount,
   formatMinorUsd,
   parseUsdMinor,
   providerFundingPreparationUrl,
@@ -812,10 +812,7 @@ export function WalletPanel({
                 <span className="text-slate-600">Transfer amount</span>
                 <CopyValue
                   label="transfer amount"
-                  value={formatMinorCurrency(
-                    funding.collection_amount_minor,
-                    funding.collection_currency,
-                  )}
+                  value={formatMinorAmount(funding.collection_amount_minor)}
                   displayValue={
                     <strong>
                       <Money
