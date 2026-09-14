@@ -62,6 +62,7 @@ export type ActiveFunding = {
   provider: string;
   provider_display_name?: string;
   funding_reference?: string;
+  provider_transaction_id?: string | null;
   amount_minor: string;
   currency: string;
   authorization_url: string | null;
@@ -107,6 +108,7 @@ export type WalletTransaction = {
   currency: string;
   created_at: string;
   provider_display_name?: string | null;
+  provider_reference?: string | null;
 };
 
 export type FundingStatus = {
@@ -126,6 +128,7 @@ export type FundingStatus = {
   provider_display_name: string;
   customer_action: string | null;
   funding_reference: string;
+  provider_transaction_id: string | null;
   amount_minor: string;
   currency: string;
   collection_amount_minor: string;
@@ -347,6 +350,7 @@ export type OperatorFunding = {
   account: { id: string; username: string; email: string | null };
   provider: string;
   providerReference: string;
+  providerTransactionId: string | null;
   canonicalAmountMinor: string;
   canonicalCurrency: "USD";
   collectionAmountMinor: string;

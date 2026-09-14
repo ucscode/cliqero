@@ -43,6 +43,7 @@ export async function GET(request: Request) {
             ? getContainer().providers.displayName(funding.providerName)
             : funding.providerName),
         funding_reference: funding.providerReference,
+        provider_transaction_id: funding.providerTransactionId ?? null,
         state: funding.state,
         amount_minor: funding.canonicalAmount.minorAmount.toString(),
         currency: funding.canonicalAmount.currency,

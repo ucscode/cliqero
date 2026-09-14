@@ -10,6 +10,7 @@ import {
   shouldPollFunding,
   validatedPreparationAmount,
   walletActivityLabel,
+  walletActivityReference,
   walletActivityState,
   walletPanelComposition,
 } from "./wallet-panel";
@@ -158,8 +159,20 @@ describe("customer-facing funding presentation", () => {
 
   it("uses provider display names and customer success states in activity", () => {
     expect(walletActivityLabel({ type: "funding_credit", provider_display_name: "Paystack" })).toBe(
-      "Paystack funding",
+      "Paystack",
     );
+    expect(
+      walletActivityReference({
+        type: "funding_credit",
+        provider_reference: "pay-123",
+      }),
+    ).toBe("pay-123");
+    expect(
+      walletActivityReference({ type: "purchase_debit", provider_reference: "pay-ignored" }),
+    ).toBe(null);
+    expect(
+      walletActivityLabel({ type: "funding_credit", provider_display_name: "NOWPayments" }),
+    ).not.toContain(" funding");
     expect(walletActivityState("available")).toBe("Funded");
     expect(walletActivityState("pending")).toBe("Pending");
     expect(walletActivityState("complete")).toBe("Completed");

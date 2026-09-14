@@ -25,14 +25,17 @@ describe("direct TRC20 provider", () => {
       paymentCurrency: "USDT",
       network: "TRC20",
       asset: "USDT",
+      instructions:
+        "Send exactly **12.50 USDT** on **TRC20** to **TReceiver**.\n\n**Submit the blockchain transaction hash after sending.**",
     });
     expect(verifier.verify).not.toHaveBeenCalled();
   });
 
   it("remains pending until enough confirmations exist", async () => {
+    const transactionHash = "AbCd".repeat(16);
     const verifier = {
       verify: vi.fn().mockResolvedValue({
-        transactionHash: "hash",
+        transactionHash,
         network: "TRC20",
         destination: "TReceiver",
         asset: "USDT",
@@ -45,8 +48,14 @@ describe("direct TRC20 provider", () => {
     const result = await provider.verify({
       reference: "ref",
       expectedAmount: Money.of(1250n, "USD"),
-      initialization: { transactionHash: "hash" },
+      providerTransactionId: transactionHash,
     });
     expect(result).toMatchObject({ verified: false, status: "confirming" });
+    expect(verifier.verify).toHaveBeenCalledWith({
+      transactionHash,
+      network: "TRC20",
+      destination: "TReceiver",
+      tokenContract: "TToken",
+    });
   });
 });

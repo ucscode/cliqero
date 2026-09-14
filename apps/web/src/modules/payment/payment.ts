@@ -53,6 +53,7 @@ export interface PaymentRecord {
   canonicalAmount: Money;
   state: PaymentState;
   idempotencyKey: string;
+  /** Opaque external identity; preserve the provider-supplied text and casing. */
   providerTransactionId?: string;
   providerVerifiedPayload?: unknown;
   providerFee?: Money;
@@ -68,6 +69,8 @@ export interface PaymentRepository {
 }
 export interface PaymentInitialization {
   reference: string;
+  /** Provider-side opaque identity; returned text and casing must be preserved exactly. */
+  providerTransactionId?: string;
   authorizationUrl?: string;
   accessCode?: string;
   metadata?: PaymentInitializationMetadata;
@@ -105,6 +108,7 @@ export interface PaymentVerification {
   verified: boolean;
   reference: string;
   amount: Money;
+  /** Opaque external identity; preserve the provider-supplied text and casing. */
   providerTransactionId?: string;
   providerFee?: Money;
   status: string;
@@ -159,6 +163,7 @@ export interface PaymentProvider {
   verify(input: {
     reference: string;
     expectedAmount: Money;
+    providerTransactionId?: string;
     initialization?: PaymentInitializationMetadata;
   }): Promise<PaymentVerification>;
 }

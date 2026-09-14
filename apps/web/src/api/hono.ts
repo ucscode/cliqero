@@ -143,6 +143,7 @@ const operatorFundingSummarySchema = z.object({
   account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),
   provider: z.string(),
   providerReference: z.string(),
+  providerTransactionId: z.string().nullable(),
   canonicalAmountMinor: z.string(),
   canonicalCurrency: z.literal("USD"),
   collectionAmountMinor: z.string(),
@@ -2473,8 +2474,26 @@ export function createApiApp(
     }
     const reference = typeof payload.order_id === "string" ? payload.order_id : null;
     if (!reference) return c.json({ error: "Invalid notification", code: "invalid_request" }, 400);
-    const funding = await container.funding.findByProviderReference(providerName, reference);
+    const providerTransactionId =
+      payload.payment_id === undefined || payload.payment_id === null
+        ? null
+        : String(payload.payment_id);
+    const funding =
+      (providerTransactionId
+        ? await container.funding.findByProviderTransactionId(providerName, providerTransactionId)
+        : null) ?? (await container.funding.findByProviderReference(providerName, reference));
     if (!funding) return c.json({ error: "Not found", code: "not_found" }, 404);
+    if (funding.providerReference !== reference)
+      return c.json(
+        { error: "Reference and transaction identity mismatch", code: "conflict" },
+        409,
+      );
+    if (
+      providerTransactionId &&
+      funding.providerTransactionId &&
+      funding.providerTransactionId !== providerTransactionId
+    )
+      return c.json({ error: "Transaction identity mismatch", code: "conflict" }, 409);
     if (funding.state === "confirmed" || funding.state === "failed" || funding.state === "expired")
       return c.body(null, 204);
     await container.database.transaction(async () => {
@@ -2483,6 +2502,7 @@ export function createApiApp(
         locked &&
         (locked.state === "awaiting_payment" || locked.state === "verification_pending")
       ) {
+        if (providerTransactionId) locked.providerTransactionId = providerTransactionId;
         locked.state = "verification_pending";
         await container.funding.save(locked);
       }

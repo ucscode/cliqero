@@ -42,6 +42,7 @@ export async function GET(request: Request) {
           ? container.providers.displayName(funding.providerName)
           : "Payment provider"),
       funding_reference: funding.providerReference,
+      provider_transaction_id: funding.providerTransactionId ?? null,
       amount_minor: funding.canonicalAmount.minorAmount.toString(),
       currency: funding.canonicalAmount.currency,
       authorization_url: paymentDetailsVisible

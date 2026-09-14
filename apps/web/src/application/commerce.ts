@@ -183,15 +183,23 @@ export class PaymentCompletionService {
     const payment = await this.payments.findById(input.paymentId);
     if (!payment) throw new Error("Payment not found");
     const collectionAmount = payment.collectionAmount ?? payment.amount;
-    const verified = await this.providers
-      .get(payment.providerName)
-      .verify({ reference: payment.providerReference, expectedAmount: collectionAmount });
+    const verified = await this.providers.get(payment.providerName).verify({
+      reference: payment.providerReference,
+      expectedAmount: collectionAmount,
+      providerTransactionId: payment.providerTransactionId,
+    });
     if (!verified.verified || verified.status !== "success")
       throw new Error("Payment verification failed");
     if (verified.reference !== payment.providerReference)
       throw new Error("Payment reference mismatch");
     if (!verified.amount.equals(collectionAmount))
       throw new Error("Payment amount or currency mismatch");
+    if (
+      payment.providerTransactionId &&
+      verified.providerTransactionId &&
+      payment.providerTransactionId !== verified.providerTransactionId
+    )
+      throw new Error("Payment provider transaction mismatch");
     return this.uow.transaction(async () => {
       const lockedPayment = await this.payments.findById(payment.id, { forUpdate: true });
       if (!lockedPayment) throw new Error("Payment not found");
@@ -209,7 +217,8 @@ export class PaymentCompletionService {
         throw new Error("Payment completion is already processing");
       }
       lockedPayment.state = "verified";
-      lockedPayment.providerTransactionId = verified.providerTransactionId;
+      lockedPayment.providerTransactionId =
+        verified.providerTransactionId ?? lockedPayment.providerTransactionId;
       lockedPayment.providerFee = verified.providerFee;
       lockedPayment.providerVerifiedPayload = {
         status: verified.status,

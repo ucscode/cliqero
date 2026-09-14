@@ -37,7 +37,21 @@ After the images have been built, ordinary development startup is:
 just dev
 ```
 
-Development uses the Compose override, source hot reload, and a disposable `.next` volume. Dependencies remain the tree installed in the Docker image; `node_modules` is not masked by anonymous runtime volumes.
+Development uses the Compose override, live source mounts, worker source/config
+watching, and a disposable `.next` volume. Dependencies remain the trees
+installed in the Docker image; host `node_modules` is not mounted over them.
+Ordinary TypeScript and YAML changes therefore do not require a worker image
+rebuild. Recreate the development stack after `.env` or Compose environment
+changes; rebuild only for dependency, Dockerfile, base-image, or OS-layer
+changes.
+
+Before relying on worker runtime behavior, verify both service health and recent
+worker output:
+
+```bash
+docker compose ps
+docker logs --tail=100 cliqero-outbox-worker-1
+```
 
 ## Production-like local start
 

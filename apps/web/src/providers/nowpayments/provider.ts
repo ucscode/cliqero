@@ -17,8 +17,10 @@ export interface NowPaymentsConfiguration {
   payCurrencies: readonly string[];
   asset?: string;
   network?: string;
-  /** NOWPayments' documented sandbox create-payment test case. */
-  sandboxCase?: NowPaymentsSandboxCase;
+  /** Optional NOWPayments sandbox create-payment simulation settings. */
+  sandbox?: {
+    case: NowPaymentsSandboxCase;
+  };
   displayName?: string;
   imageUrl?: string;
   description?: string;
@@ -141,8 +143,8 @@ export class NowPaymentsProvider implements PaymentProvider {
       order_id: reference,
       order_description: `Cliqero wallet funding ${reference}`,
       ...(this.config.ipnCallbackUrl ? { ipn_callback_url: this.config.ipnCallbackUrl } : {}),
-      ...(isNowPaymentsSandboxApi(this.config.apiBaseUrl) && this.config.sandboxCase
-        ? { case: this.config.sandboxCase }
+      ...(isNowPaymentsSandboxApi(this.config.apiBaseUrl) && this.config.sandbox?.case
+        ? { case: this.config.sandbox.case }
         : {}),
     };
     const data = await this.request<PaymentData>(
@@ -182,15 +184,16 @@ export class NowPaymentsProvider implements PaymentProvider {
         : {}),
       expiresAt: data.expiration_estimate_date ?? undefined,
     };
-    return { reference, metadata };
+    return { reference, providerTransactionId: String(data.payment_id), metadata };
   }
 
   async verify(input: {
     reference: string;
     expectedAmount: Money;
+    providerTransactionId?: string;
     initialization?: PaymentInitializationMetadata;
   }): Promise<PaymentVerification> {
-    const providerPaymentId = input.initialization?.providerPaymentId;
+    const providerPaymentId = input.providerTransactionId;
     if (!providerPaymentId) throw new Error("NOWPayments payment identifier is missing");
     const data = await this.request<PaymentData>(
       `/v1/payment/${encodeURIComponent(providerPaymentId)}`,

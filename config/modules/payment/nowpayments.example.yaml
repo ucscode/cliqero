@@ -15,10 +15,18 @@ config:
   # Allowlist of currencies customers may choose at funding time.
   pay_currencies:
     - usdttrc20
-  # Sandbox-only official NOWPayments test case.
-  # Sent only when api_base_url points to the NOWPayments sandbox API.
-  # Do not enable for production.
-  # sandbox_case: success
+  # Optional NOWPayments sandbox simulation.
+  # This does not switch the API to sandbox.
+  # `api_base_url` must already be:
+  #   https://api-sandbox.nowpayments.io
+  #
+  # Omit this section or set it to null to use the sandbox API normally
+  # without forcing a simulated test case.
+  #
+  # Never configure this section with the production NOWPayments API.
+  # sandbox:
+  #   # success simulates the successful flow without a real crypto payment.
+  #   case: success
 filters:
   # Customer visibility only; these filters do not select a fiat currency.
   countries: null

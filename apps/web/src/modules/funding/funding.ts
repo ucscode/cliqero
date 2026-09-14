@@ -21,6 +21,8 @@ export interface FundingTransaction {
   accountId: Id;
   providerName: string;
   providerReference: string;
+  /** Immutable opaque provider identity; preserve the accepted text and casing exactly. */
+  providerTransactionId?: string | null;
   canonicalAmount: Money;
   collectionAmount: Money;
   conversionSnapshot?: PaymentConversionSnapshot;
@@ -39,6 +41,10 @@ export interface FundingRepository {
   findById(id: Id, options?: { forUpdate?: boolean }): Promise<FundingTransaction | null>;
   findByIdempotency(accountId: Id, key: string): Promise<FundingTransaction | null>;
   findByProviderReference(provider: string, reference: string): Promise<FundingTransaction | null>;
+  findByProviderTransactionId(
+    provider: string,
+    transactionId: string,
+  ): Promise<FundingTransaction | null>;
   findActiveForAccount?(accountId: Id): Promise<readonly FundingTransaction[]>;
   recordCancellation?(fundingId: Id, accountId: Id, previousState: FundingState): Promise<void>;
   findHistoryForAccount?(input: {

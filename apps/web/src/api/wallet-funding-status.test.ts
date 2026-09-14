@@ -28,6 +28,7 @@ function configure(owner = account.id, state = "awaiting_payment", providerName 
         accountId: owner,
         providerName,
         providerReference: "dev-reference",
+        providerTransactionId: providerName === "usdt_trc20" ? "a".repeat(64) : null,
         canonicalAmount: { minorAmount: 1250n, currency: "USD" },
         collectionAmount: { minorAmount: 1250n, currency: "USD" },
         conversionSnapshot: {
@@ -76,6 +77,7 @@ describe("wallet funding status projection", () => {
       state: "awaiting_payment",
       provider_display_name: "Development",
       funding_reference: "dev-reference",
+      provider_transaction_id: null,
       amount_minor: "1250",
       collection_amount_minor: "1250",
       collection_currency: "USD",

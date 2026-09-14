@@ -14,6 +14,7 @@ import type {
   WalletTransaction,
 } from "@/modules/wallet/wallet";
 import type { Checkout, CheckoutRepository } from "@/modules/checkout/checkout";
+import { DuplicateProviderTransactionError } from "@/kernel/errors";
 
 export class PostgresFundingRepository implements FundingRepository {
   constructor(private sql: SqlExecutor) {}
@@ -28,6 +29,12 @@ export class PostgresFundingRepository implements FundingRepository {
   }
   findByProviderReference(provider: string, reference: string) {
     return this.find("f.provider_name=$1 and f.provider_reference=$2", [provider, reference]);
+  }
+  findByProviderTransactionId(provider: string, transactionId: string) {
+    return this.find("f.provider_name=$1 and f.provider_transaction_id=$2", [
+      provider,
+      transactionId,
+    ]);
   }
   async findActiveForAccount(accountId: string) {
     const rows = (
@@ -125,31 +132,41 @@ export class PostgresFundingRepository implements FundingRepository {
     return row ? this.map(row) : null;
   }
   async save(v: FundingTransaction) {
-    await this.sql.query(
-      `insert into funding_capability.funding_transactions(uuid,account_id,provider_name,provider_reference,canonical_amount_minor,canonical_currency,collection_amount_minor,collection_currency,conversion_snapshot,state,idempotency_key,provider_initialization,confirmed_at,initialization_claimed_at)
-    values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12::jsonb,$13,$14) on conflict(uuid) do update set state=excluded.state,provider_initialization=coalesce(excluded.provider_initialization,funding_capability.funding_transactions.provider_initialization),confirmed_at=coalesce(excluded.confirmed_at,funding_capability.funding_transactions.confirmed_at),initialization_claimed_at=excluded.initialization_claimed_at,updated_at=now()`,
-      [
-        v.id,
-        v.accountId,
-        v.providerName,
-        v.providerReference,
-        v.canonicalAmount.minorAmount.toString(),
-        v.canonicalAmount.currency,
-        v.collectionAmount.minorAmount.toString(),
-        v.collectionAmount.currency,
-        v.conversionSnapshot
-          ? JSON.stringify({
-              ...v.conversionSnapshot,
-              observedAt: v.conversionSnapshot.observedAt.toISOString(),
-            })
-          : null,
-        v.state,
-        v.idempotencyKey,
-        v.providerInitialization ? JSON.stringify(v.providerInitialization) : null,
-        v.confirmedAt ?? null,
-        v.initializationClaimedAt ?? null,
-      ],
-    );
+    try {
+      await this.sql.query(
+        `insert into funding_capability.funding_transactions(uuid,account_id,provider_name,provider_reference,provider_transaction_id,canonical_amount_minor,canonical_currency,collection_amount_minor,collection_currency,conversion_snapshot,state,idempotency_key,provider_initialization,confirmed_at,initialization_claimed_at)
+      values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13::jsonb,$14,$15) on conflict(uuid) do update set state=excluded.state,provider_transaction_id=case when funding_capability.funding_transactions.provider_transaction_id is null then excluded.provider_transaction_id when excluded.provider_transaction_id is null then funding_capability.funding_transactions.provider_transaction_id else excluded.provider_transaction_id end,provider_initialization=coalesce(excluded.provider_initialization,funding_capability.funding_transactions.provider_initialization),confirmed_at=coalesce(excluded.confirmed_at,funding_capability.funding_transactions.confirmed_at),initialization_claimed_at=excluded.initialization_claimed_at,updated_at=now()`,
+        [
+          v.id,
+          v.accountId,
+          v.providerName,
+          v.providerReference,
+          v.providerTransactionId ?? null,
+          v.canonicalAmount.minorAmount.toString(),
+          v.canonicalAmount.currency,
+          v.collectionAmount.minorAmount.toString(),
+          v.collectionAmount.currency,
+          v.conversionSnapshot
+            ? JSON.stringify({
+                ...v.conversionSnapshot,
+                observedAt: v.conversionSnapshot.observedAt.toISOString(),
+              })
+            : null,
+          v.state,
+          v.idempotencyKey,
+          v.providerInitialization ? JSON.stringify(v.providerInitialization) : null,
+          v.confirmedAt ?? null,
+          v.initializationClaimedAt ?? null,
+        ],
+      );
+    } catch (error) {
+      if (
+        (error as { code?: string; constraint?: string }).code === "23505" &&
+        (error as { constraint?: string }).constraint === "funding_provider_transaction_id_unique"
+      )
+        throw new DuplicateProviderTransactionError();
+      throw error;
+    }
   }
   private async find(where: string, values: unknown[], o?: { forUpdate?: boolean }) {
     const r = (
@@ -167,6 +184,7 @@ export class PostgresFundingRepository implements FundingRepository {
       accountId: r.account_uuid ?? r.account_id,
       providerName: r.provider_name,
       providerReference: r.provider_reference,
+      providerTransactionId: r.provider_transaction_id ?? null,
       canonicalAmount: Money.of(BigInt(r.canonical_amount_minor), r.canonical_currency),
       collectionAmount: Money.of(BigInt(r.collection_amount_minor), r.collection_currency),
       conversionSnapshot: s ? { ...s, observedAt: new Date(s.observedAt) } : undefined,
@@ -245,11 +263,11 @@ export class PostgresWalletRepository implements WalletRepository {
   async history(accountId: string, limit = 10) {
     const rows = (
       await this.sql.query<any>(
-        `select 'funding_credit' kind,c.uuid as id,f.uuid as source_id,c.amount_minor,c.currency,c.state,c.created_at,f.provider_initialization->>'providerDisplayName' as provider_display_name
+        `select 'funding_credit' kind,c.uuid as id,f.uuid as source_id,c.amount_minor,c.currency,c.state,c.created_at,f.provider_initialization->>'providerDisplayName' as provider_display_name,f.provider_reference
            from wallet_capability.credits c join funding_capability.funding_transactions f on f.id=c.funding_id
           where c.account_id=(select id from identity_capability.accounts where uuid=$1)
          union all
-         select 'purchase_debit',d.uuid,c.uuid,d.amount_minor,d.currency,'complete',d.created_at,null::text
+         select 'purchase_debit',d.uuid,c.uuid,d.amount_minor,d.currency,'complete',d.created_at,null::text,null::text
            from wallet_capability.debits d join checkout_capability.checkouts c on c.id=d.checkout_id
           where d.account_id=(select id from identity_capability.accounts where uuid=$1)
           order by created_at desc limit $2`,
@@ -264,6 +282,7 @@ export class PostgresWalletRepository implements WalletRepository {
       state: r.state,
       createdAt: r.created_at,
       ...(r.provider_display_name ? { providerDisplayName: r.provider_display_name } : {}),
+      ...(r.provider_reference ? { providerReference: r.provider_reference } : {}),
     })) as WalletTransaction[];
   }
   private credit(r: any) {

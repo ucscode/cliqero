@@ -15,6 +15,7 @@ export async function GET(request: Request) {
       currency: v.amount.currency,
       created_at: v.createdAt.toISOString(),
       provider_display_name: v.kind === "funding_credit" ? (v.providerDisplayName ?? null) : null,
+      ...(v.kind === "funding_credit" ? { provider_reference: v.providerReference ?? null } : {}),
     })),
   });
 }

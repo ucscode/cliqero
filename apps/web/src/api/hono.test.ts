@@ -267,6 +267,12 @@ describe("Hono API foundation", () => {
     expect(paths["/api/hierarchy/children/{parentId}"]).toBeDefined();
     expect(paths["/api/listings"]).toBeDefined();
     expect(paths["/api/wallet"]).toBeDefined();
+    expect(paths["/api/wallet/fund/{id}/transaction"]).toMatchObject({
+      post: expect.objectContaining({
+        "x-authentication-mode": "account",
+        "x-required-api-scope": "wallet:fund",
+      }),
+    });
     expect(paths["/api/operator/treasury/entries"]).toBeDefined();
     expect(paths["/api/api-keys"]).toBeDefined();
     expect(paths["/api/operator/accounts/{accountId}/api-keys"]).toBeDefined();

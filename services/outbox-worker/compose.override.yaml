@@ -1,5 +1,12 @@
 services:
   outbox-worker:
+    command: npm run worker:outbox:watch --workspace @cliqero/web
     environment:
       NODE_ENV: development
       TUNNEL_URL: ${TUNNEL_URL:-}
+    volumes:
+      # Keep worker source and local configuration live during development.
+      - ../..:/workspace
+      # Never mask the container-installed workspace dependencies with host modules.
+      - /workspace/node_modules
+      - /workspace/apps/web/node_modules

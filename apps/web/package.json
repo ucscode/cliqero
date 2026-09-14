@@ -8,6 +8,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "worker:outbox": "node --import tsx src/workers/outbox/main.ts",
+    "worker:outbox:watch": "node --watch --watch-path=src --watch-path=../../config --import tsx src/workers/outbox/main.ts",
     "blog:migrate": "node --import tsx src/modules/blog/infrastructure/migrate.ts",
     "cli": "node --import tsx src/console.ts",
     "seed:catalogue": "node --import tsx src/scripts/seed-catalogue.ts",

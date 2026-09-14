@@ -13,6 +13,7 @@ import { Purchase, type PurchaseRepository } from "@/modules/purchase/purchase";
 import type { PurchaseAttributionResolver } from "@/modules/referral/attribution";
 import type { PostgresPaymentOperationsRepository } from "@/providers/paystack/persistence/payment-operations";
 import { ProviderOperationError } from "@/kernel/provider-error";
+import { DuplicateProviderTransactionError } from "@/kernel/errors";
 
 export class FundingService {
   constructor(
@@ -211,12 +212,12 @@ export class FundingService {
         throw new Error("Transaction hash is not supported for this funding method");
       if (funding.state !== "awaiting_payment" && funding.state !== "verification_pending")
         throw new Error("Funding is not awaiting payment");
-      const existing = funding.providerInitialization?.transactionHash;
-      if (existing === normalized) return funding;
-      funding.providerInitialization = {
-        ...funding.providerInitialization,
-        transactionHash: normalized,
-      };
+      if (funding.providerTransactionId === normalized) return funding;
+      if (funding.providerTransactionId && funding.providerTransactionId !== normalized)
+        throw new Error("Funding already has a different provider transaction");
+      const owner = await this.funding.findByProviderTransactionId("usdt_trc20", normalized);
+      if (owner && owner.id !== funding.id) throw new DuplicateProviderTransactionError();
+      funding.providerTransactionId = normalized;
       funding.state = "verification_pending";
       await this.funding.save(funding);
       return funding;
@@ -312,6 +313,13 @@ export class FundingInitializationProcessor {
             ? { providerAccountSnapshot: f.providerInitialization.providerAccountSnapshot }
             : {}),
         };
+        if (
+          f.providerTransactionId &&
+          result.providerTransactionId &&
+          f.providerTransactionId !== result.providerTransactionId
+        )
+          throw new DuplicateProviderTransactionError();
+        if (result.providerTransactionId) f.providerTransactionId = result.providerTransactionId;
         f.state = "awaiting_payment";
         f.initializationClaimedAt = undefined;
         await this.funding.save(f);
@@ -378,6 +386,7 @@ export class FundingVerificationProcessor {
       result = await this.providers.get(f.providerName).verify({
         reference: f.providerReference,
         expectedAmount: f.collectionAmount,
+        providerTransactionId: f.providerTransactionId ?? undefined,
         initialization: f.providerInitialization,
       });
     } catch (error) {
@@ -406,7 +415,10 @@ export class FundingVerificationProcessor {
       result.status !== "success" ||
       result.reference !== f.providerReference ||
       result.amount.minorAmount !== f.collectionAmount.minorAmount ||
-      result.amount.currency !== f.collectionAmount.currency;
+      result.amount.currency !== f.collectionAmount.currency ||
+      (!!f.providerTransactionId &&
+        !!result.providerTransactionId &&
+        result.providerTransactionId !== f.providerTransactionId);
     return this.uow.transaction(async () => {
       const locked = await this.funding.findById(id, { forUpdate: true });
       if (!locked || locked.state === "confirmed") return locked;
@@ -417,7 +429,11 @@ export class FundingVerificationProcessor {
         result.reference === locked.providerReference &&
         result.amount.minorAmount === locked.collectionAmount.minorAmount &&
         result.amount.currency === locked.collectionAmount.currency;
-      if (!result.verified && isFundingPendingStatus(result.status)) {
+      const identityMismatch =
+        !!locked.providerTransactionId &&
+        !!result.providerTransactionId &&
+        result.providerTransactionId !== locked.providerTransactionId;
+      if (!identityMismatch && !result.verified && isFundingPendingStatus(result.status)) {
         locked.state =
           shouldExpire && factsMatch
             ? "expired"
@@ -427,7 +443,7 @@ export class FundingVerificationProcessor {
         await this.funding.save(locked);
         return locked;
       }
-      if (mismatch) {
+      if (mismatch || identityMismatch) {
         if (shouldExpire && factsMatch) {
           locked.state = "expired";
           await this.funding.save(locked);
@@ -438,9 +454,13 @@ export class FundingVerificationProcessor {
             ? "verification_unsuccessful"
             : result.reference !== locked.providerReference
               ? "verification_reference_mismatch"
-              : result.amount.currency !== locked.collectionAmount.currency
-                ? "verification_currency_mismatch"
-                : "verification_amount_mismatch";
+              : locked.providerTransactionId &&
+                  result.providerTransactionId &&
+                  result.providerTransactionId !== locked.providerTransactionId
+                ? "verification_transaction_id_mismatch"
+                : result.amount.currency !== locked.collectionAmount.currency
+                  ? "verification_currency_mismatch"
+                  : "verification_amount_mismatch";
         await this.operations?.recordFundingFailure({
           fundingId: locked.id,
           provider: locked.providerName,
@@ -455,6 +475,21 @@ export class FundingVerificationProcessor {
         locked.state = "failed";
         await this.funding.save(locked);
         return locked;
+      }
+      if (result.providerTransactionId) {
+        if (
+          locked.providerTransactionId &&
+          locked.providerTransactionId !== result.providerTransactionId
+        )
+          throw new DuplicateProviderTransactionError();
+        if (!locked.providerTransactionId) {
+          const owner = await this.funding.findByProviderTransactionId(
+            locked.providerName,
+            result.providerTransactionId,
+          );
+          if (owner && owner.id !== locked.id) throw new DuplicateProviderTransactionError();
+          locked.providerTransactionId = result.providerTransactionId;
+        }
       }
       await this.operations?.recordFundingSuccess({
         fundingId: locked.id,

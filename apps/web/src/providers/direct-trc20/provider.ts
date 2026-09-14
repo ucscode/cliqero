@@ -49,15 +49,18 @@ export class DirectTrc20Provider implements PaymentProvider {
     buyerEmail: string;
   }) {
     const reference = this.referenceFor(input);
+    const amount = formatAmount(input.amount);
     return {
       reference,
       metadata: {
         paymentAddress: this.config.walletAddress,
-        paymentAmount: formatAmount(input.amount),
+        paymentAmount: amount,
         paymentCurrency: "USDT",
         asset: "USDT",
         network: "TRC20",
-        instructions: `Send exactly ${formatAmount(input.amount)} USDT on TRC20 to ${this.config.walletAddress}. Submit the blockchain transaction hash after sending.`,
+        instructions: `Send exactly **${amount} USDT** on **TRC20** to **${this.config.walletAddress}**.
+
+Submit the blockchain transaction hash after sending.`,
       },
     } satisfies PaymentInitialization;
   }
@@ -65,9 +68,9 @@ export class DirectTrc20Provider implements PaymentProvider {
   async verify(input: {
     reference: string;
     expectedAmount: Money;
-    initialization?: any;
+    providerTransactionId?: string;
   }): Promise<PaymentVerification> {
-    const hash = input.initialization?.transactionHash;
+    const hash = input.providerTransactionId;
     if (!hash)
       return {
         verified: false,

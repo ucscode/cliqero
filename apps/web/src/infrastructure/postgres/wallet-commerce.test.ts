@@ -4,12 +4,13 @@ import { PostgresFundingRepository, PostgresWalletRepository } from "./wallet-co
 
 const accountId = "00000000-0000-4000-8000-000000000001";
 
-function fundingRow(id: string, state: string, providerName = "paystack") {
+function fundingRow(id: string, state: string, providerName = "paystack"): any {
   return {
     id,
     account_uuid: accountId,
     provider_name: providerName,
     provider_reference: `pay-${id}`,
+    provider_transaction_id: null,
     canonical_amount_minor: "1000",
     canonical_currency: "USD",
     collection_amount_minor: "1326500",
@@ -74,6 +75,28 @@ describe("Postgres wallet and funding projections", () => {
     ]);
   });
 
+  it("looks up and maps the first-class provider transaction identity", async () => {
+    const row = fundingRow(
+      "00000000-0000-4000-8000-000000000016",
+      "verification_pending",
+      "usdt_trc20",
+    );
+    row.provider_transaction_id = "AbCd".repeat(16);
+    const query = vi.fn<(statement: string, values: unknown[]) => Promise<{ rows: any[] }>>(
+      async () => ({ rows: [row] }),
+    );
+    const repository = new PostgresFundingRepository({ query } as never);
+
+    await expect(
+      repository.findByProviderTransactionId("usdt_trc20", row.provider_transaction_id),
+    ).resolves.toMatchObject({ providerTransactionId: row.provider_transaction_id });
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("provider_transaction_id"), [
+      "usdt_trc20",
+      row.provider_transaction_id,
+    ]);
+    expect(query.mock.calls[0]?.[0]).not.toMatch(/lower|upper|citext/i);
+  });
+
   it("keeps expired funding in normal history while excluding it from active history", async () => {
     const expiredRow = fundingRow("00000000-0000-4000-8000-000000000015", "expired", "nowpayments");
     const query = vi.fn(async (_statement: string, values: unknown[]) =>
@@ -96,6 +119,36 @@ describe("Postgres wallet and funding projections", () => {
     await repository.history(accountId, 500);
 
     expect(query).toHaveBeenCalledWith(expect.stringContaining("limit $2"), [accountId, 50]);
+  });
+
+  it("projects the persisted provider reference for funding-credit activity", async () => {
+    const query = vi.fn<(statement: string, values: unknown[]) => Promise<{ rows: unknown[] }>>(
+      async () => ({
+        rows: [
+          {
+            kind: "funding_credit",
+            id: "00000000-0000-4000-8000-000000000020",
+            source_id: "00000000-0000-4000-8000-000000000021",
+            amount_minor: "2500",
+            currency: "USD",
+            state: "available",
+            created_at: new Date("2026-09-14T01:49:14.000Z"),
+            provider_display_name: "NOWPayments",
+            provider_reference: "np-00000000-0000-4000-8000-000000000021",
+          },
+        ],
+      }),
+    );
+    const repository = new PostgresWalletRepository({ query } as never);
+
+    const history = await repository.history(accountId);
+
+    expect(history[0]).toMatchObject({
+      kind: "funding_credit",
+      providerDisplayName: "NOWPayments",
+      providerReference: "np-00000000-0000-4000-8000-000000000021",
+    });
+    expect(query.mock.calls[0]?.[0]).toContain("f.provider_reference");
   });
 
   it("serializes persisted bank account snapshots with ordered field metadata", async () => {
@@ -128,9 +181,30 @@ describe("Postgres wallet and funding projections", () => {
     });
 
     const values = query.mock.calls[0]?.[1] as unknown[];
-    expect(JSON.parse(String(values[11]))).toMatchObject({
+    expect(JSON.parse(String(values[12]))).toMatchObject({
       providerAccountId: "ng-account",
       providerAccountSnapshot: snapshot,
     });
+  });
+
+  it("maps the provider-identity unique violation to a customer-safe error", async () => {
+    const query = vi.fn(async () => {
+      throw { code: "23505", constraint: "funding_provider_transaction_id_unique" };
+    });
+    const repository = new PostgresFundingRepository({ query } as never);
+
+    await expect(
+      repository.save({
+        id: "00000000-0000-4000-8000-000000000017",
+        accountId,
+        providerName: "usdt_trc20",
+        providerReference: "usdt-reference",
+        providerTransactionId: "a".repeat(64),
+        canonicalAmount: Money.of(1000n, "USD"),
+        collectionAmount: Money.of(1000n, "USD"),
+        state: "verification_pending",
+        idempotencyKey: "provider-identity-conflict",
+      }),
+    ).rejects.toMatchObject({ code: "provider_transaction_reused", status: 409 });
   });
 });

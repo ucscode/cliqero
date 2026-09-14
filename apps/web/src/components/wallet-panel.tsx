@@ -34,6 +34,7 @@ import { HoneypotField } from "./honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { FundingProviderPreparation, initialPaymentCurrency } from "./funding-provider-preparation";
 import { CopyValue } from "./copy-value";
+import { PaymentInstructions } from "./payment-instructions";
 import { LoaderCircle } from "lucide-react";
 import { fundingToneClass, presentFundingState } from "@/modules/funding/presentation";
 
@@ -171,8 +172,14 @@ export function walletActivityLabel(
   transaction: Pick<WalletTransaction, "type" | "provider_display_name">,
 ) {
   return transaction.type === "funding_credit"
-    ? `${transaction.provider_display_name ?? "Wallet"} funding`
+    ? (transaction.provider_display_name ?? "Wallet")
     : "Listing purchase";
+}
+
+export function walletActivityReference(
+  transaction: Pick<WalletTransaction, "type" | "provider_reference">,
+) {
+  return transaction.type === "funding_credit" ? (transaction.provider_reference ?? null) : null;
 }
 
 export function walletActivityState(state: WalletTransaction["state"]) {
@@ -742,11 +749,9 @@ export function WalletPanel({
               {pollingNotice}
             </p>
           )}
-          {funding.provider !== "bank_transfer" &&
-            funding.instructions &&
-            !paymentSessionExpired && (
-              <p className="whitespace-pre-line text-sm text-slate-600">{funding.instructions}</p>
-            )}
+          {funding.provider !== "bank_transfer" && !paymentSessionExpired && (
+            <PaymentInstructions content={funding.instructions} />
+          )}
           {funding.provider === "nowpayments" &&
             (funding.state === "awaiting_payment" || funding.state === "verification_pending") &&
             !(funding.expires_at && Date.parse(funding.expires_at) <= currentTime) && (
@@ -1102,6 +1107,11 @@ export function WalletPanel({
                   </div>
                   <div className="grid gap-1">
                     <strong>{walletActivityLabel(transaction)}</strong>
+                    {walletActivityReference(transaction) && (
+                      <code className="break-all text-xs text-slate-500">
+                        {walletActivityReference(transaction)}
+                      </code>
+                    )}
                     <span className="text-xs text-slate-500">
                       {new Date(transaction.created_at).toLocaleString()}
                     </span>

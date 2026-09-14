@@ -11,7 +11,7 @@ const config = {
   ipnCallbackUrl: "https://public.example.test/api/payments/nowpayments/ipn",
   network: "ERC20",
   asset: "USDT",
-  sandboxCase: "success" as const,
+  sandbox: { case: "success" as const },
   payCurrencies: ["usdterc20", "usdttrc20", "btc", "eth"],
 };
 
@@ -104,6 +104,32 @@ describe("NOWPayments provider", () => {
       pay_currency: "usdterc20",
       ipn_callback_url: "https://public.example.test/api/payments/nowpayments/ipn",
     });
+  });
+
+  it("preserves the exact provider payment identity returned by NOWPayments", async () => {
+    const providerPaymentId = "Np-AbC123";
+    const http = vi.fn(async () =>
+      Response.json({
+        payment_id: providerPaymentId,
+        payment_status: "waiting",
+        pay_address: "Taddress",
+        pay_amount: "10.25",
+        price_amount: 10.25,
+        price_currency: "usd",
+        pay_currency: "usdttrc20",
+        order_id: `np-${id}`,
+      }),
+    );
+    const result = await new NowPaymentsProvider(config, "nowpayments", http).initiate({
+      paymentId: id,
+      amount: Money.of(1025n, "USD"),
+      idempotencyKey: "funding-case-preservation",
+      buyerEmail: "buyer@example.test",
+      paymentCurrency: "usdttrc20",
+    });
+
+    expect(result.providerTransactionId).toBe(providerPaymentId);
+    expect(result.metadata?.providerPaymentId).toBe(providerPaymentId);
   });
 
   it("does not invent an expiry when NOWPayments omits its provider deadline", async () => {
@@ -215,6 +241,38 @@ describe("NOWPayments provider", () => {
     expect(JSON.parse(String(request?.body))).not.toHaveProperty("case");
   });
 
+  it.each([
+    ["omitted", undefined],
+    ["null", null],
+  ])("does not send a case when sandbox simulation is %s", async (_label, sandbox) => {
+    const http = vi.fn(async () =>
+      Response.json({
+        payment_id: 123,
+        payment_status: "waiting",
+        pay_address: "Taddress",
+        pay_amount: "10.25",
+        price_amount: 10.25,
+        price_currency: "usd",
+        pay_currency: "usdttrc20",
+        order_id: `np-${id}`,
+      }),
+    );
+    const provider = new NowPaymentsProvider(
+      { ...config, sandbox: sandbox ?? undefined },
+      "nowpayments",
+      http,
+    );
+    await provider.initiate({
+      paymentId: id,
+      amount: Money.of(1025n, "USD"),
+      idempotencyKey: `funding-${_label}`,
+      buyerEmail: "buyer@example.test",
+      paymentCurrency: "usdttrc20",
+    });
+    const request = (http.mock.calls[0] as unknown as [string | URL, RequestInit] | undefined)?.[1];
+    expect(JSON.parse(String(request?.body))).not.toHaveProperty("case");
+  });
+
   it("uses a selected allowlisted currency and verifies against the persisted selection", async () => {
     const http = vi
       .fn()
@@ -250,11 +308,13 @@ describe("NOWPayments provider", () => {
     });
     expect(JSON.parse(String((http.mock.calls[0] as any)[1].body)).pay_currency).toBe("usdttrc20");
     expect(result.metadata?.paymentCurrency).toBe("USDTTRC20");
+    expect(result.providerTransactionId).toBe("123");
     await expect(
       provider.verify({
         reference: `np-${id}`,
         expectedAmount: Money.of(1025n, "USD"),
-        initialization: { providerPaymentId: "123", paymentCurrency: "USDTTRC20" },
+        providerTransactionId: "123",
+        initialization: { paymentCurrency: "USDTTRC20" },
       }),
     ).resolves.toMatchObject({ verified: true });
     await expect(
@@ -332,7 +392,8 @@ describe("NOWPayments provider", () => {
     const verified = await provider.verify({
       reference: `np-${id}`,
       expectedAmount: Money.of(1025n, "USD"),
-      initialization: { providerPaymentId: "123", paymentCurrency: "usdterc20" },
+      providerTransactionId: "123",
+      initialization: { paymentCurrency: "usdterc20" },
     });
     expect(verified.verified).toBe(true);
     expect(verified.status).toBe("success");
@@ -341,7 +402,7 @@ describe("NOWPayments provider", () => {
       provider.verify({
         reference: "np-other",
         expectedAmount: Money.of(1025n, "USD"),
-        initialization: { providerPaymentId: "123" },
+        providerTransactionId: "123",
       }),
     ).rejects.toThrow("reference mismatch");
   });
@@ -365,7 +426,8 @@ describe("NOWPayments provider", () => {
       provider.verify({
         reference: `np-${id}`,
         expectedAmount: Money.of(1025n, "USD"),
-        initialization: { providerPaymentId: "123", paymentCurrency: "usdttrc20" },
+        providerTransactionId: "123",
+        initialization: { paymentCurrency: "usdttrc20" },
       }),
     ).rejects.toThrow("currency mismatch");
   });

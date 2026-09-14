@@ -77,6 +77,7 @@ export type OperatorFundingSummary = {
   account: { id: string; username: string; email: string | null };
   provider: string;
   providerReference: string;
+  providerTransactionId: string | null;
   canonicalAmountMinor: string;
   canonicalCurrency: "USD";
   collectionAmountMinor: string;
@@ -127,6 +128,7 @@ function summary(row: any): OperatorFundingSummary {
     account: { id: row.account_id, username: row.username, email: row.email },
     provider: row.provider_name,
     providerReference: row.provider_reference,
+    providerTransactionId: row.provider_transaction_id ?? null,
     canonicalAmountMinor: String(row.canonical_amount_minor),
     canonicalCurrency: "USD",
     collectionAmountMinor: String(row.collection_amount_minor),
@@ -226,7 +228,7 @@ export class OperatorFundingService {
     );
     const rows = (
       await this.sql.query<any>(
-        `select f.uuid as id,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,
+        `select f.uuid as id,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,f.provider_transaction_id,
                 f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
                 f.state,f.created_at,f.updated_at,f.confirmed_at,
                 c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
@@ -252,7 +254,7 @@ export class OperatorFundingService {
   async get(id: string): Promise<OperatorFundingDetail> {
     const row = (
       await this.sql.query<any>(
-        `select f.uuid as id,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,
+        `select f.uuid as id,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,f.provider_transaction_id,
                 f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
                 f.state,f.created_at,f.updated_at,f.confirmed_at,f.conversion_snapshot,
                 case when f.provider_initialization is null then null

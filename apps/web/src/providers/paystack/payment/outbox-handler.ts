@@ -34,11 +34,20 @@ export class PaystackChargeSucceededHandler implements OutboxEventHandler {
       );
       return;
     }
-    const funding = await this.funding?.findByProviderReference(
-      "paystack",
-      providerEvent.providerReference,
-    );
+    const providerTransactionId = providerEventTransactionId(providerEvent.payload);
+    const funding =
+      (providerTransactionId
+        ? await this.funding?.findByProviderTransactionId("paystack", providerTransactionId)
+        : null) ??
+      (await this.funding?.findByProviderReference("paystack", providerEvent.providerReference));
     if (funding) {
+      if (funding.providerReference !== providerEvent.providerReference) {
+        await this.providerEvents.markRejected(
+          providerEvent.id,
+          "Paystack webhook reference and transaction identity mismatch",
+        );
+        return;
+      }
       const webhookAmount = Money.of(BigInt(providerEvent.amountMinor), providerEvent.currency);
       if (!webhookAmount.equals(funding.collectionAmount)) {
         await this.providerEvents.markRejected(
@@ -47,6 +56,18 @@ export class PaystackChargeSucceededHandler implements OutboxEventHandler {
         );
         return;
       }
+      if (
+        funding.providerTransactionId &&
+        providerTransactionId &&
+        funding.providerTransactionId !== providerTransactionId
+      ) {
+        await this.providerEvents.markRejected(
+          providerEvent.id,
+          "Paystack webhook transaction identity mismatch",
+        );
+        return;
+      }
+      if (providerTransactionId) funding.providerTransactionId = providerTransactionId;
       if (funding.state === "awaiting_payment") funding.state = "verification_pending";
       await this.funding!.save(funding);
       await this.providerEvents.markProcessed(providerEvent.id);
@@ -78,4 +99,12 @@ export class PaystackChargeSucceededHandler implements OutboxEventHandler {
 }
 function isPayload(payload: object): payload is { providerEventId: string } {
   return "providerEventId" in payload && typeof payload.providerEventId === "string";
+}
+
+function providerEventTransactionId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const data = (payload as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return null;
+  const id = (data as { id?: unknown }).id;
+  return typeof id === "number" && Number.isSafeInteger(id) ? String(id) : null;
 }

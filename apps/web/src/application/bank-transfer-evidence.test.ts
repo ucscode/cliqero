@@ -14,8 +14,12 @@ function result<T extends object>(rows: T[]): QueryResult<T> {
 
 describe("bank-transfer evidence", () => {
   it("accepts evidence from a newly-created pending funding", async () => {
+    const statements: string[] = [];
+    const parameters: unknown[][] = [];
     const service = new BankTransferEvidenceService({
-      query: async <T extends object>(sql: string) => {
+      query: async <T extends object>(sql: string, values?: unknown[]) => {
+        statements.push(sql);
+        parameters.push(values ?? []);
         if (sql.includes("select uuid as id,transfer_reference")) return result<T>([]);
         if (sql.includes("returning uuid"))
           return result<T>([{ id: "evidence-id", created_at: new Date() }] as T[]);
@@ -29,6 +33,43 @@ describe("bank-transfer evidence", () => {
               account_id: 7,
               provider_name: "bank_transfer",
               state: "initialization_pending",
+              provider_transaction_id: null,
+            },
+          ] as T[]);
+        if (sql.includes("select uuid from identity_capability.accounts"))
+          return result<T>([{ uuid: accountId }] as T[]);
+        return result<T>([]) as QueryResult<T>;
+      },
+    });
+
+    await expect(
+      service.submit(accountId, fundingId, { transferReference: "  BaNk-Ref-ABC123  " }),
+    ).resolves.toMatchObject({
+      state: "verification_pending",
+      transferReference: "BaNk-Ref-ABC123",
+    });
+    expect(statements.some((sql) => sql.includes("provider_transaction_id=coalesce"))).toBe(true);
+    expect(parameters).toContainEqual([fundingId, "BaNk-Ref-ABC123"]);
+    expect(statements.some((sql) => sql.includes("state='confirmed'"))).toBe(false);
+  });
+
+  it("rejects a transfer reference claimed by another bank funding", async () => {
+    const service = new BankTransferEvidenceService({
+      query: async <T extends object>(sql: string) => {
+        if (sql.includes("select uuid as id,transfer_reference")) return result<T>([]);
+        if (sql.includes("where f.provider_name=$1"))
+          return result<T>([{ id: "other-funding" }] as T[]);
+        if (
+          sql.includes("from funding_capability.funding_transactions") &&
+          !sql.includes("funding_evidence")
+        )
+          return result<T>([
+            {
+              id: fundingId,
+              account_id: 7,
+              provider_name: "bank_transfer",
+              state: "awaiting_payment",
+              provider_transaction_id: null,
             },
           ] as T[]);
         if (sql.includes("select uuid from identity_capability.accounts"))
@@ -39,7 +80,7 @@ describe("bank-transfer evidence", () => {
 
     await expect(
       service.submit(accountId, fundingId, { transferReference: "bank-ref" }),
-    ).resolves.toMatchObject({ state: "verification_pending", transferReference: "bank-ref" });
+    ).rejects.toMatchObject({ code: "provider_transaction_reused", status: 409 });
   });
 
   it("accepts evidence while bank details are being initialized", async () => {

@@ -157,6 +157,19 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
+-- Provider transaction identity is write-once after it becomes known.
+CREATE FUNCTION funding_capability.prevent_provider_transaction_id_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  if old.provider_transaction_id is not null
+     and new.provider_transaction_id is distinct from old.provider_transaction_id then
+    raise exception 'Provider transaction identity is immutable' using errcode='23514';
+  end if;
+  return new;
+end $$;
+
+
 --
 -- Name: prevent_entry_mutation(); Type: FUNCTION; Schema: ledger_capability; Owner: -
 --
@@ -480,6 +493,7 @@ CREATE TABLE funding_capability.funding_transactions (
     uuid uuid NOT NULL,
     provider_name text NOT NULL,
     provider_reference text NOT NULL,
+    provider_transaction_id text,
     canonical_amount_minor bigint NOT NULL,
     canonical_currency text DEFAULT 'USD'::text NOT NULL,
     collection_amount_minor bigint NOT NULL,
@@ -527,12 +541,15 @@ ALTER TABLE funding_capability.funding_evidence ALTER COLUMN id ADD GENERATED AL
 
 CREATE INDEX funding_evidence_account_idx ON funding_capability.funding_evidence USING btree (account_id, created_at DESC);
 
--- A direct blockchain transaction can fund at most one Cliqero transaction.
-CREATE UNIQUE INDEX funding_direct_usdt_transaction_unique
-ON funding_capability.funding_transactions
-((provider_initialization->>'network'), (provider_initialization->>'transactionHash'))
-WHERE provider_name = 'usdt_trc20'
-  AND provider_initialization->>'transactionHash' IS NOT NULL;
+-- A provider transaction can fund at most one Cliqero transaction. NULL means
+-- the provider has not exposed its transaction identity yet.
+CREATE UNIQUE INDEX funding_provider_transaction_id_unique
+ON funding_capability.funding_transactions (provider_name, provider_transaction_id)
+WHERE provider_transaction_id IS NOT NULL;
+
+CREATE TRIGGER funding_provider_transaction_id_guard
+BEFORE UPDATE OF provider_transaction_id ON funding_capability.funding_transactions
+FOR EACH ROW EXECUTE FUNCTION funding_capability.prevent_provider_transaction_id_change();
 
 
 --

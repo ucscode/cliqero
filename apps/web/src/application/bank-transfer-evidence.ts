@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { ObjectStorageRegistry, StoredObject } from "@/modules/storage/object-storage";
+import { DuplicateProviderTransactionError } from "@/kernel/errors";
 
 export const BANK_TRANSFER_PROOF_MAX_BYTES = 10 * 1024 * 1024;
 const proofMimeTypes = new Set([
@@ -78,7 +79,7 @@ export class BankTransferEvidenceService {
       const result = await this.uow.transaction(async () => {
         const funding = (
           await this.sql.query<any>(
-            `select f.uuid as id,f.account_id,f.provider_name,f.state
+            `select f.uuid as id,f.account_id,f.provider_name,f.state,f.provider_transaction_id
                from funding_capability.funding_transactions f
               where f.uuid=$1
               for update`,
@@ -113,6 +114,25 @@ export class BankTransferEvidenceService {
           funding.state !== "verification_pending"
         )
           throw new Error("Funding is not available for evidence");
+
+        if (transferReference) {
+          if (
+            funding.provider_transaction_id &&
+            funding.provider_transaction_id !== transferReference
+          )
+            throw new Error("Funding already has a different provider transaction");
+          const duplicate = (
+            await this.sql.query<{ id: string }>(
+              `select f.uuid as id
+                 from funding_capability.funding_transactions f
+                where f.provider_name=$1 and f.provider_transaction_id=$2
+                limit 1`,
+              ["bank_transfer", transferReference],
+            )
+          ).rows[0];
+          if (duplicate && duplicate.id !== fundingId)
+            throw new DuplicateProviderTransactionError();
+        }
 
         if (proofFile) {
           if (!this.storage || !this.storageInstanceName)
@@ -151,8 +171,11 @@ export class BankTransferEvidenceService {
           )
         ).rows[0];
         await this.sql.query(
-          `update funding_capability.funding_transactions set state='verification_pending',updated_at=now() where uuid=$1`,
-          [fundingId],
+          `update funding_capability.funding_transactions
+              set provider_transaction_id=coalesce(provider_transaction_id,$2),
+                  state='verification_pending',updated_at=now()
+            where uuid=$1`,
+          [fundingId, transferReference ?? null],
         );
         await this.sql.query(
           `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)

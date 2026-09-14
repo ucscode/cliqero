@@ -303,6 +303,10 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
               </dd>
             </div>
             <div>
+              <dt>Provider transaction ID</dt>
+              <dd className="break-value">{funding.providerTransactionId ?? "Not known yet"}</dd>
+            </div>
+            <div>
               <dt>Created</dt>
               <dd>{formatDate(funding.createdAt)}</dd>
             </div>

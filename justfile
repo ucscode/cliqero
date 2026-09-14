@@ -4,11 +4,14 @@ default: help
 help:
 	@just --list
 
-# Start the development Compose stack (automatically includes compose.override.yaml)
+# Start the development Compose stack (automatically includes compose.override.yaml).
+# The web app and outbox worker use live source mounts; ordinary TypeScript/YAML
+# changes do not require an image rebuild.
 dev:
 	docker compose up -d
 
-# Rebuild and start the development Compose stack
+# Rebuild and start the development Compose stack. Use this after dependency,
+# Dockerfile, base-image, or OS-layer changes; ordinary source/config edits use `just dev`.
 dev-build:
 	docker compose up -d --build
 
@@ -36,7 +39,7 @@ dev-ps:
 
 # Restart the development Compose stack
 dev-restart:
-	docker compose restart
+	docker compose up -d --no-build --force-recreate
 
 # Start the production Compose stack using compose.yaml only
 prod:

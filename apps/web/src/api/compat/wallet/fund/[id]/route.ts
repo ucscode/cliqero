@@ -62,6 +62,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           ? getContainer().providers.customerActionLabel(funding.providerName)
           : null,
       funding_reference: funding.providerReference,
+      provider_transaction_id: funding.providerTransactionId ?? null,
       amount_minor: funding.canonicalAmount.minorAmount.toString(),
       currency: funding.canonicalAmount.currency,
       collection_amount_minor: funding.collectionAmount.minorAmount.toString(),

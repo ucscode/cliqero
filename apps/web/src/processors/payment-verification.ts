@@ -22,6 +22,7 @@ export class PaymentVerificationProcessor {
       const verified = await this.providers.get(current.providerName).verify({
         reference: current.providerReference,
         expectedAmount: current.collectionAmount ?? current.amount,
+        providerTransactionId: current.providerTransactionId,
         initialization: current.providerInitialization,
       });
       await this.uow.transaction(async () => {
@@ -31,10 +32,14 @@ export class PaymentVerificationProcessor {
           verified.verified &&
           verified.status === "success" &&
           verified.reference === locked.providerReference &&
-          verified.amount.equals(locked.collectionAmount ?? locked.amount)
+          verified.amount.equals(locked.collectionAmount ?? locked.amount) &&
+          (!locked.providerTransactionId ||
+            !verified.providerTransactionId ||
+            locked.providerTransactionId === verified.providerTransactionId)
         ) {
           locked.state = "verified";
-          locked.providerTransactionId = verified.providerTransactionId;
+          locked.providerTransactionId =
+            verified.providerTransactionId ?? locked.providerTransactionId;
           locked.providerFee = verified.providerFee;
           await this.payments.save(locked);
         } else {

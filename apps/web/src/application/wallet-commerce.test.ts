@@ -50,6 +50,7 @@ function service(existing: any) {
     findByIdempotency: async () => existing,
     findById: async () => null,
     findByProviderReference: async () => null,
+    findByProviderTransactionId: async () => null,
     findWork: async () => [],
     findInitializationWork: async () => [],
     claimInitialization: async () => null,
@@ -127,6 +128,7 @@ describe("funding minimum preflight", () => {
       findById: async () => funding,
       findByIdempotency: async () => null,
       findByProviderReference: async () => null,
+      findByProviderTransactionId: async () => null,
       findWork: async () => [],
       findInitializationWork: async () => [],
       claimInitialization: async () => {
@@ -178,7 +180,7 @@ describe("NOWPayments funding expiry", () => {
     result: { verified: boolean; status: string; reference?: string; amount?: Money },
     providerName = "nowpayments",
   ) {
-    let current = existingFunding({
+    let current: any = existingFunding({
       providerName,
       providerInitialization: { expiresAt },
     });
@@ -556,6 +558,196 @@ describe("provider-owned funding preparation", () => {
     });
 
     expect(created.providerInitialization?.paymentCurrency).toBe("btc");
+  });
+});
+
+describe("provider transaction identity", () => {
+  it("persists the provider transaction ID returned during initialization", async () => {
+    let current: any = existingFunding({
+      providerName: "nowpayments",
+      providerInitialization: { paymentCurrency: "usdttrc20" },
+      state: "initialization_pending",
+    });
+    const repository = {
+      findInitializationWork: async () => [current],
+      claimInitialization: async () => {
+        current = { ...current, state: "initializing", initializationClaimedAt: new Date() };
+        return current;
+      },
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const processor = new FundingInitializationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "nowpayments",
+        initiate: async () => ({
+          reference: current.providerReference,
+          providerTransactionId: "Np-AbC123",
+        }),
+      }),
+      {
+        findById: async () => ({ id: accountId, username: "buyer", country: "NG" }),
+        findAuthenticationEmail: async () => "buyer@example.test",
+        exists: async () => true,
+      },
+      { transaction: async (operation) => operation() },
+    );
+
+    await expect(processor.process(fundingId)).resolves.toMatchObject({
+      state: "awaiting_payment",
+      providerTransactionId: "Np-AbC123",
+    });
+  });
+
+  it("persists a verification identity only after successful verification", async () => {
+    let current: any = existingFunding({
+      state: "verification_pending",
+      providerTransactionId: null,
+    });
+    const save = vi.fn(async (value: any) => {
+      current = value;
+    });
+    const repository = {
+      findById: async () => current,
+      findByProviderTransactionId: async () => null,
+      save,
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        verify: async () => ({
+          verified: true,
+          status: "success",
+          reference: current.providerReference,
+          amount: current.collectionAmount,
+          providerTransactionId: "paystack-123",
+        }),
+      }),
+      { transaction: async (operation) => operation() },
+    );
+
+    await expect(verification.process(fundingId)).resolves.toMatchObject({
+      state: "confirmed",
+      providerTransactionId: "paystack-123",
+    });
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ providerTransactionId: "paystack-123" }),
+    );
+  });
+
+  it("fails verification when the provider returns a different known identity", async () => {
+    let current: any = existingFunding({
+      state: "verification_pending",
+      providerTransactionId: "PayStack-Original",
+    });
+    const repository = {
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        verify: async () => ({
+          verified: true,
+          status: "success",
+          reference: current.providerReference,
+          amount: current.collectionAmount,
+          providerTransactionId: "paystack-original",
+        }),
+      }),
+      { transaction: async (operation) => operation() },
+    );
+
+    await expect(verification.process(fundingId)).resolves.toMatchObject({ state: "failed" });
+    expect(current.providerTransactionId).toBe("PayStack-Original");
+  });
+
+  it("rejects a direct TRC20 hash already claimed by another funding", async () => {
+    const hash = "a".repeat(64);
+    const current = existingFunding({ providerName: "usdt_trc20" });
+    const repository = {
+      findById: async () => current,
+      findByProviderTransactionId: async () => ({ ...current, id: "other-funding" }),
+      save: vi.fn(),
+    };
+    const service = new FundingService(repository as never, {} as never, {} as never, {} as never, {
+      transaction: async (operation) => operation(),
+    });
+
+    await expect(
+      service.submitTransaction({ accountId, fundingId, transactionHash: hash }),
+    ).rejects.toMatchObject({ code: "provider_transaction_reused", status: 409 });
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it("trims only the boundary and preserves a submitted hash exactly", async () => {
+    const hash = "AbCd".repeat(16);
+    let current = existingFunding({ providerName: "usdt_trc20" });
+    const repository = {
+      findById: async () => current,
+      findByProviderTransactionId: async () => null,
+      save: vi.fn(async (value: any) => {
+        current = value;
+      }),
+    };
+    const service = new FundingService(repository as never, {} as never, {} as never, {} as never, {
+      transaction: async (operation) => operation(),
+    });
+
+    await expect(
+      service.submitTransaction({
+        accountId,
+        fundingId,
+        transactionHash: `  ${hash}  `,
+      }),
+    ).resolves.toMatchObject({ providerTransactionId: hash });
+    expect(repository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ providerTransactionId: hash }),
+    );
+  });
+
+  it("treats case variants as distinct provider transaction identities", async () => {
+    const lower = "ab".repeat(32);
+    const upper = "AB".repeat(32);
+    const records = new Map<string, any>([
+      ["funding-lower", existingFunding({ id: "funding-lower", providerName: "usdt_trc20" })],
+      ["funding-upper", existingFunding({ id: "funding-upper", providerName: "usdt_trc20" })],
+    ]);
+    const claimed = new Map<string, any>();
+    const repository = {
+      findById: async (id: string) => records.get(id) ?? null,
+      findByProviderTransactionId: async (_provider: string, transactionId: string) =>
+        claimed.get(transactionId) ?? null,
+      save: vi.fn(async (value: any) => {
+        records.set(value.id, value);
+        if (value.providerTransactionId) claimed.set(value.providerTransactionId, value);
+      }),
+    };
+    const service = new FundingService(repository as never, {} as never, {} as never, {} as never, {
+      transaction: async (operation) => operation(),
+    });
+
+    await service.submitTransaction({
+      accountId,
+      fundingId: "funding-lower",
+      transactionHash: lower,
+    });
+    await service.submitTransaction({
+      accountId,
+      fundingId: "funding-upper",
+      transactionHash: upper,
+    });
+
+    expect(records.get("funding-lower")?.providerTransactionId).toBe(lower);
+    expect(records.get("funding-upper")?.providerTransactionId).toBe(upper);
   });
 });
 

@@ -144,7 +144,11 @@ export class BankTransferProvider implements PaymentProvider {
     };
   }
 
-  async verify(input: { reference: string; expectedAmount: Money }): Promise<PaymentVerification> {
+  async verify(input: {
+    reference: string;
+    expectedAmount: Money;
+    providerTransactionId?: string;
+  }): Promise<PaymentVerification> {
     return {
       verified: false,
       status: "awaiting_manual_confirmation",

@@ -17,3 +17,10 @@ export class PublicApplicationError extends Error {
     this.name = "PublicApplicationError";
   }
 }
+
+/** The provider has already associated this external transaction with funding. */
+export class DuplicateProviderTransactionError extends PublicApplicationError {
+  constructor() {
+    super("This provider transaction has already been used.", "provider_transaction_reused", 409);
+  }
+}

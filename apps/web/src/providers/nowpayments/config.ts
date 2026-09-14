@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { parseYamlConfiguration, resolveEnvironmentPlaceholders } from "@/config/yaml";
 import type { NowPaymentsConfiguration } from "./provider";
-import { NOWPAYMENTS_SANDBOX_CASES } from "./provider";
+import { isNowPaymentsSandboxApi, NOWPAYMENTS_SANDBOX_CASES } from "./provider";
 import {
   parsePaymentProviderFilters,
   paymentProviderFiltersSchema,
@@ -25,7 +25,13 @@ const loaded = z.object({
       pay_currencies: z.array(z.string().min(1)).min(1),
       asset: z.string().optional(),
       network: z.string().optional(),
-      sandbox_case: z.enum(NOWPAYMENTS_SANDBOX_CASES).optional(),
+      sandbox: z
+        .object({
+          case: z.enum(NOWPAYMENTS_SANDBOX_CASES),
+        })
+        .strict()
+        .nullable()
+        .optional(),
     })
     .strict(),
   filters: paymentProviderFiltersSchema.default({ countries: null }),
@@ -40,6 +46,10 @@ export function loadNowPaymentsConfiguration(
   const initial = raw.parse(value);
   if (!initial.enabled) return null;
   const config = loaded.parse(resolveEnvironmentPlaceholders(value, environment, path));
+  if (config.config.sandbox && !isNowPaymentsSandboxApi(config.config.api_base_url))
+    throw new Error(
+      "NOWPayments sandbox.case requires api_base_url=https://api-sandbox.nowpayments.io",
+    );
   const filters = parsePaymentProviderFilters(config.filters, path);
   const payCurrencies = normalizeCurrencies(config.config.pay_currencies);
   const provider: NowPaymentsConfiguration = {
@@ -55,7 +65,7 @@ export function loadNowPaymentsConfiguration(
     description: config.description,
     asset: config.config.asset,
     network: config.config.network,
-    sandboxCase: config.config.sandbox_case,
+    sandbox: config.config.sandbox ? { case: config.config.sandbox.case } : undefined,
   };
   return { provider, filters };
 }

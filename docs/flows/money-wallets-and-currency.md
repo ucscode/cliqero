@@ -62,6 +62,7 @@ A payment record should preserve enough information to reconstruct what happened
 
 - provider name;
 - provider reference;
+- provider transaction ID, when the provider exposes one;
 - provider amount;
 - provider currency;
 - canonical USD amount;
@@ -74,11 +75,24 @@ A payment record should preserve enough information to reconstruct what happened
 
 Provider retries must not create duplicate purchases, entitlements, commissions, or credits.
 
+Funding identifiers have separate meanings. The Cliqero provider reference is the
+stable order/request reference shown in wallet history. The provider transaction
+ID is the opaque external provider or blockchain identity used for anti-replay and
+reconciliation; it is nullable until known, scoped by provider, and immutable
+once set. Cliqero preserves it exactly as accepted, including letter case. Only
+accidental leading/trailing whitespace may be trimmed at an input boundary;
+provider-specific formats are validated rather than rewritten. Exact text
+equality is used for lookup and uniqueness, so case variants remain distinct.
+Its existence does not mean that verification succeeded. Direct TRC20 uses the
+submitted transaction hash, NOWPayments uses its `payment_id`, Paystack uses the
+verified charge ID, and bank transfer uses the customer-supplied transfer
+reference as a claim pending operator verification.
+
 ## Initial payment providers
 
 The code currently registers Paystack, NOWPayments-managed crypto, direct-wallet `usdt_trc20`, and `bank_transfer` when their configuration is enabled. Provider eligibility is filtered by enabled state, account country, and provider-specific rules; collection and payment currencies are resolved during provider preparation. Direct TRC20 funding snapshots the receiving wallet, network, asset, and expected amount, then verifies a customer-submitted transaction hash against configured blockchain infrastructure.
 
-For acceptance testing, NOWPayments Sandbox supports its official create-payment `case: success` procedure through `sandbox_case: success`. The field is sent only to the sandbox API (never live), with the selected currency coming from the configured `pay_currencies` allowlist; IPN testing requires a publicly reachable callback and uses no real funds.
+For acceptance testing, NOWPayments Sandbox supports its official create-payment `case: success` procedure through the optional nested `sandbox` configuration. The field is sent only to the sandbox API (never live), with the selected currency coming from the configured `pay_currencies` allowlist; IPN testing requires a publicly reachable callback and uses no real funds. A sandbox success case simulates success without requiring real crypto payment.
 
 Providers implement a generic payment capability. Listing, purchase, entitlement, referral, and ledger code must not import Paystack- or TRON-specific logic.
 
@@ -175,8 +189,8 @@ NOWPayments uses `config.pay_currencies` as its server-side allowlist. A
 customer must select one configured currency (or use the only configured
 currency when there is exactly one). That selected currency is persisted with
 the funding initialization facts and is used during verification. The sandbox
-may use `sandbox_case: success`; the `case` field is sent only to the
-NOWPayments sandbox host. Direct `usdt_trc20` remains the custom direct-wallet
+may use an optional nested `sandbox: { case: success }` setting; the `case`
+field is sent only to the NOWPayments sandbox host. Direct `usdt_trc20` remains the custom direct-wallet
 method and is separate from NOWPayments. The authenticated funding-methods
 response uses `collection_currencies` (always an array) as provider capability
 metadata, not as a customer selector. Bank transfer exposes receiving-account

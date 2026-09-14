@@ -33,6 +33,7 @@ export type WalletTransaction =
       state: "pending" | "available";
       createdAt: Date;
       providerDisplayName?: string;
+      providerReference?: string;
     }
   | {
       kind: "purchase_debit";

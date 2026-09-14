@@ -1,4 +1,4 @@
-# Optional public storage instance for listing media. 
+# Optional public storage instance for listing media.
 # Omit to use media.default_provider.
 # ---------------------------
 # media_provider: filesystem
