@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HttpDirectTrc20Verifier } from "./verifier";
+import { HttpDirectTrc20Verifier, normalizeTronAddress } from "./verifier";
 
 const baseUrl = "https://api.shasta.trongrid.io";
 const config = {
@@ -35,6 +35,56 @@ function transferEvent(overrides: Record<string, unknown>) {
 }
 
 describe("HTTP direct TRC20 verifier", () => {
+  it("normalizes Base58Check, hex, and ABI-padded TRON addresses for comparison", () => {
+    const address = "TVX22re4mJPQt9wWM48jF7bfRSzmJWcBAV";
+    expect(normalizeTronAddress(address)).toBe("41d66e8b50f5acdaca0aae620dbe0c1f9395456fd9");
+    expect(normalizeTronAddress("0xd66e8b50f5acdaca0aae620dbe0c1f9395456fd9")).toBe(
+      "41d66e8b50f5acdaca0aae620dbe0c1f9395456fd9",
+    );
+    expect(
+      normalizeTronAddress("000000000000000000000000d66e8b50f5acdaca0aae620dbe0c1f9395456fd9"),
+    ).toBe("41d66e8b50f5acdaca0aae620dbe0c1f9395456fd9");
+    expect(
+      normalizeTronAddress("0x000000000000000000000000d66e8b50f5acdaca0aae620dbe0c1f9395456fd9"),
+    ).toBe("41d66e8b50f5acdaca0aae620dbe0c1f9395456fd9");
+    expect(normalizeTronAddress(`${address.slice(0, -1)}X`)).toBe(`${address.slice(0, -1)}X`);
+  });
+
+  it("accepts a Base58-configured wallet when TRONGrid returns a hex recipient", async () => {
+    const inputWithBase58Wallet = {
+      ...input,
+      destination: "TVX22re4mJPQt9wWM48jF7bfRSzmJWcBAV",
+      tokenContract: "TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs",
+    };
+    const verifier = new HttpDirectTrc20Verifier(
+      { ...config, tokenContract: inputWithBase58Wallet.tokenContract },
+      async (url) => {
+        if (String(url).includes("gettransactionbyid"))
+          return response({ txID: input.transactionHash, raw_data: { timestamp: Date.now() } });
+        if (String(url).includes("/events"))
+          return response({
+            data: [
+              transferEvent({
+                contract_address: inputWithBase58Wallet.tokenContract,
+                result: {
+                  to: "0xd66e8b50f5acdaca0aae620dbe0c1f9395456fd9",
+                },
+              }),
+            ],
+          });
+        if (String(url).includes("gettransactioninfobyid"))
+          return response({ blockNumber: 100, receipt: { result: "SUCCESS" } });
+        return response({ block_header: { raw_data: { number: 105 } } });
+      },
+    );
+    const result = await verifier.verify({ ...inputWithBase58Wallet });
+    expect(result).toMatchObject({
+      status: "confirmed",
+      destination: "0xd66e8b50f5acdaca0aae620dbe0c1f9395456fd9",
+    });
+    expect(result).not.toHaveProperty("issue");
+  });
+
   it("returns not_found when no matching transfer event exists", async () => {
     const verifier = new HttpDirectTrc20Verifier(config, async () => response({ data: [] }));
     await expect(verifier.verify(input)).resolves.toMatchObject({
@@ -53,6 +103,22 @@ describe("HTTP direct TRC20 verifier", () => {
       status: "pending",
       confirmations: 0,
       amountBaseUnits: 12500000n,
+    });
+  });
+
+  it("preserves the transaction timestamp and detects token issues before confirmation", async () => {
+    const timestamp = Date.parse("2026-09-14T11:59:00.000Z");
+    const verifier = new HttpDirectTrc20Verifier(config, async (url) => {
+      if (String(url).includes("gettransactionbyid"))
+        return response({ txID: input.transactionHash, raw_data: { timestamp } });
+      if (String(url).includes("/events"))
+        return response({ data: [transferEvent({ contract_address: "WrongToken" })] });
+      return response({});
+    });
+    await expect(verifier.verify(input)).resolves.toMatchObject({
+      status: "pending",
+      timestamp,
+      issue: "wrong_token_contract",
     });
   });
 

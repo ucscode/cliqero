@@ -6,8 +6,15 @@ import {
   fundingActionLabel,
   fundingStatusMessage,
   formatTimeRemaining,
+  createFundingStatusPoller,
+  FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
+  FUNDING_STATUS_POLL_INTERVAL_MS,
+  shouldShowSubmittedTransactionHash,
+  shouldShowTransactionHashInput,
   snapshotInstruction,
   shouldPollFunding,
+  verificationObservationClass,
+  verificationObservationHeading,
   validatedPreparationAmount,
   walletActivityLabel,
   walletActivityReference,
@@ -213,13 +220,14 @@ describe("customer-facing funding presentation", () => {
         error_message: null,
         verification: {
           status: "confirming",
+          level: "info",
           message: "Transaction found. Waiting for 3 more confirmations.",
           checked_at: "2026-09-14T10:00:00.000Z",
           confirmations: 3,
           confirmations_required: 6,
         },
       }),
-    ).toBe("Transaction found. Waiting for 3 more confirmations.");
+    ).toBe(null);
     expect(
       fundingStatusMessage({
         provider: "nowpayments",
@@ -254,11 +262,192 @@ describe("customer-facing funding presentation", () => {
 
   it("does not run recurring polling for bank transfer", () => {
     expect(shouldPollFunding({ provider: "bank_transfer", state: "awaiting_payment" })).toBe(false);
-    expect(shouldPollFunding({ provider: "paystack", state: "awaiting_payment" })).toBe(true);
+    expect(shouldPollFunding({ provider: "paystack", state: "awaiting_payment" })).toBe(false);
+    expect(shouldPollFunding({ provider: "nowpayments", state: "awaiting_payment" })).toBe(true);
     expect(shouldPollFunding({ provider: "nowpayments", state: "verification_pending" })).toBe(
       true,
     );
-    expect(shouldPollFunding({ provider: "nowpayments", state: "expired" })).toBe(false);
+    for (const state of ["confirmed", "failed", "cancelled", "expired"] as const) {
+      expect(shouldPollFunding({ provider: "nowpayments", state })).toBe(false);
+    }
+    expect(
+      shouldPollFunding({
+        provider: "usdt_trc20",
+        state: "awaiting_payment",
+        provider_transaction_id: null,
+      }),
+    ).toBe(false);
+    expect(
+      shouldPollFunding({
+        provider: "usdt_trc20",
+        state: "verification_pending",
+        provider_transaction_id: "a".repeat(64),
+      }),
+    ).toBe(true);
+  });
+
+  it("polls status with GET semantics and applies a pending-to-confirmed response", async () => {
+    const callbacks: Array<() => void> = [];
+    const scheduledDelays: number[] = [];
+    const timers = {
+      setTimeout: (handler: () => void, delay: number) => {
+        scheduledDelays.push(delay);
+        callbacks.push(handler);
+        return callbacks.length - 1;
+      },
+      clearTimeout: () => undefined,
+    };
+    const requests: string[] = [];
+    const observed: FundingStatus[] = [];
+    let responseCount = 0;
+    const pending = {
+      id: "funding-1",
+      provider: "usdt_trc20" as const,
+      state: "verification_pending" as const,
+      provider_transaction_id: "A1B2",
+    };
+    const confirmed = {
+      ...pending,
+      state: "confirmed" as const,
+    };
+    const stop = createFundingStatusPoller({
+      initialFunding: pending,
+      getStatus: async () => {
+        requests.push("GET /api/wallet/fund/funding-1");
+        responseCount += 1;
+        return (responseCount === 1 ? pending : confirmed) as FundingStatus;
+      },
+      onStatus: (latest) => observed.push(latest),
+      timers,
+      isVisible: () => true,
+    });
+
+    expect(scheduledDelays).toEqual([FUNDING_STATUS_POLL_INITIAL_DELAY_MS]);
+    callbacks.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(requests).toEqual(["GET /api/wallet/fund/funding-1"]);
+    expect(observed).toHaveLength(1);
+    expect(observed[0]?.state).toBe("verification_pending");
+    expect(scheduledDelays).toEqual([
+      FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
+      FUNDING_STATUS_POLL_INTERVAL_MS,
+    ]);
+
+    callbacks.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(requests).toEqual(["GET /api/wallet/fund/funding-1", "GET /api/wallet/fund/funding-1"]);
+    expect(observed.at(-1)?.state).toBe("confirmed");
+    expect(scheduledDelays).toHaveLength(2);
+    stop();
+  });
+
+  it("does not create duplicate timers while a status request is in flight", async () => {
+    const callbacks: Array<() => void> = [];
+    let resolveStatus: ((funding: FundingStatus) => void) | undefined;
+    let scheduledCount = 0;
+    const timers = {
+      setTimeout: (handler: () => void) => {
+        scheduledCount += 1;
+        callbacks.push(handler);
+        return callbacks.length - 1;
+      },
+      clearTimeout: () => undefined,
+    };
+    const stop = createFundingStatusPoller({
+      initialFunding: {
+        provider: "usdt_trc20",
+        state: "verification_pending",
+        provider_transaction_id: "A1B2",
+      },
+      getStatus: () =>
+        new Promise((resolve) => {
+          resolveStatus = resolve;
+        }),
+      onStatus: () => undefined,
+      timers,
+      isVisible: () => true,
+    });
+
+    callbacks.shift()?.();
+    callbacks[0]?.();
+    expect(scheduledCount).toBe(1);
+    resolveStatus?.({
+      id: "funding-1",
+      provider: "usdt_trc20",
+      state: "confirmed",
+      provider_transaction_id: "A1B2",
+    } as FundingStatus);
+    await Promise.resolve();
+    await Promise.resolve();
+    stop();
+  });
+
+  it("keeps rejected transaction inputs editable and accepted ones read-only", () => {
+    expect(
+      shouldShowTransactionHashInput({
+        provider: "usdt_trc20",
+        state: "awaiting_payment",
+        provider_transaction_id: null,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowTransactionHashInput({
+        provider: "usdt_trc20",
+        state: "verification_pending",
+        provider_transaction_id: null,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowSubmittedTransactionHash({
+        provider: "usdt_trc20",
+        provider_transaction_id: "AbCd".repeat(16),
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowTransactionHashInput({
+        provider: "usdt_trc20",
+        state: "verification_pending",
+        provider_transaction_id: "AbCd".repeat(16),
+      }),
+    ).toBe(false);
+  });
+
+  it("provides a prominent heading for verification errors", () => {
+    expect(
+      verificationObservationHeading({
+        status: "not_found",
+        level: "error",
+        message: "Transaction not found.",
+        checked_at: null,
+      }),
+    ).toBe("Transaction not found");
+    expect(
+      verificationObservationHeading({
+        status: "provider_error",
+        level: "error",
+        message: "Try again.",
+        checked_at: null,
+      }),
+    ).toBe("Verification temporarily unavailable");
+    expect(
+      verificationObservationClass({
+        status: "confirming",
+        level: "info",
+        message: "Waiting for confirmations.",
+        checked_at: null,
+      }),
+    ).toContain("bg-blue-50");
+    expect(
+      verificationObservationClass({
+        status: "success",
+        level: "success",
+        message: "Payment verified.",
+        checked_at: null,
+      }),
+    ).toContain("bg-emerald-50");
   });
 
   it("preserves arbitrary bank field order and copy metadata for rendering", () => {

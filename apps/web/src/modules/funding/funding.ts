@@ -30,6 +30,13 @@ export function projectVerificationObservation(value: unknown) {
   return {
     status: observation.status,
     message: observation.message,
+    level:
+      observation.level ??
+      (observation.status === "success"
+        ? "success"
+        : observation.status === "confirming" || observation.status === "awaiting_transaction"
+          ? "info"
+          : "error"),
     checked_at: typeof observation.checkedAt === "string" ? observation.checkedAt : null,
     ...(typeof observation.confirmations === "number"
       ? { confirmations: observation.confirmations }

@@ -7,6 +7,7 @@ vi.mock("@/infrastructure/container", () => ({
 }));
 
 import { POST } from "@/api/compat/wallet/fund/[id]/transaction/route";
+import { InvalidProviderTransactionError } from "@/kernel/errors";
 
 const fundingId = "00000000-0000-4000-8000-000000000010";
 const account = { id: "00000000-0000-4000-8000-000000000001" };
@@ -32,6 +33,7 @@ describe("Direct USDT TRC20 transaction submission API", () => {
     const submitTransaction = vi.fn(async (input: unknown) => ({
       id: fundingId,
       state: "verification_pending" as const,
+      providerTransactionId: transactionHash,
       input,
     }));
     configure(submitTransaction);
@@ -44,7 +46,7 @@ describe("Direct USDT TRC20 transaction submission API", () => {
     expect(await response.json()).toEqual({
       id: fundingId,
       state: "verification_pending",
-      provider_transaction_id: null,
+      provider_transaction_id: transactionHash,
       verification: null,
     });
     expect(submitTransaction).toHaveBeenCalledWith({
@@ -66,6 +68,25 @@ describe("Direct USDT TRC20 transaction submission API", () => {
 
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ error: "Funding not found" });
+  });
+
+  it("returns a customer-safe rejection without an authoritative hash", async () => {
+    const submitTransaction = vi.fn(async () => {
+      throw new InvalidProviderTransactionError(
+        "This transaction does not use the required USDT token contract.",
+      );
+    });
+    configure(submitTransaction);
+
+    const response = await POST(request({ transaction_hash: transactionHash }), {
+      params: Promise.resolve({ id: fundingId }),
+    });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      error: "This transaction does not use the required USDT token contract.",
+      code: "invalid_transaction_hash",
+    });
   });
 
   it("rejects an invalid hash before calling the funding service", async () => {

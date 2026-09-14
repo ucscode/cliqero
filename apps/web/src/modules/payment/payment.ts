@@ -37,9 +37,12 @@ export type PaymentVerificationObservationStatus =
   | "failed"
   | "provider_error"
   | "success";
+export type PaymentVerificationObservationLevel = "error" | "info" | "success";
 export interface PaymentVerificationObservation {
   status: PaymentVerificationObservationStatus;
   message: string;
+  /** Customer-safe severity for rendering the latest verification result. */
+  level?: PaymentVerificationObservationLevel;
   checkedAt?: string;
   confirmations?: number;
   confirmationsRequired?: number;
@@ -120,8 +123,6 @@ export interface PaymentInitializationMetadata {
   failureCurrency?: string;
   /** Latest customer-safe verification observation; persisted with the funding snapshot. */
   verification?: PaymentVerificationObservation;
-  /** Internal first-seen timestamp used to bound repeated not-found observations. */
-  verificationNotFoundFirstAt?: string;
 }
 export interface PaymentVerification {
   verified: boolean;

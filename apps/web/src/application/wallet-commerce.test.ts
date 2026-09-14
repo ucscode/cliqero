@@ -640,6 +640,41 @@ describe("provider transaction identity", () => {
     );
   });
 
+  it("never persists a confirming observation without an accepted identity", async () => {
+    let current: any = existingFunding({
+      state: "verification_pending",
+      providerTransactionId: null,
+    });
+    const repository = {
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        verify: async () => ({
+          verified: false,
+          status: "confirming",
+          reference: current.providerReference,
+          amount: current.collectionAmount,
+          observation: { status: "confirming" as const, message: "Not yet final." },
+        }),
+      }),
+      { transaction: async (operation) => operation() },
+    );
+
+    await expect(verification.process(fundingId)).resolves.toMatchObject({
+      state: "awaiting_payment",
+      providerTransactionId: null,
+    });
+    expect(current.providerInitialization.verification).toMatchObject({
+      status: "awaiting_transaction",
+    });
+  });
+
   it("fails verification when the provider returns a different known identity", async () => {
     let current: any = existingFunding({
       state: "verification_pending",
@@ -688,33 +723,46 @@ describe("provider transaction identity", () => {
     expect(repository.save).not.toHaveBeenCalled();
   });
 
-  it("trims only the boundary and preserves a submitted hash exactly", async () => {
+  it("rejects an unadmitted hash without persisting it", async () => {
     const hash = "AbCd".repeat(16);
-    let current = existingFunding({ providerName: "usdt_trc20" });
+    const current: any = existingFunding({ providerName: "usdt_trc20" });
     const repository = {
       findById: async () => current,
       findByProviderTransactionId: async () => null,
-      save: vi.fn(async (value: any) => {
-        current = value;
-      }),
+      save: vi.fn(),
     };
-    const service = new FundingService(repository as never, {} as never, {} as never, {} as never, {
-      transaction: async (operation) => operation(),
-    });
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "usdt_trc20",
+        verify: async ({ reference, expectedAmount }) => ({
+          verified: false,
+          status: "mismatch",
+          reference,
+          amount: expectedAmount,
+          observation: { status: "mismatch" as const, message: "Wrong destination." },
+        }),
+      }),
+      { transaction: async (operation) => operation() },
+    );
+    const service = new FundingService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { transaction: async (operation) => operation() },
+      verification,
+    );
 
     await expect(
-      service.submitTransaction({
-        accountId,
-        fundingId,
-        transactionHash: `  ${hash}  `,
-      }),
-    ).resolves.toMatchObject({ providerTransactionId: hash });
-    expect(repository.save).toHaveBeenCalledWith(
-      expect.objectContaining({ providerTransactionId: hash }),
-    );
+      service.submitTransaction({ accountId, fundingId, transactionHash: `  ${hash}  ` }),
+    ).rejects.toMatchObject({ code: "invalid_transaction_hash", status: 422 });
+    expect(current.providerTransactionId).toBeUndefined();
+    expect(repository.save).not.toHaveBeenCalled();
   });
 
-  it("treats case variants as distinct provider transaction identities", async () => {
+  it("preserves the exact case of separately accepted transaction identities", async () => {
     const lower = "ab".repeat(32);
     const upper = "AB".repeat(32);
     const records = new Map<string, any>([
@@ -731,9 +779,31 @@ describe("provider transaction identity", () => {
         if (value.providerTransactionId) claimed.set(value.providerTransactionId, value);
       }),
     };
-    const service = new FundingService(repository as never, {} as never, {} as never, {} as never, {
-      transaction: async (operation) => operation(),
-    });
+    const acceptedProvider: PaymentProvider = {
+      ...provider,
+      name: "usdt_trc20",
+      verify: async ({ reference, expectedAmount, providerTransactionId }) => ({
+        verified: true,
+        status: "success",
+        reference,
+        amount: expectedAmount,
+        providerTransactionId,
+      }),
+    };
+    const unitOfWork = { transaction: async (operation: any) => operation() };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register(acceptedProvider),
+      unitOfWork,
+    );
+    const service = new FundingService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      unitOfWork,
+      verification,
+    );
 
     await service.submitTransaction({
       accountId,
@@ -752,9 +822,9 @@ describe("provider transaction identity", () => {
 });
 
 describe("foreground funding verification", () => {
-  it("persists the transaction claim before making one immediate verification attempt", async () => {
+  it("accepts and persists a submitted hash after immediate provider admission", async () => {
     const hash = "AbCd".repeat(16);
-    let current = existingFunding({ providerName: "usdt_trc20" });
+    let current: any = existingFunding({ providerName: "usdt_trc20" });
     const verify = vi.fn(async () => ({
       verified: true,
       status: "success",
@@ -792,56 +862,109 @@ describe("foreground funding verification", () => {
     expect((current.providerInitialization as any)?.verification).toMatchObject({
       status: "success",
     });
+    await expect(
+      service.submitTransaction({ accountId, fundingId, transactionHash: hash }),
+    ).rejects.toMatchObject({ code: "provider_transaction_reused", status: 409 });
   });
 
-  it("persists not-found feedback and bounds repeated not-found attempts", async () => {
-    const firstAttempt = new Date("2026-09-14T10:00:00.000Z");
-    const secondAttempt = new Date("2026-09-14T10:15:00.000Z");
-    let current = existingFunding({
-      providerName: "usdt_trc20",
-      state: "verification_pending",
-      providerTransactionId: "AbCd".repeat(16),
-    });
+  it("accepts a matching hash before final confirmation and leaves it worker-monitorable", async () => {
+    const hash = "AbCd".repeat(16);
+    let current: any = existingFunding({ providerName: "usdt_trc20" });
     const repository = {
       findById: async () => current,
+      findByProviderTransactionId: async () => null,
       save: async (value: any) => {
         current = value;
       },
     };
+    const unitOfWork = { transaction: async (operation: any) => operation() };
     const verification = new FundingVerificationProcessor(
       repository as never,
       new PaymentProviderRegistry().register({
         ...provider,
         name: "usdt_trc20",
-        verify: async () => ({
+        verify: async ({ reference, expectedAmount, providerTransactionId }) => ({
+          verified: false,
+          status: "confirming",
+          reference,
+          amount: expectedAmount,
+          providerTransactionId,
+          observation: {
+            status: "confirming" as const,
+            level: "info" as const,
+            message: "Waiting for confirmations.",
+            confirmations: 2,
+            confirmationsRequired: 6,
+          },
+        }),
+      }),
+      unitOfWork,
+    );
+    const service = new FundingService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      unitOfWork,
+      verification,
+    );
+
+    await expect(
+      service.submitTransaction({ accountId, fundingId, transactionHash: hash }),
+    ).resolves.toMatchObject({
+      state: "verification_pending",
+      providerTransactionId: hash,
+    });
+    expect(current.providerTransactionId).toBe(hash);
+    expect(current.providerInitialization.verification).toMatchObject({
+      status: "confirming",
+      confirmations: 2,
+      confirmationsRequired: 6,
+    });
+  });
+
+  it("rejects a not-found submission without persisting stale verification", async () => {
+    const hash = "AbCd".repeat(16);
+    const current: any = existingFunding({ providerName: "usdt_trc20" });
+    const repository = {
+      findById: async () => current,
+      save: vi.fn(),
+      findByProviderTransactionId: async () => null,
+    };
+    const unitOfWork = { transaction: async (operation: any) => operation() };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "usdt_trc20",
+        verify: async ({ reference, expectedAmount }) => ({
           verified: false,
           status: "not_found",
-          reference: current.providerReference,
-          amount: current.collectionAmount,
+          reference,
+          amount: expectedAmount,
           observation: {
             status: "not_found" as const,
             message: "Transaction not found on TRON yet.",
           },
         }),
       }),
-      { transaction: async (operation) => operation() },
-      undefined,
-      15 * 60_000,
+      unitOfWork,
+    );
+    const service = new FundingService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      unitOfWork,
+      verification,
     );
 
-    await expect(verification.process(fundingId, { now: firstAttempt })).resolves.toMatchObject({
-      state: "verification_pending",
-    });
-    expect((current.providerInitialization as any)?.verification).toMatchObject({
-      status: "not_found",
-      message: "Transaction not found on TRON yet.",
-    });
-    await expect(verification.process(fundingId, { now: secondAttempt })).resolves.toMatchObject({
-      state: "failed",
-    });
-    expect((current.providerInitialization as any)?.verification).toMatchObject({
-      status: "failed",
-    });
+    await expect(
+      service.submitTransaction({ accountId, fundingId, transactionHash: hash }),
+    ).rejects.toMatchObject({ code: "invalid_transaction_hash", status: 422 });
+    expect(current.providerTransactionId).toBeUndefined();
+    expect(current.providerInitialization?.verification).toBeUndefined();
+    expect(repository.save).not.toHaveBeenCalled();
   });
 
   it("keeps transient provider errors retryable while persisting customer-safe feedback", async () => {

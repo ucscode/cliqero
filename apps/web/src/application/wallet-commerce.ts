@@ -219,21 +219,15 @@ export class FundingService {
       if (!funding || funding.accountId !== input.accountId) throw new Error("Funding not found");
       if (funding.providerName !== "usdt_trc20")
         throw new Error("Transaction hash is not supported for this funding method");
+      if (funding.providerTransactionId) throw new DuplicateProviderTransactionError();
       if (funding.state !== "awaiting_payment" && funding.state !== "verification_pending")
         throw new Error("Funding is not awaiting payment");
-      if (funding.providerTransactionId === normalized) return funding;
-      if (funding.providerTransactionId && funding.providerTransactionId !== normalized)
-        throw new Error("Funding already has a different provider transaction");
       const owner = await this.funding.findByProviderTransactionId("usdt_trc20", normalized);
       if (owner && owner.id !== funding.id) throw new DuplicateProviderTransactionError();
-      funding.providerTransactionId = normalized;
-      funding.state = "verification_pending";
-      await this.funding.save(funding);
       return funding;
     });
-    if (!this.verification) return persisted;
-    await this.verification.process(persisted.id, { rethrowProviderErrors: false });
-    return (await this.funding.findById(persisted.id)) ?? persisted;
+    if (!this.verification) throw new Error("Funding verification is unavailable");
+    return this.verification.admit(persisted.id, normalized);
   }
 }
 
@@ -391,7 +385,6 @@ export class FundingVerificationProcessor {
     private providers: PaymentProviderRegistry,
     private uow: UnitOfWork,
     private operations?: PostgresPaymentOperationsRepository,
-    private readonly notFoundGraceMs = 15 * 60_000,
   ) {}
 
   async process(
@@ -424,12 +417,7 @@ export class FundingVerificationProcessor {
     const now = options.now ?? new Date();
     let result;
     try {
-      result = await this.providers.get(f.providerName).verify({
-        reference: f.providerReference,
-        expectedAmount: f.collectionAmount,
-        providerTransactionId: f.providerTransactionId ?? undefined,
-        initialization: f.providerInitialization,
-      });
+      result = await this.verify(f);
     } catch (error) {
       const diagnostic =
         error instanceof ProviderOperationError
@@ -467,12 +455,66 @@ export class FundingVerificationProcessor {
       if (options.rethrowProviderErrors !== false) throw error;
       return saved;
     }
-    const observation = verificationObservation(result, now);
+    return this.persistResult(id, result, now, options.expireUnsuccessful === true);
+  }
+
+  async admit(id: string, providerTransactionId: string) {
+    const funding = await this.funding.findById(id);
+    if (!funding) throw new Error("Funding not found");
+    if (funding.state !== "awaiting_payment" && funding.state !== "verification_pending")
+      throw new Error("Funding is not awaiting payment");
+    const result: PaymentVerification = await this.providers.get(funding.providerName).verify({
+      reference: funding.providerReference,
+      expectedAmount: funding.collectionAmount,
+      providerTransactionId,
+      initialization: funding.providerInitialization,
+    });
+    if (
+      result.providerTransactionId !== providerTransactionId ||
+      result.reference !== funding.providerReference ||
+      result.amount.minorAmount !== funding.collectionAmount.minorAmount ||
+      result.amount.currency !== funding.collectionAmount.currency
+    )
+      throw new InvalidProviderTransactionError(
+        result.observation?.message ?? "This transaction could not be accepted for this funding.",
+      );
+    const persisted = await this.persistResult(
+      id,
+      result,
+      new Date(),
+      false,
+      providerTransactionId,
+    );
+    if (!persisted) throw new Error("Funding not found");
+    return persisted;
+  }
+
+  private verify(funding: FundingTransaction) {
+    return this.providers.get(funding.providerName).verify({
+      reference: funding.providerReference,
+      expectedAmount: funding.collectionAmount,
+      providerTransactionId: funding.providerTransactionId ?? undefined,
+      initialization: funding.providerInitialization,
+    });
+  }
+
+  private async persistResult(
+    id: string,
+    result: PaymentVerification,
+    now: Date,
+    expireUnsuccessful: boolean,
+    admittedProviderTransactionId?: string,
+  ) {
     return this.uow.transaction(async () => {
       const locked = await this.funding.findById(id, { forUpdate: true });
       if (!locked || locked.state === "confirmed") return locked;
-      const shouldExpire =
-        options.expireUnsuccessful === true && isExpiredNowPaymentsFunding(locked, now);
+      if (
+        admittedProviderTransactionId &&
+        locked.providerTransactionId &&
+        locked.providerTransactionId !== admittedProviderTransactionId
+      )
+        throw new DuplicateProviderTransactionError();
+      const shouldExpire = expireUnsuccessful && isExpiredNowPaymentsFunding(locked, now);
       const factsMatch =
         result.reference === locked.providerReference &&
         result.amount.minorAmount === locked.collectionAmount.minorAmount &&
@@ -481,22 +523,41 @@ export class FundingVerificationProcessor {
         !!locked.providerTransactionId &&
         !!result.providerTransactionId &&
         result.providerTransactionId !== locked.providerTransactionId;
-      const notFoundExpired = isNotFoundExpired(
-        locked.providerInitialization?.verificationNotFoundFirstAt,
-        observation.status === "not_found",
-        now,
-        this.notFoundGraceMs,
-      );
-      if (
-        !identityMismatch &&
-        !notFoundExpired &&
-        !result.verified &&
+      const observation =
+        !locked.providerTransactionId &&
+        !result.providerTransactionId &&
         isFundingPendingStatus(result.status)
-      ) {
+          ? withVerificationObservation(
+              undefined,
+              {
+                status: "awaiting_transaction",
+                message:
+                  "Payment has not been identified yet; verification will continue automatically.",
+                level: "info",
+              },
+              now,
+            ).verification!
+          : verificationObservation(result, now);
+      if (result.providerTransactionId && factsMatch && !identityMismatch) {
+        if (
+          locked.providerTransactionId &&
+          locked.providerTransactionId !== result.providerTransactionId
+        )
+          throw new DuplicateProviderTransactionError();
+        if (!locked.providerTransactionId) {
+          const owner = await this.funding.findByProviderTransactionId(
+            locked.providerName,
+            result.providerTransactionId,
+          );
+          if (owner && owner.id !== locked.id) throw new DuplicateProviderTransactionError();
+          locked.providerTransactionId = result.providerTransactionId;
+        }
+      }
+      if (!identityMismatch && !result.verified && isFundingPendingStatus(result.status)) {
         locked.state =
           shouldExpire && factsMatch
             ? "expired"
-            : locked.state === "verification_pending"
+            : locked.providerTransactionId
               ? "verification_pending"
               : "awaiting_payment";
         locked.providerInitialization = withVerificationObservation(
@@ -504,11 +565,6 @@ export class FundingVerificationProcessor {
           observation,
           now,
         );
-        if (observation.status === "not_found") {
-          locked.providerInitialization.verificationNotFoundFirstAt ??= now.toISOString();
-        } else {
-          delete locked.providerInitialization.verificationNotFoundFirstAt;
-        }
         await this.funding.save(locked);
         return locked;
       }
@@ -519,7 +575,7 @@ export class FundingVerificationProcessor {
         result.amount.minorAmount !== locked.collectionAmount.minorAmount ||
         result.amount.currency !== locked.collectionAmount.currency ||
         identityMismatch;
-      if (notFoundExpired || mismatch || identityMismatch) {
+      if (mismatch || identityMismatch) {
         if (shouldExpire && factsMatch) {
           locked.state = "expired";
           locked.providerInitialization = withVerificationObservation(
@@ -556,32 +612,11 @@ export class FundingVerificationProcessor {
         locked.state = "failed";
         locked.providerInitialization = withVerificationObservation(
           locked.providerInitialization,
-          notFoundExpired
-            ? {
-                status: "failed",
-                message:
-                  "Transaction was not found on TRON within the verification window. Check the hash and start a new funding attempt.",
-              }
-            : observation,
+          observation,
           now,
         );
         await this.funding.save(locked);
         return locked;
-      }
-      if (result.providerTransactionId) {
-        if (
-          locked.providerTransactionId &&
-          locked.providerTransactionId !== result.providerTransactionId
-        )
-          throw new DuplicateProviderTransactionError();
-        if (!locked.providerTransactionId) {
-          const owner = await this.funding.findByProviderTransactionId(
-            locked.providerName,
-            result.providerTransactionId,
-          );
-          if (owner && owner.id !== locked.id) throw new DuplicateProviderTransactionError();
-          locked.providerTransactionId = result.providerTransactionId;
-        }
       }
       await this.operations?.recordFundingSuccess({
         fundingId: locked.id,
@@ -595,7 +630,6 @@ export class FundingVerificationProcessor {
         observation,
         now,
       );
-      delete locked.providerInitialization.verificationNotFoundFirstAt;
       await this.funding.save(locked);
       return locked;
     });
@@ -614,23 +648,30 @@ function defaultVerificationObservation(
   result: PaymentVerification,
 ): PaymentVerificationObservation {
   if (result.status === "success")
-    return { status: "success", message: "Payment verified successfully." };
+    return { status: "success", message: "Payment verified successfully.", level: "success" };
   if (result.status === "not_found")
     return {
       status: "not_found",
       message:
         "Transaction not found yet. Check the transaction hash or wait a moment if it was just submitted.",
+      level: "error",
     };
   if (result.status === "confirming" || isFundingPendingStatus(result.status))
-    return { status: "confirming", message: "Transaction found. Waiting for confirmation." };
+    return {
+      status: "confirming",
+      message: "Transaction found. Waiting for confirmation.",
+      level: "info",
+    };
   if (result.status === "failed")
     return {
       status: "failed",
       message: "This blockchain transaction failed and cannot fund your wallet.",
+      level: "error",
     };
   return {
     status: "mismatch",
     message: "The provider verification did not match this funding attempt.",
+    level: "error",
   };
 }
 
@@ -641,19 +682,18 @@ function withVerificationObservation(
 ) {
   return {
     ...(metadata ?? {}),
-    verification: { ...observation, checkedAt: now.toISOString() },
+    verification: {
+      ...observation,
+      level: observation.level ?? verificationObservationLevel(observation.status),
+      checkedAt: now.toISOString(),
+    },
   };
 }
 
-function isNotFoundExpired(
-  firstAt: string | undefined,
-  isNotFound: boolean,
-  now: Date,
-  graceMs: number,
-) {
-  if (!isNotFound || !firstAt) return false;
-  const first = Date.parse(firstAt);
-  return !Number.isNaN(first) && now.getTime() - first >= graceMs;
+function verificationObservationLevel(status: PaymentVerificationObservation["status"]) {
+  if (status === "success") return "success" as const;
+  if (status === "confirming" || status === "awaiting_transaction") return "info" as const;
+  return "error" as const;
 }
 
 export class FundingExpiryProcessor {

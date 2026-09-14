@@ -96,6 +96,7 @@ describe("wallet funding status projection", () => {
       },
       verification: {
         status: "confirming",
+        level: "info",
         message: "Transaction found. Waiting for 3 more confirmations.",
         checked_at: "2026-09-13T08:01:00.000Z",
         confirmations: 3,

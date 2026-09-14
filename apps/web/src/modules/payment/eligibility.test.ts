@@ -81,6 +81,7 @@ describe("payment provider eligibility", () => {
         {
           walletAddress: "Tabc",
           confirmationsRequired: 6,
+          maxTransactionAgeSeconds: 86400,
           tokenContract: "Tusdt",
           verification: { provider: "trongrid", apiBaseUrl: "https://api.shasta.trongrid.io" },
         },
@@ -123,6 +124,7 @@ describe("payment provider eligibility", () => {
           {
             walletAddress: "Tabc",
             confirmationsRequired: 6,
+            maxTransactionAgeSeconds: 86400,
             tokenContract: "Tusdt",
             verification: { provider: "trongrid", apiBaseUrl: "https://api.shasta.trongrid.io" },
           },

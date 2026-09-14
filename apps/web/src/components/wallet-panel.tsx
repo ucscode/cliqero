@@ -105,7 +105,7 @@ export function fundingStatusMessage(
     return "Complete the payment to continue.";
   }
   if (funding.state === "verification_pending")
-    return funding.verification?.message ?? "Your payment is being verified.";
+    return funding.verification ? null : "Your payment is being verified.";
   if (funding.state === "expired")
     return "This payment session has expired. Start a new funding attempt.";
   if (funding.state === "failed" || funding.state === "blocked")
@@ -135,8 +135,121 @@ export function canSubmitBankTransferEvidence(
   );
 }
 
-export function shouldPollFunding(funding: Pick<FundingStatus, "provider" | "state">) {
-  return funding.provider !== "bank_transfer" && !terminalFundingStates.has(funding.state);
+export function shouldPollFunding(
+  funding: Pick<FundingStatus, "provider" | "state"> & {
+    provider_transaction_id?: FundingStatus["provider_transaction_id"];
+  },
+) {
+  if (terminalFundingStates.has(funding.state)) return false;
+  if (funding.provider === "bank_transfer") return false;
+  if (funding.state === "verification_pending") return true;
+
+  // NOWPayments has a provider-owned payment session that remains observable
+  // while awaiting payment. Other awaiting_payment states are intentionally
+  // passive until an action creates a verification-pending workflow.
+  return funding.provider === "nowpayments" && funding.state === "awaiting_payment";
+}
+
+export const FUNDING_STATUS_POLL_INITIAL_DELAY_MS = 1000;
+export const FUNDING_STATUS_POLL_INTERVAL_MS = 4000;
+
+type FundingStatusPollerTimers = {
+  setTimeout: (handler: () => void, timeout: number) => number;
+  clearTimeout: (handle: number) => void;
+};
+
+export function createFundingStatusPoller({
+  initialFunding,
+  getStatus,
+  onStatus,
+  onError,
+  timers,
+  isVisible = () => document.visibilityState !== "hidden",
+}: {
+  initialFunding: Pick<FundingStatus, "provider" | "state"> & {
+    provider_transaction_id?: FundingStatus["provider_transaction_id"];
+  };
+  getStatus: () => Promise<FundingStatus>;
+  onStatus: (funding: FundingStatus) => void;
+  onError?: (error: unknown) => void;
+  timers: FundingStatusPollerTimers;
+  isVisible?: () => boolean;
+}) {
+  let currentFunding = initialFunding;
+  let disposed = false;
+  let inFlight = false;
+  let timer: number | undefined;
+
+  const schedule = (delay: number) => {
+    if (disposed || timer !== undefined) return;
+    timer = timers.setTimeout(() => {
+      timer = undefined;
+      void poll();
+    }, delay);
+  };
+
+  const poll = async () => {
+    if (disposed || inFlight) return;
+    if (!isVisible()) {
+      schedule(FUNDING_STATUS_POLL_INTERVAL_MS);
+      return;
+    }
+
+    inFlight = true;
+    try {
+      const latest = await getStatus();
+      if (disposed) return;
+      currentFunding = latest;
+      onStatus(latest);
+      if (!shouldPollFunding(latest)) return;
+    } catch (error) {
+      if (!disposed) onError?.(error);
+      if (!shouldPollFunding(currentFunding)) return;
+    } finally {
+      inFlight = false;
+    }
+
+    schedule(FUNDING_STATUS_POLL_INTERVAL_MS);
+  };
+
+  schedule(FUNDING_STATUS_POLL_INITIAL_DELAY_MS);
+  return () => {
+    disposed = true;
+    if (timer !== undefined) timers.clearTimeout(timer);
+    timer = undefined;
+  };
+}
+
+export function verificationObservationHeading(verification: FundingStatus["verification"]) {
+  if (!verification) return "Verification update";
+  if (verification.status === "not_found") return "Transaction not found";
+  if (verification.status === "failed") return "Transaction failed";
+  if (verification.status === "mismatch") return "Transaction does not match";
+  if (verification.status === "provider_error") return "Verification temporarily unavailable";
+  if (verification.status === "success") return "Payment verified";
+  return "Verification in progress";
+}
+
+export function verificationObservationClass(verification: FundingStatus["verification"]) {
+  if (verification?.level === "success") return "border-emerald-200 bg-emerald-50 text-emerald-950";
+  if (verification?.level === "info") return "border-blue-200 bg-blue-50 text-blue-950";
+  return "border-red-200 bg-red-50 text-red-950";
+}
+
+export function shouldShowTransactionHashInput(
+  funding: Pick<FundingStatus, "provider" | "state" | "provider_transaction_id">,
+) {
+  return (
+    funding.provider === "usdt_trc20" &&
+    !funding.provider_transaction_id &&
+    (funding.state === "awaiting_payment" || funding.state === "verification_pending")
+  );
+}
+
+export function shouldShowSubmittedTransactionHash(
+  funding: Pick<FundingStatus, "provider" | "provider_transaction_id">,
+) {
+  return funding.provider === "usdt_trc20" && Boolean(funding.provider_transaction_id);
 }
 
 export function walletPanelComposition(fundingPage: boolean, persistedFunding = false) {
@@ -214,6 +327,7 @@ export function WalletPanel({
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [customerNote, setCustomerNote] = useState("");
   const [evidenceMessage, setEvidenceMessage] = useState<string | null>(null);
+  const [transactionError, setTransactionError] = useState<string | null>(null);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [fundingMethods, setFundingMethods] = useState<FundingMethod[]>([]);
   const [preparation, setPreparation] = useState<FundingPreparation | null>(null);
@@ -337,43 +451,39 @@ export function WalletPanel({
       !fundingId ||
       !fundingProvider ||
       !fundingState ||
-      !shouldPollFunding({ provider: fundingProvider, state: fundingState })
+      !shouldPollFunding({
+        provider: fundingProvider,
+        state: fundingState,
+        provider_transaction_id: funding?.provider_transaction_id,
+      })
     )
       return;
-    let attempts = 0;
-    let timeout: number | undefined;
-    const poll = async () => {
-      if (document.visibilityState === "hidden") return;
-      attempts += 1;
-      try {
-        const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
+    return createFundingStatusPoller({
+      initialFunding: {
+        provider: fundingProvider,
+        state: fundingState,
+        provider_transaction_id: funding?.provider_transaction_id,
+      },
+      getStatus: () => apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`),
+      onStatus: (latest) => {
         setFunding(latest);
         if (latest.state === "confirmed") void loadWallet(true);
-        if (!shouldPollFunding(latest)) {
-          setPollingNotice(null);
-          return;
-        }
-        if (attempts >= 20) {
-          setPollingNotice(
-            "Automatic updates are paused. Funding may still be processing; refresh to check again.",
-          );
-          return;
-        }
-      } catch {
-        if (attempts >= 20) {
-          setPollingNotice(
-            "Automatic updates are paused. Funding may still be processing; refresh to check again.",
-          );
-          return;
-        }
-      }
-      timeout = window.setTimeout(() => void poll(), 4000);
-    };
-    timeout = window.setTimeout(() => void poll(), 1000);
-    return () => {
-      if (timeout) window.clearTimeout(timeout);
-    };
-  }, [funding?.id, funding?.provider, funding?.state, loadWallet]);
+        setPollingNotice(null);
+      },
+      onError: () =>
+        setPollingNotice("Automatic status updates are temporarily unavailable. Retrying…"),
+      timers: {
+        setTimeout: (handler, delay) => window.setTimeout(handler, delay),
+        clearTimeout: (handle) => window.clearTimeout(handle),
+      },
+    });
+  }, [
+    funding?.id,
+    funding?.provider,
+    funding?.provider_transaction_id,
+    funding?.state,
+    loadWallet,
+  ]);
 
   const selectedMethod = fundingMethods.find((method) => method.id === provider) ?? null;
   const methodsToRender = providerPreparation
@@ -532,6 +642,7 @@ export function WalletPanel({
     event.preventDefault();
     if (!funding) return;
     setProviderError(null);
+    setTransactionError(null);
     setSubmitting(true);
     try {
       const result = await apiFetch<{
@@ -555,8 +666,9 @@ export function WalletPanel({
           : current,
       );
       setTransactionHash("");
+      setTransactionError(null);
     } catch (cause) {
-      setProviderError(
+      setTransactionError(
         cause instanceof ApiClientError
           ? cause.message
           : "Transaction hash could not be submitted.",
@@ -923,12 +1035,21 @@ export function WalletPanel({
                 />
               </div>
             )}
-            {funding.provider === "usdt_trc20" && funding.provider_transaction_id ? (
+            {funding.verification && (
+              <div
+                className={`grid gap-1 rounded-lg border p-4 text-sm ${verificationObservationClass(funding.verification)}`}
+                role={funding.verification.level === "error" ? "alert" : "status"}
+              >
+                <strong>{verificationObservationHeading(funding.verification)}</strong>
+                <span>{funding.verification.message}</span>
+              </div>
+            )}
+            {shouldShowSubmittedTransactionHash(funding) ? (
               <div className="grid gap-1">
                 <span className="text-slate-600">Submitted transaction hash</span>
                 <CopyValue
                   label="submitted transaction hash"
-                  value={funding.provider_transaction_id}
+                  value={funding.provider_transaction_id!}
                   displayValue={
                     <code className="break-all rounded bg-white p-2 text-xs text-slate-700">
                       {funding.provider_transaction_id}
@@ -936,17 +1057,20 @@ export function WalletPanel({
                   }
                 />
               </div>
-            ) : funding.provider === "usdt_trc20" &&
-              (funding.state === "awaiting_payment" || funding.state === "verification_pending") ? (
+            ) : shouldShowTransactionHashInput(funding) ? (
               <form className="grid gap-2" onSubmit={submitTransactionHash}>
                 <Label htmlFor="transaction-hash">Blockchain transaction hash</Label>
                 <Input
                   id="transaction-hash"
                   value={transactionHash}
-                  onChange={(event) => setTransactionHash(event.target.value)}
+                  onChange={(event) => {
+                    setTransactionHash(event.target.value);
+                    setTransactionError(null);
+                  }}
                   placeholder="Paste the transaction hash"
                   disabled={submitting}
                 />
+                {transactionError && <Toast>{transactionError}</Toast>}
                 <Button
                   type="submit"
                   variant="secondary"

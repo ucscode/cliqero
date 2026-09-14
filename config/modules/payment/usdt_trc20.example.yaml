@@ -10,6 +10,8 @@ config:
   # Official TRON mainnet USD₮ contract.
   token_contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
   confirmations_required: 20
+  # Reject submitted transactions older than this provider-owned admission window.
+  max_transaction_age_seconds: 86400
   verification:
     provider: trongrid
     api_base_url: https://api.trongrid.io

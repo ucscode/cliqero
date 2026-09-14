@@ -159,6 +159,7 @@ export type FundingStatus = {
       | "failed"
       | "provider_error"
       | "success";
+    level: "error" | "info" | "success";
     message: string;
     checked_at: string | null;
     confirmations?: number;

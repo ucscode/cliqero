@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ProviderOperationError } from "@/kernel/provider-error";
 
 export type DirectTrc20Network = "TRC20";
@@ -8,6 +9,7 @@ export interface DirectTrc20Transfer {
   destination: string;
   asset: "USDT";
   amountBaseUnits: bigint;
+  timestamp?: number;
   confirmations: number;
   status: "pending" | "confirmed" | "failed" | "not_found";
   issue?: "missing_transfer" | "wrong_token_contract" | "wrong_destination";
@@ -62,13 +64,13 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
     );
     const contractEvents = transferEvents.filter(
       (item: any) =>
-        String(item.contract_address ?? item.contractAddress ?? "").toLowerCase() ===
-        input.tokenContract.toLowerCase(),
+        normalizeTronAddress(String(item.contract_address ?? item.contractAddress ?? "")) ===
+        normalizeTronAddress(input.tokenContract),
     );
     const destinationEvents = contractEvents.filter(
       (item: any) =>
-        String(item.result?.to ?? item.result?.to_address ?? "").toLowerCase() ===
-        input.destination.toLowerCase(),
+        normalizeTronAddress(String(item.result?.to ?? item.result?.to_address ?? "")) ===
+        normalizeTronAddress(input.destination),
     );
     const event = destinationEvents[0] ?? contractEvents[0] ?? transferEvents[0];
     const transactionExists = hasTransaction(transaction);
@@ -93,8 +95,16 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
     );
     const blockNumber = parseBlockNumber(transactionInfo.blockNumber);
     const receiptResult = String(transactionInfo.receipt?.result ?? "").toUpperCase();
+    const issue = !transferEvents.length
+      ? "missing_transfer"
+      : !contractEvents.length
+        ? "wrong_token_contract"
+        : !destinationEvents.length
+          ? "wrong_destination"
+          : undefined;
     const destination = String(event?.result?.to ?? event?.result?.to_address ?? "");
     const amountBaseUnits = parseAmount(event?.result?.value ?? event?.result?.amount);
+    const timestamp = parseTimestamp(transaction);
     if (receiptResult === "FAILED")
       return {
         transactionHash: input.transactionHash,
@@ -102,8 +112,10 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
         destination,
         asset: "USDT",
         amountBaseUnits,
+        ...(timestamp === undefined ? {} : { timestamp }),
         confirmations: 0,
         status: "failed",
+        ...(issue ? { issue } : {}),
       };
     if (blockNumber === null || receiptResult !== "SUCCESS")
       return {
@@ -112,8 +124,10 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
         destination,
         asset: "USDT",
         amountBaseUnits,
+        ...(timestamp === undefined ? {} : { timestamp }),
         confirmations: 0,
         status: "pending",
+        ...(issue ? { issue } : {}),
       };
 
     const latestBlock = await this.request(
@@ -123,19 +137,13 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
     const latestBlockNumber = parseBlockNumber(latestBlock.block_header?.raw_data?.number);
     const confirmations =
       latestBlockNumber === null ? 0 : Math.max(0, latestBlockNumber - blockNumber + 1);
-    const issue = !transferEvents.length
-      ? "missing_transfer"
-      : !contractEvents.length
-        ? "wrong_token_contract"
-        : !destinationEvents.length
-          ? "wrong_destination"
-          : undefined;
     return {
       transactionHash: input.transactionHash,
       network: input.network,
       destination,
       asset: "USDT",
       amountBaseUnits,
+      ...(timestamp === undefined ? {} : { timestamp }),
       confirmations,
       status: "confirmed",
       ...(issue ? { issue } : {}),
@@ -172,6 +180,60 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
       throw new Error("Verification service returned invalid data");
     }
   }
+}
+
+/** Normalize TRON addresses for comparison without changing their display form. */
+export function normalizeTronAddress(value: string): string {
+  const trimmed = value.trim();
+  if (/^0x[0-9a-fA-F]{40}$/.test(trimmed)) return `41${trimmed.slice(2).toLowerCase()}`;
+  if (/^0x[0-9a-fA-F]{64}$/.test(trimmed)) return `41${trimmed.slice(-40).toLowerCase()}`;
+  if (/^41[0-9a-fA-F]{40}$/.test(trimmed)) return trimmed.toLowerCase();
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) return `41${trimmed.slice(-40).toLowerCase()}`;
+  if (trimmed.startsWith("T")) {
+    const decoded = decodeBase58(trimmed);
+    if (decoded.length === 25 && decoded[0] === 0x41 && isValidBase58Check(decoded))
+      return Buffer.from(decoded.subarray(0, 21)).toString("hex");
+  }
+  return trimmed;
+}
+
+function isValidBase58Check(value: Uint8Array) {
+  const payload = value.subarray(0, -4);
+  const checksum = value.subarray(-4);
+  const digest = createHash("sha256")
+    .update(createHash("sha256").update(payload).digest())
+    .digest();
+  return checksum.every((byte, index) => byte === digest[index]);
+}
+
+function decodeBase58(value: string): Uint8Array {
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let number = 0n;
+  for (const character of value) {
+    const digit = alphabet.indexOf(character);
+    if (digit < 0) return new Uint8Array();
+    number = number * 58n + BigInt(digit);
+  }
+  const bytes: number[] = [];
+  while (number > 0n) {
+    bytes.unshift(Number(number & 0xffn));
+    number >>= 8n;
+  }
+  for (let index = 0; index < value.length && value[index] === "1"; index++) bytes.unshift(0);
+  return Uint8Array.from(bytes);
+}
+
+function parseTimestamp(value: unknown): number | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const transaction = value as { timestamp?: unknown; raw_data?: { timestamp?: unknown } };
+  const timestamp = transaction.raw_data?.timestamp ?? transaction.timestamp;
+  if (typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp > 0)
+    return timestamp;
+  if (typeof timestamp === "string" && /^\d+$/.test(timestamp)) {
+    const parsed = Number(timestamp);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return undefined;
 }
 
 function hasTransaction(value: unknown): boolean {

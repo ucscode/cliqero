@@ -11,9 +11,10 @@ const schema = z.object({
   image_url: z.string().trim().min(1),
   description: z.string().trim().min(1),
   config: z.object({
-    wallet_address: z.string().min(1),
+    wallet_address: z.string().trim().min(1),
     confirmations_required: z.number().int().positive().default(12),
-    token_contract: z.string().min(1),
+    max_transaction_age_seconds: z.number().int().positive().default(86_400),
+    token_contract: z.string().trim().min(1),
     verification: z.object({
       provider: z.literal("trongrid"),
       api_key: z.string().min(1).optional(),
@@ -35,6 +36,7 @@ export function loadDirectTrc20Configuration(path: string) {
       description: parsed.description,
       walletAddress: parsed.config.wallet_address,
       confirmationsRequired: parsed.config.confirmations_required,
+      maxTransactionAgeSeconds: parsed.config.max_transaction_age_seconds,
       tokenContract: parsed.config.token_contract,
       verification: {
         provider: parsed.config.verification.provider,

@@ -6,11 +6,12 @@ import type {
   PaymentVerification,
   PaymentVerificationObservation,
 } from "@/modules/payment/payment";
-import type { DirectTrc20Verifier } from "./verifier";
+import { normalizeTronAddress, type DirectTrc20Verifier } from "./verifier";
 
 export interface DirectTrc20Configuration {
   walletAddress: string;
   confirmationsRequired: number;
+  maxTransactionAgeSeconds: number;
   tokenContract: string;
   verification: {
     provider: "trongrid";
@@ -33,6 +34,7 @@ export class DirectTrc20Provider implements PaymentProvider {
   constructor(
     private readonly config: DirectTrc20Configuration,
     private readonly verifier: DirectTrc20Verifier,
+    private readonly clock: () => Date = () => new Date(),
   ) {
     this.displayName = config.displayName ?? "Direct USDT TRC20";
     this.imageUrl = config.imageUrl ?? "/images/payment/usdt-trc20.svg";
@@ -59,9 +61,7 @@ export class DirectTrc20Provider implements PaymentProvider {
         paymentCurrency: "USDT",
         asset: "USDT",
         network: "TRC20",
-        instructions: `Send exactly **${amount} USDT** on **TRC20** to **${this.config.walletAddress}**.
-
-**Submit the blockchain transaction hash after sending.**`,
+        instructions: `Send exactly **${amount} USDT** on **TRC20** to **${this.config.walletAddress}**.`,
       },
     } satisfies PaymentInitialization;
   }
@@ -81,6 +81,7 @@ export class DirectTrc20Provider implements PaymentProvider {
         observation: {
           status: "awaiting_transaction",
           message: "Submit the blockchain transaction hash to begin verification.",
+          level: "info",
         },
       };
     const transfer = await this.verifier.verify({
@@ -89,108 +90,125 @@ export class DirectTrc20Provider implements PaymentProvider {
       destination: this.config.walletAddress,
       tokenContract: this.config.tokenContract,
     });
+    if (transfer.status === "not_found")
+      return rejectedVerification(input, {
+        status: "not_found",
+        message:
+          "Transaction not found on TRON yet. Check the transaction hash or wait a moment if it was just submitted.",
+        level: "error",
+      });
+    if (transfer.issue)
+      return rejectedVerification(
+        input,
+        directTrc20MismatchObservation(transfer.issue, input.expectedAmount),
+      );
+    if (!transfer.timestamp)
+      return rejectedVerification(input, {
+        status: "mismatch",
+        message:
+          "Transaction details are not available yet. Try again once the transfer has propagated.",
+        level: "error",
+      });
+    if (this.clock().getTime() - transfer.timestamp > this.config.maxTransactionAgeSeconds * 1000)
+      return rejectedVerification(input, {
+        status: "mismatch",
+        message: "This transaction is too old to fund this wallet.",
+        level: "error",
+      });
+    if (transfer.network !== "TRC20" || transfer.asset !== "USDT")
+      return rejectedVerification(input, {
+        status: "mismatch",
+        message: "This transaction does not contain the required USDT transfer.",
+        level: "error",
+      });
+    if (!transfer.destination)
+      return rejectedVerification(input, {
+        status: "mismatch",
+        message: "Transaction transfer details are not available yet. Try again shortly.",
+        level: "error",
+      });
+    if (
+      normalizeTronAddress(transfer.destination) !== normalizeTronAddress(this.config.walletAddress)
+    )
+      return rejectedVerification(input, {
+        status: "mismatch",
+        message: "This transaction does not send USDT to the required payment address.",
+        level: "error",
+      });
     const expectedUnits = input.expectedAmount.minorAmount * 10_000n;
-    const mismatchStatus = transfer.issue
-      ? directTrc20MismatchObservation(transfer.issue, input.expectedAmount)
-      : transfer.network !== "TRC20" || transfer.asset !== "USDT"
-        ? {
-            status: "mismatch" as const,
-            message: "This transaction does not contain the required USDT transfer.",
-          }
-        : transfer.destination.toLowerCase() !== this.config.walletAddress.toLowerCase()
-          ? {
-              status: "mismatch" as const,
-              message: "This transaction does not send USDT to the required payment address.",
-            }
-          : transfer.amountBaseUnits < expectedUnits
-            ? {
-                status: "mismatch" as const,
-                message: `The transaction was found, but the received amount is below the required ${formatAmount(input.expectedAmount)} USDT.`,
-              }
-            : undefined;
-    const matches =
-      transfer.network === "TRC20" &&
-      transfer.asset === "USDT" &&
-      transfer.destination.toLowerCase() === this.config.walletAddress.toLowerCase() &&
-      transfer.amountBaseUnits >= expectedUnits;
-    const success =
-      matches &&
-      transfer.status === "confirmed" &&
-      transfer.confirmations >= this.config.confirmationsRequired;
+    const accepted = {
+      reference: input.reference,
+      amount: input.expectedAmount,
+      providerTransactionId: hash,
+    };
+    if (transfer.amountBaseUnits < expectedUnits)
+      return {
+        verified: false,
+        status: "mismatch",
+        ...accepted,
+        observation: {
+          status: "mismatch",
+          message: `The transaction was found, but the received amount is below the required ${formatAmount(input.expectedAmount)} USDT.`,
+          level: "error" as const,
+        },
+      };
     if (transfer.status === "failed")
       return {
         verified: false,
         status: "failed",
-        reference: input.reference,
-        amount: input.expectedAmount,
-        providerTransactionId: hash,
+        ...accepted,
         observation: {
           status: "failed",
           message: "This blockchain transaction failed and cannot fund your wallet.",
+          level: "error" as const,
         },
       };
-    if (mismatchStatus && transfer.status === "confirmed")
+    const confirmed = transfer.status === "confirmed";
+    if (
+      transfer.status !== "confirmed" ||
+      transfer.confirmations < this.config.confirmationsRequired
+    )
       return {
         verified: false,
-        status: "mismatch",
-        reference: input.reference,
-        amount: input.expectedAmount,
-        providerTransactionId: hash,
-        observation: mismatchStatus,
-      };
-    if (transfer.status === "not_found")
-      return {
-        verified: false,
-        status: "not_found",
-        reference: input.reference,
-        amount: input.expectedAmount,
-        providerTransactionId: hash,
+        status: "confirming",
+        ...accepted,
         observation: {
-          status: "not_found",
+          status: "confirming",
           message:
-            "Transaction not found on TRON yet. Check the transaction hash or wait a moment if it was just submitted.",
-        },
-      };
-    if (!matches)
-      return {
-        verified: false,
-        status: "confirming",
-        reference: input.reference,
-        amount: input.expectedAmount,
-        providerTransactionId: hash,
-        observation: {
-          status: "confirming",
-          message: "Transaction found. Waiting for the transfer details to finalize.",
-        },
-      };
-    if (transfer.confirmations < this.config.confirmationsRequired)
-      return {
-        verified: false,
-        status: "confirming",
-        reference: input.reference,
-        amount: input.expectedAmount,
-        providerTransactionId: hash,
-        observation: {
-          status: "confirming",
-          message: `Transaction found. Waiting for ${this.config.confirmationsRequired - transfer.confirmations} more confirmations.`,
+            transfer.status !== "confirmed"
+              ? "Transaction found. Waiting for the transfer to confirm."
+              : `Transaction found. Waiting for ${this.config.confirmationsRequired - transfer.confirmations} more confirmations.`,
+          level: "info",
           confirmations: transfer.confirmations,
           confirmationsRequired: this.config.confirmationsRequired,
         },
       };
     return {
-      verified: success,
+      verified: confirmed,
       status: "success",
-      reference: input.reference,
-      amount: input.expectedAmount,
-      providerTransactionId: hash,
+      ...accepted,
       observation: {
         status: "success",
         message: "Payment verified successfully.",
+        level: "success",
         confirmations: transfer.confirmations,
         confirmationsRequired: this.config.confirmationsRequired,
       },
     };
   }
+}
+
+function rejectedVerification(
+  input: { reference: string; expectedAmount: Money },
+  observation: PaymentVerificationObservation,
+): PaymentVerification {
+  return {
+    verified: false,
+    status: observation.status,
+    reference: input.reference,
+    amount: input.expectedAmount,
+    observation,
+  };
 }
 
 function directTrc20MismatchObservation(
@@ -201,20 +219,24 @@ function directTrc20MismatchObservation(
     return {
       status: "mismatch",
       message: "This transaction does not send USDT to the required payment address.",
+      level: "error",
     };
   if (issue === "wrong_token_contract")
     return {
       status: "mismatch",
       message: "This transaction does not use the required USDT token contract.",
+      level: "error",
     };
   if (issue === "missing_transfer")
     return {
       status: "mismatch",
       message: "This transaction does not contain the required USDT transfer.",
+      level: "error",
     };
   return {
     status: "mismatch",
     message: `The transaction was found, but the received amount is below the required ${formatAmount(expectedAmount)} USDT.`,
+    level: "error",
   };
 }
 

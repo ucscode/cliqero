@@ -26,7 +26,7 @@ export class DuplicateProviderTransactionError extends PublicApplicationError {
 }
 
 export class InvalidProviderTransactionError extends PublicApplicationError {
-  constructor() {
-    super("Invalid TRON transaction hash.", "invalid_transaction_hash", 422);
+  constructor(message = "Invalid TRON transaction hash.") {
+    super(message, "invalid_transaction_hash", 422);
   }
 }
