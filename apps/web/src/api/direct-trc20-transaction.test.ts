@@ -41,7 +41,12 @@ describe("Direct USDT TRC20 transaction submission API", () => {
     });
 
     expect(response.status).toBe(202);
-    expect(await response.json()).toEqual({ id: fundingId, state: "verification_pending" });
+    expect(await response.json()).toEqual({
+      id: fundingId,
+      state: "verification_pending",
+      provider_transaction_id: null,
+      verification: null,
+    });
     expect(submitTransaction).toHaveBeenCalledWith({
       accountId: account.id,
       fundingId,
@@ -71,12 +76,12 @@ describe("Direct USDT TRC20 transaction submission API", () => {
       params: Promise.resolve({ id: fundingId }),
     });
 
-    expect(response.status).toBe(400);
-    expect(submitTransaction).toHaveBeenCalledWith({
-      accountId: account.id,
-      fundingId,
-      transactionHash: "not-a-tron-hash",
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      error: "Invalid TRON transaction hash.",
+      code: "invalid_transaction_hash",
     });
+    expect(submitTransaction).not.toHaveBeenCalled();
   });
 
   it("returns a customer-safe error for non-TRC20 funding", async () => {

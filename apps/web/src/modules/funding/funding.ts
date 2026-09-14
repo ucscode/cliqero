@@ -3,7 +3,42 @@ import type { Money } from "@/modules/money/money";
 import type {
   PaymentConversionSnapshot,
   PaymentInitializationMetadata,
+  PaymentVerificationObservation,
 } from "@/modules/payment/payment";
+
+const verificationObservationStatuses = new Set<PaymentVerificationObservation["status"]>([
+  "awaiting_transaction",
+  "not_found",
+  "confirming",
+  "mismatch",
+  "failed",
+  "provider_error",
+  "success",
+]);
+
+export function projectVerificationObservation(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const observation = value as Partial<PaymentVerificationObservation>;
+  if (
+    typeof observation.status !== "string" ||
+    !verificationObservationStatuses.has(
+      observation.status as PaymentVerificationObservation["status"],
+    ) ||
+    typeof observation.message !== "string"
+  )
+    return null;
+  return {
+    status: observation.status,
+    message: observation.message,
+    checked_at: typeof observation.checkedAt === "string" ? observation.checkedAt : null,
+    ...(typeof observation.confirmations === "number"
+      ? { confirmations: observation.confirmations }
+      : {}),
+    ...(typeof observation.confirmationsRequired === "number"
+      ? { confirmations_required: observation.confirmationsRequired }
+      : {}),
+  };
+}
 
 export type FundingState =
   | "initialization_pending"

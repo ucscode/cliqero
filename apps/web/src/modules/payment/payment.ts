@@ -29,6 +29,21 @@ export interface PaymentPreparation {
   paymentCurrency?: string;
   conversionSnapshot?: PaymentConversionSnapshot;
 }
+export type PaymentVerificationObservationStatus =
+  | "awaiting_transaction"
+  | "not_found"
+  | "confirming"
+  | "mismatch"
+  | "failed"
+  | "provider_error"
+  | "success";
+export interface PaymentVerificationObservation {
+  status: PaymentVerificationObservationStatus;
+  message: string;
+  checkedAt?: string;
+  confirmations?: number;
+  confirmationsRequired?: number;
+}
 export interface PaymentFundingOption {
   id: string;
   collectionCurrency: string;
@@ -103,6 +118,10 @@ export interface PaymentInitializationMetadata {
   failureMessage?: string;
   failureAmountMinor?: string;
   failureCurrency?: string;
+  /** Latest customer-safe verification observation; persisted with the funding snapshot. */
+  verification?: PaymentVerificationObservation;
+  /** Internal first-seen timestamp used to bound repeated not-found observations. */
+  verificationNotFoundFirstAt?: string;
 }
 export interface PaymentVerification {
   verified: boolean;
@@ -112,6 +131,7 @@ export interface PaymentVerification {
   providerTransactionId?: string;
   providerFee?: Money;
   status: string;
+  observation?: Omit<PaymentVerificationObservation, "checkedAt">;
 }
 export interface PaymentProvider {
   readonly name: string;

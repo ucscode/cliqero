@@ -301,7 +301,6 @@ export function createContainer(databaseUrl: string) {
     database,
     yamlCommissionPolicy,
   );
-  const fundingService = new FundingService(funding, providers, exchangeRates, accounts, database);
   const fundingInitialization = new FundingInitializationProcessor(
     funding,
     providers,
@@ -314,6 +313,14 @@ export function createContainer(databaseUrl: string) {
     providers,
     database,
     paymentOperations,
+  );
+  const fundingService = new FundingService(
+    funding,
+    providers,
+    exchangeRates,
+    accounts,
+    database,
+    fundingVerification,
   );
   const fundingExpiry = new FundingExpiryProcessor(funding, fundingVerification);
   const wallet = new WalletService(walletRepository);

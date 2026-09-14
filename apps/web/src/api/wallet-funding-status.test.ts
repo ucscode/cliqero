@@ -41,6 +41,13 @@ function configure(owner = account.id, state = "awaiting_payment", providerName 
         },
         state,
         providerInitialization: {
+          verification: {
+            status: "confirming",
+            message: "Transaction found. Waiting for 3 more confirmations.",
+            checkedAt: "2026-09-13T08:01:00.000Z",
+            confirmations: 3,
+            confirmationsRequired: 6,
+          },
           authorizationUrl: "https://pay.example.test/continue",
           providerAccountSnapshot: {
             id: "account-1",
@@ -86,6 +93,13 @@ describe("wallet funding status projection", () => {
         to_currency: "NGN",
         rate: "1326.475",
         observed_at: "2026-09-13T08:00:00.000Z",
+      },
+      verification: {
+        status: "confirming",
+        message: "Transaction found. Waiting for 3 more confirmations.",
+        checked_at: "2026-09-13T08:01:00.000Z",
+        confirmations: 3,
+        confirmations_required: 6,
       },
       authorization_url: "https://pay.example.test/continue",
       provider_account_snapshot: {

@@ -150,6 +150,20 @@ export type FundingStatus = {
   expires_at: string | null;
   error_code: string | null;
   error_message: string | null;
+  verification: {
+    status:
+      | "awaiting_transaction"
+      | "not_found"
+      | "confirming"
+      | "mismatch"
+      | "failed"
+      | "provider_error"
+      | "success";
+    message: string;
+    checked_at: string | null;
+    confirmations?: number;
+    confirmations_required?: number;
+  } | null;
   authorization_url: string | null;
   confirmed_at: string | null;
   evidence: {

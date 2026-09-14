@@ -24,3 +24,9 @@ export class DuplicateProviderTransactionError extends PublicApplicationError {
     super("This provider transaction has already been used.", "provider_transaction_reused", 409);
   }
 }
+
+export class InvalidProviderTransactionError extends PublicApplicationError {
+  constructor() {
+    super("Invalid TRON transaction hash.", "invalid_transaction_hash", 422);
+  }
+}

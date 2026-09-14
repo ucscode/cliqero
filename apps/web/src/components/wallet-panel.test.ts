@@ -207,6 +207,21 @@ describe("customer-facing funding presentation", () => {
     ).toBe("Contacting payment provider.");
     expect(
       fundingStatusMessage({
+        provider: "usdt_trc20",
+        state: "verification_pending",
+        expires_at: null,
+        error_message: null,
+        verification: {
+          status: "confirming",
+          message: "Transaction found. Waiting for 3 more confirmations.",
+          checked_at: "2026-09-14T10:00:00.000Z",
+          confirmations: 3,
+          confirmations_required: 6,
+        },
+      }),
+    ).toBe("Transaction found. Waiting for 3 more confirmations.");
+    expect(
+      fundingStatusMessage({
         provider: "nowpayments",
         state: "expired",
         expires_at: null,

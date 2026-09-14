@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiError, authenticatedAccount } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
 import { formatMinorMoney, Money } from "@/modules/money/money";
+import { projectVerificationObservation } from "@/modules/funding/funding";
 
 export function customerFailureMessage(funding: {
   providerInitialization?: {
@@ -103,6 +104,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         : null,
       error_code: funding.providerInitialization?.failureCode ?? null,
       error_message: customerFailureMessage(funding),
+      verification: projectVerificationObservation(funding.providerInitialization?.verification),
       confirmed_at: funding.confirmedAt?.toISOString() ?? null,
       evidence: evidence
         ? {

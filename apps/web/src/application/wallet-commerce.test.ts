@@ -751,6 +751,132 @@ describe("provider transaction identity", () => {
   });
 });
 
+describe("foreground funding verification", () => {
+  it("persists the transaction claim before making one immediate verification attempt", async () => {
+    const hash = "AbCd".repeat(16);
+    let current = existingFunding({ providerName: "usdt_trc20" });
+    const verify = vi.fn(async () => ({
+      verified: true,
+      status: "success",
+      reference: current.providerReference,
+      amount: current.collectionAmount,
+      providerTransactionId: hash,
+      observation: { status: "success" as const, message: "Payment verified successfully." },
+    }));
+    const repository = {
+      findById: async () => current,
+      findByProviderTransactionId: async () => null,
+      save: vi.fn(async (value: any) => {
+        current = value;
+      }),
+    };
+    const unitOfWork = { transaction: async (operation: any) => operation() };
+    const processor = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({ ...provider, name: "usdt_trc20", verify }),
+      unitOfWork,
+    );
+    const service = new FundingService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      unitOfWork,
+      processor,
+    );
+
+    await expect(
+      service.submitTransaction({ accountId, fundingId, transactionHash: hash }),
+    ).resolves.toMatchObject({ state: "confirmed", providerTransactionId: hash });
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect((current.providerInitialization as any)?.verification).toMatchObject({
+      status: "success",
+    });
+  });
+
+  it("persists not-found feedback and bounds repeated not-found attempts", async () => {
+    const firstAttempt = new Date("2026-09-14T10:00:00.000Z");
+    const secondAttempt = new Date("2026-09-14T10:15:00.000Z");
+    let current = existingFunding({
+      providerName: "usdt_trc20",
+      state: "verification_pending",
+      providerTransactionId: "AbCd".repeat(16),
+    });
+    const repository = {
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "usdt_trc20",
+        verify: async () => ({
+          verified: false,
+          status: "not_found",
+          reference: current.providerReference,
+          amount: current.collectionAmount,
+          observation: {
+            status: "not_found" as const,
+            message: "Transaction not found on TRON yet.",
+          },
+        }),
+      }),
+      { transaction: async (operation) => operation() },
+      undefined,
+      15 * 60_000,
+    );
+
+    await expect(verification.process(fundingId, { now: firstAttempt })).resolves.toMatchObject({
+      state: "verification_pending",
+    });
+    expect((current.providerInitialization as any)?.verification).toMatchObject({
+      status: "not_found",
+      message: "Transaction not found on TRON yet.",
+    });
+    await expect(verification.process(fundingId, { now: secondAttempt })).resolves.toMatchObject({
+      state: "failed",
+    });
+    expect((current.providerInitialization as any)?.verification).toMatchObject({
+      status: "failed",
+    });
+  });
+
+  it("keeps transient provider errors retryable while persisting customer-safe feedback", async () => {
+    let current = existingFunding({
+      providerName: "usdt_trc20",
+      state: "verification_pending",
+      providerTransactionId: "AbCd".repeat(16),
+    });
+    const repository = {
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "usdt_trc20",
+        verify: async () => {
+          throw new Error("private TRONGrid detail");
+        },
+      }),
+      { transaction: async (operation) => operation() },
+    );
+
+    await expect(
+      verification.process(fundingId, { rethrowProviderErrors: false }),
+    ).resolves.toMatchObject({ state: "verification_pending" });
+    expect((current.providerInitialization as any)?.verification).toMatchObject({
+      status: "provider_error",
+    });
+  });
+});
+
 describe("customer funding cancellation", () => {
   it("cancels only the selected pending attempt and never confirmed value", async () => {
     const siblingId = "00000000-0000-4000-8000-000000000003";

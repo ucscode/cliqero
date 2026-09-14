@@ -10,6 +10,7 @@ export interface DirectTrc20Transfer {
   amountBaseUnits: bigint;
   confirmations: number;
   status: "pending" | "confirmed" | "failed" | "not_found";
+  issue?: "missing_transfer" | "wrong_token_contract" | "wrong_destination";
 }
 
 export interface DirectTrc20Verifier {
@@ -46,17 +47,32 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
       this.config.apiBaseUrl,
     );
     url.search = new URLSearchParams({ limit: "200", only_confirmed: "false" }).toString();
+    const transaction = await this.request(
+      new URL("/wallet/gettransactionbyid", this.config.apiBaseUrl),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: input.transactionHash }),
+      },
+    );
     const body = await this.request(url);
     const events = Array.isArray(body.data) ? body.data : [];
-    const event = events.find(
-      (item: any) =>
-        String(item.event_name ?? item.eventName ?? "").toLowerCase() === "transfer" &&
-        String(item.contract_address ?? item.contractAddress ?? "").toLowerCase() ===
-          input.tokenContract.toLowerCase() &&
-        String(item.result?.to ?? item.result?.to_address ?? "").toLowerCase() ===
-          input.destination.toLowerCase(),
+    const transferEvents = events.filter(
+      (item: any) => String(item.event_name ?? item.eventName ?? "").toLowerCase() === "transfer",
     );
-    if (!event)
+    const contractEvents = transferEvents.filter(
+      (item: any) =>
+        String(item.contract_address ?? item.contractAddress ?? "").toLowerCase() ===
+        input.tokenContract.toLowerCase(),
+    );
+    const destinationEvents = contractEvents.filter(
+      (item: any) =>
+        String(item.result?.to ?? item.result?.to_address ?? "").toLowerCase() ===
+        input.destination.toLowerCase(),
+    );
+    const event = destinationEvents[0] ?? contractEvents[0] ?? transferEvents[0];
+    const transactionExists = hasTransaction(transaction);
+    if (!event && !transactionExists)
       return {
         transactionHash: input.transactionHash,
         network: input.network,
@@ -77,13 +93,15 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
     );
     const blockNumber = parseBlockNumber(transactionInfo.blockNumber);
     const receiptResult = String(transactionInfo.receipt?.result ?? "").toUpperCase();
+    const destination = String(event?.result?.to ?? event?.result?.to_address ?? "");
+    const amountBaseUnits = parseAmount(event?.result?.value ?? event?.result?.amount);
     if (receiptResult === "FAILED")
       return {
         transactionHash: input.transactionHash,
         network: input.network,
-        destination: String(event.result?.to ?? event.result?.to_address ?? ""),
+        destination,
         asset: "USDT",
-        amountBaseUnits: parseAmount(event.result?.value ?? event.result?.amount),
+        amountBaseUnits,
         confirmations: 0,
         status: "failed",
       };
@@ -91,9 +109,9 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
       return {
         transactionHash: input.transactionHash,
         network: input.network,
-        destination: String(event.result?.to ?? event.result?.to_address ?? ""),
+        destination,
         asset: "USDT",
-        amountBaseUnits: parseAmount(event.result?.value ?? event.result?.amount),
+        amountBaseUnits,
         confirmations: 0,
         status: "pending",
       };
@@ -105,14 +123,22 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
     const latestBlockNumber = parseBlockNumber(latestBlock.block_header?.raw_data?.number);
     const confirmations =
       latestBlockNumber === null ? 0 : Math.max(0, latestBlockNumber - blockNumber + 1);
+    const issue = !transferEvents.length
+      ? "missing_transfer"
+      : !contractEvents.length
+        ? "wrong_token_contract"
+        : !destinationEvents.length
+          ? "wrong_destination"
+          : undefined;
     return {
       transactionHash: input.transactionHash,
       network: input.network,
-      destination: String(event.result?.to ?? event.result?.to_address ?? ""),
+      destination,
       asset: "USDT",
-      amountBaseUnits: parseAmount(event.result?.value ?? event.result?.amount),
+      amountBaseUnits,
       confirmations,
       status: "confirmed",
+      ...(issue ? { issue } : {}),
     };
   }
 
@@ -146,6 +172,22 @@ export class HttpDirectTrc20Verifier implements DirectTrc20Verifier {
       throw new Error("Verification service returned invalid data");
     }
   }
+}
+
+function hasTransaction(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const transaction = value as {
+    txID?: unknown;
+    txid?: unknown;
+    raw_data?: unknown;
+    ret?: unknown;
+  };
+  return (
+    (typeof transaction.txID === "string" && transaction.txID.length > 0) ||
+    (typeof transaction.txid === "string" && transaction.txid.length > 0) ||
+    (Boolean(transaction.raw_data) && typeof transaction.raw_data === "object") ||
+    Array.isArray(transaction.ret)
+  );
 }
 
 function parseBlockNumber(value: unknown): number | null {

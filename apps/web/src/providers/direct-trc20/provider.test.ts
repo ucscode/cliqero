@@ -58,4 +58,56 @@ describe("direct TRC20 provider", () => {
       tokenContract: "TToken",
     });
   });
+
+  it("returns customer-safe not-found feedback", async () => {
+    const verifier = {
+      verify: vi.fn().mockResolvedValue({
+        transactionHash: "a".repeat(64),
+        network: "TRC20",
+        destination: "TReceiver",
+        asset: "USDT",
+        amountBaseUnits: 0n,
+        confirmations: 0,
+        status: "not_found",
+      }),
+    };
+    const result = await new DirectTrc20Provider(config, verifier).verify({
+      reference: "ref",
+      expectedAmount: Money.of(1250n, "USD"),
+      providerTransactionId: "a".repeat(64),
+    });
+    expect(result).toMatchObject({
+      verified: false,
+      status: "not_found",
+      observation: { status: "not_found" },
+    });
+  });
+
+  it("reports an insufficient confirmed transfer as a mismatch", async () => {
+    const verifier = {
+      verify: vi.fn().mockResolvedValue({
+        transactionHash: "a".repeat(64),
+        network: "TRC20",
+        destination: "TReceiver",
+        asset: "USDT",
+        amountBaseUnits: 1_000_000n,
+        confirmations: 6,
+        status: "confirmed",
+      }),
+    };
+    const result = await new DirectTrc20Provider(config, verifier).verify({
+      reference: "ref",
+      expectedAmount: Money.of(1250n, "USD"),
+      providerTransactionId: "a".repeat(64),
+    });
+    expect(result).toMatchObject({
+      verified: false,
+      status: "mismatch",
+      observation: {
+        status: "mismatch",
+        message:
+          "The transaction was found, but the received amount is below the required 12.50 USDT.",
+      },
+    });
+  });
 });

@@ -89,7 +89,9 @@ export function bankStatusFieldRows(fields: readonly BankStatusField[]) {
 }
 
 export function fundingStatusMessage(
-  funding: Pick<FundingStatus, "provider" | "state" | "expires_at" | "error_message">,
+  funding: Pick<FundingStatus, "provider" | "state" | "expires_at" | "error_message"> & {
+    verification?: FundingStatus["verification"];
+  },
   now = Date.now(),
 ) {
   if (funding.state === "initialization_pending") return "Preparing payment.";
@@ -102,7 +104,8 @@ export function fundingStatusMessage(
       return "Send the exact amount below. Cliqero will detect the payment automatically.";
     return "Complete the payment to continue.";
   }
-  if (funding.state === "verification_pending") return "Your payment is being verified.";
+  if (funding.state === "verification_pending")
+    return funding.verification?.message ?? "Your payment is being verified.";
   if (funding.state === "expired")
     return "This payment session has expired. Start a new funding attempt.";
   if (funding.state === "failed" || funding.state === "blocked")
@@ -235,6 +238,12 @@ export function WalletPanel({
     if (!fundingId) return;
     setRefreshing(true);
     try {
+      await apiFetch<{
+        id: string;
+        state: FundingStatus["state"];
+        provider_transaction_id: string | null;
+        verification: FundingStatus["verification"];
+      }>(`/api/wallet/fund/${fundingId}/verify`, { method: "POST" });
       const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
       setFunding(latest);
       setProviderError(null);
@@ -525,15 +534,26 @@ export function WalletPanel({
     setProviderError(null);
     setSubmitting(true);
     try {
-      const result = await apiFetch<{ id: string; state: FundingStatus["state"] }>(
-        `/api/wallet/fund/${funding.id}/transaction`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ transaction_hash: transactionHash }),
-        },
+      const result = await apiFetch<{
+        id: string;
+        state: FundingStatus["state"];
+        provider_transaction_id: string | null;
+        verification: FundingStatus["verification"];
+      }>(`/api/wallet/fund/${funding.id}/transaction`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transaction_hash: transactionHash }),
+      });
+      setFunding((current) =>
+        current
+          ? {
+              ...current,
+              state: result.state,
+              provider_transaction_id: result.provider_transaction_id,
+              verification: result.verification,
+            }
+          : current,
       );
-      setFunding((current) => (current ? { ...current, state: result.state } : current));
       setTransactionHash("");
     } catch (cause) {
       setProviderError(
@@ -903,27 +923,39 @@ export function WalletPanel({
                 />
               </div>
             )}
-            {funding.provider === "usdt_trc20" &&
-              (funding.state === "awaiting_payment" ||
-                funding.state === "verification_pending") && (
-                <form className="grid gap-2" onSubmit={submitTransactionHash}>
-                  <Label htmlFor="transaction-hash">Blockchain transaction hash</Label>
-                  <Input
-                    id="transaction-hash"
-                    value={transactionHash}
-                    onChange={(event) => setTransactionHash(event.target.value)}
-                    placeholder="Paste the transaction hash"
-                    disabled={submitting}
-                  />
-                  <Button
-                    type="submit"
-                    variant="secondary"
-                    disabled={submitting || !transactionHash.trim()}
-                  >
-                    {submitting ? "Submitting…" : "Submit transaction hash"}
-                  </Button>
-                </form>
-              )}
+            {funding.provider === "usdt_trc20" && funding.provider_transaction_id ? (
+              <div className="grid gap-1">
+                <span className="text-slate-600">Submitted transaction hash</span>
+                <CopyValue
+                  label="submitted transaction hash"
+                  value={funding.provider_transaction_id}
+                  displayValue={
+                    <code className="break-all rounded bg-white p-2 text-xs text-slate-700">
+                      {funding.provider_transaction_id}
+                    </code>
+                  }
+                />
+              </div>
+            ) : funding.provider === "usdt_trc20" &&
+              (funding.state === "awaiting_payment" || funding.state === "verification_pending") ? (
+              <form className="grid gap-2" onSubmit={submitTransactionHash}>
+                <Label htmlFor="transaction-hash">Blockchain transaction hash</Label>
+                <Input
+                  id="transaction-hash"
+                  value={transactionHash}
+                  onChange={(event) => setTransactionHash(event.target.value)}
+                  placeholder="Paste the transaction hash"
+                  disabled={submitting}
+                />
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  disabled={submitting || !transactionHash.trim()}
+                >
+                  {submitting ? "Submitting…" : "Submit transaction hash"}
+                </Button>
+              </form>
+            ) : null}
             {funding.provider === "bank_transfer" && funding.evidence && (
               <div className="grid gap-1 border-t border-slate-200 pt-4 text-sm" role="status">
                 <strong>Evidence submitted</strong>
