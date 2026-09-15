@@ -29,7 +29,11 @@ function fundingTransaction(
   };
 }
 
-function makeService(current = fundingTransaction(), storage?: ObjectStorageRegistry, storageName?: string) {
+function makeService(
+  current = fundingTransaction(),
+  storage?: ObjectStorageRegistry,
+  storageName?: string,
+) {
   let existing: BankTransferEvidence | null = null;
   let duplicate: FundingTransaction | null = null;
   const fundingSaves: FundingTransaction[] = [];
@@ -72,7 +76,9 @@ function makeService(current = fundingTransaction(), storage?: ObjectStorageRegi
 
 describe("BankTransferEvidenceService", () => {
   it("accepts trimmed evidence and moves funding to verification pending", async () => {
-    const { service, fundingSaves, audits } = makeService(fundingTransaction("initialization_pending"));
+    const { service, fundingSaves, audits } = makeService(
+      fundingTransaction("initialization_pending"),
+    );
     await expect(
       service.submit(accountId, fundingId, { transferReference: "  BaNk-Ref-ABC123  " }),
     ).resolves.toMatchObject({

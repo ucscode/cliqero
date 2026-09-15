@@ -59,13 +59,9 @@ function makeService() {
     requireCapability: async () => undefined,
   };
   const audit: AuditRecorder = { record: async (input) => void audits.push(input) };
-  const service = new CapabilityAdministrationService(
-    accounts,
-    operators,
-    assignments,
-    audit,
-    { transaction: async (operation) => operation() },
-  );
+  const service = new CapabilityAdministrationService(accounts, operators, assignments, audit, {
+    transaction: async (operation) => operation(),
+  });
   return { service, assignments, audits };
 }
 

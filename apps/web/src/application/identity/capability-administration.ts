@@ -43,10 +43,7 @@ export interface CapabilityAssignmentStore {
 
 function capabilityOrThrow(value: string): Capability {
   if (!isCapability(value))
-    throw new PublicApplicationError(
-      "That capability is not recognized.",
-      "unknown_capability",
-    );
+    throw new PublicApplicationError("That capability is not recognized.", "unknown_capability");
   return value;
 }
 
@@ -66,10 +63,7 @@ export class CapabilityAdministrationService {
   async inspect(actorId: string, targetId: string): Promise<CapabilityAdministrationView> {
     const actorCapabilities = await this.operators.capabilities(actorId);
     if (!canManageCapability(actorCapabilities, "capabilities.manage"))
-      throw forbidden(
-        "You are not allowed to inspect capability assignments.",
-        "forbidden",
-      );
+      throw forbidden("You are not allowed to inspect capability assignments.", "forbidden");
     await this.ensureAccount(targetId);
     return {
       accountId: targetId,
@@ -111,14 +105,11 @@ export class CapabilityAdministrationService {
       }
       await this.ensureAccount(targetId);
       const rootCount =
-        capability === "system.root"
-          ? await this.assignmentsStore.lockRootAssignments()
-          : null;
+        capability === "system.root" ? await this.assignmentsStore.lockRootAssignments() : null;
 
       if (action === "grant") {
         const result = await this.assignmentsStore.grant(targetId, capability);
-        if (result.changed)
-          await this.recordAudit(actorId, targetId, capability, "granted");
+        if (result.changed) await this.recordAudit(actorId, targetId, capability, "granted");
         return {
           accountId: targetId,
           capability,

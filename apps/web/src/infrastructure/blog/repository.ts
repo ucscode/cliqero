@@ -69,8 +69,7 @@ export class SqliteBlogRepository implements BlogRepository {
 
   findSlugOwner(slug: string) {
     const row = this.db.prepare("select id from blog_posts where slug=?").get(slug) as
-      | { id: string }
-      | undefined;
+      { id: string } | undefined;
     return row?.id ?? null;
   }
 
@@ -172,7 +171,9 @@ export class SqliteBlogRepository implements BlogRepository {
       values.push(options.status);
     }
     if (options.search) {
-      where.push("(lower(p.title) like lower(?) or lower(p.excerpt) like lower(?) or p.slug like ?)");
+      where.push(
+        "(lower(p.title) like lower(?) or lower(p.excerpt) like lower(?) or p.slug like ?)",
+      );
       const q = `%${options.search.trim()}%`;
       values.push(q, q, q);
     }
@@ -255,8 +256,7 @@ export class SqliteBlogRepository implements BlogRepository {
     this.db.prepare("delete from blog_post_tags where post_id=?").run(postId);
     for (const name of names) {
       let tag = this.db.prepare("select id from blog_tags where lower(name)=lower(?)").get(name) as
-        | { id: string }
-        | undefined;
+        { id: string } | undefined;
       if (!tag) {
         const id = newId();
         this.db

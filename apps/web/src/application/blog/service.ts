@@ -1,11 +1,7 @@
 import { createHash } from "node:crypto";
 import slugify from "slugify";
 import { newId } from "@/kernel/ids";
-import {
-  blogPostInputSchema,
-  type BlogPost,
-  type BlogPostInput,
-} from "@/modules/blog/domain/blog";
+import { blogPostInputSchema, type BlogPost, type BlogPostInput } from "@/modules/blog/domain/blog";
 import type {
   BlogListOptions,
   BlogPersistenceInput,
@@ -59,12 +55,8 @@ export class BlogService {
       tags: current.tags.map((tag) => tag.name),
       ...parsed,
     };
-    const publishedAt =
-      merged.status === "published" ? current.publishedAt ?? new Date() : null;
-    const post = this.repository.update(
-      id,
-      this.prepare(id, merged, current.slug, publishedAt),
-    );
+    const publishedAt = merged.status === "published" ? (current.publishedAt ?? new Date()) : null;
+    const post = this.repository.update(id, this.prepare(id, merged, current.slug, publishedAt));
     if (!post) throw new Error("Blog post not found");
     return post;
   }
@@ -74,7 +66,7 @@ export class BlogService {
     if (!current) throw new Error("Blog post not found");
     const post = this.repository.setPublished(
       id,
-      published ? current.publishedAt ?? new Date() : null,
+      published ? (current.publishedAt ?? new Date()) : null,
     );
     if (!post) throw new Error("Blog post not found");
     return post;

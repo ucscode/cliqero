@@ -51,8 +51,7 @@ export class PostgresCapabilityAssignmentStore implements CapabilityAssignmentSt
        returning granted_at`,
       [accountId, capability],
     );
-    if (inserted.rowCount)
-      return { changed: true, grantedAt: inserted.rows[0].granted_at };
+    if (inserted.rowCount) return { changed: true, grantedAt: inserted.rows[0].granted_at };
     const grantedAt = await this.assignment(accountId, capability);
     if (!grantedAt) throw new Error("Capability assignment disappeared during grant");
     return { changed: false, grantedAt };

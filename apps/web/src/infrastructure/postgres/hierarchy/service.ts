@@ -121,7 +121,7 @@ export class PostgresHierarchyReader implements HierarchyReader {
         hasMoreChildren: Boolean(row.has_more_children),
         nextChildCursor: row.next_child_cursor ?? null,
       })),
-      nextCursor: rows.rows.length > limit ? visible.at(-1)?.id ?? null : null,
+      nextCursor: rows.rows.length > limit ? (visible.at(-1)?.id ?? null) : null,
     };
   }
 

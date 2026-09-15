@@ -13,18 +13,14 @@ export class BankTransferConfirmationService {
     return this.uow.transaction(async () => {
       const current = await this.funding.findById(fundingId, { forUpdate: true });
       if (!current) throw new Error("Funding not found");
-      if (current.providerName !== "bank_transfer")
-        throw new Error("Funding provider mismatch");
+      if (current.providerName !== "bank_transfer") throw new Error("Funding provider mismatch");
       if (current.state === "confirmed")
         return {
           id: current.id,
           state: current.state,
           confirmedAt: current.confirmedAt?.toISOString() ?? null,
         };
-      if (
-        current.state !== "awaiting_payment" &&
-        current.state !== "verification_pending"
-      )
+      if (current.state !== "awaiting_payment" && current.state !== "verification_pending")
         throw new Error("Funding is not awaiting manual confirmation");
 
       const confirmedAt = new Date();
