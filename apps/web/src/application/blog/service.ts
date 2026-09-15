@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import slugify from "slugify";
 import { newId } from "@/kernel/ids";
-import { blogPostInputSchema, type BlogPost, type BlogPostInput } from "@/modules/blog/domain/blog";
+import {
+  blogPostInputSchema,
+  type BlogPost,
+  type BlogPostInput,
+} from "@/modules/blog/domain/blog";
 import type {
   BlogListOptions,
   BlogPersistenceInput,
