@@ -1,4 +1,4 @@
-import type { QueryExecutor } from "@/kernel/database";
+import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type { ListingMedia, ListingMediaRepository } from "@/modules/listing/media/media";
 
 export class PostgresListingMediaRepository implements ListingMediaRepository {

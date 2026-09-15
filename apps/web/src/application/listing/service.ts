@@ -5,15 +5,15 @@ import type { Account } from "@/modules/identity/account";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import type { ListingMedia } from "@/modules/listing/media/media";
 import type { ListingMediaService } from "@/application/listing/media";
-import type { QueryExecutor } from "@/kernel/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { RatingSummary } from "@/modules/listing/reviews/review";
+import type { AuditRecorder } from "@/application/shared/audit";
 
 export class ListingService {
   constructor(
     private readonly listings: ListingRepository,
     private readonly authorization: AuthorizationPolicy,
-    private readonly sql?: QueryExecutor,
+    private readonly auditRecorder?: AuditRecorder,
     private readonly uow?: UnitOfWork,
   ) {}
   async create(
@@ -261,17 +261,14 @@ export class ListingService {
     previousState: object | null,
     newState: object,
   ) {
-    await this.sql?.query(
-      `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
-       values((select id from identity_capability.accounts where uuid=$1),$2,'listing',$3,$4::jsonb,$5::jsonb,gen_random_uuid())`,
-      [
-        actorId,
-        action,
-        subjectId,
-        previousState ? JSON.stringify(previousState) : null,
-        JSON.stringify(newState),
-      ],
-    );
+    await this.auditRecorder?.record({
+      actorId,
+      action,
+      subjectType: "listing",
+      subjectId,
+      previousState,
+      newState,
+    });
   }
   private catalogueMutation<T>(operation: () => Promise<T>) {
     return this.uow ? this.uow.transaction(operation) : operation();

@@ -1,31 +1,24 @@
 import { newId } from "@/kernel/ids";
-import type { QueryExecutor } from "@/kernel/database";
 import type { TreasuryRepository } from "@/modules/treasury/treasury";
+import type { TreasuryDistributionStore } from "@/processors/treasury/contracts";
+
 export class TreasuryProcessor {
   constructor(
-    private sql: QueryExecutor,
-    private treasury: TreasuryRepository,
+    private readonly store: TreasuryDistributionStore,
+    private readonly treasury: TreasuryRepository,
   ) {}
-  async findWork(limit = 50) {
-    return (
-      await this.sql.query<{ id: string }>(
-        `select d.uuid as id from ledger_capability.purchase_distributions d left join treasury_capability.entries t on t.source_kind='distribution' and t.source_id=d.uuid where d.platform_amount_minor>0 and t.id is null order by d.completed_at,d.id limit $1`,
-        [limit],
-      )
-    ).rows;
+
+  findWork(limit = 50) {
+    return this.store.findWork(limit);
   }
+
   async process(distributionId: string) {
-    const row = (
-      await this.sql.query<{ id: string; amount: string }>(
-        `select uuid as id,platform_amount_minor amount from ledger_capability.purchase_distributions where uuid=$1`,
-        [distributionId],
-      )
-    ).rows[0];
-    if (!row || BigInt(row.amount) <= 0n) return null;
+    const row = await this.store.findAmount(distributionId);
+    if (!row || BigInt(row.amountMinor) <= 0n) return null;
     return this.treasury.create({
       id: newId(),
       direction: "credit",
-      amountMinor: BigInt(row.amount),
+      amountMinor: BigInt(row.amountMinor),
       title: "Platform allocation",
       note: "Automatic allocation from completed purchase distribution",
       sourceKind: "distribution",

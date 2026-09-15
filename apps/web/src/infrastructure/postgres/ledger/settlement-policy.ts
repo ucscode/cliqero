@@ -1,4 +1,4 @@
-import type { QueryExecutor } from "@/kernel/database";
+import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type { SettlementPolicy, SettlementPolicyRepository } from "@/modules/ledger/settlement";
 
 export class PostgresSettlementPolicyRepository implements SettlementPolicyRepository {

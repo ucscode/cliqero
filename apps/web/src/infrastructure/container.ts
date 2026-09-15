@@ -54,6 +54,7 @@ import {
 import { PostgresReversalRepository } from "./postgres/purchase/reversals";
 import { PurchaseReversalProcessor } from "@/processors/purchase/reversal";
 import { SettlementProcessor } from "@/processors/ledger/settlement";
+import { PostgresSettlementStore } from "@/infrastructure/postgres/ledger/settlement";
 import { PostgresSettlementPolicyRepository } from "@/infrastructure/postgres/ledger/settlement-policy";
 import { PostgresLedgerFundsReservationService } from "@/infrastructure/postgres/ledger/reservations";
 import {
@@ -66,10 +67,10 @@ import { PostgresPayoutRepository } from "@/infrastructure/postgres/payout/payou
 import { PayoutExecutionProcessor } from "@/processors/payout/execution";
 import { PaystackPayoutProvider } from "@/providers/payout/paystack/provider";
 import { loadPaystackPayoutConfiguration } from "@/providers/payout/paystack/config";
-import { PostgresPaystackRecipientStore } from "@/providers/payout/paystack/persistence/recipients";
-import { PostgresPaystackPayoutEventRepository } from "@/providers/payout/paystack/persistence/payout-events";
+import { PostgresPaystackRecipientStore } from "@/infrastructure/postgres/payout/paystack/recipients";
+import { PostgresPaystackPayoutEventRepository } from "@/infrastructure/postgres/payout/paystack/payout-events";
 import { PaystackPayoutWebhookIngress } from "@/application/payout/paystack/webhook";
-import { PostgresPaystackOperationsRepository } from "@/providers/payment/paystack/persistence/operations";
+import { PostgresPaystackOperationsRepository } from "@/infrastructure/postgres/payment/paystack/operations";
 import { ExchangeRateService } from "@/modules/money/exchange-service";
 import { FrankfurterProvider } from "@/providers/money/frankfurter/provider";
 import { FawazProvider } from "@/providers/money/fawaz/provider";
@@ -100,30 +101,34 @@ import { ListingMediaDeletionProcessor, ListingMediaService } from "@/applicatio
 import { ListingTransferService } from "@/application/listing/transfer";
 import { ListingReviewService } from "@/application/listing/reviews";
 import { ProfileService } from "@/application/account/profile";
-import { AccountProjectionService } from "@/application/account/projections";
+import { AccountProjectionService } from "@/infrastructure/postgres/account/projections";
 import { loadYamlCommissionPolicy } from "@/modules/referral/yaml-policy";
 import { PostgresTreasuryRepository } from "./postgres/treasury/treasury";
 import { TreasuryService } from "@/modules/treasury/treasury";
 import { TreasuryProcessor } from "@/processors/treasury/processor";
-import { OperatorTreasuryService } from "@/application/operator/treasury";
+import { PostgresTreasuryDistributionStore } from "@/infrastructure/postgres/treasury/distributions";
+import { OperatorTreasuryService } from "@/infrastructure/postgres/operator/treasury";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
 import { ApiPrincipalResolver } from "@/infrastructure/identity/api-principal";
-import { HierarchyService } from "@/application/hierarchy";
-import { OperatorOverviewService } from "@/application/operator/overview";
-import { OperatorAccountService } from "@/application/operator/accounts";
-import { CapabilityAdministrationService } from "@/application/capability-administration";
-import { OperatorApiKeyService } from "@/application/operator/api-keys";
-import { OperatorFundingService } from "@/application/operator/funding";
-import { BankTransferEvidenceService } from "@/application/funding/bank-transfer/evidence";
+import { HierarchyService } from "@/infrastructure/postgres/hierarchy/service";
+import { OperatorOverviewService } from "@/infrastructure/postgres/operator/overview";
+import { OperatorAccountService } from "@/infrastructure/postgres/operator/accounts";
+import { CapabilityAdministrationService } from "@/infrastructure/postgres/identity/capability-administration";
+import { OperatorApiKeyService } from "@/infrastructure/postgres/operator/api-keys";
+import { OperatorFundingService } from "@/infrastructure/postgres/operator/funding";
+import { BankTransferEvidenceService } from "@/infrastructure/postgres/funding/bank-transfer/evidence";
 import {
   OperatorDistributionService,
   OperatorEarningsService,
-} from "@/application/operator/distributions";
-import { OperatorWithdrawalService } from "@/application/operator/withdrawals";
+} from "@/infrastructure/postgres/operator/distributions";
+import { OperatorWithdrawalService } from "@/infrastructure/postgres/operator/withdrawals";
 import { getBlogService } from "@/infrastructure/blog/service";
+import { PostgresAuditRecorder } from "@/infrastructure/postgres/shared/audit";
+import { PostgresWithdrawalPersistence } from "@/infrastructure/postgres/withdrawal/transaction";
 
 export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
+  const auditRecorder = new PostgresAuditRecorder(database);
   const accounts = new PostgresAccountRepository(database);
   const listings = new PostgresListingRepository(database);
   const reviews = new PostgresListingReviewRepository(database);
@@ -144,7 +149,7 @@ export function createContainer(databaseUrl: string) {
   const listingService = new ListingService(
     listings,
     new AuthorizationPolicy(),
-    database,
+    auditRecorder,
     database,
   );
   const listingReviews = new ListingReviewService(
@@ -185,13 +190,20 @@ export function createContainer(databaseUrl: string) {
   const yamlCommissionPolicy = { getActive: async () => loadedYamlCommissionPolicy };
   const treasuryRepository = new PostgresTreasuryRepository(database);
   const treasury = new TreasuryService(treasuryRepository);
-  const treasuryProcessor = new TreasuryProcessor(database, treasuryRepository);
+  const treasuryProcessor = new TreasuryProcessor(
+    new PostgresTreasuryDistributionStore(database),
+    treasuryRepository,
+  );
   const settlementPolicy = new PostgresSettlementPolicyRepository(database);
-  const settlement = new SettlementProcessor(database, database, ledger, settlementPolicy);
+  const settlement = new SettlementProcessor(
+    new PostgresSettlementStore(database, database),
+    settlementPolicy,
+  );
   const reversals = new PostgresReversalRepository(database);
   const withdrawalRepository = new PostgresWithdrawalRepository(database);
   const withdrawalPolicy = new PostgresWithdrawalPolicyRepository(database);
   const fundsReservation = new PostgresLedgerFundsReservationService(database);
+  const withdrawalPersistence = new PostgresWithdrawalPersistence(database, database);
   const withdrawals = new WithdrawalService(
     withdrawalRepository,
     withdrawalPolicy,
@@ -199,7 +211,7 @@ export function createContainer(databaseUrl: string) {
     outbox,
     database,
     new PostgresOperatorAuthorizationService(database),
-    database,
+    withdrawalPersistence,
   );
   const payoutProviders = new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());
   const payoutRepository = new PostgresPayoutRepository(database);
@@ -410,7 +422,12 @@ export function createContainer(databaseUrl: string) {
     walletAvailability,
     checkoutPayment,
     entitlementIssuance,
-    referralGraphService: new ReferralGraphService(accounts, referralGraph, database, database),
+    referralGraphService: new ReferralGraphService(
+      accounts,
+      referralGraph,
+      database,
+      auditRecorder,
+    ),
     commissionDistribution,
     ledger,
     financialDistributionPolicy,

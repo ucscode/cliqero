@@ -51,6 +51,23 @@ function resolveSourceFile(path: string): string | null {
   );
 }
 
+function fileDirectoryCollisions(root: string): string[] {
+  if (!existsSync(root)) return [];
+  const collisions: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      collisions.push(...fileDirectoryCollisions(join(root, entry.name)));
+      continue;
+    }
+    const extension = entry.name.slice(entry.name.lastIndexOf("."));
+    if (!codeExtensions.has(extension)) continue;
+    const basename = entry.name.slice(0, -extension.length);
+    if (existsSync(join(root, basename)) && statSync(join(root, basename)).isDirectory())
+      collisions.push(join(root, entry.name));
+  }
+  return collisions;
+}
+
 function importViolations(root: string, forbiddenRoots: readonly string[]) {
   return filesUnder(root).flatMap((file) =>
     importSpecifiers(file).flatMap((specifier) => {
@@ -89,6 +106,31 @@ describe("architectural boundaries", () => {
   it("keeps application implementations behind inward-facing contracts", () => {
     const forbidden = ["infrastructure", "providers", "processors", "workers", "api"];
     expect(importViolations(join(sourceRoot, "application"), forbidden)).toEqual([]);
+  });
+
+  it("keeps database execution contracts and drivers out of application code", () => {
+    const applicationFiles = filesUnder(join(sourceRoot, "application"));
+    const forbiddenTokens = ["QueryExecutor", "better-sqlite3", 'from "pg"', "from 'pg'"];
+    const violations = applicationFiles.flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      return forbiddenTokens
+        .filter((token) => source.includes(token))
+        .map((token) => `${file}: ${token}`);
+    });
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps QueryExecutor and database drivers exclusively under infrastructure", () => {
+    const infrastructureRoot = `${sourceRoot}/infrastructure/`;
+    const violations = filesUnder(sourceRoot)
+      .filter((file) => !file.startsWith(infrastructureRoot))
+      .flatMap((file) => {
+        const source = readFileSync(file, "utf8");
+        return ["QueryExecutor", "better-sqlite3", 'from "pg"', "from 'pg'"]
+          .filter((token) => source.includes(token))
+          .map((token) => `${file}: ${token}`);
+      });
+    expect(violations).toEqual([]);
   });
 
   it("keeps the kernel independent from database drivers", () => {
@@ -131,25 +173,45 @@ describe("architectural boundaries", () => {
       routeModules.map((file) => file.replace(`${resolve(sourceRoot, "api/routes")}/`, "")),
     ).toEqual(
       expect.arrayContaining([
-        "blog.ts",
-        "hierarchy.ts",
+        "blog/index.ts",
+        "hierarchy/index.ts",
         "funding.ts",
         "payment-callbacks.ts",
-        "reviews.ts",
-        "account-access.ts",
+        "reviews/index.ts",
+        "account-access/index.ts",
         "operator/operations.ts",
-        "operator/accounts.ts",
-        "operator/capabilities.ts",
-        "operator/funding.ts",
-        "operator/finance.ts",
-        "operator/withdrawal.ts",
-        "operator/treasury.ts",
-        "api-keys.ts",
+        "operator/accounts/index.ts",
+        "operator/capabilities/index.ts",
+        "operator/funding/index.ts",
+        "operator/finance/index.ts",
+        "operator/withdrawal/index.ts",
+        "operator/treasury/index.ts",
+        "api-keys/index.ts",
       ]),
     );
     expect(existsSync(resolve(sourceRoot, "api/routes/contracts.ts"))).toBe(false);
     expect(honoSource).not.toContain("x-required-api-scope");
     expect(honoSource).not.toContain("/api/operator/");
+  });
+
+  it("rejects file and same-name directory ownership collisions", () => {
+    const governedRoots = [
+      "api/routes",
+      "application",
+      "infrastructure",
+      "modules",
+      "providers",
+      "processors",
+      "workers",
+      "lib",
+      "../tests",
+    ];
+    const collisions = governedRoots.flatMap((root) =>
+      fileDirectoryCollisions(resolve(sourceRoot, root)),
+    );
+    expect(
+      collisions.concat(packageRoots.flatMap((root) => fileDirectoryCollisions(root))),
+    ).toEqual([]);
   });
 
   it("keeps legacy compatibility dispatch separate from its route registry", () => {

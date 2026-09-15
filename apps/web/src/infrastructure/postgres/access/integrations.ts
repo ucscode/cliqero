@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { newId, type Id } from "@/kernel/ids";
 import { ScopedIntegration } from "@/modules/access/integrations";
-import type { QueryExecutor } from "@/kernel/database";
+import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 const hashCredential = (salt: Buffer, secret: string) =>

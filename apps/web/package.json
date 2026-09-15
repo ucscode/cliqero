@@ -11,7 +11,7 @@
     "worker:outbox:watch": "node --watch --watch-path=src --watch-path=../../config --import tsx src/workers/outbox/main.ts",
     "blog:migrate": "node --import tsx src/infrastructure/blog/migrate.ts",
     "cli": "node --import tsx src/console.ts",
-    "seed:catalogue": "node --import tsx src/scripts/seed-catalogue.ts",
+    "seed:catalogue": "node --import tsx src/infrastructure/postgres/seed/catalogue.ts",
     "seed:blog": "node --import tsx src/infrastructure/blog/seed.ts",
     "test": "vitest run",
     "test:integration": "vitest run tests/integration",

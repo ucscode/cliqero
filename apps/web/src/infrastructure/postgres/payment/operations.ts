@@ -1,5 +1,5 @@
 import { newId } from "@/kernel/ids";
-import type { QueryExecutor } from "@/kernel/database";
+import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 
 export type ReconciliationState = "started" | "completed" | "skipped" | "mismatch" | "failed";
 export interface ReconciliationAttempt {

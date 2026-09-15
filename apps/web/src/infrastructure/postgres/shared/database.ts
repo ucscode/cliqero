@@ -1,9 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import type { QueryExecutor, QueryResult } from "@/kernel/database";
+import type { QueryExecutor, QueryResult } from "@/infrastructure/postgres/shared/query";
 
-export type { QueryExecutor, QueryResult } from "@/kernel/database";
+export type { QueryExecutor, QueryResult } from "@/infrastructure/postgres/shared/query";
 
 const transactionStorage = new AsyncLocalStorage<PoolClient>();
 

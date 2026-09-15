@@ -1,4 +1,4 @@
-import type { QueryExecutor } from "@/kernel/database";
+import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import { Account } from "@/modules/identity/account";
 import type { AuthenticationService } from "@/modules/identity/authentication";
 import type { Capability } from "@/modules/identity/capabilities";

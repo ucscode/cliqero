@@ -1,5 +1,5 @@
 import { Account, type AccountReader } from "@/modules/identity/account";
-import type { QueryExecutor } from "@/kernel/database";
+import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import {
   DuplicateUsernameError,
   type IdentityPersistence,

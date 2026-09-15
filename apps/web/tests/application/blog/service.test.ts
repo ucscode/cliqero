@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BlogService } from "@/application/blog/service";
+import { SqliteBlogRepository } from "@/infrastructure/blog/repository";
 import { closeBlogDatabaseForTests, getBlogDatabase } from "@/infrastructure/blog/database";
 
 describe("BlogService SQLite capability", () => {
@@ -23,7 +24,7 @@ describe("BlogService SQLite capability", () => {
     ...extra,
   });
   it("creates drafts, generates unique slugs, and publishes", () => {
-    const service = new BlogService(getBlogDatabase().sqlite);
+    const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
     const first = service.create(input(), "00000000-0000-4000-8000-000000000001", "k1");
     const second = service.create(input(), null, "k2");
     expect(first?.status).toBe("draft");
@@ -33,7 +34,7 @@ describe("BlogService SQLite capability", () => {
     expect(service.get(first!.slug, true)?.title).toBe("Hello Blog");
   });
   it("converges idempotent retries and rejects semantic conflicts", () => {
-    const service = new BlogService(getBlogDatabase().sqlite);
+    const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
     const first = service.create(input(), "00000000-0000-4000-8000-000000000001", "same");
     expect(service.create(input(), "00000000-0000-4000-8000-000000000001", "same")?.id).toBe(
       first?.id,
@@ -44,7 +45,7 @@ describe("BlogService SQLite capability", () => {
     );
   });
   it("stores relational category and tags", () => {
-    const service = new BlogService(getBlogDatabase().sqlite);
+    const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
     const post = service.create(
       input({ category: "Guides", tags: ["referrals", "marketing"] }),
       null,
@@ -55,7 +56,7 @@ describe("BlogService SQLite capability", () => {
     expect(service.tags()).toHaveLength(2);
   });
   it("paginates published posts deterministically and excludes drafts", () => {
-    const service = new BlogService(getBlogDatabase().sqlite);
+    const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
     for (let i = 0; i < 5; i += 1)
       service.create(input({ title: `Published ${i}`, status: "published" }), null);
     service.create(input({ title: "Draft only" }), null);
@@ -75,7 +76,7 @@ describe("BlogService SQLite capability", () => {
     ).toHaveLength(2);
   });
   it("paginates category and tag-filtered published posts", () => {
-    const service = new BlogService(getBlogDatabase().sqlite);
+    const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
     for (let i = 0; i < 3; i += 1)
       service.create(
         input({ title: `Guide ${i}`, status: "published", category: "Guides", tags: ["launch"] }),

@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { QueryResultRow } from "pg";
 import { createContainer } from "@/infrastructure/container";
 import { PostgresReferralGraphRepository } from "@/infrastructure/postgres/referral/referrals";
-import type { QueryExecutor, QueryResult } from "@/kernel/database";
+import type { QueryExecutor, QueryResult } from "@/infrastructure/postgres/shared/query";
 import { newId } from "@/kernel/ids";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;

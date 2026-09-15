@@ -1,7 +1,6 @@
 import { newId } from "@/kernel/ids";
 import type { EventOutbox } from "@/kernel/events";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import type { QueryExecutor } from "@/kernel/database";
 import type { LedgerFundsReservationService } from "@/modules/ledger/reservations";
 import type {
   Withdrawal,
@@ -10,6 +9,7 @@ import type {
 } from "@/modules/withdrawal/withdrawal";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import { Money } from "@/modules/money/money";
+import type { WithdrawalPersistence } from "@/application/withdrawal/contracts";
 export class WithdrawalService {
   constructor(
     private readonly withdrawals: WithdrawalRepository,
@@ -18,7 +18,7 @@ export class WithdrawalService {
     private readonly outbox: EventOutbox,
     private readonly uow: UnitOfWork,
     private readonly operators: OperatorAuthorizationService,
-    private readonly sql: QueryExecutor,
+    private readonly persistence: WithdrawalPersistence,
   ) {}
   async request(input: {
     accountId: string;
@@ -40,10 +40,7 @@ export class WithdrawalService {
     if (policy.maximumAmount && input.amountMinor > policy.maximumAmount.minorAmount)
       throw new Error("Withdrawal amount exceeds the maximum");
     if (!input.destinationReference.trim()) throw new Error("Withdrawal destination is required");
-    return this.uow.transaction(async () => {
-      await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [
-        `withdrawal:idempotency:${input.idempotencyKey}`,
-      ]);
+    return this.persistence.withIdempotencyLock(input.idempotencyKey, async () => {
       const prior = await this.withdrawals.findByIdempotencyKey(input.idempotencyKey);
       if (prior) return this.resolveIdempotent(prior, input);
       const id = newId();
@@ -119,24 +116,12 @@ export class WithdrawalService {
       if (!withdrawal) throw new Error("Withdrawal not found");
       if (withdrawal.state !== "requested" && withdrawal.state !== "approved")
         throw new Error(`Invalid withdrawal transition from ${withdrawal.state}`);
-      const payout = (
-        await this.sql.query<{ state: string; attempt_state: string | null }>(
-          `select e.state, a.state attempt_state
-             from payout_capability.executions e
-             left join lateral (
-               select state from payout_capability.attempts
-                where execution_id=e.id order by attempt_number desc limit 1
-             ) a on true
-            where e.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
-            for update of e`,
-          [id],
-        )
-      ).rows[0];
+      const payout = await this.persistence.findPayoutState(id);
       if (
         payout &&
         (["submitted", "unknown", "succeeded"].includes(payout.state) ||
-          (payout.attempt_state &&
-            ["submitted", "pending", "unknown", "succeeded"].includes(payout.attempt_state)))
+          (payout.attemptState &&
+            ["submitted", "pending", "unknown", "succeeded"].includes(payout.attemptState)))
       )
         throw new Error("Withdrawal cannot be rejected after payout execution started");
       await this.withdrawals.transition(id, withdrawal.state, "rejected", reason);

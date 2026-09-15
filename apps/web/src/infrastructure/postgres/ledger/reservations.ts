@@ -1,6 +1,6 @@
 import { newId } from "@/kernel/ids";
 import type { Money } from "@/modules/money/money";
-import type { QueryExecutor } from "@/kernel/database";
+import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type {
   FundsReservation,
   LedgerFundsReservationService,
