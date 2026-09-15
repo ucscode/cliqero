@@ -7,74 +7,129 @@ If existing code conflicts with these rules, report the conflict and fix the
 architecture deliberately. Do not silently copy a bad existing pattern merely
 because it already exists.
 
-## 1. Domain grouping is mandatory
+## 1. Preserve architectural roots; group functionality inside them
 
-Group code by the domain it belongs to first. A developer opening a directory
-must immediately understand what that part of the project owns.
+Cliqero's top-level source directories represent architectural/technical
+boundaries and should remain recognizable as such.
 
-Preferred shape:
+Examples include:
+
+```text
+src/
+  api/
+  app/
+  components/
+  infrastructure/
+  modules/
+  providers/
+  types/
+  workers/
+```
+
+Do not replace these architectural roots with business-function roots such as:
 
 ```text
 src/
   payment/
   withdrawal/
-  catalogue/
+  listing/
   wallet/
-  account/
-  media/
 ```
 
-Within a domain, group implementation details underneath that domain:
+That reverses the desired hierarchy and makes the project harder to navigate.
+
+The rule is:
+
+> Build project functionality inside the appropriate architectural root.
+> Do not build architectural roots inside project functionality.
+
+Correct:
 
 ```text
-payment/
-  providers/
+modules/
+  listing/
+    index.ts
+    media/
+    reviews/
+  payment/
+  withdrawal/
+
+providers/
+  payment/
     paystack/
     nowpayments/
     direct-trc20/
     bank-transfer/
-  application/
-  domain/
-  infrastructure/
-  ui/
+  media/
+    pexels/
+    wikimedia/
 ```
 
-Do not encode missing directory structure into filenames such as:
+Wrong:
 
 ```text
-payment-paystack.ts
-payment-nowpayments.ts
-payment-paystack-logic.ts
-listing-media.ts
-listing-media-data.ts
+payment/
+  modules/
+  providers/
+  components/
+
+listing/
+  modules/
+  providers/
 ```
 
-Use directories to communicate ownership.
+The architectural root communicates what kind of code it is. The nested
+functionality directory communicates what part of Cliqero it belongs to.
 
-## 2. Unrelated provider families must not be mixed
+## 2. Group related functionality internally; do not encode grouping in filenames
 
-`provider` is not a sufficient domain boundary.
+Within each architectural root, related project functionality must be grouped
+under a clear directory.
 
-Payment providers, media providers, AI providers, storage providers, and other
-provider families must not be mixed in one generic provider directory merely
-because they share the word "provider".
-
-Use domain-first grouping:
+Prefer:
 
 ```text
-payment/providers/paystack/
-media/providers/pexels/
-ai/providers/openrouter/
+modules/
+  listing/
+    index.ts
+    media/
+    reviews/
 ```
 
-Not:
+instead of:
+
+```text
+modules/
+  listing.ts
+  listing-media.ts
+  listing-reviews.ts
+```
+
+Likewise, do not flatten provider families:
 
 ```text
 providers/
   paystack/
+  nowpayments/
   pexels/
-  openrouter/
+  wikimedia/
 ```
+
+Use grouping that preserves both the architectural root and the functional
+family:
+
+```text
+providers/
+  payment/
+    paystack/
+    nowpayments/
+  media/
+    pexels/
+    wikimedia/
+```
+
+Use directories to communicate ownership and relationships. Do not create long
+filename prefixes as a substitute for structure.
 
 ## 3. Libraries first; custom infrastructure requires justification
 
@@ -154,27 +209,36 @@ boundary.
 
 Do not clutter production directories with colocated test files.
 
-Preferred structure:
+The test hierarchy should mirror the relevant production architecture where
+practical.
+
+Prefer:
 
 ```text
 src/
-  payment/
-    ...
+  modules/
+    listing/
+      media/
+  providers/
+    payment/
+      paystack/
 
 tests/
-  payment/
-    ...
+  modules/
+    listing/
+      media/
+  providers/
+    payment/
+      paystack/
 ```
-
-The test tree should mirror the source/domain structure where practical.
 
 Avoid:
 
 ```text
-src/payment/provider.ts
-src/payment/provider.test.ts
-src/payment/service.ts
-src/payment/service.test.ts
+src/modules/listing/index.ts
+src/modules/listing/index.test.ts
+src/providers/payment/paystack/provider.ts
+src/providers/payment/paystack/provider.test.ts
 ```
 
 Tests belong under the project test hierarchy unless a tool or framework has a
@@ -216,7 +280,21 @@ states, the ownership boundary is wrong.
 
 ## 8. Components must own their behavior
 
-Frontend ownership follows the same domain rules as backend ownership.
+Frontend ownership follows the same grouping rule as the rest of the source
+code: keep the architectural root, then group related functionality inside it.
+
+For example:
+
+```text
+components/
+  payment/
+    paystack/
+    nowpayments/
+    direct-trc20/
+    bank-transfer/
+  listing/
+  wallet/
+```
 
 Provider-specific payment UI belongs to that payment provider. Shared
 components provide common layout and mechanisms only.
@@ -235,9 +313,9 @@ tree.
 Do not optimize project structure around an AI agent's ability to search or
 inspect thousands of files quickly.
 
-Directory names, class ownership, domain grouping, and dependency direction
-must communicate the architecture without requiring repository-wide semantic
-search.
+Architectural roots should remain stable and recognizable. Functional grouping
+inside those roots must make relationships obvious without repository-wide
+semantic search.
 
 ## 10. Do not preserve bad architecture because work already exists
 
@@ -281,16 +359,21 @@ instead of silently deviating from them.
 
 Before moving or rewriting a large part of the project:
 
-1. audit the current directory and dependency structure;
-2. identify violations of these rules;
-3. identify mature libraries that can replace custom infrastructure;
-4. propose the target domain structure;
-5. move code in coherent domain groups;
-6. run validation after each coherent stage.
+1. preserve and identify the existing architectural roots (`api`, `app`,
+   `modules`, `providers`, `components`, `types`, `infrastructure`, etc.);
+2. audit grouping inside each architectural root;
+3. identify flat functionality that should become an internal directory;
+4. identify violations of the OOP and dependency rules;
+5. identify mature libraries that can replace custom infrastructure;
+6. propose the target internal grouping without inverting the root hierarchy;
+7. move code in coherent groups;
+8. run validation after each coherent stage.
 
 Do not perform a repository-wide move as an unreviewed mechanical shuffle.
-The result must improve ownership and dependency direction, not merely rename
-paths.
+Do not introduce `src/payment/...`, `src/listing/...`, or similar business-root
+structures merely to claim domain grouping.
+
+The desired direction is architecture-root first, functional grouping second.
 
 # Contributor checks
 
@@ -311,8 +394,8 @@ credential/configuration files out of formatting and lint runs.
 ## Local worker development
 
 The development `outbox-worker` uses a live repository source mount and keeps
-its dependencies in Docker-owned anonymous volumes. Ordinary worker TypeScript
-and YAML configuration changes do not require
+its dependencies in Docker-owned anonymous volumes. Ordinary worker
+TypeScript and YAML configuration changes do not require
 `docker compose build outbox-worker`; the worker watch command restarts the
 process for changes under `apps/web/src` and `config/`. Changes to `.env` or
 Compose environment values require recreating the service, for example with
