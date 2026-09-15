@@ -1,7 +1,7 @@
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 import type { ReversalRecord, ReversalRepository } from "@/processors/purchase/reversal";
 export class PostgresReversalRepository implements ReversalRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async findByPurchaseId(purchaseId: string) {
     const row = (
       await this.sql.query<any>(

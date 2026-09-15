@@ -105,7 +105,7 @@ describe("NOWPayments protocol client", () => {
     });
   });
 
-  it("normalizes a safe provider numeric decimal at the boundary", async () => {
+  it("rejects provider numeric decimal values at the boundary", async () => {
     const client = new NowPaymentsClient({
       apiKey: "test-key",
       apiBaseUrl: "https://api.nowpayments.test",
@@ -117,8 +117,9 @@ describe("NOWPayments protocol client", () => {
         }),
       ),
     });
-    await expect(client.getPaymentStatus("PAY-NUMERIC")).resolves.toMatchObject({
-      pay_amount: "0.00991099",
+    await expect(client.getPaymentStatus("PAY-NUMERIC")).rejects.toMatchObject({
+      name: "NowPaymentsResponseError",
+      status: 200,
     });
   });
 });

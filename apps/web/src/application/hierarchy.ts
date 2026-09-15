@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import { loadYamlConfiguration } from "@/config/yaml";
 
 const visualizationSchema = z.object({
@@ -64,7 +64,7 @@ export function visualizationConfigFromValue(value: unknown): VisualizationConfi
 
 export class HierarchyService {
   private readonly config: VisualizationConfig;
-  constructor(private readonly sql: SqlExecutor) {
+  constructor(private readonly sql: QueryExecutor) {
     this.config = visualizationConfig();
   }
   async isDescendantOrSelf(ancestor: string, candidate: string) {

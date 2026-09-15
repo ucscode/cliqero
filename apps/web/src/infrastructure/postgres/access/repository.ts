@@ -3,7 +3,7 @@ import {
   type AccessGrantRepository,
   type AccessGrantState,
 } from "@/modules/access/access";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 
 interface GrantRow {
   id: string;
@@ -13,7 +13,7 @@ interface GrantRow {
 }
 
 export class PostgresAccessGrantRepository implements AccessGrantRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async findByTokenHash(tokenHash: Buffer): Promise<AccessGrant | null> {
     const row = (
       await this.sql.query<GrantRow>(

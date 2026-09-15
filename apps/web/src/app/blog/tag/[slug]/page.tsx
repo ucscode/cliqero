@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getBlogService } from "@/application/blog/service";
+import { getBlogService } from "@/infrastructure/blog/service";
 import { BlogIndex } from "../../page";
 export const dynamic = "force-dynamic";
 export default async function TagPage({

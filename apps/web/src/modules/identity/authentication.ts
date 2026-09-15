@@ -1,10 +1,7 @@
 import type { Account } from "./account";
-import type { BetterAuthBoundary, BetterAuthInstance } from "./better-auth";
 
 /** Application-facing identity contract; SQL and Better Auth wiring stay outside the domain module. */
 export interface AuthenticationService {
-  readonly betterAuth: Pick<BetterAuthBoundary, "close">;
-  readonly auth: BetterAuthInstance;
   register(input: {
     email: string;
     username: string;

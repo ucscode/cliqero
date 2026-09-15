@@ -1,5 +1,5 @@
 import { Money } from "@/modules/money/money";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 import type {
   WalletCredit,
   WalletDebit,
@@ -8,7 +8,7 @@ import type {
 } from "@/modules/wallet/wallet";
 
 export class PostgresWalletRepository implements WalletRepository {
-  constructor(private sql: SqlExecutor) {}
+  constructor(private sql: QueryExecutor) {}
   async lockAccount(id: string) {
     await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,7331))`, [id]);
   }

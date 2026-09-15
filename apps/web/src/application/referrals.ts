@@ -1,14 +1,14 @@
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { AccountReader } from "@/modules/identity/account";
 import type { ReferralGraphRepository } from "@/modules/referral/referral";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 
 export class ReferralGraphService {
   constructor(
     private readonly accounts: AccountReader,
     private readonly graph: ReferralGraphRepository,
     private readonly uow: UnitOfWork,
-    private readonly sql?: SqlExecutor,
+    private readonly sql?: QueryExecutor,
   ) {}
   async establish(childAccountId: string, parentAccountId: string): Promise<void> {
     if (childAccountId === parentAccountId) throw new Error("Self-referral is not allowed");

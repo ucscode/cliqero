@@ -1,20 +1,14 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { blogPostInputSchema } from "@/modules/blog/domain/blog";
-import * as routeContracts from "./contracts";
-import type { Env } from "./contracts";
+import type { Env } from "../shared/context";
+import { requirePrincipal, requireCapabilityScope } from "../shared/context";
+import { errorSchema } from "../shared/schemas";
+import { domainError } from "../shared/error";
+import { blogJson } from "./blog/serialization";
+import { blogPageSchema, blogPostSchema } from "./blog/contracts";
 
 export function registerBlogRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
-  const {
-    errorSchema,
-    blogPostSchema,
-    blogPageSchema,
-    requirePrincipal,
-    requireCapabilityScope,
-    blogJson,
-    domainError,
-  } = routeContracts;
-
   const blogListQuery = z.object({
     search: z.string().max(100).optional(),
     status: z.enum(["draft", "published"]).optional(),

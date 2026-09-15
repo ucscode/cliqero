@@ -1,16 +1,18 @@
 import { newId } from "@/kernel/ids";
-import type { PaystackPayoutProvider } from "@/providers/payout/paystack/provider";
-import type { PostgresPaystackPayoutEventRepository } from "@/providers/payout/paystack/persistence/payout-events";
-import type { PostgresPayoutRepository } from "@/infrastructure/postgres/payout/payouts";
-import type { PayoutExecutionProcessor } from "@/processors/payout/execution";
+import type {
+  PaystackPayoutEventStore,
+  PaystackPayoutVerifier,
+  PayoutAttemptStore,
+  PayoutExecutionUseCase,
+} from "./contracts";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { Money } from "@/modules/money/money";
 export class PaystackPayoutWebhookIngress {
   constructor(
-    private readonly provider: PaystackPayoutProvider,
-    private readonly events: PostgresPaystackPayoutEventRepository,
-    private readonly payouts: PostgresPayoutRepository,
-    private readonly execution: PayoutExecutionProcessor,
+    private readonly provider: PaystackPayoutVerifier,
+    private readonly events: PaystackPayoutEventStore,
+    private readonly payouts: PayoutAttemptStore,
+    private readonly execution: PayoutExecutionUseCase,
     private readonly uow: UnitOfWork,
   ) {}
   async ingest(raw: Uint8Array, signature: string | null) {

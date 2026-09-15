@@ -1,14 +1,14 @@
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
 import type { FundingVerificationProcessor } from "@/application/funding/verification";
-import { NowPaymentsExpiryPolicy } from "@/providers/payment/nowpayments/expiry-policy";
+import type { FundingExpiryPolicy } from "./contracts";
 
 /** NOWPayments owns the meaning of its provider-issued expiry timestamp. */
 export class NowPaymentsExpiryProcessor {
   constructor(
     private readonly funding: FundingRepository,
     private readonly verification: FundingVerificationProcessor,
+    private readonly policy: FundingExpiryPolicy,
     private readonly clock: () => Date = () => new Date(),
-    private readonly policy = new NowPaymentsExpiryPolicy(),
   ) {}
 
   findWork(limit = 50) {

@@ -4,7 +4,7 @@ import type { ListingRepository } from "@/modules/listing";
 import { Money } from "@/modules/money/money";
 import { Purchase, type PurchaseRepository } from "@/modules/purchase/purchase";
 import type { PaymentRepository, PaymentProviderRegistry } from "@/modules/payment";
-import type { PostgresIdempotencyRepository } from "@/infrastructure/postgres/shared/idempotency";
+import type { IdempotencyStore } from "./contracts";
 import type { PurchaseAttributionResolver } from "@/modules/referral/attribution";
 import type { AccountReader } from "@/modules/identity/account";
 import type { ExchangeRateService } from "@/modules/money/exchange-service";
@@ -16,7 +16,7 @@ export class CheckoutService {
     private payments: PaymentRepository,
     private purchases: PurchaseRepository,
     private providers: PaymentProviderRegistry,
-    private idempotency: PostgresIdempotencyRepository,
+    private idempotency: IdempotencyStore,
     private attribution: PurchaseAttributionResolver,
     private uow: UnitOfWork,
     private accounts?: AccountReader,

@@ -3,7 +3,7 @@ import type { ApplicationContainer } from "@/infrastructure/container";
 import { registerOperatorAccountRoutes } from "./accounts";
 import { registerOperatorCapabilityRoutes } from "./capabilities";
 import { registerOperatorFundingRoutes } from "./funding";
-import type { Env } from "../contracts";
+import type { Env } from "../../shared/context";
 
 /** Composition boundary for operator operational route families. */
 export function registerOperatorOperationsRoutes(

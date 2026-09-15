@@ -21,9 +21,12 @@ function filesUnder(root: string): string[] {
 
 function importSpecifiers(file: string): string[] {
   const source = readFileSync(file, "utf8");
-  return [...source.matchAll(/(?:import|export)(?:[\s\S]*?from\s*)?(["'])([^"']+)\1/g)].map(
-    (match) => match[2],
-  );
+  const specifiers = [
+    ...source.matchAll(/(?:import|export)(?:[\s\S]*?from\s*)?(["'])([^"']+)\1/g),
+    ...source.matchAll(/import\s*\(\s*(["'])([^"']+)\1\s*\)/g),
+    ...source.matchAll(/require\s*\(\s*(["'])([^"']+)\1\s*\)/g),
+  ];
+  return specifiers.map((match) => match[2]);
 }
 
 function resolveImport(file: string, specifier: string): string | null {
@@ -83,6 +86,20 @@ describe("architectural boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps application implementations behind inward-facing contracts", () => {
+    const forbidden = ["infrastructure", "providers", "processors", "workers", "api"];
+    expect(importViolations(join(sourceRoot, "application"), forbidden)).toEqual([]);
+  });
+
+  it("keeps the kernel independent from database drivers", () => {
+    const kernelFiles = filesUnder(join(sourceRoot, "kernel"));
+    expect(
+      kernelFiles.flatMap((file) =>
+        importSpecifiers(file).filter((specifier) => specifier === "pg"),
+      ),
+    ).toEqual([]);
+  });
+
   it("keeps production source free of colocated tests", () => {
     const violations = filesUnder(sourceRoot).filter((file) => /\.test\.[jt]sx?$/.test(file));
     expect(violations).toEqual([]);
@@ -107,6 +124,7 @@ describe("architectural boundaries", () => {
 
   it("keeps the API root as composition and gives each capability its own route module", () => {
     const hono = resolve(sourceRoot, "api/hono.ts");
+    const honoSource = readFileSync(hono, "utf8");
     const routeModules = filesUnder(resolve(sourceRoot, "api/routes"));
     expect(readFileSync(hono, "utf8").split("\n").length).toBeLessThan(220);
     expect(
@@ -129,6 +147,9 @@ describe("architectural boundaries", () => {
         "api-keys.ts",
       ]),
     );
+    expect(existsSync(resolve(sourceRoot, "api/routes/contracts.ts"))).toBe(false);
+    expect(honoSource).not.toContain("x-required-api-scope");
+    expect(honoSource).not.toContain("/api/operator/");
   });
 
   it("keeps legacy compatibility dispatch separate from its route registry", () => {

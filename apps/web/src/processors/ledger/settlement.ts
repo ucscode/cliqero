@@ -1,11 +1,11 @@
-import type { SqlExecutor } from "@/kernel/sql";
+import type { QueryExecutor } from "@/kernel/database";
 import type { LedgerRepository } from "@/modules/ledger/ledger";
 import { newId } from "@/kernel/ids";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { SettlementPolicyRepository, SettlementResult } from "@/modules/ledger/settlement";
 export class SettlementProcessor {
   constructor(
-    private readonly sql: SqlExecutor,
+    private readonly sql: QueryExecutor,
     private readonly uow: UnitOfWork,
     private readonly ledger: LedgerRepository,
     private readonly policy: SettlementPolicyRepository,

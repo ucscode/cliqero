@@ -1,7 +1,7 @@
 import { parseIpnPayload } from "@cliqero/nowpayments";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { FundingRepository } from "@/modules/funding/funding";
-import type { NowPaymentsProvider } from "@/providers/payment/nowpayments/provider";
+import type { NowPaymentsIpnSignatureVerifier } from "./contracts";
 
 export type NowPaymentsIpnDisposition =
   "pending" | "confirmed" | "failed" | "reconciliation_required";
@@ -14,7 +14,7 @@ export type NowPaymentsIpnResponse = {
 /** Provider-owned raw-body IPN adapter. It never confirms funding directly. */
 export class NowPaymentsIpnIngress {
   constructor(
-    private readonly provider: NowPaymentsProvider,
+    private readonly provider: NowPaymentsIpnSignatureVerifier,
     private readonly funding: FundingRepository,
     private readonly uow: UnitOfWork,
   ) {}

@@ -1,7 +1,6 @@
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import { requirePrincipal } from "./contracts";
-import type { Env } from "./contracts";
+import { requirePrincipal, type Env } from "../shared/context";
 
 export function registerFundingRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
   app.get("/api/wallet/funding-methods", async (c) => {

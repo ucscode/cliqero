@@ -1,5 +1,4 @@
-import type { ApiKeyService } from "@/infrastructure/postgres/api-keys";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { PublicApplicationError } from "@/kernel/errors";
 import { hasCapability, type Capability } from "@/modules/identity/capabilities";
@@ -9,6 +8,7 @@ import {
   operatorCapabilitiesForScope,
   type ApiScope,
 } from "@/modules/identity/api/scopes";
+import type { ApiKeyManagementService } from "@/modules/identity/api/keys";
 
 export type OperatorApiKeyInput = {
   name: string;
@@ -22,8 +22,8 @@ function forbidden(message: string, code = "forbidden") {
 
 export class OperatorApiKeyService {
   constructor(
-    private readonly apiKeys: ApiKeyService,
-    private readonly sql: SqlExecutor,
+    private readonly apiKeys: ApiKeyManagementService,
+    private readonly sql: QueryExecutor,
     private readonly uow: UnitOfWork,
   ) {}
 

@@ -1,13 +1,13 @@
 import { newId } from "@/kernel/ids";
 import type { Money } from "@/modules/money/money";
-import type { SqlExecutor } from "@/kernel/sql";
+import type { QueryExecutor } from "@/kernel/database";
 import type {
   FundsReservation,
   LedgerFundsReservationService,
 } from "@/modules/ledger/reservations";
 
 export class PostgresLedgerFundsReservationService implements LedgerFundsReservationService {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async reserve(input: {
     withdrawalId: string;
     accountId: string;

@@ -1,8 +1,8 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 
 /** Paystack-specific operator projection for persisted provider events. */
 export class PostgresPaystackOperationsRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
 
   async listProviderEvents(limit: number) {
     return (

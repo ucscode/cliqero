@@ -3,7 +3,7 @@ import {
   type EntitlementRepository,
   type EntitlementState,
 } from "@/modules/entitlement/entitlement";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 
 interface EntitlementRow {
   id: string;
@@ -15,7 +15,7 @@ interface EntitlementRow {
 }
 
 export class PostgresEntitlementRepository implements EntitlementRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async findByPurchaseId(purchaseId: string) {
     return this.find("purchase_id = (select id from purchase_capability.purchases where uuid=$1)", [
       purchaseId,

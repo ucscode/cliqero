@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 
 export type ProviderEventState = "received" | "processed" | "rejected" | "ignored";
 export interface ProviderEventRecord {
@@ -26,7 +26,7 @@ interface ProviderEventRow {
   last_error: string | null;
 }
 export class PostgresProviderEventRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async record(
     event: Omit<ProviderEventRecord, "state" | "lastError">,
   ): Promise<{ record: ProviderEventRecord; created: boolean }> {

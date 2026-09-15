@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { QueryResult } from "pg";
+import type { QueryResult } from "@/kernel/database";
 import { OperatorOverviewService } from "@/application/operator/overview";
 
 function result<T extends object>(rows: T[]): QueryResult<T> {
-  return { command: "SELECT", rowCount: rows.length, oid: 0, fields: [], rows };
+  return { rowCount: rows.length, rows };
 }
 
 describe("operator overview projection", () => {

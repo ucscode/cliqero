@@ -1,5 +1,5 @@
 import { newId } from "@/kernel/ids";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 
 export type ReconciliationState = "started" | "completed" | "skipped" | "mismatch" | "failed";
 export interface ReconciliationAttempt {
@@ -23,7 +23,7 @@ interface AttemptRow {
   correlation_id: string;
 }
 export class PostgresPaymentOperationsRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async recordProviderFailure(input: {
     paymentId: string;
     provider: string;

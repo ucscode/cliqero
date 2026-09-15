@@ -1,7 +1,7 @@
 import { newId } from "@/kernel/ids";
 import type { EventOutbox } from "@/kernel/events";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import type { LedgerFundsReservationService } from "@/modules/ledger/reservations";
 import type {
   Withdrawal,
@@ -18,7 +18,7 @@ export class WithdrawalService {
     private readonly outbox: EventOutbox,
     private readonly uow: UnitOfWork,
     private readonly operators: OperatorAuthorizationService,
-    private readonly sql: SqlExecutor,
+    private readonly sql: QueryExecutor,
   ) {}
   async request(input: {
     accountId: string;

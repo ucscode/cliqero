@@ -1,17 +1,17 @@
-import type { PaymentVerificationProcessor } from "@/processors/payment/verification";
-import type { PostgresPaymentRepository } from "@/infrastructure/postgres/payment/payments";
-import type {
-  PostgresPaymentOperationsRepository,
-  ReconciliationAttempt,
-} from "@/infrastructure/postgres/payment/operations";
-import type { PostgresPaystackOperationsRepository } from "@/providers/payment/paystack/persistence/operations";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
+import type {
+  PaystackPaymentStore,
+  PaymentVerificationUseCase,
+  PaystackOperationsInspection,
+  ReconciliationAttempt,
+  ReconciliationOperations,
+} from "./contracts";
 
 export class PaymentReconciliationService {
   constructor(
-    private readonly payments: PostgresPaymentRepository,
-    private readonly verification: PaymentVerificationProcessor,
-    private readonly operations: PostgresPaymentOperationsRepository,
+    private readonly payments: PaystackPaymentStore,
+    private readonly verification: PaymentVerificationUseCase,
+    private readonly operations: ReconciliationOperations,
     private readonly operators: OperatorAuthorizationService,
   ) {}
   async reconcile(input: {
@@ -63,7 +63,7 @@ export class PaymentReconciliationService {
 
 export class PaystackOperationsInspectionService {
   constructor(
-    private readonly operations: PostgresPaystackOperationsRepository,
+    private readonly operations: PaystackOperationsInspection,
     private readonly operators: OperatorAuthorizationService,
   ) {}
   async listEvents(actorId: string, limit: number) {

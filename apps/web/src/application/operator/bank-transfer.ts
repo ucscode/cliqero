@@ -1,10 +1,10 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 /** Bank Transfer owns the rules for operator confirmation of its evidence. */
 export class BankTransferOperatorConfirmationService {
   constructor(
-    private readonly sql: SqlExecutor,
+    private readonly sql: QueryExecutor,
     private readonly uow: UnitOfWork = { transaction: (operation) => operation() },
   ) {}
 

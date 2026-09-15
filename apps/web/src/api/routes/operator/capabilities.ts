@@ -1,19 +1,14 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import * as routeContracts from "../contracts";
-import type { Env } from "../contracts";
+import { requirePrincipal, requireSessionCapability, type Env } from "../../shared/context";
+import { domainError } from "../../shared/error";
+import { errorSchema } from "../../shared/schemas";
+import { capabilityAdministrationSchema } from "./capabilities/contracts";
 
 export function registerOperatorCapabilityRoutes(
   app: OpenAPIHono<Env>,
   container: ApplicationContainer,
 ) {
-  const {
-    errorSchema,
-    capabilityAdministrationSchema,
-    requirePrincipal,
-    requireSessionCapability,
-    domainError,
-  } = routeContracts;
   const capabilityParams = z.object({ accountId: z.string().uuid() });
   const capabilityBody = z.object({ capability: z.string().min(1).max(64) }).strict();
   app.openapi(

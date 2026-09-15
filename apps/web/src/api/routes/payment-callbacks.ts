@@ -1,6 +1,6 @@
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import type { Env } from "./contracts";
+import type { Env } from "../shared/context";
 
 export function registerPaymentCallbackRoutes(
   app: OpenAPIHono<Env>,

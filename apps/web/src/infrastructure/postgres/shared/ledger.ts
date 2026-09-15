@@ -7,10 +7,10 @@ import type {
   LedgerRepository,
   PurchaseDistribution,
 } from "@/modules/ledger/ledger";
-import type { SqlExecutor } from "./database";
+import type { QueryExecutor } from "./database";
 
 export class PostgresFinancialDistributionPolicyRepository implements FinancialDistributionPolicyRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async getActive(): Promise<FinancialDistributionPolicy> {
     const row = (
       await this.sql.query<{
@@ -65,7 +65,7 @@ interface EntryRow {
   created_at: Date;
 }
 export class PostgresLedgerRepository implements LedgerRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async findDistributionByPurchaseId(purchaseId: string): Promise<PurchaseDistribution | null> {
     const row = (
       await this.sql.query<DistributionRow>(

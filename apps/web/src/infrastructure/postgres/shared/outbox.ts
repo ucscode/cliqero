@@ -1,15 +1,5 @@
-import type { DomainEvent, EventOutbox } from "@/kernel/events";
-import type { SqlExecutor } from "./database";
-
-export interface ClaimedOutboxEvent {
-  id: string;
-  name: string;
-  aggregateId: string;
-  correlationId: string;
-  payload: object;
-  occurredAt: Date;
-  attemptCount: number;
-}
+import type { ClaimedOutboxEvent, DomainEvent, EventOutbox } from "@/kernel/events";
+import type { QueryExecutor } from "./database";
 
 interface OutboxRow {
   id: string;
@@ -22,7 +12,7 @@ interface OutboxRow {
 }
 
 export class PostgresOutbox implements EventOutbox {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
 
   async append(events: readonly DomainEvent[]): Promise<void> {
     for (const event of events) {
@@ -97,3 +87,5 @@ export class PostgresOutbox implements EventOutbox {
     );
   }
 }
+
+export type { ClaimedOutboxEvent } from "@/kernel/events";

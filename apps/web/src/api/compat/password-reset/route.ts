@@ -3,7 +3,7 @@ import { apiError } from "../../http";
 import { passwordResetError } from "@/api/auth-errors";
 import { getContainer } from "@/infrastructure/container";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
-import type { BetterAuthInstance } from "@/modules/identity/better-auth";
+import type { BetterAuthInstance } from "@/infrastructure/identity/better-auth";
 import { logDevelopmentError } from "@/infrastructure/development-log";
 
 const bodySchema = z.object({

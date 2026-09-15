@@ -5,7 +5,7 @@ import type { Account } from "@/modules/identity/account";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import type { ListingMedia } from "@/modules/listing/media/media";
 import type { ListingMediaService } from "@/application/listing/media";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { RatingSummary } from "@/modules/listing/reviews/review";
 
@@ -13,7 +13,7 @@ export class ListingService {
   constructor(
     private readonly listings: ListingRepository,
     private readonly authorization: AuthorizationPolicy,
-    private readonly sql?: SqlExecutor,
+    private readonly sql?: QueryExecutor,
     private readonly uow?: UnitOfWork,
   ) {}
   async create(

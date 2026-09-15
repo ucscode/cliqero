@@ -2,8 +2,7 @@ import { createHash } from "node:crypto";
 import { newId } from "@/kernel/ids";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { EventOutbox } from "@/kernel/events";
-import type { PaystackProvider } from "@/providers/payment/paystack/provider";
-import type { PostgresProviderEventRepository } from "@/infrastructure/postgres/payment/provider-events";
+import type { PaystackWebhookVerifier, ProviderEventStore } from "./contracts";
 
 interface PaystackChargeSuccess {
   event: "charge.success";
@@ -22,8 +21,8 @@ interface PaystackRefundProcessed {
 }
 export class PaystackWebhookIngress {
   constructor(
-    private readonly provider: PaystackProvider,
-    private readonly events: PostgresProviderEventRepository,
+    private readonly provider: PaystackWebhookVerifier,
+    private readonly events: ProviderEventStore,
     private readonly outbox: EventOutbox,
     private readonly uow: UnitOfWork,
   ) {}

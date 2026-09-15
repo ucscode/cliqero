@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 
 type Cursor = { createdAt: string; id: string };
 
@@ -79,7 +79,7 @@ export type OperatorDistributionDetail = OperatorDistributionSummary & {
 };
 
 export class OperatorDistributionService {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
 
   async list(input: DistributionInput) {
     const cursor = decodeCursor(input.cursor);
@@ -236,7 +236,7 @@ export type OperatorEarningsEntry = {
 };
 
 export class OperatorEarningsService {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
 
   async list(input: {
     search?: string;

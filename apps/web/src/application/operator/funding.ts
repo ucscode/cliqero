@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { BankTransferOperatorConfirmationService } from "@/application/operator/bank-transfer";
 
@@ -153,7 +153,7 @@ function summary(row: any): OperatorFundingSummary {
 
 export class OperatorFundingService {
   constructor(
-    private readonly sql: SqlExecutor,
+    private readonly sql: QueryExecutor,
     private readonly uow: UnitOfWork = { transaction: (operation) => operation() },
     private readonly bankTransferConfirmation = new BankTransferOperatorConfirmationService(
       sql,

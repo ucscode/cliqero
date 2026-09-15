@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "./database";
+import type { QueryExecutor } from "./database";
 
 export interface IdempotencyResult {
   resultReference: string | null;
@@ -6,7 +6,7 @@ export interface IdempotencyResult {
 }
 
 export class PostgresIdempotencyRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
 
   async begin(scope: string, key: string): Promise<boolean> {
     const result = await this.sql.query(

@@ -2,7 +2,8 @@ import { Pool } from "pg";
 import { betterAuth, type Auth } from "better-auth";
 import { bearer } from "better-auth/plugins/bearer";
 import { nextCookies } from "better-auth/next-js";
-import type { SqlExecutor } from "@/kernel/sql";
+import type { QueryExecutor } from "@/kernel/database";
+import type { AuthenticationGateway, AuthSession } from "@/application/identity/contracts";
 import { sendAuthEmail, type AuthEmail } from "@/lib/email";
 import { siteConfig } from "@/config/site";
 import { getEnabledSocialProviders } from "@/config/auth";
@@ -30,12 +31,12 @@ async function deliverAuthenticationEmail(
 // option literal through every application service.
 export type BetterAuthInstance = Auth<any>;
 
-export class BetterAuthBoundary {
+export class BetterAuthBoundary implements AuthenticationGateway {
   readonly auth: BetterAuthInstance;
   private readonly pool: Pool;
 
   constructor(
-    private readonly sql: SqlExecutor,
+    private readonly sql: QueryExecutor,
     databaseUrl: string,
   ) {
     // Keep Better Auth's tables separate from Cliqero's domain schemas. The
@@ -108,6 +109,25 @@ export class BetterAuthBoundary {
 
   async close(): Promise<void> {
     await this.pool.end();
+  }
+
+  async signUpEmail(input: { email: string; password: string }): Promise<AuthSession> {
+    const result = await this.auth.api.signUpEmail({
+      body: { name: "", email: input.email, password: input.password },
+    });
+    return { user: { id: result.user.id }, token: result.token };
+  }
+
+  async signInEmail(input: { email: string; password: string }): Promise<AuthSession> {
+    const result = await this.auth.api.signInEmail({
+      body: { email: input.email, password: input.password },
+    });
+    return { user: { id: result.user.id }, token: result.token };
+  }
+
+  async getSession(headers: Headers): Promise<AuthSession | null> {
+    const result = await this.auth.api.getSession({ headers });
+    return result?.user ? { user: { id: result.user.id }, token: result.session?.token } : null;
   }
 
   /**

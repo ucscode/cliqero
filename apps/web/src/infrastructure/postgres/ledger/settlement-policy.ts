@@ -1,8 +1,8 @@
-import type { SqlExecutor } from "@/kernel/sql";
+import type { QueryExecutor } from "@/kernel/database";
 import type { SettlementPolicy, SettlementPolicyRepository } from "@/modules/ledger/settlement";
 
 export class PostgresSettlementPolicyRepository implements SettlementPolicyRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
 
   async getActive(): Promise<SettlementPolicy> {
     const row = (

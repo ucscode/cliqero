@@ -5,7 +5,7 @@ import {
   type ListingRepository,
   type ListingState,
 } from "@/modules/listing";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 
 interface ListingRow {
   id: string;
@@ -22,7 +22,7 @@ interface ListingRow {
 }
 
 export class PostgresListingRepository implements ListingRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async findById(id: string): Promise<Listing | null> {
     const row = (
       await this.sql.query<ListingRow>(

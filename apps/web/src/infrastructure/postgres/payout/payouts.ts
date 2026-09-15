@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 import type { PayoutFailureCategory, PayoutResult } from "@/modules/withdrawal/provider";
 export interface PayoutExecution {
   id: string;
@@ -27,7 +27,7 @@ export interface PayoutAttempt {
   attemptNumber: number;
 }
 export class PostgresPayoutRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async getExecutionForUpdate(withdrawalId: string) {
     const row = (
       await this.sql.query<any>(

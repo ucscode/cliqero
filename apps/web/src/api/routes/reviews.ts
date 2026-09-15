@@ -1,7 +1,7 @@
 import { OpenAPIHono, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import { requireCapabilityScope, requirePrincipal, reviewJson } from "./contracts";
-import type { Env } from "./contracts";
+import { requireCapabilityScope, requirePrincipal, type Env } from "../shared/context";
+import { reviewJson } from "./reviews/serialization";
 
 export function registerReviewRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
   app.get("/api/listings/:listingId/reviews", async (c) => {

@@ -1,22 +1,15 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import * as routeContracts from "../contracts";
-import type { Env } from "../contracts";
+import { requireCapabilityScope, requirePrincipal, type Env } from "../../shared/context";
+import { domainError } from "../../shared/error";
+import { errorSchema } from "../../shared/schemas";
+import { jsonSafe } from "../../shared/serialization";
+import { operatorTreasuryEntrySchema, operatorTreasurySummarySchema } from "./treasury/contracts";
 
 export function registerOperatorTreasuryRoutes(
   app: OpenAPIHono<Env>,
   container: ApplicationContainer,
 ) {
-  const {
-    errorSchema,
-    operatorTreasuryEntrySchema,
-    operatorTreasurySummarySchema,
-    requirePrincipal,
-    requireCapabilityScope,
-    domainError,
-    jsonSafe,
-  } = routeContracts;
-
   const treasuryEntryQuery = z.object({
     search: z.string().max(100).optional(),
     direction: z.enum(["credit", "debit"]).optional(),

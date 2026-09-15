@@ -1,5 +1,5 @@
 import { Feed } from "feed";
-import { getBlogService } from "@/application/blog/service";
+import { getBlogService } from "@/infrastructure/blog/service";
 import { siteConfig } from "@/config/site";
 export const dynamic = "force-dynamic";
 export function GET() {

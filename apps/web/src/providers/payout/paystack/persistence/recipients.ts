@@ -1,7 +1,7 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import type { PaystackRecipientStore } from "../provider";
 export class PostgresPaystackRecipientStore implements PaystackRecipientStore {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async find(accountId: string, fingerprint: string) {
     const row = (
       await this.sql.query<{ recipient_code: string }>(

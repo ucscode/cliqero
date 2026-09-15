@@ -1,9 +1,9 @@
-import type { SqlExecutor } from "@/kernel/sql";
+import type { QueryExecutor } from "@/kernel/database";
 import { hasCapability, type Capability } from "@/modules/identity/capabilities";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 
 export class PostgresOperatorAuthorizationService implements OperatorAuthorizationService {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async capabilities(accountId: string): Promise<readonly Capability[]> {
     const result = await this.sql.query<{ capability: string }>(
       `select capability from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1)`,

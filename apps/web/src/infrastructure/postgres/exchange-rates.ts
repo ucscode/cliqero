@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "./shared/database";
+import type { QueryExecutor } from "./shared/database";
 import type { ExchangeRateCache } from "@/modules/money/exchange-service";
 import type { ExchangeRateQuote } from "@/modules/money/exchange";
 interface Row {
@@ -11,7 +11,7 @@ interface Row {
   fetched_at: Date;
 }
 export class PostgresExchangeRateCache implements ExchangeRateCache {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async get(fromCurrency: string, toCurrency: string) {
     const row = (
       await this.sql.query<Row>(

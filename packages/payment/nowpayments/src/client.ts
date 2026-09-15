@@ -8,23 +8,13 @@ import type {
   NowPaymentsIpnPayload,
 } from "./types";
 
-const scalarAmountSchema = z.union([
-  z
-    .string()
-    .trim()
-    .regex(/^\d+(?:\.\d+)?$/),
-  z
-    .number()
-    .superRefine((value, context) => {
-      if (
-        !Number.isFinite(value) ||
-        value < 0 ||
-        (Number.isInteger(value) && !Number.isSafeInteger(value))
-      )
-        context.addIssue({ code: "custom", message: "unsafe provider decimal" });
-    })
-    .transform(numberDecimalToString),
-]);
+// NOWPayments documents monetary response fields as decimal strings. Reject
+// JSON numbers because response.json() has already passed them through
+// IEEE-754 before validation can inspect their original digits.
+const scalarAmountSchema = z
+  .string()
+  .trim()
+  .regex(/^\d+(?:\.\d+)?$/);
 const minimumAmountSchema = z.object({
   min_amount: scalarAmountSchema.nullable().optional(),
   fiat_equivalent: scalarAmountSchema.nullable().optional(),
@@ -196,25 +186,6 @@ export function parseIpnPayload(rawBody: Uint8Array): NowPaymentsIpnPayload | nu
   if (value.payment_status !== undefined && value.payment_status !== null && !paymentStatus)
     return null;
   return { orderId: value.order_id, paymentId, paymentStatus };
-}
-
-/**
- * NOWPayments normally returns decimal amounts as strings. If its JSON response
- * uses a number, JSON.parse has already discarded the original numeric token;
- * retain the parser's canonical decimal form and reject unsafe integer values
- * rather than introducing another numeric conversion in Cliqero.
- */
-function numberDecimalToString(value: number): string {
-  const text = String(value);
-  const scientific = /^(\d+)(?:\.(\d+))?e([+-]?\d+)$/i.exec(text);
-  if (!scientific) return text;
-  const [, whole, fraction = "", exponentText] = scientific;
-  const exponent = parseInt(exponentText, 10);
-  const digits = whole + fraction;
-  const decimalIndex = whole.length + exponent;
-  if (decimalIndex <= 0) return `0.${"0".repeat(-decimalIndex)}${digits}`;
-  if (decimalIndex >= digits.length) return `${digits}${"0".repeat(decimalIndex - digits.length)}`;
-  return `${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

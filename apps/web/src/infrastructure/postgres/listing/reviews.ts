@@ -4,7 +4,7 @@ import type {
   RatingSummary,
   ReviewStatus,
 } from "@/modules/listing/reviews/review";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 
 type ReviewRow = {
   id: string;
@@ -22,7 +22,7 @@ type ReviewRow = {
 };
 
 export class PostgresListingReviewRepository implements ListingReviewRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async findMine(listingId: string, accountId: string) {
     const row = (
       await this.sql.query<ReviewRow>(

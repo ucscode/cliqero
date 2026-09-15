@@ -1,20 +1,14 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import * as routeContracts from "../contracts";
-import type { Env } from "../contracts";
+import { requireCapabilityScope, requirePrincipal, type Env } from "../../shared/context";
+import { domainError } from "../../shared/error";
+import { errorSchema } from "../../shared/schemas";
+import { operatorAccountDetailSchema, operatorAccountSummarySchema } from "./accounts/contracts";
 
 export function registerOperatorAccountRoutes(
   app: OpenAPIHono<Env>,
   container: ApplicationContainer,
 ) {
-  const {
-    errorSchema,
-    operatorAccountSummarySchema,
-    operatorAccountDetailSchema,
-    requirePrincipal,
-    requireCapabilityScope,
-    domainError,
-  } = routeContracts;
   const accountListQuery = z.object({
     search: z.string().max(100).optional(),
     cursor: z.string().max(512).optional(),

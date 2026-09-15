@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 
 type ProjectionCursor = { createdAt: string; id: string };
 
@@ -26,7 +26,7 @@ function decodeCursor(value: string | undefined): ProjectionCursor | null {
 }
 
 export class AccountProjectionService {
-  constructor(private sql: SqlExecutor) {}
+  constructor(private sql: QueryExecutor) {}
   async purchases(accountId: string, input: { cursor?: string; limit: number }) {
     const cursor = decodeCursor(input.cursor);
     const rows = (

@@ -1,21 +1,12 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import type { SqlExecutor } from "./shared/database";
+import type { QueryExecutor } from "./shared/database";
 import { assertApiScopes } from "@/modules/identity/api/scopes";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
+import type { ApiKeyRecord as IdentityApiKeyRecord } from "@/modules/identity/api/keys";
 
-export interface ApiKeyRecord {
-  id: string;
-  accountId: string;
-  name: string;
-  keyPrefix: string;
-  scopes: string[];
-  createdAt: Date;
-  lastUsedAt: Date | null;
-  expiresAt: Date | null;
-  revokedAt: Date | null;
-}
+export type ApiKeyRecord = IdentityApiKeyRecord;
 export class PostgresApiKeyRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async insert(input: {
     accountId: string;
     name: string;
@@ -94,7 +85,7 @@ export class PostgresApiKeyRepository {
 export class ApiKeyService {
   constructor(
     private readonly repository: PostgresApiKeyRepository,
-    private readonly sql: SqlExecutor,
+    private readonly sql: QueryExecutor,
     private readonly uow?: UnitOfWork,
   ) {}
   async create(input: {

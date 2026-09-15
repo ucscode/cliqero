@@ -1,20 +1,18 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { apiScopeSchema } from "@/modules/identity/api/scopes";
-import * as routeContracts from "./contracts";
-import type { Env } from "./contracts";
+import {
+  grantableScopes,
+  requireCapabilityScope,
+  requirePrincipal,
+  requireScope,
+  type Env,
+} from "../shared/context";
+import { domainError } from "../shared/error";
+import { errorSchema } from "../shared/schemas";
+import { operatorApiKeyListSchema } from "./api-keys/contracts";
 
 export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
-  const {
-    errorSchema,
-    operatorApiKeyListSchema,
-    requirePrincipal,
-    requireScope,
-    requireCapabilityScope,
-    grantableScopes,
-    domainError,
-  } = routeContracts;
-
   const operatorKeyBody = z
     .object({
       name: z.string().min(1).max(100),
@@ -66,6 +64,10 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
         },
         400: {
           description: "Invalid key request",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "API-key management scope required",
           content: { "application/json": { schema: errorSchema } },
         },
       },

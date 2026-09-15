@@ -1,8 +1,8 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import type { ListingMedia, ListingMediaRepository } from "@/modules/listing/media/media";
 
 export class PostgresListingMediaRepository implements ListingMediaRepository {
-  constructor(private sql: SqlExecutor) {}
+  constructor(private sql: QueryExecutor) {}
   async findById(id: string) {
     const row = (
       await this.sql.query<any>(

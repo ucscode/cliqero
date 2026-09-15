@@ -1,10 +1,10 @@
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 import type {
   PurchaseAttribution,
   ReferralAttributionRepository,
 } from "@/modules/referral/attribution";
 export class PostgresReferralAttributionRepository implements ReferralAttributionRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async createAttribution(input: {
     id: string;
     listingId: string;

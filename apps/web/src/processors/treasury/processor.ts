@@ -1,9 +1,9 @@
 import { newId } from "@/kernel/ids";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import type { TreasuryRepository } from "@/modules/treasury/treasury";
 export class TreasuryProcessor {
   constructor(
-    private sql: SqlExecutor,
+    private sql: QueryExecutor,
     private treasury: TreasuryRepository,
   ) {}
   async findWork(limit = 50) {

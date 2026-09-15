@@ -1,21 +1,18 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import * as routeContracts from "../contracts";
-import type { Env } from "../contracts";
+import { requireCapabilityScope, requirePrincipal, type Env } from "../../shared/context";
+import { domainError } from "../../shared/error";
+import { errorSchema } from "../../shared/schemas";
+import {
+  fundingStateSchema,
+  operatorFundingDetailSchema,
+  operatorFundingSummarySchema,
+} from "./funding/contracts";
 
 export function registerOperatorFundingRoutes(
   app: OpenAPIHono<Env>,
   container: ApplicationContainer,
 ) {
-  const {
-    errorSchema,
-    fundingStateSchema,
-    operatorFundingSummarySchema,
-    operatorFundingDetailSchema,
-    requirePrincipal,
-    requireCapabilityScope,
-    domainError,
-  } = routeContracts;
   const operatorFundingQuery = z.object({
     search: z.string().max(100).optional(),
     state: fundingStateSchema.optional(),
@@ -145,7 +142,7 @@ export function registerOperatorFundingRoutes(
             c.req.valid("param").fundingId,
           ),
           200,
-        );
+        ) as never;
       } catch (error) {
         return domainError(c, error);
       }

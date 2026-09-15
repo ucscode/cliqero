@@ -4,7 +4,7 @@ import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { PurchaseRepository } from "@/modules/purchase/purchase";
 import type { PaymentRepository, PaymentProviderRegistry } from "@/modules/payment";
 import { Entitlement, type EntitlementRepository } from "@/modules/entitlement/entitlement";
-import type { PostgresIdempotencyRepository } from "@/infrastructure/postgres/shared/idempotency";
+import type { IdempotencyStore } from "./contracts";
 
 export class PaymentCompletionService {
   constructor(
@@ -12,7 +12,7 @@ export class PaymentCompletionService {
     private purchases: PurchaseRepository,
     private entitlements: EntitlementRepository,
     private providers: PaymentProviderRegistry,
-    private idempotency: PostgresIdempotencyRepository,
+    private idempotency: IdempotencyStore,
     private outbox: EventOutbox,
     private uow: UnitOfWork,
   ) {}

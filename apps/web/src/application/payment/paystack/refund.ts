@@ -1,17 +1,16 @@
 import { Money } from "@/modules/money/money";
-import type { PostgresProviderEventRepository } from "@/infrastructure/postgres/payment/provider-events";
+import type { ProviderEventStore } from "./contracts";
 import type { PaymentRepository } from "@/modules/payment";
 import type { PurchaseRepository } from "@/modules/purchase/purchase";
-import type { PurchaseReversalProcessor } from "@/processors/purchase/reversal";
-import type { OutboxEventHandler } from "@/workers/outbox/dispatcher";
-import type { ClaimedOutboxEvent } from "@/infrastructure/postgres/shared/outbox";
+import type { ClaimedOutboxEvent, OutboxEventHandler } from "@/kernel/events";
+import type { PurchaseReversalUseCase } from "./refund-contracts";
 export class PaystackRefundProcessedHandler implements OutboxEventHandler {
   readonly eventNames = ["payment.paystack.refund-processed"];
   constructor(
-    private readonly events: PostgresProviderEventRepository,
+    private readonly events: ProviderEventStore,
     private readonly payments: PaymentRepository,
     private readonly purchases: PurchaseRepository,
-    private readonly reversals: PurchaseReversalProcessor,
+    private readonly reversals: PurchaseReversalUseCase,
   ) {}
   async handle(event: ClaimedOutboxEvent) {
     const id = isPayload(event.payload) ? event.payload.providerEventId : null;

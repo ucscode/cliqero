@@ -1,8 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { QueryResult, QueryResultRow } from "pg";
+import type { QueryResultRow } from "pg";
 import { createContainer } from "@/infrastructure/container";
 import { PostgresReferralGraphRepository } from "@/infrastructure/postgres/referral/referrals";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor, QueryResult } from "@/kernel/database";
 import { newId } from "@/kernel/ids";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -300,7 +300,7 @@ suite("referral graph and trusted purchase attribution", () => {
       join identity_capability.accounts parent_account on parent_account.uuid=parent_item.uuid`,
       [grandchildren, children],
     );
-    class CountingExecutor implements SqlExecutor {
+    class CountingExecutor implements QueryExecutor {
       count = 0;
       query<T extends QueryResultRow = QueryResultRow>(
         sql: string,

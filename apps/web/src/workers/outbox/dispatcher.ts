@@ -1,9 +1,7 @@
-import type { ClaimedOutboxEvent, PostgresOutbox } from "@/infrastructure/postgres/shared/outbox";
+import type { ClaimedOutboxEvent, OutboxEventHandler } from "@/kernel/events";
+import type { PostgresOutbox } from "@/infrastructure/postgres/shared/outbox";
 
-export interface OutboxEventHandler {
-  readonly eventNames: readonly string[];
-  handle(event: ClaimedOutboxEvent): Promise<void>;
-}
+export type { OutboxEventHandler } from "@/kernel/events";
 export interface WorkerLogger {
   info(fields: Record<string, unknown>, message: string): void;
   error(fields: Record<string, unknown>, message: string): void;

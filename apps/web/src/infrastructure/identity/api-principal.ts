@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/kernel/sql";
+import type { QueryExecutor } from "@/kernel/database";
 import { Account } from "@/modules/identity/account";
 import type { AuthenticationService } from "@/modules/identity/authentication";
 import type { Capability } from "@/modules/identity/capabilities";
@@ -11,7 +11,7 @@ export class ApiPrincipalResolver {
   constructor(
     private readonly authentication: AuthenticationService,
     private readonly apiKeys: ApiKeyAuthenticator,
-    private readonly sql: SqlExecutor,
+    private readonly sql: QueryExecutor,
   ) {}
   async resolve(request: Request): Promise<ApiPrincipal | null> {
     const authorization = request.headers.get("authorization");

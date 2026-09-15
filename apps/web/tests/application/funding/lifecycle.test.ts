@@ -5,6 +5,7 @@ import { PaymentProviderRegistry, type PaymentProvider } from "@/modules/payment
 import { PaystackProvider } from "@/providers/payment/paystack/provider";
 import { NowPaymentsProvider } from "@/providers/payment/nowpayments/provider";
 import { NowPaymentsExpiryProcessor } from "@/application/funding/expiry";
+import { NowPaymentsExpiryPolicy } from "@/providers/payment/nowpayments/expiry-policy";
 import { BankTransferProvider } from "@/providers/payment/bank-transfer/provider";
 import { FundingService } from "@/application/funding/service";
 import { FundingInitializationProcessor } from "@/application/funding/initialization";
@@ -211,7 +212,12 @@ describe("NOWPayments funding expiry", () => {
       new PaymentProviderRegistry().register(paymentProvider),
       { transaction: async (operation) => operation() },
     );
-    const expiry = new NowPaymentsExpiryProcessor(repository as never, verification, () => now);
+    const expiry = new NowPaymentsExpiryProcessor(
+      repository as never,
+      verification,
+      new NowPaymentsExpiryPolicy(),
+      () => now,
+    );
     return { current: () => current, expiry, verify };
   }
 

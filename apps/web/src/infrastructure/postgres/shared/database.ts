@@ -1,13 +1,13 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "pg";
+import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import type { SqlExecutor } from "@/kernel/sql";
+import type { QueryExecutor, QueryResult } from "@/kernel/database";
 
-export type { SqlExecutor } from "@/kernel/sql";
+export type { QueryExecutor, QueryResult } from "@/kernel/database";
 
 const transactionStorage = new AsyncLocalStorage<PoolClient>();
 
-export class PostgresDatabase implements SqlExecutor, UnitOfWork {
+export class PostgresDatabase implements QueryExecutor, UnitOfWork {
   constructor(private readonly pool: Pool) {
     // pg emits idle-client connection errors on the pool itself when
     // PostgreSQL disappears. Keep the process alive so callers can observe the
@@ -26,12 +26,13 @@ export class PostgresDatabase implements SqlExecutor, UnitOfWork {
     );
   }
 
-  query<TRow extends QueryResultRow = QueryResultRow>(
-    sql: string,
+  async query<TRow extends object = Record<string, unknown>>(
+    statement: string,
     values: readonly unknown[] = [],
   ): Promise<QueryResult<TRow>> {
     const executor = transactionStorage.getStore() ?? this.pool;
-    return executor.query<TRow>(sql, [...values]);
+    const result = await executor.query<TRow & QueryResultRow>(statement, [...values]);
+    return { rows: result.rows as TRow[], rowCount: result.rowCount };
   }
 
   async transaction<T>(operation: () => Promise<T>): Promise<T> {

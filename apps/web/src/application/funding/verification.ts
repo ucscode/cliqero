@@ -5,7 +5,7 @@ import type {
   PaymentVerificationObservation,
 } from "@/modules/payment";
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
-import type { PostgresPaymentOperationsRepository } from "@/infrastructure/postgres/payment/operations";
+import type { FundingOperations } from "./contracts";
 import { ProviderOperationError } from "@/kernel/provider-error";
 import { DuplicateProviderTransactionError } from "@/kernel/errors";
 
@@ -16,7 +16,7 @@ export class FundingVerificationProcessor {
     private funding: FundingRepository,
     private providers: PaymentProviderRegistry,
     private uow: UnitOfWork,
-    private operations?: PostgresPaymentOperationsRepository,
+    private operations?: FundingOperations,
   ) {}
 
   async process(

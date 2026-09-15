@@ -1,13 +1,16 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { dispatchLegacyApi, legacyApiPaths } from "./legacy-dispatch";
+import { applyOpenApiMetadata } from "./openapi/metadata";
+import type { OpenApiDocument } from "./openapi/metadata";
 import {
   canReadOpenApiSchema,
   loadOpenApiSchemaAccess,
   type OpenApiSchemaAccess,
 } from "@/security/openapi";
-import * as routeContracts from "./routes/contracts";
-import type { Env } from "./routes/contracts";
+import type { Env } from "./shared/context";
+import { domainError } from "./shared/error";
+import { errorSchema } from "./shared/schemas";
 import { registerBlogRoutes } from "./routes/blog";
 import { registerOperatorOperationsRoutes } from "./routes/operator/operations";
 import { registerOperatorFinanceRoutes } from "./routes/operator/finance";
@@ -19,8 +22,14 @@ import { registerFundingRoutes } from "./routes/funding";
 import { registerPaymentCallbackRoutes } from "./routes/payment-callbacks";
 import { registerReviewRoutes } from "./routes/reviews";
 import { registerAccountAccessRoutes } from "./routes/account-access";
-
-const { errorSchema, domainError } = routeContracts;
+import { accountAccessOpenApiMetadata } from "./routes/account-access/metadata";
+import { blogOpenApiMetadata } from "./routes/blog/metadata";
+import { hierarchyOpenApiMetadata } from "./routes/hierarchy/metadata";
+import { operatorAccountsOpenApiMetadata } from "./routes/operator/accounts/metadata";
+import { operatorFinanceOpenApiMetadata } from "./routes/operator/finance/metadata";
+import { operatorFundingOpenApiMetadata } from "./routes/operator/funding/metadata";
+import { operatorTreasuryOpenApiMetadata } from "./routes/operator/treasury/metadata";
+import { operatorWithdrawalOpenApiMetadata } from "./routes/operator/withdrawal/metadata";
 
 export function createApiApp(
   container: ApplicationContainer,
@@ -50,134 +59,23 @@ export function createApiApp(
     }),
     (c) => {
       if (!canReadOpenApiSchema(schemaAccess, c.req.header("x-openapi-key")))
-        return c.json({ error: "Not found", code: "not_found" }, 404);
+        return c.json({ error: "Not found", code: "not_found" }, 404) as never;
       const document = app.getOpenAPIDocument({
         openapi: "3.0.0",
         info: { title: "Cliqero API", version: "1.0.0" },
         servers: [{ url: "/" }],
-      }) as any;
-      const response = {
-        description: "Application API response",
-        content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
-      };
-      const errorResponse = {
-        description: "Request error",
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: { error: { type: "string" }, code: { type: "string" } },
-              required: ["error"],
-            },
-          },
-        },
-      };
-      for (const route of legacyApiPaths) {
-        const path = (document.paths[route.path] ??= {});
-        for (const routeMethod of route.methods) {
-          const operation = routeMethod.method.toLowerCase();
-          path[operation] ??= {
-            "x-authentication-mode": routeMethod.access.mode,
-            ...(routeMethod.access.scope
-              ? { "x-required-api-scope": routeMethod.access.scope }
-              : {}),
-            responses: {
-              "200": response,
-              "400": errorResponse,
-              "401": errorResponse,
-              "403": errorResponse,
-              "404": errorResponse,
-            },
-          };
-        }
-      }
-      const overview = document.paths["/api/operator/overview"]?.get;
-      if (overview) {
-        overview["x-authentication-mode"] = "account";
-        overview["x-required-api-scope"] = "operations:manage";
-      }
-      for (const path of ["/api/operator/accounts", "/api/operator/accounts/{accountId}"]) {
-        const operation = document.paths[path]?.get;
-        if (operation) {
-          operation["x-authentication-mode"] = "account";
-          operation["x-required-api-scope"] = "operations:manage";
-        }
-      }
-      for (const path of ["/api/operator/funding", "/api/operator/funding/{fundingId}"]) {
-        const operation = document.paths[path]?.get;
-        if (operation) {
-          operation["x-authentication-mode"] = "account";
-          operation["x-required-api-scope"] = "operations:manage";
-        }
-      }
-      for (const path of [
-        "/api/operator/distributions",
-        "/api/operator/distributions/{distributionId}",
-        "/api/operator/earnings",
-      ]) {
-        const operation = document.paths[path]?.get;
-        if (operation) {
-          operation["x-authentication-mode"] = "account";
-          operation["x-required-api-scope"] = "operations:manage";
-        }
-      }
-      for (const path of [
-        "/api/operator/blog",
-        "/api/blog/posts",
-        "/api/blog/posts/{id}",
-        "/api/blog/posts/{id}/publish",
-        "/api/blog/posts/{id}/unpublish",
-      ]) {
-        const pathItem = document.paths[path];
-        if (pathItem)
-          for (const [method, operation] of Object.entries(pathItem) as any[])
-            if (operation && typeof operation === "object") {
-              operation["x-authentication-mode"] =
-                path === "/api/blog/posts" && method === "get" ? "public" : "account";
-              operation["x-required-api-scope"] =
-                method === "post" && path.endsWith("publish")
-                  ? "blog:publish"
-                  : method === "delete"
-                    ? "blog:manage"
-                    : method === "patch" || method === "post"
-                      ? "blog:write"
-                      : "blog:read";
-            }
-      }
-      for (const path of [
-        "/api/operator/withdrawals",
-        "/api/operator/withdrawals/{withdrawalId}",
-        "/api/operator/withdrawals/{withdrawalId}/approve",
-        "/api/operator/withdrawals/{withdrawalId}/reject",
-        "/api/operator/withdrawals/{withdrawalId}/payout",
-        "/api/operator/withdrawals/{withdrawalId}/payout/reconcile",
-        "/api/operator/withdrawals/{withdrawalId}/complete",
-      ]) {
-        const pathItem = document.paths[path];
-        if (pathItem)
-          for (const operation of Object.values(pathItem) as any[]) {
-            if (operation && typeof operation === "object") {
-              operation["x-authentication-mode"] = "account";
-              operation["x-required-api-scope"] = "withdrawals:manage";
-            }
-          }
-      }
-      for (const [path, method] of [
-        ["/api/operator/treasury", "get"],
-        ["/api/operator/treasury/entries", "get"],
-        ["/api/operator/treasury/entries/{entryId}", "get"],
-        ["/api/operator/treasury/entries", "post"],
-      ] as const) {
-        const operation = document.paths[path]?.[method];
-        if (operation) {
-          operation["x-authentication-mode"] = "account";
-          operation["x-required-api-scope"] =
-            method === "post" ? "treasury:manage" : "treasury:read";
-        }
-      }
-      const access = document.paths["/api/me/access"]?.get;
-      if (access) access["x-authentication-mode"] = "account";
-      return c.json(document);
+      }) as unknown as OpenApiDocument;
+      applyOpenApiMetadata(document, legacyApiPaths, [
+        accountAccessOpenApiMetadata,
+        blogOpenApiMetadata,
+        hierarchyOpenApiMetadata,
+        operatorAccountsOpenApiMetadata,
+        operatorFinanceOpenApiMetadata,
+        operatorFundingOpenApiMetadata,
+        operatorTreasuryOpenApiMetadata,
+        operatorWithdrawalOpenApiMetadata,
+      ]);
+      return c.json(document, 200) as never;
     },
   );
   registerBlogRoutes(app, container);

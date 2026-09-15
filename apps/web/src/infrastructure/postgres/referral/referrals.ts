@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 import {
   assertPageLimit,
   assertTraversalDepth,
@@ -9,7 +9,7 @@ import {
 import { CommissionPolicy, type CommissionPolicyRepository } from "@/modules/referral/commission";
 
 export class PostgresReferralGraphRepository implements ReferralGraphRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async assignParent(childAccountId: string, parentAccountId: string): Promise<void> {
     await this.sql.query(
       `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2))`,
@@ -118,7 +118,7 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
   }
 }
 export class PostgresCommissionPolicyRepository implements CommissionPolicyRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async getActive(): Promise<CommissionPolicy> {
     const row = (
       await this.sql.query<{ rates_basis_points: number[] }>(

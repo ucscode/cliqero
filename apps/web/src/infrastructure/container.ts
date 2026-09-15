@@ -14,6 +14,7 @@ import {
 } from "./postgres/referral/referrals";
 import { PostgresReferralAttributionRepository } from "./postgres/referral/attributions";
 import { AuthenticationService } from "@/application/identity/authentication";
+import { BetterAuthBoundary } from "@/infrastructure/identity/better-auth";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import { AccessService } from "@/modules/access/access";
 import { PostgresIntegrationService } from "@/infrastructure/postgres/access/integrations";
@@ -25,6 +26,7 @@ import { PaystackWebhookIngress } from "@/application/payment/paystack/webhook";
 import { NowPaymentsProvider } from "@/providers/payment/nowpayments/provider";
 import { loadNowPaymentsConfiguration } from "@/providers/payment/nowpayments/config";
 import { NowPaymentsExpiryProcessor } from "@/application/funding/expiry";
+import { NowPaymentsExpiryPolicy } from "@/providers/payment/nowpayments/expiry-policy";
 import { NowPaymentsIpnIngress } from "@/application/payment/nowpayments/ipn";
 import { DirectTrc20Provider } from "@/providers/payment/direct-trc20/provider";
 import { HttpDirectTrc20Verifier } from "@/providers/payment/direct-trc20/verifier";
@@ -118,7 +120,7 @@ import {
   OperatorEarningsService,
 } from "@/application/operator/distributions";
 import { OperatorWithdrawalService } from "@/application/operator/withdrawals";
-import { getBlogService } from "@/application/blog/service";
+import { getBlogService } from "@/infrastructure/blog/service";
 
 export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
@@ -319,7 +321,12 @@ export function createContainer(databaseUrl: string) {
     database,
     fundingVerification,
   );
-  const fundingExpiry = new NowPaymentsExpiryProcessor(funding, fundingVerification);
+  const fundingExpiry = new NowPaymentsExpiryProcessor(
+    funding,
+    fundingVerification,
+    new NowPaymentsExpiryPolicy(),
+    () => new Date(),
+  );
   const wallet = new WalletService(walletRepository);
   const walletCredit = new WalletCreditProcessor(funding, walletRepository, database);
   const walletAvailability = new WalletAvailabilityProcessor(walletRepository, database);
@@ -331,7 +338,11 @@ export function createContainer(databaseUrl: string) {
   );
   const entitlementIssuance = new EntitlementIssuanceProcessor(purchases, entitlements, database);
   const operators = new PostgresOperatorAuthorizationService(database);
-  const authentication = new AuthenticationService(database, databaseUrl);
+  const betterAuth = new BetterAuthBoundary(database, databaseUrl);
+  const authentication = Object.assign(new AuthenticationService(accounts, betterAuth, database), {
+    auth: betterAuth.auth,
+    betterAuth,
+  });
   const apiKeyRepository = new PostgresApiKeyRepository(database);
   const apiKeys = new ApiKeyService(apiKeyRepository, database, database);
   const operatorApiKeys = new OperatorApiKeyService(apiKeys, database, database);
@@ -365,7 +376,7 @@ export function createContainer(databaseUrl: string) {
     principalResolver,
     authorization: new AuthorizationPolicy(),
     integrations: new PostgresIntegrationService(database, database),
-    profiles: new ProfileService(database),
+    profiles: new ProfileService(accounts),
     accountProjections: new AccountProjectionService(database),
     listingService,
     listingTransfer,

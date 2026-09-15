@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import { hasCapability, type Capability } from "@/modules/identity/capabilities";
 
 export type OperatorOverview = {
@@ -18,7 +18,7 @@ function count(value: unknown) {
 }
 
 export class OperatorOverviewService {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
 
   async get(capabilities: readonly Capability[]): Promise<OperatorOverview> {
     const catalogue = hasCapability(capabilities, "catalogue.manage")

@@ -3,13 +3,25 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { PostgresDatabase } from "@/infrastructure/postgres/shared/database";
 import { AuthenticationService } from "@/application/identity/authentication";
+import { BetterAuthBoundary } from "@/infrastructure/identity/better-auth";
+import { PostgresAccountRepository } from "@/infrastructure/postgres/identity/accounts";
 import { CAPABILITIES, type Capability } from "@/modules/identity/capabilities";
 type AccountRow = { id: string; email: string | null; username: string; country: string | null };
-type IdentityContext = { database: PostgresDatabase; authentication: AuthenticationService };
+type IdentityContext = {
+  database: PostgresDatabase;
+  authentication: AuthenticationService & { betterAuth: BetterAuthBoundary };
+};
 
 function openContext(): IdentityContext {
   const database = PostgresDatabase.connect(requiredDatabaseUrl());
-  return { database, authentication: new AuthenticationService(database, requiredDatabaseUrl()) };
+  const betterAuth = new BetterAuthBoundary(database, requiredDatabaseUrl());
+  const accounts = new PostgresAccountRepository(database);
+  return {
+    database,
+    authentication: Object.assign(new AuthenticationService(accounts, betterAuth, database), {
+      betterAuth,
+    }),
+  };
 }
 
 async function closeContext(context: IdentityContext) {

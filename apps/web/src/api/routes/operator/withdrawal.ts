@@ -1,25 +1,21 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { newId } from "@/kernel/ids";
-import * as routeContracts from "../contracts";
-import type { Env } from "../contracts";
+import { requireCapabilityScope, requirePrincipal, type Env } from "../../shared/context";
+import { domainError } from "../../shared/error";
+import { errorSchema } from "../../shared/schemas";
+import { jsonSafe } from "../../shared/serialization";
+import {
+  operatorWithdrawalAttentionSchema,
+  operatorWithdrawalDetailSchema,
+  operatorWithdrawalSchema,
+  operatorWithdrawalStateSchema,
+} from "./withdrawal/contracts";
 
 export function registerOperatorWithdrawalRoutes(
   app: OpenAPIHono<Env>,
   container: ApplicationContainer,
 ) {
-  const {
-    errorSchema,
-    operatorWithdrawalStateSchema,
-    operatorWithdrawalAttentionSchema,
-    operatorWithdrawalSchema,
-    operatorWithdrawalDetailSchema,
-    requirePrincipal,
-    requireCapabilityScope,
-    domainError,
-    jsonSafe,
-  } = routeContracts;
-
   const operatorWithdrawalQuery = z.object({
     search: z.string().max(100).optional(),
     state: operatorWithdrawalStateSchema.optional(),

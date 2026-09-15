@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Money } from "@/modules/money/money";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 import type {
   FundingRepository,
   FundingHistoryPage,
@@ -10,7 +10,7 @@ import type {
 import { DuplicateProviderTransactionError } from "@/kernel/errors";
 
 export class PostgresFundingRepository implements FundingRepository {
-  constructor(private sql: SqlExecutor) {}
+  constructor(private sql: QueryExecutor) {}
   findById(id: string, o?: { forUpdate?: boolean }) {
     return this.find("f.uuid=$1", [id], o);
   }

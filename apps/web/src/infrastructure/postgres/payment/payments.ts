@@ -1,6 +1,6 @@
 import { Money } from "@/modules/money/money";
 import type { PaymentRecord, PaymentRepository, PaymentState } from "@/modules/payment";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 
 interface PaymentRow {
   id: string;
@@ -23,7 +23,7 @@ interface PaymentRow {
   created_at: Date;
 }
 export class PostgresPaymentRepository implements PaymentRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async findById(id: string, options?: { forUpdate?: boolean }): Promise<PaymentRecord | null> {
     return this.find("p.uuid=$1", [id], options?.forUpdate ?? false);
   }

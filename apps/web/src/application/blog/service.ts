@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
+import type Database from "better-sqlite3";
 import slugify from "slugify";
 import { newId } from "@/kernel/ids";
-import { getBlogDatabase } from "@/infrastructure/blog/database";
 import { blogPostInputSchema, type BlogPost, type BlogPostInput } from "@/modules/blog/domain/blog";
 
 type Row = Record<string, any>;
@@ -50,7 +50,7 @@ function requestHash(input: BlogPostInput) {
 }
 
 export class BlogService {
-  private readonly db = getBlogDatabase().sqlite;
+  constructor(private readonly db: BlogDatabase) {}
 
   private uniqueSlug(desired: string, excludeId?: string) {
     const base = desired || "post";
@@ -302,7 +302,4 @@ export class BlogService {
   }
 }
 
-let service: BlogService | undefined;
-export function getBlogService() {
-  return (service ??= new BlogService());
-}
+export type BlogDatabase = Database.Database;

@@ -1,5 +1,5 @@
 import { Purchase, type PurchaseRepository, type PurchaseState } from "@/modules/purchase/purchase";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 
 interface PurchaseRow {
   id: string;
@@ -20,7 +20,7 @@ interface PurchaseRow {
 }
 
 export class PostgresPurchaseRepository implements PurchaseRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async findById(id: string, options?: { forUpdate?: boolean }): Promise<Purchase | null> {
     const lock = options?.forUpdate ? " for update" : "";
     const row = (

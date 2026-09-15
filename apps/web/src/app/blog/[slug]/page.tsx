@@ -7,7 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { SiteHeader } from "@/components/site/header";
 import { SiteFooter } from "@/components/site/footer";
 import { BlogMarkdown } from "@/components/blog/markdown";
-import { getBlogService } from "@/application/blog/service";
+import { getBlogService } from "@/infrastructure/blog/service";
 import { siteConfig } from "@/config/site";
 export const dynamic = "force-dynamic";
 export async function generateMetadata({

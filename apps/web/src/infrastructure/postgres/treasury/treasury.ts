@@ -1,7 +1,7 @@
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 import type { TreasuryEntry, TreasuryRepository } from "@/modules/treasury/treasury";
 export class PostgresTreasuryRepository implements TreasuryRepository {
-  constructor(private sql: SqlExecutor) {}
+  constructor(private sql: QueryExecutor) {}
   async create(v: TreasuryEntry) {
     const result = await this.sql.query(
       `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,created_at)

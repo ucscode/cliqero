@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 
 type WithdrawalState = "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
 type Cursor = { createdAt: string; id: string };
@@ -128,7 +128,7 @@ const projection = `
    left join payout_capability.executions p on p.withdrawal_id=w.id`;
 
 export class OperatorWithdrawalService {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async list(input: {
     search?: string;
     state?: WithdrawalState;

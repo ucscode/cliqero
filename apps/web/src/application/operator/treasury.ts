@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 
 type Cursor = { createdAt: string; id: string };
 
@@ -49,7 +49,7 @@ export type OperatorTreasurySummary = {
 };
 
 export class OperatorTreasuryService {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
 
   async summary(): Promise<OperatorTreasurySummary> {
     const row = (

@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { newId, type Id } from "@/kernel/ids";
 import { ScopedIntegration } from "@/modules/access/integrations";
-import type { SqlExecutor } from "@/kernel/sql";
+import type { QueryExecutor } from "@/kernel/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 const hashCredential = (salt: Buffer, secret: string) =>
@@ -18,7 +18,7 @@ interface IntegrationRow {
 
 export class PostgresIntegrationService {
   constructor(
-    private readonly sql: SqlExecutor,
+    private readonly sql: QueryExecutor,
     private readonly uow?: UnitOfWork,
   ) {}
   async create(ownerId: Id, name: string, listingId: Id): Promise<{ id: Id; credential: string }> {

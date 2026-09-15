@@ -1,9 +1,9 @@
 import { Money } from "@/modules/money/money";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 import type { Checkout, CheckoutRepository } from "@/modules/checkout/checkout";
 
 export class PostgresCheckoutRepository implements CheckoutRepository {
-  constructor(private sql: SqlExecutor) {}
+  constructor(private sql: QueryExecutor) {}
   findById(id: string, o?: { forUpdate?: boolean }) {
     return this.find("c.uuid=$1", [id], o);
   }

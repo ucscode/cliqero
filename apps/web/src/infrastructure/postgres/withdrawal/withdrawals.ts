@@ -1,5 +1,5 @@
 import { Money } from "@/modules/money/money";
-import type { SqlExecutor } from "../shared/database";
+import type { QueryExecutor } from "../shared/database";
 import type {
   Withdrawal,
   WithdrawalRepository,
@@ -22,7 +22,7 @@ interface Row {
   updated_at: Date;
 }
 export class PostgresWithdrawalRepository implements WithdrawalRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async findById(id: string) {
     return this.find("w.uuid=$1", [id]);
   }
@@ -104,7 +104,7 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
   }
 }
 export class PostgresWithdrawalPolicyRepository implements WithdrawalPolicyRepository {
-  constructor(private readonly sql: SqlExecutor) {}
+  constructor(private readonly sql: QueryExecutor) {}
   async getActive(): Promise<WithdrawalPolicy> {
     const row = (
       await this.sql.query<{

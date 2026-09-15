@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { QueryResult } from "pg";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor, QueryResult } from "@/kernel/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { CapabilityAdministrationService } from "@/application/capability-administration";
 
 type Row = Record<string, unknown>;
 
-class FakeDatabase implements SqlExecutor, UnitOfWork {
+class FakeDatabase implements QueryExecutor, UnitOfWork {
   readonly accounts = new Set<string>();
   readonly capabilities = new Map<string, Map<string, string>>();
   readonly audits: Row[] = [];
@@ -15,7 +14,10 @@ class FakeDatabase implements SqlExecutor, UnitOfWork {
     return operation();
   }
 
-  async query<TRow extends Row = Row>(sql: string, values: readonly unknown[] = []) {
+  async query<TRow extends object = Record<string, unknown>>(
+    sql: string,
+    values: readonly unknown[] = [],
+  ): Promise<QueryResult<TRow>> {
     const text = sql.replace(/\s+/g, " ").trim();
     const accountId = String(values[0] ?? "");
     if (text.startsWith("select ac.capability from identity_capability.account_capabilities")) {

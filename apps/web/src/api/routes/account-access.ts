@@ -1,8 +1,9 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { canAccessOperator } from "@/modules/identity/capabilities";
-import { accountAccessSchema, errorSchema, requirePrincipal } from "./contracts";
-import type { Env } from "./contracts";
+import { requirePrincipal, type Env } from "../shared/context";
+import { errorSchema } from "../shared/schemas";
+import { accountAccessSchema } from "./account-access/contracts";
 
 export function registerAccountAccessRoutes(
   app: OpenAPIHono<Env>,

@@ -3,7 +3,7 @@ import { formatMinorMoney } from "@/modules/money/money";
 import type { PaymentProviderRegistry } from "@/modules/payment";
 import type { AccountReader } from "@/modules/identity/account";
 import type { FundingRepository } from "@/modules/funding/funding";
-import type { PostgresPaymentOperationsRepository } from "@/infrastructure/postgres/payment/operations";
+import type { FundingOperations } from "./contracts";
 import { ProviderOperationError } from "@/kernel/provider-error";
 import { DuplicateProviderTransactionError } from "@/kernel/errors";
 
@@ -13,7 +13,7 @@ export class FundingInitializationProcessor {
     private providers: PaymentProviderRegistry,
     private accounts: AccountReader,
     private uow: UnitOfWork,
-    private operations?: PostgresPaymentOperationsRepository,
+    private operations?: FundingOperations,
     private staleClaimMs = 5 * 60_000,
     private clock: () => Date = () => new Date(),
   ) {}

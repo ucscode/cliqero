@@ -1,6 +1,6 @@
 import { PublicApplicationError } from "@/kernel/errors";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
+import type { QueryExecutor } from "@/kernel/database";
 import {
   CAPABILITIES,
   canManageCapability,
@@ -40,7 +40,7 @@ function forbidden(message: string, code: string) {
 
 export class CapabilityAdministrationService {
   constructor(
-    private readonly sql: SqlExecutor,
+    private readonly sql: QueryExecutor,
     private readonly uow: UnitOfWork,
   ) {}
 
