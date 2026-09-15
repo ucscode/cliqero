@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { newId } from "@/kernel/ids";
 import { Account } from "@/modules/identity/account";
 import { getContainer } from "@/infrastructure/container";
-import { fixturePng } from "@/scripts/fixture-media";
+import { fixturePng } from "@/infrastructure/postgres/seed/fixture-media";
 
 if (process.env.NODE_ENV === "production")
   throw new Error("Catalogue fixtures are development-only");
