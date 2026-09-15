@@ -5,11 +5,11 @@ import {
   type CurrencyMappingConfig,
 } from "@/modules/money/country-currency";
 import { Money } from "@/modules/money/money";
+import { AbstractPaymentProvider } from "@/modules/payment/payment";
 import type {
   PaymentInitialization,
   PaymentFundingOption,
-  PaymentProvider,
-  PaymentVerification,
+  PaymentResult,
 } from "@/modules/payment/payment";
 
 export interface BankTransferConfiguration {
@@ -38,7 +38,7 @@ export interface BankTransferAccount {
 }
 
 /** Manual bank transfer funding. Confirmation is deliberately never inferred from submission. */
-export class BankTransferProvider implements PaymentProvider {
+export class BankTransferProvider extends AbstractPaymentProvider {
   readonly name = "bank_transfer";
   readonly displayName: string;
   readonly imageUrl: string;
@@ -50,6 +50,7 @@ export class BankTransferProvider implements PaymentProvider {
     private readonly config: BankTransferConfiguration,
     private readonly countryCurrencies: CountryCurrencyResolver = loadCountryCurrencyResolver(),
   ) {
+    super();
     this.displayName = config.displayName ?? "Bank transfer";
     this.imageUrl = config.imageUrl ?? "/images/payment/bank-transfer.svg";
     this.description = config.description ?? "Transfer funds from your bank account.";
@@ -148,12 +149,16 @@ export class BankTransferProvider implements PaymentProvider {
     reference: string;
     expectedAmount: Money;
     providerTransactionId?: string;
-  }): Promise<PaymentVerification> {
+  }): Promise<PaymentResult> {
     return {
-      verified: false,
-      status: "awaiting_manual_confirmation",
+      state: "pending",
       reference: input.reference,
       amount: input.expectedAmount,
+      observation: {
+        status: "awaiting_transaction",
+        message: "Your bank transfer is awaiting manual verification.",
+        level: "info",
+      },
     };
   }
 }

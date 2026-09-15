@@ -53,8 +53,8 @@ describe("bank transfer funding provider", () => {
       reference: initialized.reference,
       expectedAmount: Money.of(1250n, "USD"),
     });
-    expect(verification.verified).toBe(false);
-    expect(verification.status).toBe("awaiting_manual_confirmation");
+    expect(verification.state).toBe("pending");
+    expect(verification.observation?.status).toBe("awaiting_transaction");
   });
 
   it("exposes every country-eligible account and requires an explicit choice", async () => {

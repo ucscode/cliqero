@@ -65,13 +65,12 @@ describe("direct TRC20 provider", () => {
         reference: "ref",
         expectedAmount,
       }),
-    ).resolves.toMatchObject({ status: "awaiting_transaction" });
+    ).resolves.toMatchObject({ state: "pending", observation: { status: "awaiting_transaction" } });
   });
 
   it("accepts a confirming transaction identity before final confirmation", async () => {
     await expect(verify(validTransfer({ confirmations: 5 }))).resolves.toMatchObject({
-      verified: false,
-      status: "confirming",
+      state: "pending",
       providerTransactionId: transactionHash,
       observation: { level: "info" },
     });
@@ -79,16 +78,14 @@ describe("direct TRC20 provider", () => {
 
   it("accepts a confirmed transaction identity and payment", async () => {
     await expect(verify(validTransfer())).resolves.toMatchObject({
-      verified: true,
-      status: "success",
+      state: "confirmed",
       providerTransactionId: transactionHash,
     });
   });
 
   it("accepts an otherwise valid insufficient transfer and retains its identity", async () => {
     await expect(verify(validTransfer({ amountBaseUnits: 1_000_000n }))).resolves.toMatchObject({
-      verified: false,
-      status: "mismatch",
+      state: "failed",
       providerTransactionId: transactionHash,
       observation: { level: "error" },
     });
@@ -98,8 +95,7 @@ describe("direct TRC20 provider", () => {
     await expect(
       verify(validTransfer({ status: "failed", confirmations: 0 })),
     ).resolves.toMatchObject({
-      verified: false,
-      status: "failed",
+      state: "failed",
       providerTransactionId: transactionHash,
     });
   });
@@ -113,7 +109,7 @@ describe("direct TRC20 provider", () => {
     ["missing timestamp", { timestamp: 0 }, "mismatch"],
   ] as const)("rejects %s without accepting its identity", async (_label, transfer, status) => {
     const result = await verify(validTransfer(transfer));
-    expect(result).toMatchObject({ verified: false, status });
+    expect(result).toMatchObject({ state: "failed", observation: { status } });
     expect(result.providerTransactionId).toBeUndefined();
   });
 
@@ -122,8 +118,11 @@ describe("direct TRC20 provider", () => {
       validTransfer({ status: "pending", destination: "", amountBaseUnits: 0n }),
     );
     expect(result).toMatchObject({
-      status: "mismatch",
-      observation: { message: expect.stringContaining("details are not available") },
+      state: "failed",
+      observation: {
+        status: "mismatch",
+        message: expect.stringContaining("details are not available"),
+      },
     });
     expect(result.providerTransactionId).toBeUndefined();
   });

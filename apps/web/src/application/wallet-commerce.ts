@@ -6,8 +6,9 @@ import type { ExchangeRateService } from "@/modules/money/exchange-service";
 import type {
   PaymentFundingOption,
   PaymentProviderRegistry,
-  PaymentVerification,
+  PaymentResult,
   PaymentVerificationObservation,
+  ProviderRequestContext,
 } from "@/modules/payment/payment";
 import type { AccountReader } from "@/modules/identity/account";
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
@@ -16,12 +17,9 @@ import type { CheckoutRepository } from "@/modules/checkout/checkout";
 import type { ListingRepository } from "@/modules/listing/listing";
 import { Purchase, type PurchaseRepository } from "@/modules/purchase/purchase";
 import type { PurchaseAttributionResolver } from "@/modules/referral/attribution";
-import type { PostgresPaymentOperationsRepository } from "@/providers/paystack/persistence/payment-operations";
+import type { PostgresPaymentOperationsRepository } from "@/infrastructure/postgres/payment-operations";
 import { ProviderOperationError } from "@/kernel/provider-error";
-import {
-  DuplicateProviderTransactionError,
-  InvalidProviderTransactionError,
-} from "@/kernel/errors";
+import { DuplicateProviderTransactionError } from "@/kernel/errors";
 
 export class FundingService {
   constructor(
@@ -206,28 +204,26 @@ export class FundingService {
     });
   }
 
-  async submitTransaction(input: {
-    accountId: string;
-    fundingId: string;
-    transactionHash: string;
-  }) {
-    const normalized = input.transactionHash.trim();
-    if (!/^(0x[a-fA-F0-9]{64}|[a-fA-F0-9]{64})$/.test(normalized))
-      throw new InvalidProviderTransactionError();
+  async submitProviderRequest(input: { accountId: string; fundingId: string; payload: unknown }) {
     const persisted = await this.uow.transaction(async () => {
       const funding = await this.funding.findById(input.fundingId, { forUpdate: true });
       if (!funding || funding.accountId !== input.accountId) throw new Error("Funding not found");
-      if (funding.providerName !== "usdt_trc20")
-        throw new Error("Transaction hash is not supported for this funding method");
-      if (funding.providerTransactionId) throw new DuplicateProviderTransactionError();
       if (funding.state !== "awaiting_payment" && funding.state !== "verification_pending")
-        throw new Error("Funding is not awaiting payment");
-      const owner = await this.funding.findByProviderTransactionId("usdt_trc20", normalized);
-      if (owner && owner.id !== funding.id) throw new DuplicateProviderTransactionError();
+        throw new Error("Funding is not available for provider interaction");
       return funding;
     });
     if (!this.verification) throw new Error("Funding verification is unavailable");
-    return this.verification.admit(persisted.id, normalized);
+    const provider = this.providers.get(persisted.providerName);
+    if (!provider.handleRequest) throw new Error("Payment provider does not accept this request");
+    const context: ProviderRequestContext = {
+      accountId: persisted.accountId,
+      fundingId: persisted.id,
+      reference: persisted.providerReference,
+      expectedAmount: persisted.collectionAmount,
+      initialization: persisted.providerInitialization,
+    };
+    const result = await provider.handleRequest(input.payload, context);
+    return this.verification.admitResult(persisted.id, result);
   }
 }
 
@@ -390,7 +386,6 @@ export class FundingVerificationProcessor {
   async process(
     id: string,
     options: {
-      expireUnsuccessful?: boolean;
       now?: Date;
       rethrowProviderErrors?: boolean;
     } = {},
@@ -407,7 +402,6 @@ export class FundingVerificationProcessor {
   private async processOne(
     id: string,
     options: {
-      expireUnsuccessful?: boolean;
       now?: Date;
       rethrowProviderErrors?: boolean;
     },
@@ -455,38 +449,40 @@ export class FundingVerificationProcessor {
       if (options.rethrowProviderErrors !== false) throw error;
       return saved;
     }
-    return this.persistResult(id, result, now, options.expireUnsuccessful === true);
+    return this.persistResult(id, result, now);
   }
 
-  async admit(id: string, providerTransactionId: string) {
-    const funding = await this.funding.findById(id);
-    if (!funding) throw new Error("Funding not found");
-    if (funding.state !== "awaiting_payment" && funding.state !== "verification_pending")
-      throw new Error("Funding is not awaiting payment");
-    const result: PaymentVerification = await this.providers.get(funding.providerName).verify({
-      reference: funding.providerReference,
-      expectedAmount: funding.collectionAmount,
-      providerTransactionId,
-      initialization: funding.providerInitialization,
-    });
+  async admitResult(id: string, result: PaymentResult, admittedProviderTransactionId?: string) {
+    const persisted = await this.persistResult(id, result, new Date());
     if (
-      result.providerTransactionId !== providerTransactionId ||
-      result.reference !== funding.providerReference ||
-      result.amount.minorAmount !== funding.collectionAmount.minorAmount ||
-      result.amount.currency !== funding.collectionAmount.currency
+      admittedProviderTransactionId &&
+      persisted?.providerTransactionId !== admittedProviderTransactionId
     )
-      throw new InvalidProviderTransactionError(
-        result.observation?.message ?? "This transaction could not be accepted for this funding.",
-      );
-    const persisted = await this.persistResult(
-      id,
-      result,
-      new Date(),
-      false,
-      providerTransactionId,
-    );
-    if (!persisted) throw new Error("Funding not found");
+      throw new Error(result.message ?? "This transaction could not be accepted for this funding.");
     return persisted;
+  }
+
+  async expire(id: string, now = new Date()) {
+    return this.uow.transaction(async () => {
+      const funding = await this.funding.findById(id, { forUpdate: true });
+      if (
+        !funding ||
+        (funding.state !== "awaiting_payment" && funding.state !== "verification_pending")
+      )
+        return funding;
+      funding.state = "expired";
+      funding.providerInitialization = withVerificationObservation(
+        funding.providerInitialization,
+        {
+          status: "failed",
+          message: "This payment session has expired without a confirmed payment.",
+          level: "error",
+        },
+        now,
+      );
+      await this.funding.save(funding);
+      return funding;
+    });
   }
 
   private verify(funding: FundingTransaction) {
@@ -498,46 +494,20 @@ export class FundingVerificationProcessor {
     });
   }
 
-  private async persistResult(
-    id: string,
-    result: PaymentVerification,
-    now: Date,
-    expireUnsuccessful: boolean,
-    admittedProviderTransactionId?: string,
-  ) {
+  private async persistResult(id: string, result: PaymentResult, now: Date) {
     return this.uow.transaction(async () => {
       const locked = await this.funding.findById(id, { forUpdate: true });
       if (!locked || locked.state === "confirmed") return locked;
-      if (
-        admittedProviderTransactionId &&
-        locked.providerTransactionId &&
-        locked.providerTransactionId !== admittedProviderTransactionId
-      )
-        throw new DuplicateProviderTransactionError();
-      const shouldExpire = expireUnsuccessful && isExpiredNowPaymentsFunding(locked, now);
-      const factsMatch =
-        result.reference === locked.providerReference &&
-        result.amount.minorAmount === locked.collectionAmount.minorAmount &&
-        result.amount.currency === locked.collectionAmount.currency;
+      const referenceMismatch =
+        result.reference !== undefined && result.reference !== locked.providerReference;
+      const amountMismatch =
+        result.amount !== undefined && !result.amount.equals(locked.collectionAmount);
+      const factsMatch = !referenceMismatch && !amountMismatch;
       const identityMismatch =
         !!locked.providerTransactionId &&
         !!result.providerTransactionId &&
         result.providerTransactionId !== locked.providerTransactionId;
-      const observation =
-        !locked.providerTransactionId &&
-        !result.providerTransactionId &&
-        isFundingPendingStatus(result.status)
-          ? withVerificationObservation(
-              undefined,
-              {
-                status: "awaiting_transaction",
-                message:
-                  "Payment has not been identified yet; verification will continue automatically.",
-                level: "info",
-              },
-              now,
-            ).verification!
-          : verificationObservation(result, now);
+      const observation = verificationObservation(result, now);
       if (result.providerTransactionId && factsMatch && !identityMismatch) {
         if (
           locked.providerTransactionId &&
@@ -553,13 +523,27 @@ export class FundingVerificationProcessor {
           locked.providerTransactionId = result.providerTransactionId;
         }
       }
-      if (!identityMismatch && !result.verified && isFundingPendingStatus(result.status)) {
-        locked.state =
-          shouldExpire && factsMatch
-            ? "expired"
-            : locked.providerTransactionId
-              ? "verification_pending"
-              : "awaiting_payment";
+      if (!identityMismatch && factsMatch && result.state === "pending") {
+        locked.state = locked.providerTransactionId ? "verification_pending" : "awaiting_payment";
+        const pendingObservation =
+          !locked.providerTransactionId && !result.providerTransactionId
+            ? {
+                status: "awaiting_transaction" as const,
+                message:
+                  "Payment has not been identified yet; verification will continue automatically.",
+                level: "info" as const,
+              }
+            : observation;
+        locked.providerInitialization = withVerificationObservation(
+          locked.providerInitialization,
+          pendingObservation,
+          now,
+        );
+        await this.funding.save(locked);
+        return locked;
+      }
+      if (result.state === "reconciliation_required") {
+        locked.state = "reconciliation_pending";
         locked.providerInitialization = withVerificationObservation(
           locked.providerInitialization,
           observation,
@@ -569,33 +553,23 @@ export class FundingVerificationProcessor {
         return locked;
       }
       const mismatch =
-        !result.verified ||
-        result.status !== "success" ||
-        result.reference !== locked.providerReference ||
-        result.amount.minorAmount !== locked.collectionAmount.minorAmount ||
-        result.amount.currency !== locked.collectionAmount.currency ||
-        identityMismatch;
-      if (mismatch || identityMismatch) {
-        if (shouldExpire && factsMatch) {
-          locked.state = "expired";
-          locked.providerInitialization = withVerificationObservation(
-            locked.providerInitialization,
-            observation,
-            now,
-          );
-          await this.funding.save(locked);
-          return locked;
-        }
+        identityMismatch ||
+        referenceMismatch ||
+        amountMismatch ||
+        result.state !== "confirmed" ||
+        !result.reference ||
+        !result.amount;
+      if (mismatch) {
         const code =
-          !result.verified || result.status !== "success"
+          result.state !== "confirmed"
             ? "verification_unsuccessful"
-            : result.reference !== locked.providerReference
+            : referenceMismatch || !result.reference
               ? "verification_reference_mismatch"
               : locked.providerTransactionId &&
                   result.providerTransactionId &&
                   result.providerTransactionId !== locked.providerTransactionId
                 ? "verification_transaction_id_mismatch"
-                : result.amount.currency !== locked.collectionAmount.currency
+                : result.amount && result.amount.currency !== locked.collectionAmount.currency
                   ? "verification_currency_mismatch"
                   : "verification_amount_mismatch";
         await this.operations?.recordFundingFailure({
@@ -603,7 +577,7 @@ export class FundingVerificationProcessor {
           provider: locked.providerName,
           operation: "transaction.verify",
           error: {
-            providerStatus: result.verified,
+            providerStatus: result.state === "confirmed",
             providerMessage: "Provider verification did not match persisted funding facts",
             providerCode: code,
             kind: "rejection",
@@ -636,7 +610,7 @@ export class FundingVerificationProcessor {
   }
 }
 
-function verificationObservation(result: PaymentVerification, now: Date) {
+function verificationObservation(result: PaymentResult, now: Date) {
   return withVerificationObservation(
     undefined,
     result.observation ?? defaultVerificationObservation(result),
@@ -644,34 +618,25 @@ function verificationObservation(result: PaymentVerification, now: Date) {
   ).verification!;
 }
 
-function defaultVerificationObservation(
-  result: PaymentVerification,
-): PaymentVerificationObservation {
-  if (result.status === "success")
+function defaultVerificationObservation(result: PaymentResult): PaymentVerificationObservation {
+  if (result.state === "confirmed")
     return { status: "success", message: "Payment verified successfully.", level: "success" };
-  if (result.status === "not_found")
-    return {
-      status: "not_found",
-      message:
-        "Transaction not found yet. Check the transaction hash or wait a moment if it was just submitted.",
-      level: "error",
-    };
-  if (result.status === "confirming" || isFundingPendingStatus(result.status))
+  if (result.state === "pending")
     return {
       status: "confirming",
       message: "Transaction found. Waiting for confirmation.",
       level: "info",
     };
-  if (result.status === "failed")
+  if (result.state === "failed")
     return {
       status: "failed",
-      message: "This blockchain transaction failed and cannot fund your wallet.",
+      message: result.message ?? "This payment could not be confirmed.",
       level: "error",
     };
   return {
-    status: "mismatch",
-    message: "The provider verification did not match this funding attempt.",
-    level: "error",
+    status: "provider_error",
+    message: result.message ?? "This payment requires provider reconciliation.",
+    level: "info",
   };
 }
 
@@ -694,57 +659,6 @@ function verificationObservationLevel(status: PaymentVerificationObservation["st
   if (status === "success") return "success" as const;
   if (status === "confirming" || status === "awaiting_transaction") return "info" as const;
   return "error" as const;
-}
-
-export class FundingExpiryProcessor {
-  constructor(
-    private funding: FundingRepository,
-    private verification: FundingVerificationProcessor,
-    private clock: () => Date = () => new Date(),
-  ) {}
-  findWork(limit = 50) {
-    const now = this.clock();
-    return (
-      this.funding.findExpiredNowPayments?.(now, limit) ??
-      Promise.resolve([] as FundingTransaction[])
-    );
-  }
-  async process(id: string) {
-    const now = this.clock();
-    const funding = await this.funding.findById(id);
-    if (!isExpiredNowPaymentsFunding(funding, now)) return null;
-    return this.verification.process(id, { expireUnsuccessful: true, now });
-  }
-}
-
-function isExpiredNowPaymentsFunding(
-  funding: FundingTransaction | null,
-  now: Date,
-): funding is FundingTransaction {
-  if (
-    !funding ||
-    funding.providerName !== "nowpayments" ||
-    funding.state !== "awaiting_payment" ||
-    !funding.providerInitialization?.expiresAt
-  )
-    return false;
-  const expiresAt = Date.parse(funding.providerInitialization.expiresAt);
-  return !Number.isNaN(expiresAt) && expiresAt <= now.getTime();
-}
-
-function isFundingPendingStatus(status: string) {
-  return new Set([
-    "awaiting_manual_confirmation",
-    "awaiting_transaction",
-    "not_found",
-    "pending",
-    "waiting",
-    "confirming",
-    "confirmed",
-    "sending",
-    "partially_paid",
-    "processing",
-  ]).has(status.toLowerCase());
 }
 
 export class WalletService {

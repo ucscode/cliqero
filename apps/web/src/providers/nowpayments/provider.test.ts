@@ -316,7 +316,7 @@ describe("NOWPayments provider", () => {
         providerTransactionId: "123",
         initialization: { paymentCurrency: "USDTTRC20" },
       }),
-    ).resolves.toMatchObject({ verified: true });
+    ).resolves.toMatchObject({ state: "confirmed" });
     await expect(
       provider.initiate({
         paymentId: id,
@@ -395,9 +395,9 @@ describe("NOWPayments provider", () => {
       providerTransactionId: "123",
       initialization: { paymentCurrency: "usdterc20" },
     });
-    expect(verified.verified).toBe(true);
-    expect(verified.status).toBe("success");
-    expect(verified.amount.equals(Money.of(1025n, "USD"))).toBe(true);
+    expect(verified.state).toBe("confirmed");
+    expect(verified.observation?.status).toBe("success");
+    expect(verified.amount?.equals(Money.of(1025n, "USD"))).toBe(true);
     await expect(
       provider.verify({
         reference: "np-other",

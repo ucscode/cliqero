@@ -4,11 +4,7 @@ import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { ListingRepository } from "@/modules/listing/listing";
 import { Money } from "@/modules/money/money";
 import { Purchase, type PurchaseRepository } from "@/modules/purchase/purchase";
-import type {
-  PaymentRecord,
-  PaymentRepository,
-  PaymentProviderRegistry,
-} from "@/modules/payment/payment";
+import type { PaymentRepository, PaymentProviderRegistry } from "@/modules/payment/payment";
 import { Entitlement, type EntitlementRepository } from "@/modules/entitlement/entitlement";
 import type { PostgresIdempotencyRepository } from "@/infrastructure/postgres/idempotency";
 import type { PurchaseAttributionResolver } from "@/modules/referral/attribution";
@@ -188,11 +184,10 @@ export class PaymentCompletionService {
       expectedAmount: collectionAmount,
       providerTransactionId: payment.providerTransactionId,
     });
-    if (!verified.verified || verified.status !== "success")
-      throw new Error("Payment verification failed");
+    if (verified.state !== "confirmed") throw new Error("Payment verification failed");
     if (verified.reference !== payment.providerReference)
       throw new Error("Payment reference mismatch");
-    if (!verified.amount.equals(collectionAmount))
+    if (!verified.amount || !verified.amount.equals(collectionAmount))
       throw new Error("Payment amount or currency mismatch");
     if (
       payment.providerTransactionId &&
@@ -221,10 +216,10 @@ export class PaymentCompletionService {
         verified.providerTransactionId ?? lockedPayment.providerTransactionId;
       lockedPayment.providerFee = verified.providerFee;
       lockedPayment.providerVerifiedPayload = {
-        status: verified.status,
+        state: verified.state,
         reference: verified.reference,
-        amountMinor: verified.amount.minorAmount.toString(),
-        currency: verified.amount.currency,
+        amountMinor: verified.amount?.minorAmount.toString(),
+        currency: verified.amount?.currency,
         providerFeeMinor: verified.providerFee?.minorAmount.toString(),
         providerFeeCurrency: verified.providerFee?.currency,
       };

@@ -54,7 +54,7 @@ describe("Postgres wallet and funding projections", () => {
 
   it("discovers bounded, expired NOWPayments sessions from persisted provider expiry", async () => {
     const query = vi.fn(async (statement: string) =>
-      statement.includes("provider_name='nowpayments'")
+      statement.includes("provider_name=$1")
         ? {
             rows: [
               fundingRow("00000000-0000-4000-8000-000000000014", "awaiting_payment", "nowpayments"),
@@ -63,13 +63,15 @@ describe("Postgres wallet and funding projections", () => {
         : { rows: [] },
     );
     const repository = new PostgresFundingRepository({ query } as never);
-    const expired = await repository.findExpiredNowPayments(
+    const expired = await repository.findExpired(
+      "nowpayments",
       new Date("2026-09-13T10:00:00.000Z"),
       500,
     );
 
     expect(expired.map((funding) => funding.id)).toEqual(["00000000-0000-4000-8000-000000000014"]);
     expect(query).toHaveBeenCalledWith(expect.stringContaining("expiresAt"), [
+      "nowpayments",
       "2026-09-13T10:00:00.000Z",
       50,
     ]);

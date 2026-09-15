@@ -3,7 +3,8 @@ import type { PostgresPaymentRepository } from "@/infrastructure/postgres/paymen
 import type {
   PostgresPaymentOperationsRepository,
   ReconciliationAttempt,
-} from "../persistence/payment-operations";
+} from "@/infrastructure/postgres/payment-operations";
+import type { PostgresPaystackOperationsRepository } from "@/providers/paystack/persistence/operations";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 
 export class PaymentReconciliationService {
@@ -62,7 +63,7 @@ export class PaymentReconciliationService {
 
 export class PaystackOperationsInspectionService {
   constructor(
-    private readonly operations: PostgresPaymentOperationsRepository,
+    private readonly operations: PostgresPaystackOperationsRepository,
     private readonly operators: OperatorAuthorizationService,
   ) {}
   async listEvents(actorId: string, limit: number) {

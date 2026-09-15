@@ -7,16 +7,16 @@ vi.mock("@/infrastructure/container", () => ({
 }));
 
 import { POST } from "@/api/compat/wallet/fund/[id]/transaction/route";
-import { InvalidProviderTransactionError } from "@/kernel/errors";
+import { InvalidDirectTrc20TransactionError } from "@/providers/direct-trc20/errors";
 
 const fundingId = "00000000-0000-4000-8000-000000000010";
 const account = { id: "00000000-0000-4000-8000-000000000001" };
 const transactionHash = "a".repeat(64);
 
-function configure(submitTransaction: ReturnType<typeof vi.fn>) {
+function configure(submitProviderRequest: ReturnType<typeof vi.fn>) {
   fixtures.container = {
     principalResolver: { resolve: vi.fn(async () => ({ account })) },
-    fundingService: { submitTransaction },
+    fundingService: { submitProviderRequest },
   };
 }
 
@@ -30,13 +30,13 @@ function request(body: unknown) {
 
 describe("Direct USDT TRC20 transaction submission API", () => {
   it("submits a valid hash through FundingService and returns verification_pending", async () => {
-    const submitTransaction = vi.fn(async (input: unknown) => ({
+    const submitProviderRequest = vi.fn(async (input: unknown) => ({
       id: fundingId,
       state: "verification_pending" as const,
       providerTransactionId: transactionHash,
       input,
     }));
-    configure(submitTransaction);
+    configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: transactionHash }), {
       params: Promise.resolve({ id: fundingId }),
@@ -49,18 +49,18 @@ describe("Direct USDT TRC20 transaction submission API", () => {
       provider_transaction_id: transactionHash,
       verification: null,
     });
-    expect(submitTransaction).toHaveBeenCalledWith({
+    expect(submitProviderRequest).toHaveBeenCalledWith({
       accountId: account.id,
       fundingId,
-      transactionHash,
+      payload: { transaction_hash: transactionHash },
     });
   });
 
   it("returns not-found for an unknown funding", async () => {
-    const submitTransaction = vi.fn(async () => {
+    const submitProviderRequest = vi.fn(async () => {
       throw new Error("Funding not found");
     });
-    configure(submitTransaction);
+    configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: transactionHash }), {
       params: Promise.resolve({ id: fundingId }),
@@ -71,12 +71,12 @@ describe("Direct USDT TRC20 transaction submission API", () => {
   });
 
   it("returns a customer-safe rejection without an authoritative hash", async () => {
-    const submitTransaction = vi.fn(async () => {
-      throw new InvalidProviderTransactionError(
+    const submitProviderRequest = vi.fn(async () => {
+      throw new InvalidDirectTrc20TransactionError(
         "This transaction does not use the required USDT token contract.",
       );
     });
-    configure(submitTransaction);
+    configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: transactionHash }), {
       params: Promise.resolve({ id: fundingId }),
@@ -90,8 +90,10 @@ describe("Direct USDT TRC20 transaction submission API", () => {
   });
 
   it("rejects an invalid hash before calling the funding service", async () => {
-    const submitTransaction = vi.fn();
-    configure(submitTransaction);
+    const submitProviderRequest = vi.fn(async () => {
+      throw new InvalidDirectTrc20TransactionError();
+    });
+    configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: "not-a-tron-hash" }), {
       params: Promise.resolve({ id: fundingId }),
@@ -102,14 +104,14 @@ describe("Direct USDT TRC20 transaction submission API", () => {
       error: "Invalid TRON transaction hash.",
       code: "invalid_transaction_hash",
     });
-    expect(submitTransaction).not.toHaveBeenCalled();
+    expect(submitProviderRequest).toHaveBeenCalled();
   });
 
   it("returns a customer-safe error for non-TRC20 funding", async () => {
-    const submitTransaction = vi.fn(async () => {
+    const submitProviderRequest = vi.fn(async () => {
       throw new Error("Transaction hash is not supported for this funding method");
     });
-    configure(submitTransaction);
+    configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: transactionHash }), {
       params: Promise.resolve({ id: fundingId }),

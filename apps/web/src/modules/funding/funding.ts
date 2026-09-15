@@ -97,7 +97,11 @@ export interface FundingRepository {
     active?: boolean;
   }): Promise<FundingHistoryPage>;
   findWork(state: FundingState, limit?: number): Promise<readonly FundingTransaction[]>;
-  findExpiredNowPayments?(now: Date, limit?: number): Promise<readonly FundingTransaction[]>;
+  findExpired?(
+    providerName: string,
+    now: Date,
+    limit?: number,
+  ): Promise<readonly FundingTransaction[]>;
   findInitializationWork(staleBefore: Date, limit?: number): Promise<readonly FundingTransaction[]>;
   claimInitialization(
     id: Id,

@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import { newId } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
-import type { PaymentProvider, PaymentVerification } from "@/modules/payment/payment";
+import type { PaymentProvider, PaymentResult } from "@/modules/payment/payment";
 import { FundingInitializationProcessor } from "@/application/wallet-commerce";
 import { Entitlement } from "@/modules/entitlement/entitlement";
 import { PurchaseDistributionProcessor } from "@/processors/purchase-distribution";
@@ -259,9 +259,8 @@ suite("wallet-first durable commerce", () => {
   it.each([
     [
       "correct",
-      (reference: string, amount: Money): PaymentVerification => ({
-        verified: true,
-        status: "success",
+      (reference: string, amount: Money): PaymentResult => ({
+        state: "confirmed",
         reference,
         amount,
       }),
@@ -269,9 +268,8 @@ suite("wallet-first durable commerce", () => {
     ],
     [
       "unsuccessful",
-      (reference: string, amount: Money): PaymentVerification => ({
-        verified: false,
-        status: "failed",
+      (reference: string, amount: Money): PaymentResult => ({
+        state: "failed",
         reference,
         amount,
       }),
@@ -279,9 +277,8 @@ suite("wallet-first durable commerce", () => {
     ],
     [
       "wrong reference",
-      (_reference: string, amount: Money): PaymentVerification => ({
-        verified: true,
-        status: "success",
+      (_reference: string, amount: Money): PaymentResult => ({
+        state: "confirmed",
         reference: "wrong-reference",
         amount,
       }),
@@ -289,9 +286,8 @@ suite("wallet-first durable commerce", () => {
     ],
     [
       "wrong amount",
-      (reference: string, amount: Money): PaymentVerification => ({
-        verified: true,
-        status: "success",
+      (reference: string, amount: Money): PaymentResult => ({
+        state: "confirmed",
         reference,
         amount: Money.of(amount.minorAmount + 1n, amount.currency),
       }),
@@ -299,9 +295,8 @@ suite("wallet-first durable commerce", () => {
     ],
     [
       "wrong currency",
-      (reference: string, amount: Money): PaymentVerification => ({
-        verified: true,
-        status: "success",
+      (reference: string, amount: Money): PaymentResult => ({
+        state: "confirmed",
         reference,
         amount: Money.of(amount.minorAmount, "NGN"),
       }),
@@ -364,8 +359,7 @@ suite("wallet-first durable commerce", () => {
         };
       },
       verify: async (input) => ({
-        verified: true,
-        status: "success",
+        state: "confirmed",
         reference: input.reference,
         amount: input.expectedAmount,
       }),

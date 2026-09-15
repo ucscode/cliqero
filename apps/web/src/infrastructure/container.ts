@@ -28,6 +28,8 @@ import { loadPaystackConfiguration } from "@/providers/paystack/payment/config";
 import { PaystackWebhookIngress } from "@/providers/paystack/payment/webhook";
 import { NowPaymentsProvider } from "@/providers/nowpayments/provider";
 import { loadNowPaymentsConfiguration } from "@/providers/nowpayments/config";
+import { NowPaymentsExpiryProcessor } from "@/providers/nowpayments/expiry";
+import { NowPaymentsIpnIngress } from "@/providers/nowpayments/ipn";
 import { DirectTrc20Provider } from "@/providers/direct-trc20/provider";
 import { HttpDirectTrc20Verifier } from "@/providers/direct-trc20/verifier";
 import { loadDirectTrc20Configuration } from "@/providers/direct-trc20/config";
@@ -45,7 +47,7 @@ import {
 } from "./postgres/ledger";
 import { PurchaseDistributionProcessor } from "@/processors/purchase-distribution";
 import { OperatorAuthorizationService } from "@/modules/identity/operator";
-import { PostgresPaymentOperationsRepository } from "@/providers/paystack/persistence/payment-operations";
+import { PostgresPaymentOperationsRepository } from "./postgres/payment-operations";
 import {
   PaymentReconciliationService,
   PaystackOperationsInspectionService,
@@ -70,6 +72,7 @@ import { loadPaystackPayoutConfiguration } from "@/providers/paystack/payout/con
 import { PostgresPaystackRecipientStore } from "@/providers/paystack/persistence/recipients";
 import { PostgresPaystackPayoutEventRepository } from "@/providers/paystack/persistence/payout-events";
 import { PaystackPayoutWebhookIngress } from "@/providers/paystack/payout/webhook";
+import { PostgresPaystackOperationsRepository } from "@/providers/paystack/persistence/operations";
 import { ExchangeRateService } from "@/modules/money/exchange-service";
 import { FrankfurterProvider } from "@/providers/frankfurter/provider";
 import { FawazProvider } from "@/providers/fawaz/provider";
@@ -86,7 +89,6 @@ import {
   FundingService,
   FundingInitializationProcessor,
   FundingVerificationProcessor,
-  FundingExpiryProcessor,
   WalletService,
   WalletCheckoutService,
 } from "@/application/wallet-commerce";
@@ -119,7 +121,7 @@ import { OperatorAccountService } from "@/application/operator-accounts";
 import { CapabilityAdministrationService } from "@/application/capability-administration";
 import { OperatorApiKeyService } from "@/application/operator-api-keys";
 import { OperatorFundingService } from "@/application/operator-funding";
-import { BankTransferEvidenceService } from "@/application/bank-transfer-evidence";
+import { BankTransferEvidenceService } from "@/providers/bank-transfer/evidence";
 import {
   OperatorDistributionService,
   OperatorEarningsService,
@@ -227,6 +229,7 @@ export function createContainer(databaseUrl: string) {
     paystackPayout ? "paystack" : "development",
   );
   const providers = registerDevelopmentPaymentProvider(new PaymentProviderRegistry());
+  const paystackInspectionOperations = new PostgresPaystackOperationsRepository(database);
   const paystackConfiguration = loadPaystackConfiguration();
   const paystack = paystackConfiguration
     ? new PaystackProvider(paystackConfiguration.provider, fetch, undefined, exchangeRates)
@@ -236,8 +239,11 @@ export function createContainer(databaseUrl: string) {
   const nowPaymentsConfiguration = loadNowPaymentsConfiguration(
     "config/modules/payment/nowpayments.yaml",
   );
-  if (nowPaymentsConfiguration)
-    providers.register(new NowPaymentsProvider(nowPaymentsConfiguration.provider), {
+  const nowPayments = nowPaymentsConfiguration
+    ? new NowPaymentsProvider(nowPaymentsConfiguration.provider)
+    : null;
+  if (nowPayments && nowPaymentsConfiguration)
+    providers.register(nowPayments, {
       filters: nowPaymentsConfiguration.filters,
     });
   const directTrc20Configuration = loadDirectTrc20Configuration(
@@ -322,7 +328,7 @@ export function createContainer(databaseUrl: string) {
     database,
     fundingVerification,
   );
-  const fundingExpiry = new FundingExpiryProcessor(funding, fundingVerification);
+  const fundingExpiry = new NowPaymentsExpiryProcessor(funding, fundingVerification);
   const wallet = new WalletService(walletRepository);
   const walletCredit = new WalletCreditProcessor(funding, walletRepository, database);
   const walletAvailability = new WalletAvailabilityProcessor(walletRepository, database);
@@ -415,6 +421,7 @@ export function createContainer(databaseUrl: string) {
     paystackWebhook: paystack
       ? new PaystackWebhookIngress(paystack, providerEvents, outbox, database)
       : null,
+    nowPaymentsIpn: nowPayments ? new NowPaymentsIpnIngress(nowPayments, funding, database) : null,
     paystackPayoutWebhook: paystackPayout
       ? new PaystackPayoutWebhookIngress(
           paystackPayout,
@@ -435,7 +442,10 @@ export function createContainer(databaseUrl: string) {
       paymentOperations,
       operators,
     ),
-    paystackInspection: new PaystackOperationsInspectionService(paymentOperations, operators),
+    paystackInspection: new PaystackOperationsInspectionService(
+      paystackInspectionOperations,
+      operators,
+    ),
     settlementPolicy,
     settlement,
     reversals,

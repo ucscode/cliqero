@@ -1,10 +1,13 @@
 import type { Id } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
+import { InvalidDirectTrc20TransactionError } from "./errors";
+import { AbstractPaymentProvider } from "@/modules/payment/payment";
 import type {
   PaymentInitialization,
-  PaymentProvider,
-  PaymentVerification,
+  PaymentInitializationMetadata,
+  PaymentResult,
   PaymentVerificationObservation,
+  ProviderRequestContext,
 } from "@/modules/payment/payment";
 import { normalizeTronAddress, type DirectTrc20Verifier } from "./verifier";
 
@@ -24,7 +27,7 @@ export interface DirectTrc20Configuration {
   description?: string;
 }
 
-export class DirectTrc20Provider implements PaymentProvider {
+export class DirectTrc20Provider extends AbstractPaymentProvider {
   readonly name = "usdt_trc20";
   readonly displayName: string;
   readonly imageUrl: string;
@@ -36,6 +39,7 @@ export class DirectTrc20Provider implements PaymentProvider {
     private readonly verifier: DirectTrc20Verifier,
     private readonly clock: () => Date = () => new Date(),
   ) {
+    super();
     this.displayName = config.displayName ?? "Direct USDT TRC20";
     this.imageUrl = config.imageUrl ?? "/images/payment/usdt-trc20.svg";
     this.description = config.description ?? "Send USDT on the TRON TRC20 network directly.";
@@ -66,16 +70,32 @@ export class DirectTrc20Provider implements PaymentProvider {
     } satisfies PaymentInitialization;
   }
 
+  async handleRequest(input: unknown, context: ProviderRequestContext): Promise<PaymentResult> {
+    if (!input || typeof input !== "object" || Array.isArray(input))
+      throw new InvalidDirectTrc20TransactionError();
+    const transactionId = (input as { transaction_hash?: unknown }).transaction_hash;
+    if (typeof transactionId !== "string") throw new InvalidDirectTrc20TransactionError();
+    const normalized = transactionId.trim();
+    if (!/^(0x[a-fA-F0-9]{64}|[a-fA-F0-9]{64})$/.test(normalized))
+      throw new InvalidDirectTrc20TransactionError();
+    return this.verify({
+      reference: context.reference,
+      expectedAmount: context.expectedAmount,
+      providerTransactionId: normalized,
+      initialization: context.initialization,
+    });
+  }
+
   async verify(input: {
     reference: string;
     expectedAmount: Money;
     providerTransactionId?: string;
-  }): Promise<PaymentVerification> {
+    initialization?: PaymentInitializationMetadata;
+  }): Promise<PaymentResult> {
     const hash = input.providerTransactionId;
     if (!hash)
       return {
-        verified: false,
-        status: "awaiting_transaction",
+        state: "pending",
         reference: input.reference,
         amount: input.expectedAmount,
         observation: {
@@ -143,8 +163,7 @@ export class DirectTrc20Provider implements PaymentProvider {
     };
     if (transfer.amountBaseUnits < expectedUnits)
       return {
-        verified: false,
-        status: "mismatch",
+        state: "failed",
         ...accepted,
         observation: {
           status: "mismatch",
@@ -154,8 +173,7 @@ export class DirectTrc20Provider implements PaymentProvider {
       };
     if (transfer.status === "failed")
       return {
-        verified: false,
-        status: "failed",
+        state: "failed",
         ...accepted,
         observation: {
           status: "failed",
@@ -163,14 +181,12 @@ export class DirectTrc20Provider implements PaymentProvider {
           level: "error" as const,
         },
       };
-    const confirmed = transfer.status === "confirmed";
     if (
       transfer.status !== "confirmed" ||
       transfer.confirmations < this.config.confirmationsRequired
     )
       return {
-        verified: false,
-        status: "confirming",
+        state: "pending",
         ...accepted,
         observation: {
           status: "confirming",
@@ -184,8 +200,7 @@ export class DirectTrc20Provider implements PaymentProvider {
         },
       };
     return {
-      verified: confirmed,
-      status: "success",
+      state: "confirmed",
       ...accepted,
       observation: {
         status: "success",
@@ -201,10 +216,9 @@ export class DirectTrc20Provider implements PaymentProvider {
 function rejectedVerification(
   input: { reference: string; expectedAmount: Money },
   observation: PaymentVerificationObservation,
-): PaymentVerification {
+): PaymentResult {
   return {
-    verified: false,
-    status: observation.status,
+    state: observation.status === "awaiting_transaction" ? "pending" : "failed",
     reference: input.reference,
     amount: input.expectedAmount,
     observation,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,7 +8,6 @@ import {
   ApiClientError,
   canonicalWalletFundingUrl,
   formatExchangeRate,
-  formatMinorAmount,
   formatMinorUsd,
   parseUsdMinor,
   providerFundingPreparationUrl,
@@ -20,237 +19,38 @@ import {
   type WalletSummary,
   type WalletTransaction,
 } from "@/lib/api-client";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Textarea } from "./ui/textarea";
 import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { Money } from "./money";
 import { HoneypotField } from "./honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
-import { FundingProviderPreparation, initialPaymentCurrency } from "./funding-provider-preparation";
-import { CopyValue } from "./copy-value";
-import { PaymentInstructions } from "./payment-instructions";
+import {
+  FundingProviderPreparation,
+  initialPaymentCurrency,
+  providerPreparationReady,
+} from "./funding-provider-preparation";
 import { LoaderCircle } from "lucide-react";
-import { fundingToneClass, presentFundingState } from "@/modules/funding/presentation";
+import { PaymentProviderComponent } from "./payment-provider-components";
 
-const terminalFundingStates = new Set([
-  "confirmed",
-  "failed",
-  "blocked",
-  "cancelled",
-  "expired",
-  "reconciliation_pending",
-]);
-
-function safeProviderUrl(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-type BankStatusField = {
-  key: string;
-  label: string;
-  value: string;
-  copyable?: boolean;
-};
-
-function snapshotFields(value: unknown): BankStatusField[] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  const fields = (value as { fields?: unknown }).fields;
-  if (!Array.isArray(fields)) return [];
-  return fields.filter(
-    (field): field is BankStatusField =>
-      Boolean(field) &&
-      typeof field === "object" &&
-      typeof (field as { key?: unknown }).key === "string" &&
-      typeof (field as { label?: unknown }).label === "string" &&
-      typeof (field as { value?: unknown }).value === "string",
-  );
-}
-
-export function snapshotInstruction(value: unknown): string | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const instruction = (value as { instruction?: unknown }).instruction;
-  return typeof instruction === "string" && instruction.trim() ? instruction : null;
-}
-
-export function bankStatusFieldRows(fields: readonly BankStatusField[]) {
-  return [...fields];
-}
-
-export function fundingStatusMessage(
-  funding: Pick<FundingStatus, "provider" | "state" | "expires_at" | "error_message"> & {
-    verification?: FundingStatus["verification"];
-  },
-  now = Date.now(),
-) {
-  if (funding.state === "initialization_pending") return "Preparing payment.";
-  if (funding.state === "initializing") return "Contacting payment provider.";
-  if (funding.state === "awaiting_payment") {
-    if (funding.expires_at && Date.parse(funding.expires_at) <= now)
-      return "This provider payment session has expired. Start a new funding attempt.";
-    if (funding.provider === "bank_transfer") return "Use the details below to make your transfer.";
-    if (funding.provider === "nowpayments")
-      return "Send the exact amount below. Cliqero will detect the payment automatically.";
-    return "Complete the payment to continue.";
-  }
-  if (funding.state === "verification_pending")
-    return funding.verification ? null : "Your payment is being verified.";
-  if (funding.state === "expired")
-    return "This payment session has expired. Start a new funding attempt.";
-  if (funding.state === "failed" || funding.state === "blocked")
-    return (
-      funding.error_message ??
-      "This funding attempt could not be completed. You can start a new attempt."
-    );
-  if (funding.state === "cancelled") return "This funding attempt was cancelled.";
-  if (funding.state === "confirmed")
-    return "Your funding is confirmed. Wallet availability will update as the credit settles.";
-  return null;
-}
-
-export function fundingActionLabel(funding: Pick<FundingStatus, "customer_action">) {
-  return funding.customer_action ?? "Continue";
-}
-
-export function canSubmitBankTransferEvidence(
-  funding: Pick<FundingStatus, "provider" | "state"> | null,
-) {
-  return (
-    funding?.provider === "bank_transfer" &&
-    (funding.state === "initialization_pending" ||
-      funding.state === "initializing" ||
-      funding.state === "awaiting_payment" ||
-      funding.state === "verification_pending")
-  );
-}
-
-export function shouldPollFunding(
-  funding: Pick<FundingStatus, "provider" | "state"> & {
-    provider_transaction_id?: FundingStatus["provider_transaction_id"];
-  },
-) {
-  if (terminalFundingStates.has(funding.state)) return false;
-  if (funding.provider === "bank_transfer") return false;
-  if (funding.state === "verification_pending") return true;
-
-  // NOWPayments has a provider-owned payment session that remains observable
-  // while awaiting payment. Other awaiting_payment states are intentionally
-  // passive until an action creates a verification-pending workflow.
-  return funding.provider === "nowpayments" && funding.state === "awaiting_payment";
-}
-
-export const FUNDING_STATUS_POLL_INITIAL_DELAY_MS = 1000;
-export const FUNDING_STATUS_POLL_INTERVAL_MS = 4000;
-
-type FundingStatusPollerTimers = {
-  setTimeout: (handler: () => void, timeout: number) => number;
-  clearTimeout: (handle: number) => void;
-};
-
-export function createFundingStatusPoller({
-  initialFunding,
-  getStatus,
-  onStatus,
-  onError,
-  timers,
-  isVisible = () => document.visibilityState !== "hidden",
-}: {
-  initialFunding: Pick<FundingStatus, "provider" | "state"> & {
-    provider_transaction_id?: FundingStatus["provider_transaction_id"];
-  };
-  getStatus: () => Promise<FundingStatus>;
-  onStatus: (funding: FundingStatus) => void;
-  onError?: (error: unknown) => void;
-  timers: FundingStatusPollerTimers;
-  isVisible?: () => boolean;
-}) {
-  let currentFunding = initialFunding;
-  let disposed = false;
-  let inFlight = false;
-  let timer: number | undefined;
-
-  const schedule = (delay: number) => {
-    if (disposed || timer !== undefined) return;
-    timer = timers.setTimeout(() => {
-      timer = undefined;
-      void poll();
-    }, delay);
-  };
-
-  const poll = async () => {
-    if (disposed || inFlight) return;
-    if (!isVisible()) {
-      schedule(FUNDING_STATUS_POLL_INTERVAL_MS);
-      return;
-    }
-
-    inFlight = true;
-    try {
-      const latest = await getStatus();
-      if (disposed) return;
-      currentFunding = latest;
-      onStatus(latest);
-      if (!shouldPollFunding(latest)) return;
-    } catch (error) {
-      if (!disposed) onError?.(error);
-      if (!shouldPollFunding(currentFunding)) return;
-    } finally {
-      inFlight = false;
-    }
-
-    schedule(FUNDING_STATUS_POLL_INTERVAL_MS);
-  };
-
-  schedule(FUNDING_STATUS_POLL_INITIAL_DELAY_MS);
-  return () => {
-    disposed = true;
-    if (timer !== undefined) timers.clearTimeout(timer);
-    timer = undefined;
-  };
-}
-
-export function verificationObservationHeading(verification: FundingStatus["verification"]) {
-  if (!verification) return "Verification update";
-  if (verification.status === "not_found") return "Transaction not found";
-  if (verification.status === "failed") return "Transaction failed";
-  if (verification.status === "mismatch") return "Transaction does not match";
-  if (verification.status === "provider_error") return "Verification temporarily unavailable";
-  if (verification.status === "success") return "Payment verified";
-  return "Verification in progress";
-}
-
-export function verificationObservationClass(verification: FundingStatus["verification"]) {
-  if (verification?.level === "success") return "border-emerald-200 bg-emerald-50 text-emerald-950";
-  if (verification?.level === "info") return "border-blue-200 bg-blue-50 text-blue-950";
-  return "border-red-200 bg-red-50 text-red-950";
-}
-
-export function shouldShowTransactionHashInput(
-  funding: Pick<FundingStatus, "provider" | "state" | "provider_transaction_id">,
-) {
-  return (
-    funding.provider === "usdt_trc20" &&
-    !funding.provider_transaction_id &&
-    (funding.state === "awaiting_payment" || funding.state === "verification_pending")
-  );
-}
-
-export function shouldShowSubmittedTransactionHash(
-  funding: Pick<FundingStatus, "provider" | "provider_transaction_id">,
-) {
-  return funding.provider === "usdt_trc20" && Boolean(funding.provider_transaction_id);
-}
+export {
+  bankStatusFieldRows,
+  createFundingStatusPoller,
+  FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
+  FUNDING_STATUS_POLL_INTERVAL_MS,
+  formatTimeRemaining,
+  fundingActionLabel,
+  fundingStatusMessage,
+  snapshotInstruction,
+  snapshotFields,
+  verificationObservationClass,
+  verificationObservationHeading,
+} from "./payment-provider-components";
 
 export function walletPanelComposition(fundingPage: boolean, persistedFunding = false) {
   return {
@@ -273,15 +73,6 @@ export function validatedPreparationAmount(value: string | undefined): string | 
   } catch {
     return null;
   }
-}
-
-export function formatTimeRemaining(expiresAt: string, now = Date.now()) {
-  const remaining = Math.max(0, Date.parse(expiresAt) - now);
-  if (remaining === 0) return "Expired";
-  const totalSeconds = Math.ceil(remaining / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `Expires in ${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 export function walletActivityLabel(
@@ -319,15 +110,8 @@ export function WalletPanel({
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [funding, setFunding] = useState<FundingStatus | null>(null);
-  const [pollingNotice, setPollingNotice] = useState<string | null>(null);
   const [fundOpen, setFundOpen] = useState(fundingPage);
   const [amount, setAmount] = useState(fundingAmount ?? "");
-  const [transactionHash, setTransactionHash] = useState("");
-  const [transferReference, setTransferReference] = useState("");
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [customerNote, setCustomerNote] = useState("");
-  const [evidenceMessage, setEvidenceMessage] = useState<string | null>(null);
-  const [transactionError, setTransactionError] = useState<string | null>(null);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [fundingMethods, setFundingMethods] = useState<FundingMethod[]>([]);
   const [preparation, setPreparation] = useState<FundingPreparation | null>(null);
@@ -342,7 +126,6 @@ export function WalletPanel({
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [preparationError, setPreparationError] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const persistedFunding = fundingPage && Boolean(fundingId);
   const composition = walletPanelComposition(fundingPage, persistedFunding);
   const showActivity = composition.showActivity;
@@ -361,7 +144,6 @@ export function WalletPanel({
       const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
       setFunding(latest);
       setProviderError(null);
-      setPollingNotice(null);
     } catch {
       setProviderError("We couldn't refresh this funding attempt right now.");
     } finally {
@@ -416,6 +198,9 @@ export function WalletPanel({
     },
     [showActivity],
   );
+  const handleFundingConfirmed = useCallback(() => {
+    void loadWallet(true);
+  }, [loadWallet]);
 
   useEffect(() => {
     // Route changes can preserve this client component instance. Reset the
@@ -443,48 +228,6 @@ export function WalletPanel({
       .catch(() => setProviderError("We couldn't load this funding attempt right now."));
   }, [fundingId]);
 
-  useEffect(() => {
-    const fundingId = funding?.id;
-    const fundingProvider = funding?.provider;
-    const fundingState = funding?.state;
-    if (
-      !fundingId ||
-      !fundingProvider ||
-      !fundingState ||
-      !shouldPollFunding({
-        provider: fundingProvider,
-        state: fundingState,
-        provider_transaction_id: funding?.provider_transaction_id,
-      })
-    )
-      return;
-    return createFundingStatusPoller({
-      initialFunding: {
-        provider: fundingProvider,
-        state: fundingState,
-        provider_transaction_id: funding?.provider_transaction_id,
-      },
-      getStatus: () => apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`),
-      onStatus: (latest) => {
-        setFunding(latest);
-        if (latest.state === "confirmed") void loadWallet(true);
-        setPollingNotice(null);
-      },
-      onError: () =>
-        setPollingNotice("Automatic status updates are temporarily unavailable. Retrying…"),
-      timers: {
-        setTimeout: (handler, delay) => window.setTimeout(handler, delay),
-        clearTimeout: (handle) => window.clearTimeout(handle),
-      },
-    });
-  }, [
-    funding?.id,
-    funding?.provider,
-    funding?.provider_transaction_id,
-    funding?.state,
-    loadWallet,
-  ]);
-
   const selectedMethod = fundingMethods.find((method) => method.id === provider) ?? null;
   const methodsToRender = providerPreparation
     ? fundingMethods.filter((method) => method.id === provider)
@@ -492,8 +235,6 @@ export function WalletPanel({
   const preparationLoading = Boolean(
     providerPreparation && fixedAmountMinor && selectedMethod && !preparation && !preparationError,
   );
-  const bankFundingOptions = fundingOptions;
-  const bankAccountRequired = providerPreparation && selectedMethod?.id === "bank_transfer";
 
   useEffect(() => {
     if (!fundOpen && !fundingPage) return;
@@ -552,34 +293,10 @@ export function WalletPanel({
   ]);
 
   useEffect(() => {
-    if (!funding?.expires_at) return;
-    const timer = window.setInterval(() => setCurrentTime(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [funding?.expires_at]);
-
-  useEffect(() => {
     if (!fundingPage || summaryLoading) return;
     document.getElementById("wallet-funding")?.scrollIntoView({ block: "start" });
   }, [fundingPage, summaryLoading]);
 
-  const providerUrl =
-    funding?.expires_at && Date.parse(funding.expires_at) <= currentTime
-      ? null
-      : safeProviderUrl(funding?.authorization_url ?? null);
-  const paymentSessionExpired = Boolean(
-    funding?.state === "expired" ||
-    (funding?.provider === "nowpayments" &&
-      funding.expires_at &&
-      Date.parse(funding.expires_at) <= currentTime),
-  );
-  const canContinueProvider = funding?.state === "awaiting_payment" && providerUrl;
-  const bankEvidenceAllowed = canSubmitBankTransferEvidence(funding) && !funding?.evidence;
-  const pendingMessage = useMemo(
-    () => (funding ? fundingStatusMessage(funding, currentTime) : null),
-    [currentTime, funding],
-  );
-  const bankFields = bankStatusFieldRows(snapshotFields(funding?.provider_account_snapshot));
-  const bankInstruction = snapshotInstruction(funding?.provider_account_snapshot);
   const activeFundings =
     summary?.active_fundings ?? (summary?.active_funding ? [summary.active_funding] : []);
 
@@ -624,7 +341,6 @@ export function WalletPanel({
       );
       const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${created.id}`);
       setFunding(latest);
-      setPollingNotice(null);
       setFundOpen(false);
       setAmount("");
       setPaymentCurrency("");
@@ -632,108 +348,6 @@ export function WalletPanel({
     } catch (cause) {
       setProviderError(
         cause instanceof ApiClientError ? cause.message : "Funding could not be initiated.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function submitTransactionHash(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!funding) return;
-    setProviderError(null);
-    setTransactionError(null);
-    setSubmitting(true);
-    try {
-      const result = await apiFetch<{
-        id: string;
-        state: FundingStatus["state"];
-        provider_transaction_id: string | null;
-        verification: FundingStatus["verification"];
-      }>(`/api/wallet/fund/${funding.id}/transaction`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ transaction_hash: transactionHash }),
-      });
-      setFunding((current) =>
-        current
-          ? {
-              ...current,
-              state: result.state,
-              provider_transaction_id: result.provider_transaction_id,
-              verification: result.verification,
-            }
-          : current,
-      );
-      setTransactionHash("");
-      setTransactionError(null);
-    } catch (cause) {
-      setTransactionError(
-        cause instanceof ApiClientError
-          ? cause.message
-          : "Transaction hash could not be submitted.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function submitBankEvidence(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!funding) return;
-    setProviderError(null);
-    setEvidenceMessage(null);
-    const evidence = {
-      transfer_reference: transferReference.trim(),
-      customer_note: customerNote.trim(),
-    };
-    if (!evidence.transfer_reference && !proofFile && !evidence.customer_note) {
-      setProviderError("Add a transfer reference, proof file, or note before submitting.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const body = new FormData();
-      body.set("transfer_reference", evidence.transfer_reference);
-      body.set("customer_note", evidence.customer_note);
-      if (proofFile) body.set("proof_file", proofFile);
-      await apiFetch(`/api/wallet/fund/${funding.id}/evidence`, {
-        method: "POST",
-        body,
-      });
-      const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${funding.id}`);
-      setFunding(latest);
-      setTransferReference("");
-      setProofFile(null);
-      setCustomerNote("");
-      setEvidenceMessage("Evidence submitted. Your bank transfer is awaiting manual verification.");
-    } catch (cause) {
-      setProviderError(
-        cause instanceof ApiClientError
-          ? cause.message
-          : "Evidence could not be submitted. Please try again.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function verifyDevelopmentFunding() {
-    if (!funding) return;
-    setSubmitting(true);
-    try {
-      const result = await apiFetch<{ state: FundingStatus["state"] }>(
-        "/api/funding/development/verify",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ funding_id: funding.id }),
-        },
-      );
-      setFunding((current) => (current ? { ...current, state: result.state } : current));
-    } catch (cause) {
-      setProviderError(
-        cause instanceof ApiClientError ? cause.message : "Development verification failed.",
       );
     } finally {
       setSubmitting(false);
@@ -839,373 +453,18 @@ export function WalletPanel({
       )}
 
       {funding && (
-        <Card className="grid gap-4 p-5" aria-live="polite">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="eyebrow">Payment method</p>
-              <p className="font-semibold">{funding.provider_display_name ?? "Payment provider"}</p>
-              <p className="eyebrow mt-3">Status</p>
-              <h2>{presentFundingState(funding.state).label}</h2>
-            </div>
-            <Badge
-              variant={
-                presentFundingState(funding.state).tone === "danger" ? "destructive" : "secondary"
-              }
-              className={fundingToneClass(presentFundingState(funding.state).tone)}
-            >
-              {presentFundingState(funding.state).label}
-            </Badge>
-          </div>
-          <p>{pendingMessage}</p>
-          {(funding.state === "initialization_pending" || funding.state === "initializing") && (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-              <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
-              <span>
-                {funding.state === "initialization_pending"
-                  ? "Preparing payment…"
-                  : "Contacting payment provider…"}
-              </span>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => void refreshFunding()}
-                disabled={refreshing}
-              >
-                {refreshing ? "Refreshing…" : "Refresh"}
-              </Button>
-            </div>
-          )}
-          {pollingNotice && (
-            <p className="text-sm text-amber-800" role="status">
-              {pollingNotice}
-            </p>
-          )}
-          {funding.provider !== "bank_transfer" && !paymentSessionExpired && (
-            <PaymentInstructions content={funding.instructions} />
-          )}
-          {funding.provider === "nowpayments" &&
-            (funding.state === "awaiting_payment" || funding.state === "verification_pending") &&
-            !(funding.expires_at && Date.parse(funding.expires_at) <= currentTime) && (
-              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-                <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
-                <div className="grid gap-1">
-                  <strong>Waiting for payment</strong>
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void refreshFunding()}
-                  disabled={refreshing}
-                >
-                  {refreshing ? "Refreshing…" : "Refresh status"}
-                </Button>
-              </div>
-            )}
-          <div className="grid gap-4 rounded-lg bg-slate-50 p-4 text-sm">
-            <div className="grid gap-1">
-              <span className="text-slate-600">Reference ID</span>
-              <CopyValue
-                label="reference ID"
-                value={funding.funding_reference ?? funding.id}
-                displayValue={
-                  <code className="break-all rounded bg-white px-2 py-1 text-xs text-slate-700">
-                    {funding.funding_reference ?? funding.id}
-                  </code>
-                }
-              />
-            </div>
-            <div className="grid gap-1">
-              <span className="text-slate-600">Funding amount</span>
-              <strong>
-                <Money minor={funding.amount_minor} currency={funding.currency} />
-              </strong>
-            </div>
-            {!paymentSessionExpired && funding.conversion && (
-              <>
-                <div className="grid gap-1">
-                  <span className="text-slate-600">Payment amount</span>
-                  <strong>
-                    <Money
-                      minor={funding.collection_amount_minor}
-                      currency={funding.collection_currency}
-                    />
-                  </strong>
-                </div>
-                <div className="grid gap-1">
-                  <span className="text-slate-600">Exchange rate</span>
-                  <strong>
-                    {formatExchangeRate(funding.conversion.rate, funding.conversion.to_currency)} /{" "}
-                    {funding.conversion.from_currency}
-                  </strong>
-                </div>
-              </>
-            )}
-            {!paymentSessionExpired && funding.payment_amount && (
-              <div className="grid gap-1">
-                <span className="text-slate-600">Payment amount</span>
-                <CopyValue
-                  label="payment amount"
-                  value={funding.payment_amount}
-                  displayValue={
-                    <strong>
-                      {funding.payment_amount} {funding.payment_currency ?? ""}
-                    </strong>
-                  }
-                />
-              </div>
-            )}
-            {!paymentSessionExpired && funding.payment_currency && (
-              <div className="grid gap-1">
-                <span className="text-slate-600">Payment currency</span>
-                <strong>{funding.payment_currency}</strong>
-              </div>
-            )}
-            {!paymentSessionExpired && funding.network && (
-              <div className="grid gap-1">
-                <span className="text-slate-600">Network</span>
-                <strong>{funding.network}</strong>
-              </div>
-            )}
-            {funding.provider === "bank_transfer" && (
-              <div className="grid gap-1 border-t border-slate-200 pt-3">
-                <span className="text-slate-600">Transfer amount</span>
-                <CopyValue
-                  label="transfer amount"
-                  value={formatMinorAmount(funding.collection_amount_minor)}
-                  displayValue={
-                    <strong>
-                      <Money
-                        minor={funding.collection_amount_minor}
-                        currency={funding.collection_currency}
-                      />
-                    </strong>
-                  }
-                />
-              </div>
-            )}
-            {funding.provider === "bank_transfer" && bankFields.length > 0 && (
-              <div className="grid gap-4 border-t border-slate-200 pt-3">
-                <strong>Receiving bank details</strong>
-                {bankFields.map((field) => (
-                  <div
-                    className="grid gap-1 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] sm:items-center sm:gap-3"
-                    key={field.key}
-                  >
-                    <span className="text-slate-600">{field.label}</span>
-                    <div className="min-w-0">
-                      {field.copyable ? (
-                        <CopyValue
-                          label={field.label}
-                          value={field.value}
-                          displayValue={<strong className="break-all">{field.value}</strong>}
-                        />
-                      ) : (
-                        <strong className="block break-all">{field.value}</strong>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {funding.provider === "bank_transfer" && bankFields.length === 0 && (
-              <p className="border-t border-amber-200 pt-3 text-sm text-amber-900" role="status">
-                Bank details are unavailable for this saved funding attempt. Do not transfer until
-                receiving details are shown.
-              </p>
-            )}
-            {funding.provider === "bank_transfer" && bankInstruction && (
-              <div className="grid gap-1 border-t border-slate-200 pt-3">
-                <span className="text-slate-600">Transfer instruction</span>
-                <strong className="whitespace-pre-line">{bankInstruction}</strong>
-              </div>
-            )}
-            {!paymentSessionExpired && funding.payment_address && (
-              <div className="grid gap-1">
-                <span className="text-slate-600">Payment address</span>
-                <CopyValue
-                  label="payment address"
-                  value={funding.payment_address}
-                  displayValue={
-                    <code className="break-all rounded bg-white p-2 text-xs text-slate-700">
-                      {funding.payment_address}
-                    </code>
-                  }
-                />
-              </div>
-            )}
-            {funding.verification && (
-              <div
-                className={`grid gap-1 rounded-lg border p-4 text-sm ${verificationObservationClass(funding.verification)}`}
-                role={funding.verification.level === "error" ? "alert" : "status"}
-              >
-                <strong>{verificationObservationHeading(funding.verification)}</strong>
-                <span>{funding.verification.message}</span>
-              </div>
-            )}
-            {shouldShowSubmittedTransactionHash(funding) ? (
-              <div className="grid gap-1">
-                <span className="text-slate-600">Submitted transaction hash</span>
-                <CopyValue
-                  label="submitted transaction hash"
-                  value={funding.provider_transaction_id!}
-                  displayValue={
-                    <code className="break-all rounded bg-white p-2 text-xs text-slate-700">
-                      {funding.provider_transaction_id}
-                    </code>
-                  }
-                />
-              </div>
-            ) : shouldShowTransactionHashInput(funding) ? (
-              <form className="grid gap-2" onSubmit={submitTransactionHash}>
-                <Label htmlFor="transaction-hash">Blockchain transaction hash</Label>
-                <Input
-                  id="transaction-hash"
-                  value={transactionHash}
-                  onChange={(event) => {
-                    setTransactionHash(event.target.value);
-                    setTransactionError(null);
-                  }}
-                  placeholder="Paste the transaction hash"
-                  disabled={submitting}
-                />
-                {transactionError && <Toast>{transactionError}</Toast>}
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  disabled={submitting || !transactionHash.trim()}
-                >
-                  {submitting ? "Submitting…" : "Submit transaction hash"}
-                </Button>
-              </form>
-            ) : null}
-            {funding.provider === "bank_transfer" && funding.evidence && (
-              <div className="grid gap-1 border-t border-slate-200 pt-4 text-sm" role="status">
-                <strong>Evidence submitted</strong>
-                <span className="text-slate-600">
-                  Your bank transfer is awaiting manual verification.
-                </span>
-                {funding.evidence.proof && (
-                  <span className="text-slate-600">
-                    Proof file: {funding.evidence.proof.original_filename ?? "Uploaded file"}
-                  </span>
-                )}
-              </div>
-            )}
-            {bankEvidenceAllowed && (
-              <form
-                className="grid gap-3 border-t border-slate-200 pt-4"
-                onSubmit={submitBankEvidence}
-              >
-                <div>
-                  <h3>Submit transfer evidence</h3>
-                  <p className="text-sm text-slate-600">
-                    Add at least one item. Evidence helps the operator reconcile your transfer; it
-                    does not confirm or credit your wallet automatically.
-                  </p>
-                </div>
-                <div className="grid gap-1">
-                  <Label htmlFor="bank-transfer-reference">Transfer reference</Label>
-                  <Input
-                    id="bank-transfer-reference"
-                    value={transferReference}
-                    onChange={(event) => setTransferReference(event.target.value)}
-                    maxLength={200}
-                    disabled={submitting}
-                    placeholder="Bank transfer reference"
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label htmlFor="bank-proof-file">Transaction proof file</Label>
-                  <Input
-                    id="bank-proof-file"
-                    name="proof_file"
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={(event) => setProofFile(event.target.files?.[0] ?? null)}
-                    disabled={submitting}
-                  />
-                  <p className="text-xs text-slate-500">
-                    PNG, JPEG, WEBP, GIF, or PDF up to 10 MB.
-                  </p>
-                </div>
-                <div className="grid gap-1">
-                  <Label htmlFor="bank-customer-note">Note</Label>
-                  <Textarea
-                    id="bank-customer-note"
-                    value={customerNote}
-                    onChange={(event) => setCustomerNote(event.target.value)}
-                    maxLength={2000}
-                    disabled={submitting}
-                    placeholder="Optional note for the operator"
-                  />
-                </div>
-                <Button type="submit" variant="secondary" disabled={submitting}>
-                  {submitting ? "Submitting…" : "Submit transfer evidence"}
-                </Button>
-              </form>
-            )}
-            {funding.expires_at && funding.state !== "expired" && !paymentSessionExpired && (
-              <p className="text-sm font-medium text-slate-700" role="timer">
-                {formatTimeRemaining(funding.expires_at, currentTime)} · Expires:{" "}
-                {new Date(funding.expires_at).toLocaleString()}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {canContinueProvider && (
-              <Button asChild>
-                <a href={providerUrl}>{fundingActionLabel(funding)}</a>
-              </Button>
-            )}
-            {process.env.NODE_ENV !== "production" &&
-              funding.provider === "development" &&
-              (funding.state === "awaiting_payment" ||
-                funding.state === "verification_pending") && (
-                <Button
-                  variant="secondary"
-                  onClick={verifyDevelopmentFunding}
-                  disabled={submitting}
-                >
-                  {submitting ? "Verifying…" : "Verify development funding"}
-                </Button>
-              )}
-            {returnTo && (
-              <Button asChild variant="secondary">
-                <Link href={returnTo}>Return to checkout</Link>
-              </Button>
-            )}
-            {funding.state === "initialization_pending" || funding.state === "awaiting_payment" ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => void cancelFunding()}
-                disabled={submitting}
-              >
-                Cancel funding
-              </Button>
-            ) : null}
-            {(funding.state === "blocked" ||
-              funding.state === "failed" ||
-              funding.state === "expired") && (
-              <Button asChild variant="secondary">
-                <Link href={canonicalWalletFundingUrl(returnTo ?? "/dashboard/wallet/fund")}>
-                  Start a new funding attempt
-                </Link>
-              </Button>
-            )}
-            <Button asChild variant="ghost">
-              <Link href="/dashboard?section=wallet">Wallet overview</Link>
-            </Button>
-          </div>
-          {providerError && <Toast>{providerError}</Toast>}
-          {evidenceMessage && (
-            <p className="text-sm font-medium text-emerald-800" role="status">
-              {evidenceMessage}
-            </p>
-          )}
-        </Card>
+        <PaymentProviderComponent
+          funding={funding}
+          returnTo={returnTo}
+          refreshing={refreshing}
+          submitting={submitting}
+          onRefresh={() => void refreshFunding()}
+          onCancel={() => void cancelFunding()}
+          onFundingChange={setFunding}
+          onConfirmed={handleFundingConfirmed}
+          onError={setProviderError}
+          providerError={providerError}
+        />
       )}
 
       {!fundingPage && activeFundings.length > 0 && (
@@ -1405,7 +664,7 @@ export function WalletPanel({
               {providerPreparation && selectedMethod && (
                 <FundingProviderPreparation
                   method={selectedMethod}
-                  fundingOptions={bankFundingOptions}
+                  fundingOptions={fundingOptions}
                   fundingOptionId={fundingOptionId}
                   onFundingOptionChange={(value) => {
                     setFundingOptionId(value);
@@ -1429,7 +688,7 @@ export function WalletPanel({
               {providerPreparation && preparationError && <Toast>{preparationError}</Toast>}
               {providerPreparation &&
                 preparation &&
-                (!bankAccountRequired || Boolean(fundingOptionId)) && (
+                providerPreparationReady(selectedMethod!, fundingOptionId) && (
                   <div className="grid gap-2 rounded-lg border border-slate-200 p-4 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-slate-600">You pay</span>
@@ -1459,7 +718,9 @@ export function WalletPanel({
                   submitting ||
                   methodsToRender.length === 0 ||
                   !provider ||
-                  (bankAccountRequired && !fundingOptionId) ||
+                  (providerPreparation &&
+                    selectedMethod &&
+                    !providerPreparationReady(selectedMethod, fundingOptionId)) ||
                   (providerPreparation && !preparation)
                 }
               >

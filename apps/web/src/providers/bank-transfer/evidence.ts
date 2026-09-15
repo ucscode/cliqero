@@ -43,6 +43,28 @@ export type BankTransferEvidenceInput = {
   proofFile?: BankTransferProofFile;
 };
 
+type EvidenceRow = {
+  id: string;
+  transfer_reference: string | null;
+  proof_image_url: string | null;
+  customer_note: string | null;
+  proof_storage_provider: string | null;
+  proof_storage_container: string | null;
+  proof_object_key: string | null;
+  proof_original_filename: string | null;
+  proof_mime_type: string;
+  proof_byte_size: string | number | bigint;
+  created_at: string | Date;
+};
+
+type FundingEvidenceRow = {
+  id: string;
+  account_id: string;
+  provider_name: string;
+  state: string;
+  provider_transaction_id: string | null;
+};
+
 export class BankTransferEvidenceService {
   constructor(
     private readonly sql: SqlExecutor,
@@ -53,7 +75,7 @@ export class BankTransferEvidenceService {
 
   async findForFunding(accountId: string, fundingId: string): Promise<BankTransferEvidence | null> {
     const row = (
-      await this.sql.query<any>(
+      await this.sql.query<EvidenceRow>(
         `select e.uuid as id,e.transfer_reference,e.proof_image_url,e.customer_note,
                 e.proof_storage_provider,e.proof_storage_container,e.proof_object_key,
                 e.proof_original_filename,e.proof_mime_type,e.proof_byte_size,e.created_at
@@ -78,7 +100,7 @@ export class BankTransferEvidenceService {
     try {
       const result = await this.uow.transaction(async () => {
         const funding = (
-          await this.sql.query<any>(
+          await this.sql.query<FundingEvidenceRow>(
             `select f.uuid as id,f.account_id,f.provider_name,f.state,f.provider_transaction_id
                from funding_capability.funding_transactions f
               where f.uuid=$1
@@ -97,7 +119,7 @@ export class BankTransferEvidenceService {
         if (funding.provider_name !== "bank_transfer") throw new Error("Funding provider mismatch");
 
         const existing = (
-          await this.sql.query<any>(
+          await this.sql.query<EvidenceRow>(
             `select uuid as id,transfer_reference,proof_image_url,customer_note,
                     proof_storage_provider,proof_storage_container,proof_object_key,
                     proof_original_filename,proof_mime_type,proof_byte_size,created_at
@@ -147,7 +169,7 @@ export class BankTransferEvidenceService {
           });
         }
         const inserted = (
-          await this.sql.query<any>(
+          await this.sql.query<{ id: string; created_at: string | Date }>(
             `insert into funding_capability.funding_evidence(
                uuid,funding_id,account_id,transfer_reference,customer_note,
                proof_storage_provider,proof_storage_container,proof_object_key,
@@ -260,7 +282,7 @@ function safeFilename(value?: string) {
   return filename || null;
 }
 
-function mapEvidence(row: any, fundingId: string): BankTransferEvidence {
+function mapEvidence(row: EvidenceRow, fundingId: string): BankTransferEvidence {
   return {
     id: row.id,
     fundingId,

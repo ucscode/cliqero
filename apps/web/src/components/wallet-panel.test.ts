@@ -2,17 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   activeFundingAction,
   bankStatusFieldRows,
-  canSubmitBankTransferEvidence,
   fundingActionLabel,
   fundingStatusMessage,
   formatTimeRemaining,
   createFundingStatusPoller,
   FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
   FUNDING_STATUS_POLL_INTERVAL_MS,
-  shouldShowSubmittedTransactionHash,
-  shouldShowTransactionHashInput,
   snapshotInstruction,
-  shouldPollFunding,
   verificationObservationClass,
   verificationObservationHeading,
   validatedPreparationAmount,
@@ -21,6 +17,13 @@ import {
   walletActivityState,
   walletPanelComposition,
 } from "./wallet-panel";
+import { canSubmitBankTransferEvidence } from "@/providers/bank-transfer/ui-policy";
+import {
+  shouldPollDirectTrc20Funding,
+  shouldShowSubmittedTransactionHash,
+  shouldShowTransactionHashInput,
+} from "@/providers/direct-trc20/ui-policy";
+import { shouldPollNowPaymentsFunding } from "@/providers/nowpayments/ui-policy";
 import {
   formatExchangeRate,
   formatMinorAmount,
@@ -260,30 +263,14 @@ describe("customer-facing funding presentation", () => {
     ]);
   });
 
-  it("does not run recurring polling for bank transfer", () => {
-    expect(shouldPollFunding({ provider: "bank_transfer", state: "awaiting_payment" })).toBe(false);
-    expect(shouldPollFunding({ provider: "paystack", state: "awaiting_payment" })).toBe(false);
-    expect(shouldPollFunding({ provider: "nowpayments", state: "awaiting_payment" })).toBe(true);
-    expect(shouldPollFunding({ provider: "nowpayments", state: "verification_pending" })).toBe(
-      true,
-    );
+  it("keeps provider polling policy in provider modules", () => {
+    expect(shouldPollNowPaymentsFunding({ state: "awaiting_payment" })).toBe(true);
+    expect(shouldPollNowPaymentsFunding({ state: "verification_pending" })).toBe(true);
     for (const state of ["confirmed", "failed", "cancelled", "expired"] as const) {
-      expect(shouldPollFunding({ provider: "nowpayments", state })).toBe(false);
+      expect(shouldPollNowPaymentsFunding({ state })).toBe(false);
     }
-    expect(
-      shouldPollFunding({
-        provider: "usdt_trc20",
-        state: "awaiting_payment",
-        provider_transaction_id: null,
-      }),
-    ).toBe(false);
-    expect(
-      shouldPollFunding({
-        provider: "usdt_trc20",
-        state: "verification_pending",
-        provider_transaction_id: "a".repeat(64),
-      }),
-    ).toBe(true);
+    expect(shouldPollDirectTrc20Funding({ state: "awaiting_payment" })).toBe(false);
+    expect(shouldPollDirectTrc20Funding({ state: "verification_pending" })).toBe(true);
   });
 
   it("polls status with GET semantics and applies a pending-to-confirmed response", async () => {
@@ -320,6 +307,7 @@ describe("customer-facing funding presentation", () => {
       onStatus: (latest) => observed.push(latest),
       timers,
       isVisible: () => true,
+      shouldContinue: shouldPollDirectTrc20Funding,
     });
 
     expect(scheduledDelays).toEqual([FUNDING_STATUS_POLL_INITIAL_DELAY_MS]);
@@ -358,9 +346,7 @@ describe("customer-facing funding presentation", () => {
     };
     const stop = createFundingStatusPoller({
       initialFunding: {
-        provider: "usdt_trc20",
         state: "verification_pending",
-        provider_transaction_id: "A1B2",
       },
       getStatus: () =>
         new Promise((resolve) => {
@@ -369,6 +355,7 @@ describe("customer-facing funding presentation", () => {
       onStatus: () => undefined,
       timers,
       isVisible: () => true,
+      shouldContinue: shouldPollDirectTrc20Funding,
     });
 
     callbacks.shift()?.();

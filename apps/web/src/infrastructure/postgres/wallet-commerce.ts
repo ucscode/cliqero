@@ -75,16 +75,16 @@ export class PostgresFundingRepository implements FundingRepository {
       nextCursor: rows.length > limit ? (items.at(-1)?.createdAt?.toISOString() ?? null) : null,
     };
   }
-  async findExpiredNowPayments(now: Date, limit = 50) {
+  async findExpired(providerName: string, now: Date, limit = 50) {
     const rows = (
       await this.sql.query<any>(
         `select f.*,f.uuid as id,a.uuid as account_uuid from funding_capability.funding_transactions f join identity_capability.accounts a on a.id=f.account_id
-         where f.provider_name='nowpayments'
+         where f.provider_name=$1
            and f.state='awaiting_payment'
            and f.provider_initialization->>'expiresAt' is not null
-           and f.provider_initialization->>'expiresAt' <= $1
-         order by f.updated_at,f.id limit $2`,
-        [now.toISOString(), Math.max(1, Math.min(limit, 50))],
+           and f.provider_initialization->>'expiresAt' <= $2
+         order by f.updated_at,f.id limit $3`,
+        [providerName, now.toISOString(), Math.max(1, Math.min(limit, 50))],
       )
     ).rows;
     return rows.map((row) => this.map(row));

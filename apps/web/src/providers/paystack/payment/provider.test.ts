@@ -85,8 +85,7 @@ describe("PaystackProvider", () => {
       expectedAmount: Money.of(40333n, "NGN"),
     });
     expect(result).toMatchObject({
-      verified: true,
-      status: "success",
+      state: "confirmed",
       reference: "reference-1",
       providerTransactionId: "4099260516",
     });

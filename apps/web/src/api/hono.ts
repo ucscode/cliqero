@@ -2454,60 +2454,25 @@ export function createApiApp(
     return c.json({ methods }, 200);
   });
   app.post("/api/payments/:provider/ipn", async (c) => {
-    const providerName = c.req.param("provider");
-    if (providerName !== "nowpayments")
+    if (c.req.param("provider") !== "nowpayments")
       return c.json({ error: "Not found", code: "not_found" }, 404);
-    let provider: any;
-    try {
-      provider = container.providers.get(providerName);
-    } catch {
+    const ingress = container.nowPaymentsIpn;
+    if (!ingress)
       return c.json({ error: "Provider unavailable", code: "provider_unavailable" }, 503);
-    }
-    const raw = new Uint8Array(await c.req.raw.arrayBuffer());
-    if (!provider.verifyIpnSignature?.(raw, c.req.header("x-nowpayments-sig") ?? null))
-      return c.json({ error: "Unauthorized", code: "unauthorized" }, 401);
-    let payload: any;
-    try {
-      payload = JSON.parse(Buffer.from(raw).toString("utf8"));
-    } catch {
+    const result = await ingress.ingest(
+      new Uint8Array(await c.req.raw.arrayBuffer()),
+      c.req.header("x-nowpayments-sig") ?? null,
+    );
+    if (result.status === 401) return c.json({ error: "Unauthorized", code: "unauthorized" }, 401);
+    if (result.status === 400)
       return c.json({ error: "Invalid notification", code: "invalid_request" }, 400);
-    }
-    const reference = typeof payload.order_id === "string" ? payload.order_id : null;
-    if (!reference) return c.json({ error: "Invalid notification", code: "invalid_request" }, 400);
-    const providerTransactionId =
-      payload.payment_id === undefined || payload.payment_id === null
-        ? null
-        : String(payload.payment_id);
-    const funding =
-      (providerTransactionId
-        ? await container.funding.findByProviderTransactionId(providerName, providerTransactionId)
-        : null) ?? (await container.funding.findByProviderReference(providerName, reference));
-    if (!funding) return c.json({ error: "Not found", code: "not_found" }, 404);
-    if (funding.providerReference !== reference)
+    if (result.status === 404) return c.json({ error: "Not found", code: "not_found" }, 404);
+    if (result.status === 409)
       return c.json(
         { error: "Reference and transaction identity mismatch", code: "conflict" },
         409,
       );
-    if (
-      providerTransactionId &&
-      funding.providerTransactionId &&
-      funding.providerTransactionId !== providerTransactionId
-    )
-      return c.json({ error: "Transaction identity mismatch", code: "conflict" }, 409);
-    if (funding.state === "confirmed" || funding.state === "failed" || funding.state === "expired")
-      return c.body(null, 204);
-    await container.database.transaction(async () => {
-      const locked = await container.funding.findById(funding.id, { forUpdate: true });
-      if (
-        locked &&
-        (locked.state === "awaiting_payment" || locked.state === "verification_pending")
-      ) {
-        if (providerTransactionId) locked.providerTransactionId = providerTransactionId;
-        locked.state = "verification_pending";
-        await container.funding.save(locked);
-      }
-    });
-    return c.body(null, 202);
+    return result.status === 204 ? c.body(null, 204) : c.body(null, 202);
   });
   app.put("/api/listings/:listingId/reviews/me", async (c) => {
     const p = requirePrincipal(c);

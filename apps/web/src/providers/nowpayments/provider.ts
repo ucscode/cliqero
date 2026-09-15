@@ -1,11 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Id } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
+import { AbstractPaymentProvider } from "@/modules/payment/payment";
 import type {
   PaymentInitialization,
   PaymentInitializationMetadata,
-  PaymentProvider,
-  PaymentVerification,
+  PaymentResult,
 } from "@/modules/payment/payment";
 import { ProviderOperationError } from "@/kernel/provider-error";
 
@@ -51,7 +51,7 @@ interface MinimumAmountData {
   fiat_equivalent?: number | string | null;
 }
 
-export class NowPaymentsProvider implements PaymentProvider {
+export class NowPaymentsProvider extends AbstractPaymentProvider {
   readonly collectionCurrencies = ["USD"] as const;
   readonly displayName: string;
   readonly imageUrl: string;
@@ -65,6 +65,7 @@ export class NowPaymentsProvider implements PaymentProvider {
     name = "nowpayments",
     private readonly http: NowPaymentsHttpClient = fetch,
   ) {
+    super();
     this.name = name;
     this.displayName = config.displayName ?? "NOWPayments";
     this.imageUrl = config.imageUrl ?? "/images/payment/nowpayments.svg";
@@ -192,7 +193,7 @@ export class NowPaymentsProvider implements PaymentProvider {
     expectedAmount: Money;
     providerTransactionId?: string;
     initialization?: PaymentInitializationMetadata;
-  }): Promise<PaymentVerification> {
+  }): Promise<PaymentResult> {
     const providerPaymentId = input.providerTransactionId;
     if (!providerPaymentId) throw new Error("NOWPayments payment identifier is missing");
     const data = await this.request<PaymentData>(
@@ -214,13 +215,23 @@ export class NowPaymentsProvider implements PaymentProvider {
     if (price === null) throw new Error("NOWPayments returned an invalid amount");
     const status = String(data.payment_status ?? "").toLowerCase();
     const terminalSuccess = status === "finished";
+    const terminalFailure = ["failed", "expired", "refunded", "partially_refunded"].includes(
+      status,
+    );
     return {
-      verified: terminalSuccess,
-      // FundingVerificationProcessor consumes the provider-neutral terminal status.
-      status: terminalSuccess ? "success" : status,
+      state: terminalSuccess ? "confirmed" : terminalFailure ? "failed" : "pending",
       reference: input.reference,
       amount: Money.of(price, currency),
       providerTransactionId: String(data.payment_id),
+      observation: {
+        status: terminalSuccess ? "success" : terminalFailure ? "failed" : "confirming",
+        message: terminalSuccess
+          ? "Payment verified successfully."
+          : terminalFailure
+            ? "NOWPayments did not complete this payment."
+            : "NOWPayments is still waiting for this payment.",
+        level: terminalSuccess ? "success" : terminalFailure ? "error" : "info",
+      },
     };
   }
 

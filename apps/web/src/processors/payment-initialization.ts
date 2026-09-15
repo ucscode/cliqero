@@ -1,6 +1,6 @@
 import { ProviderOperationError } from "@/kernel/provider-error";
 import type { PaymentProviderRegistry, PaymentRepository } from "@/modules/payment/payment";
-import type { PostgresPaymentOperationsRepository } from "@/providers/paystack/persistence/payment-operations";
+import type { PostgresPaymentOperationsRepository } from "@/infrastructure/postgres/payment-operations";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { AccountReader } from "@/modules/identity/account";
 

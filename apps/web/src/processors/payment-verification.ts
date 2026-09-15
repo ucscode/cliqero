@@ -29,9 +29,9 @@ export class PaymentVerificationProcessor {
         const locked = await this.payments.findById(paymentId, { forUpdate: true });
         if (!locked) return;
         if (
-          verified.verified &&
-          verified.status === "success" &&
+          verified.state === "confirmed" &&
           verified.reference === locked.providerReference &&
+          verified.amount &&
           verified.amount.equals(locked.collectionAmount ?? locked.amount) &&
           (!locked.providerTransactionId ||
             !verified.providerTransactionId ||

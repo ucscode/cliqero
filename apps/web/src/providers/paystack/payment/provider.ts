@@ -3,11 +3,8 @@ import type { Id } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
 import { ExactCurrencyConverter } from "@/modules/money/exchange";
 import type { ExchangeRateService } from "@/modules/money/exchange-service";
-import type {
-  PaymentInitialization,
-  PaymentProvider,
-  PaymentVerification,
-} from "@/modules/payment/payment";
+import { AbstractPaymentProvider } from "@/modules/payment/payment";
+import type { PaymentInitialization, PaymentResult } from "@/modules/payment/payment";
 import { ProviderOperationError } from "@/kernel/provider-error";
 import {
   loadCountryCurrencyResolver,
@@ -46,7 +43,7 @@ interface TransactionData {
   fees?: number | null;
 }
 
-export class PaystackProvider implements PaymentProvider {
+export class PaystackProvider extends AbstractPaymentProvider {
   readonly name = "paystack";
   readonly displayName: string;
   readonly imageUrl: string;
@@ -64,6 +61,7 @@ export class PaystackProvider implements PaymentProvider {
     private readonly rates?: ExchangeRateService,
     private readonly countryCurrencies: CountryCurrencyResolver = loadCountryCurrencyResolver(),
   ) {
+    super();
     this.collectionCurrencies = normalizeCurrencies(config.currencies ?? collectionCurrencies);
     this.defaultCollectionCurrency = normalizeCurrency(
       config.defaultCurrency ?? this.collectionCurrencies[0],
@@ -154,7 +152,7 @@ export class PaystackProvider implements PaymentProvider {
     reference: string;
     expectedAmount: Money;
     providerTransactionId?: string;
-  }): Promise<PaymentVerification> {
+  }): Promise<PaymentResult> {
     const data = await this.request<TransactionData>(
       `/transaction/verify/${encodeURIComponent(input.reference)}`,
       { method: "GET" },
@@ -173,9 +171,11 @@ export class PaystackProvider implements PaymentProvider {
       (!Number.isSafeInteger(data.fees) || data.fees < 0)
     )
       throw new Error("Paystack returned an invalid fee");
+    const status = data.status.toLowerCase();
+    const confirmed = status === "success";
+    const failed = ["failed", "abandoned", "reversed", "cancelled", "rejected"].includes(status);
     return {
-      verified: data.status === "success",
-      status: data.status,
+      state: confirmed ? "confirmed" : failed ? "failed" : "pending",
       reference: data.reference,
       amount: Money.of(BigInt(data.amount), data.currency),
       providerTransactionId: String(data.id),
@@ -183,6 +183,15 @@ export class PaystackProvider implements PaymentProvider {
         data.fees === undefined || data.fees === null
           ? undefined
           : Money.of(BigInt(data.fees), data.currency),
+      observation: {
+        status: confirmed ? "success" : failed ? "failed" : "confirming",
+        message: confirmed
+          ? "Payment verified successfully."
+          : failed
+            ? "Paystack did not complete this payment."
+            : "Paystack is still processing this payment.",
+        level: confirmed ? "success" : failed ? "error" : "info",
+      },
     };
   }
 

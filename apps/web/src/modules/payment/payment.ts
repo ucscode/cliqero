@@ -94,6 +94,28 @@ export interface PaymentInitialization {
   metadata?: PaymentInitializationMetadata;
 }
 
+export type PaymentResultState = "pending" | "confirmed" | "failed" | "reconciliation_required";
+
+/** Provider output consumed by generic funding; provider status vocabulary stays private. */
+export interface PaymentResult {
+  state: PaymentResultState;
+  reference?: string;
+  amount?: Money;
+  providerTransactionId?: string;
+  providerFee?: Money;
+  message?: string;
+  providerData?: unknown;
+  observation?: Omit<PaymentVerificationObservation, "checkedAt">;
+}
+
+export interface ProviderRequestContext {
+  accountId: Id;
+  fundingId: Id;
+  reference: string;
+  expectedAmount: Money;
+  initialization?: PaymentInitializationMetadata;
+}
+
 export interface PaymentCurrencyOption {
   code: string;
   label?: string;
@@ -123,16 +145,6 @@ export interface PaymentInitializationMetadata {
   failureCurrency?: string;
   /** Latest customer-safe verification observation; persisted with the funding snapshot. */
   verification?: PaymentVerificationObservation;
-}
-export interface PaymentVerification {
-  verified: boolean;
-  reference: string;
-  amount: Money;
-  /** Opaque external identity; preserve the provider-supplied text and casing. */
-  providerTransactionId?: string;
-  providerFee?: Money;
-  status: string;
-  observation?: Omit<PaymentVerificationObservation, "checkedAt">;
 }
 export interface PaymentProvider {
   readonly name: string;
@@ -186,7 +198,38 @@ export interface PaymentProvider {
     expectedAmount: Money;
     providerTransactionId?: string;
     initialization?: PaymentInitializationMetadata;
-  }): Promise<PaymentVerification>;
+  }): Promise<PaymentResult>;
+  /** Provider-specific customer interaction. The raw input is intentionally opaque to funding. */
+  handleRequest?(input: unknown, context: ProviderRequestContext): Promise<PaymentResult>;
+}
+
+/** Small home for defaults shared by payment providers. */
+export abstract class AbstractPaymentProvider implements PaymentProvider {
+  abstract readonly name: string;
+  abstract readonly displayName: string;
+  abstract readonly imageUrl: string;
+  abstract readonly description: string;
+  abstract initiate(input: {
+    paymentId: Id;
+    amount: Money;
+    idempotencyKey: string;
+    buyerEmail: string;
+    country?: string | null;
+    paymentCurrency?: string;
+    fundingOptionId?: string;
+  }): Promise<PaymentInitialization>;
+  abstract verify(input: {
+    reference: string;
+    expectedAmount: Money;
+    providerTransactionId?: string;
+    initialization?: PaymentInitializationMetadata;
+  }): Promise<PaymentResult>;
+
+  async handleRequest(_input: unknown, _context: ProviderRequestContext): Promise<PaymentResult> {
+    void _input;
+    void _context;
+    throw new Error(`Payment provider does not accept customer requests: ${this.name}`);
+  }
 }
 export interface PaymentProviderFilters {
   countries: string[] | null;
@@ -302,7 +345,7 @@ export function registerDevelopmentPaymentProvider(
   return registry;
 }
 
-export class DevelopmentPaymentProvider implements PaymentProvider {
+export class DevelopmentPaymentProvider extends AbstractPaymentProvider {
   readonly name = "development";
   readonly environmentOnly = "development" as const;
   readonly displayName = "Development";
@@ -325,11 +368,16 @@ export class DevelopmentPaymentProvider implements PaymentProvider {
     return { reference: this.referenceFor(input) };
   }
   async verify(input: { reference: string; expectedAmount: Money }) {
+    const confirmed = input.reference.startsWith("dev_") && input.expectedAmount.minorAmount >= 0n;
     return {
-      verified: input.reference.startsWith("dev_") && input.expectedAmount.minorAmount >= 0n,
+      state: confirmed ? ("confirmed" as const) : ("failed" as const),
       reference: input.reference,
       amount: input.expectedAmount,
-      status: "success",
+      observation: {
+        status: confirmed ? ("success" as const) : ("failed" as const),
+        message: confirmed ? "Payment verified successfully." : "Development payment failed.",
+        level: confirmed ? ("success" as const) : ("error" as const),
+      },
     };
   }
 }
