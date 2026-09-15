@@ -35,6 +35,7 @@ export class PostgresCapabilityAssignmentStore implements CapabilityAssignmentSt
   }
 
   async lockRootAssignments(): Promise<number> {
+    await this.sql.query(`select pg_advisory_xact_lock(hashtext('cliqero:system-root'))`);
     const roots = await this.sql.query<{ account_id: string }>(
       `select account_id from identity_capability.account_capabilities
        where capability='system.root' for update`,

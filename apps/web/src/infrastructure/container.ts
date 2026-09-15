@@ -94,8 +94,7 @@ import {
 } from "@/processors/wallet/commerce";
 import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing/media";
 import { PostgresListingReviewRepository } from "@/infrastructure/postgres/listing/reviews";
-import { loadMediaStorage } from "@/providers/storage/media-config";
-import { requirePrivateStorage } from "@/providers/storage/media-config";
+import { loadMediaStorage, requirePrivateStorage } from "@/providers/storage/media-config";
 import { storefrontConfig, resolveStorefrontMediaProvider } from "@/config/storefront";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing/media";
 import { ListingTransferService } from "@/application/listing/transfer";
@@ -110,13 +109,18 @@ import { PostgresTreasuryDistributionStore } from "@/infrastructure/postgres/tre
 import { OperatorTreasuryService } from "@/infrastructure/postgres/operator/treasury";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
 import { ApiPrincipalResolver } from "@/infrastructure/identity/api-principal";
-import { HierarchyService } from "@/infrastructure/postgres/hierarchy/service";
+import { HierarchyService } from "@/application/hierarchy";
+import { PostgresHierarchyReader } from "@/infrastructure/postgres/hierarchy/service";
 import { OperatorOverviewService } from "@/infrastructure/postgres/operator/overview";
 import { OperatorAccountService } from "@/infrastructure/postgres/operator/accounts";
-import { CapabilityAdministrationService } from "@/infrastructure/postgres/identity/capability-administration";
-import { OperatorApiKeyService } from "@/infrastructure/postgres/operator/api-keys";
-import { OperatorFundingService } from "@/infrastructure/postgres/operator/funding";
-import { BankTransferEvidenceService } from "@/infrastructure/postgres/funding/bank-transfer/evidence";
+import { CapabilityAdministrationService } from "@/application/identity/capability-administration";
+import { PostgresCapabilityAssignmentStore } from "@/infrastructure/postgres/identity/capability-administration";
+import { OperatorApiKeyService } from "@/application/operator/api-keys";
+import { OperatorFundingService } from "@/application/operator/funding";
+import { PostgresOperatorFundingReader } from "@/infrastructure/postgres/operator/funding";
+import { BankTransferConfirmationService } from "@/application/funding/bank-transfer/confirmation";
+import { BankTransferEvidenceService } from "@/application/funding/bank-transfer/evidence";
+import { PostgresBankTransferEvidenceRepository } from "@/infrastructure/postgres/funding/bank-transfer/evidence";
 import {
   OperatorDistributionService,
   OperatorEarningsService,
@@ -152,11 +156,8 @@ export function createContainer(databaseUrl: string) {
     auditRecorder,
     database,
   );
-  const listingReviews = new ListingReviewService(
-    reviews,
-    listings,
-    new PostgresOperatorAuthorizationService(database),
-  );
+  const operators = new PostgresOperatorAuthorizationService(database);
+  const listingReviews = new ListingReviewService(reviews, listings, operators);
   const listingTransfer = new ListingTransferService(
     listingService,
     listingMedia,
@@ -184,8 +185,6 @@ export function createContainer(databaseUrl: string) {
   const referralAttributionRepository = new PostgresReferralAttributionRepository(database);
   const ledger = new PostgresLedgerRepository(database);
   const financialDistributionPolicy = new PostgresFinancialDistributionPolicyRepository(database);
-  // Validate the deployment policy while composing the application; malformed
-  // commission YAML must fail startup rather than halfway through distribution.
   const loadedYamlCommissionPolicy = loadYamlCommissionPolicy();
   const yamlCommissionPolicy = { getActive: async () => loadedYamlCommissionPolicy };
   const treasuryRepository = new PostgresTreasuryRepository(database);
@@ -210,7 +209,7 @@ export function createContainer(databaseUrl: string) {
     fundsReservation,
     outbox,
     database,
-    new PostgresOperatorAuthorizationService(database),
+    operators,
     withdrawalPersistence,
   );
   const payoutProviders = new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());
@@ -269,11 +268,10 @@ export function createContainer(databaseUrl: string) {
     if (!bankEvidenceStorageName)
       throw new Error("Bank-transfer evidence storage instance is required");
     requirePrivateStorage(objectStorage, bankEvidenceStorageName);
-  }
-  if (bankTransfer)
     providers.register(new BankTransferProvider(bankTransfer.provider), {
       filters: bankTransfer.filters,
     });
+  }
   const paymentInitialization = new PaymentInitializationProcessor(
     payments,
     providers,
@@ -349,7 +347,6 @@ export function createContainer(databaseUrl: string) {
     database,
   );
   const entitlementIssuance = new EntitlementIssuanceProcessor(purchases, entitlements, database);
-  const operators = new PostgresOperatorAuthorizationService(database);
   const betterAuth = new BetterAuthBoundary(database, databaseUrl);
   const authentication = Object.assign(new AuthenticationService(accounts, betterAuth, database), {
     auth: betterAuth.auth,
@@ -357,8 +354,38 @@ export function createContainer(databaseUrl: string) {
   });
   const apiKeyRepository = new PostgresApiKeyRepository(database);
   const apiKeys = new ApiKeyService(apiKeyRepository, database, database);
-  const operatorApiKeys = new OperatorApiKeyService(apiKeys, database, database);
+  const operatorApiKeys = new OperatorApiKeyService(
+    apiKeys,
+    accounts,
+    operators,
+    auditRecorder,
+    database,
+  );
   const principalResolver = new ApiPrincipalResolver(authentication, apiKeys, database);
+  const capabilityAdministration = new CapabilityAdministrationService(
+    accounts,
+    operators,
+    new PostgresCapabilityAssignmentStore(database),
+    auditRecorder,
+    database,
+  );
+  const bankTransferConfirmation = new BankTransferConfirmationService(
+    funding,
+    auditRecorder,
+    database,
+  );
+  const operatorFunding = new OperatorFundingService(
+    new PostgresOperatorFundingReader(database),
+    bankTransferConfirmation,
+  );
+  const bankTransferEvidence = new BankTransferEvidenceService(
+    funding,
+    new PostgresBankTransferEvidenceRepository(database),
+    auditRecorder,
+    database,
+    objectStorage,
+    bankEvidenceStorageName,
+  );
   return {
     database,
     accounts,
@@ -480,17 +507,12 @@ export function createContainer(databaseUrl: string) {
     exchangeRates,
     buyerAccess: new BuyerAccessService(access, listings, database, purchases, entitlements),
     access,
-    hierarchy: new HierarchyService(database),
+    hierarchy: new HierarchyService(new PostgresHierarchyReader(database)),
     operatorOverview: new OperatorOverviewService(database),
     operatorAccounts: new OperatorAccountService(database),
-    capabilityAdministration: new CapabilityAdministrationService(database, database),
-    operatorFunding: new OperatorFundingService(database, database),
-    bankTransferEvidence: new BankTransferEvidenceService(
-      database,
-      database,
-      objectStorage,
-      bankEvidenceStorageName,
-    ),
+    capabilityAdministration,
+    operatorFunding,
+    bankTransferEvidence,
     operatorDistributions: new OperatorDistributionService(database),
     operatorEarnings: new OperatorEarningsService(database),
     operatorWithdrawals: new OperatorWithdrawalService(database),
@@ -506,11 +528,13 @@ function configuredDurationMs(value: string | undefined, fallback: number) {
     throw new Error("Exchange-rate cache TTL must be a positive integer in milliseconds");
   return parsed;
 }
+
 export type ApplicationContainer = ReturnType<typeof createContainer>;
 
 const globalContainer = globalThis as typeof globalThis & {
   __cliqeroContainer?: ApplicationContainer;
 };
+
 export function getContainer(): ApplicationContainer {
   if (!globalContainer.__cliqeroContainer) {
     const databaseUrl = process.env.DATABASE_URL;
