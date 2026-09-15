@@ -1,10 +1,10 @@
 import type { EventOutbox } from "@/kernel/events";
 import { newId, type Id } from "@/kernel/ids";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import type { ListingRepository } from "@/modules/listing/listing";
+import type { ListingRepository } from "@/modules/listing";
 import { Money } from "@/modules/money/money";
 import { Purchase, type PurchaseRepository } from "@/modules/purchase/purchase";
-import type { PaymentRepository, PaymentProviderRegistry } from "@/modules/payment/payment";
+import type { PaymentRepository, PaymentProviderRegistry } from "@/modules/payment";
 import { Entitlement, type EntitlementRepository } from "@/modules/entitlement/entitlement";
 import type { PostgresIdempotencyRepository } from "@/infrastructure/postgres/idempotency";
 import type { PurchaseAttributionResolver } from "@/modules/referral/attribution";

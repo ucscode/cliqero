@@ -7,7 +7,7 @@ vi.mock("@/infrastructure/container", () => ({
 }));
 
 import { POST } from "@/api/compat/wallet/fund/[id]/transaction/route";
-import { InvalidDirectTrc20TransactionError } from "@/providers/direct-trc20/errors";
+import { InvalidDirectTrc20TransactionError } from "@/providers/payment/direct-trc20/errors";
 
 const fundingId = "00000000-0000-4000-8000-000000000010";
 const account = { id: "00000000-0000-4000-8000-000000000001" };

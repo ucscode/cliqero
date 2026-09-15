@@ -5,7 +5,7 @@ import {
   type ListingMetadata,
   type ListingRepository,
   type ListingState,
-} from "@/modules/listing/listing";
+} from "@/modules/listing";
 import { Purchase, type PurchaseRepository, type PurchaseState } from "@/modules/purchase/purchase";
 import {
   Entitlement,
@@ -113,7 +113,7 @@ export class PostgresListingRepository implements ListingRepository {
     state?: ListingState;
     search?: string;
     cursor?: string;
-    sort?: import("@/modules/listing/listing").ListingSort;
+    sort?: import("@/modules/listing").ListingSort;
     featuredOnly?: boolean;
     limit: number;
   }) {

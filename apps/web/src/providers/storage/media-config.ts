@@ -4,9 +4,9 @@ import {
   ObjectStorageRegistry,
   type ObjectStorageProvider,
 } from "@/modules/storage/object-storage";
-import { FilesystemObjectStorageProvider } from "@/providers/filesystem/storage/provider";
-import { SupabaseObjectStorageProvider } from "@/providers/supabase/storage/provider";
-import { CloudflareR2ObjectStorageProvider } from "@/providers/cloudflare-r2/storage/provider";
+import { FilesystemObjectStorageProvider } from "@/providers/storage/filesystem/provider";
+import { SupabaseObjectStorageProvider } from "@/providers/storage/supabase/provider";
+import { CloudflareR2ObjectStorageProvider } from "@/providers/storage/cloudflare-r2/provider";
 
 const instanceName = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/);
 const visibility = z.enum(["public", "private"]);

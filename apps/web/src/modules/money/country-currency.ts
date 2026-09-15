@@ -33,7 +33,7 @@ export class CountryCurrencyResolver {
 }
 
 export function loadCountryCurrencyResolver(
-  path = "config/reference/country-currencies.json",
+  path = "apps/web/data/reference/country-currencies.json",
 ): CountryCurrencyResolver {
   const value = loadYamlConfiguration(path, process.env, { required: true });
   if (!value || Array.isArray(value) || typeof value !== "object")

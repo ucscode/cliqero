@@ -1,11 +1,11 @@
 import { newId, type Id } from "@/kernel/ids";
 import type { Account } from "@/modules/identity/account";
-import type { ListingRepository } from "@/modules/listing/listing";
+import type { ListingRepository } from "@/modules/listing";
 import {
   type ListingReviewRepository,
   type ReviewStatus,
   validateReviewInput,
-} from "@/modules/listing-review/review";
+} from "@/modules/listing/reviews/review";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 
 export class ListingReviewService {

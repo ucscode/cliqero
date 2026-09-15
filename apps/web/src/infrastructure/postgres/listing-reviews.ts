@@ -3,7 +3,7 @@ import type {
   ListingReviewRepository,
   RatingSummary,
   ReviewStatus,
-} from "@/modules/listing-review/review";
+} from "@/modules/listing/reviews/review";
 import type { SqlExecutor } from "./database";
 
 type ReviewRow = {

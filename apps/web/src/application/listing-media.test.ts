@@ -4,7 +4,7 @@ import {
   ObjectStorageRegistry,
   type ObjectStorageProvider,
 } from "@/modules/storage/object-storage";
-import type { ListingMedia } from "@/modules/listing-media/media";
+import type { ListingMedia } from "@/modules/listing/media/media";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "./listing-media";
 
 const listingId = "00000000-0000-4000-8000-000000000001";

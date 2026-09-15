@@ -3,7 +3,8 @@
   "private": true,
   "packageManager": "npm@11.5.2",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @cliqero/web",

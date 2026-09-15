@@ -17,13 +17,13 @@ import {
   walletActivityState,
   walletPanelComposition,
 } from "./wallet-panel";
-import { canSubmitBankTransferEvidence } from "@/providers/bank-transfer/ui-policy";
+import { canSubmitBankTransferEvidence } from "@/providers/payment/bank-transfer/ui-policy";
 import {
   shouldPollDirectTrc20Funding,
   shouldShowSubmittedTransactionHash,
   shouldShowTransactionHashInput,
-} from "@/providers/direct-trc20/ui-policy";
-import { shouldPollNowPaymentsFunding } from "@/providers/nowpayments/ui-policy";
+} from "@/providers/payment/direct-trc20/ui-policy";
+import { shouldPollNowPaymentsFunding } from "@/providers/payment/nowpayments/ui-policy";
 import {
   formatExchangeRate,
   formatMinorAmount,

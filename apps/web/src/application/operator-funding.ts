@@ -1,6 +1,6 @@
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import { BankTransferOperatorConfirmationService } from "@/providers/bank-transfer/operator";
+import { BankTransferOperatorConfirmationService } from "@/providers/payment/bank-transfer/operator";
 
 type FundingState =
   | "initialization_pending"

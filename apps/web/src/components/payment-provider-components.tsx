@@ -28,14 +28,14 @@ import { PaymentInstructions } from "./payment-instructions";
 import { LoaderCircle } from "lucide-react";
 import { canonicalWalletFundingUrl } from "@/lib/api-client";
 import { fundingToneClass, presentFundingState } from "@/modules/funding/presentation";
-import { canSubmitBankTransferEvidence } from "@/providers/bank-transfer/ui-policy";
+import { canSubmitBankTransferEvidence } from "@/providers/payment/bank-transfer/ui-policy";
 import {
   shouldShowSubmittedTransactionHash,
   shouldShowTransactionHashInput,
   shouldPollDirectTrc20Funding,
-} from "@/providers/direct-trc20/ui-policy";
-import { shouldPollNowPaymentsFunding } from "@/providers/nowpayments/ui-policy";
-import { shouldShowPaystackRefresh } from "@/providers/paystack/ui-policy";
+} from "@/providers/payment/direct-trc20/ui-policy";
+import { shouldPollNowPaymentsFunding } from "@/providers/payment/nowpayments/ui-policy";
+import { shouldShowPaystackRefresh } from "@/providers/payment/paystack/ui-policy";
 
 export function fundingStatusMessage(
   funding: Pick<FundingStatus, "provider" | "state" | "expires_at" | "error_message"> & {

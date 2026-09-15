@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inspectImage } from "@/modules/listing-media/image";
+import { inspectImage } from "@/modules/listing/media/image";
 import { fixturePng } from "./fixture-media";
 
 describe("catalogue fixture media", () => {

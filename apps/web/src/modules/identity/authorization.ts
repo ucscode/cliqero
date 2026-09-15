@@ -1,5 +1,5 @@
 import type { Account } from "./account";
-import type { Listing } from "@/modules/listing/listing";
+import type { Listing } from "@/modules/listing";
 import type { Entitlement } from "@/modules/entitlement/entitlement";
 
 export class AuthorizationPolicy {

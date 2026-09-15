@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import { newId } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
-import type { PaymentProvider, PaymentResult } from "@/modules/payment/payment";
+import type { PaymentProvider, PaymentResult } from "@/modules/payment";
 import { FundingInitializationProcessor } from "@/application/wallet-commerce";
 import { Entitlement } from "@/modules/entitlement/entitlement";
 import { PurchaseDistributionProcessor } from "@/processors/purchase-distribution";

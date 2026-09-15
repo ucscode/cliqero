@@ -19,22 +19,20 @@ import { AuthenticationService } from "@/modules/identity/authentication";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import { AccessService } from "@/modules/access/access";
 import { IntegrationService } from "@/modules/access/integrations";
-import {
-  PaymentProviderRegistry,
-  registerDevelopmentPaymentProvider,
-} from "@/modules/payment/payment";
-import { PaystackProvider } from "@/providers/paystack/payment/provider";
-import { loadPaystackConfiguration } from "@/providers/paystack/payment/config";
-import { PaystackWebhookIngress } from "@/providers/paystack/payment/webhook";
-import { NowPaymentsProvider } from "@/providers/nowpayments/provider";
-import { loadNowPaymentsConfiguration } from "@/providers/nowpayments/config";
-import { NowPaymentsExpiryProcessor } from "@/providers/nowpayments/expiry";
-import { NowPaymentsIpnIngress } from "@/providers/nowpayments/ipn";
-import { DirectTrc20Provider } from "@/providers/direct-trc20/provider";
-import { HttpDirectTrc20Verifier } from "@/providers/direct-trc20/verifier";
-import { loadDirectTrc20Configuration } from "@/providers/direct-trc20/config";
-import { BankTransferProvider } from "@/providers/bank-transfer/provider";
-import { loadBankTransferConfiguration } from "@/providers/bank-transfer/config";
+import { PaymentProviderRegistry } from "@/modules/payment";
+import { registerDevelopmentPaymentProvider } from "@/providers/payment/development/registration";
+import { PaystackProvider } from "@/providers/payment/paystack/provider";
+import { loadPaystackConfiguration } from "@/providers/payment/paystack/config";
+import { PaystackWebhookIngress } from "@/providers/payment/paystack/webhook";
+import { NowPaymentsProvider } from "@/providers/payment/nowpayments/provider";
+import { loadNowPaymentsConfiguration } from "@/providers/payment/nowpayments/config";
+import { NowPaymentsExpiryProcessor } from "@/providers/payment/nowpayments/expiry";
+import { NowPaymentsIpnIngress } from "@/providers/payment/nowpayments/ipn";
+import { DirectTrc20Provider } from "@/providers/payment/direct-trc20/provider";
+import { HttpDirectTrc20Verifier } from "@/providers/payment/direct-trc20/verifier";
+import { loadDirectTrc20Configuration } from "@/providers/payment/direct-trc20/config";
+import { BankTransferProvider } from "@/providers/payment/bank-transfer/provider";
+import { loadBankTransferConfiguration } from "@/providers/payment/bank-transfer/config";
 import { ListingService } from "@/application/listings";
 import { CheckoutService, PaymentCompletionService } from "@/application/commerce";
 import { BuyerAccessService } from "@/application/access";
@@ -51,7 +49,7 @@ import { PostgresPaymentOperationsRepository } from "./postgres/payment-operatio
 import {
   PaymentReconciliationService,
   PaystackOperationsInspectionService,
-} from "@/providers/paystack/payment/operations";
+} from "@/providers/payment/paystack/operations";
 import { PostgresReversalRepository } from "./postgres/reversals";
 import { PurchaseReversalProcessor } from "@/processors/purchase-reversal";
 import {
@@ -67,15 +65,15 @@ import { WithdrawalService } from "@/application/withdrawals";
 import { PayoutProviderRegistry, DevelopmentPayoutProvider } from "@/modules/withdrawal/provider";
 import { PostgresPayoutRepository } from "@/infrastructure/postgres/payouts";
 import { PayoutExecutionProcessor } from "@/processors/payout-execution";
-import { PaystackPayoutProvider } from "@/providers/paystack/payout/provider";
-import { loadPaystackPayoutConfiguration } from "@/providers/paystack/payout/config";
-import { PostgresPaystackRecipientStore } from "@/providers/paystack/persistence/recipients";
-import { PostgresPaystackPayoutEventRepository } from "@/providers/paystack/persistence/payout-events";
-import { PaystackPayoutWebhookIngress } from "@/providers/paystack/payout/webhook";
-import { PostgresPaystackOperationsRepository } from "@/providers/paystack/persistence/operations";
+import { PaystackPayoutProvider } from "@/providers/payout/paystack/provider";
+import { loadPaystackPayoutConfiguration } from "@/providers/payout/paystack/config";
+import { PostgresPaystackRecipientStore } from "@/providers/payout/paystack/persistence/recipients";
+import { PostgresPaystackPayoutEventRepository } from "@/providers/payout/paystack/persistence/payout-events";
+import { PaystackPayoutWebhookIngress } from "@/providers/payout/paystack/webhook";
+import { PostgresPaystackOperationsRepository } from "@/providers/payment/paystack/persistence/operations";
 import { ExchangeRateService } from "@/modules/money/exchange-service";
-import { FrankfurterProvider } from "@/providers/frankfurter/provider";
-import { FawazProvider } from "@/providers/fawaz/provider";
+import { FrankfurterProvider } from "@/providers/money/frankfurter/provider";
+import { FawazProvider } from "@/providers/money/fawaz/provider";
 import { PostgresExchangeRateCache } from "./postgres/exchange-rates";
 import { PaymentInitializationProcessor } from "@/processors/payment-initialization";
 import { PaymentInitializationWorker } from "@/workers/payment-initialization/worker";
@@ -121,7 +119,7 @@ import { OperatorAccountService } from "@/application/operator-accounts";
 import { CapabilityAdministrationService } from "@/application/capability-administration";
 import { OperatorApiKeyService } from "@/application/operator-api-keys";
 import { OperatorFundingService } from "@/application/operator-funding";
-import { BankTransferEvidenceService } from "@/providers/bank-transfer/evidence";
+import { BankTransferEvidenceService } from "@/providers/payment/bank-transfer/evidence";
 import {
   OperatorDistributionService,
   OperatorEarningsService,

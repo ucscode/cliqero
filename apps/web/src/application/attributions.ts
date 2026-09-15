@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { newId } from "@/kernel/ids";
-import type { ListingRepository } from "@/modules/listing/listing";
+import type { ListingRepository } from "@/modules/listing";
 import type { AccountReader } from "@/modules/identity/account";
 import type {
   PurchaseAttributionResolver,

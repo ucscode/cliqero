@@ -25,5 +25,8 @@ COPY --from=build /workspace/apps/web/.next/static ./apps/web/.next/static
 # Web-owned informational MDX is repository-owned runtime content. Bake it into
 # the production image; development bind-mounts the same directory for live edits.
 COPY --from=build /workspace/apps/web/content ./apps/web/content
+# Reference data is loaded at runtime by the application and is not guaranteed to
+# be included in Next.js standalone output, so copy the app-owned data explicitly.
+COPY --from=build /workspace/apps/web/data ./apps/web/data
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]

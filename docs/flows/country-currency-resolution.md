@@ -10,7 +10,7 @@ does not ask for a country or generic currency. Generic funding input is only
 the canonical USD amount and provider. Provider preparation owns collection
 currency resolution and any provider-specific payment-currency selection.
 
-The optional reference file `config/reference/country-currencies.json` maps ISO
+The optional reference file `apps/web/data/reference/country-currencies.json` maps ISO
 alpha-2 country codes to preferred ISO alpha-3 fiat currencies. It contains no
 rates. `CountryCurrencyResolver` uses this order when mapping is enabled:
 

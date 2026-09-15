@@ -18,6 +18,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@cliqero/nowpayments": "*",
+    "@cliqero/paystack": "*",
+    "@cliqero/tron": "*",
     "@dagrejs/dagre": "^3.1.1",
     "@hono/zod-openapi": "^1.2.2",
     "@mdx-js/loader": "^3.1.1",

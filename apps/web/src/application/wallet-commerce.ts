@@ -9,12 +9,12 @@ import type {
   PaymentResult,
   PaymentVerificationObservation,
   ProviderRequestContext,
-} from "@/modules/payment/payment";
+} from "@/modules/payment";
 import type { AccountReader } from "@/modules/identity/account";
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
 import type { WalletRepository } from "@/modules/wallet/wallet";
 import type { CheckoutRepository } from "@/modules/checkout/checkout";
-import type { ListingRepository } from "@/modules/listing/listing";
+import type { ListingRepository } from "@/modules/listing";
 import { Purchase, type PurchaseRepository } from "@/modules/purchase/purchase";
 import type { PurchaseAttributionResolver } from "@/modules/referral/attribution";
 import type { PostgresPaymentOperationsRepository } from "@/infrastructure/postgres/payment-operations";

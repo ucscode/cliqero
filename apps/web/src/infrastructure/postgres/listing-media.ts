@@ -1,5 +1,5 @@
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
-import type { ListingMedia, ListingMediaRepository } from "@/modules/listing-media/media";
+import type { ListingMedia, ListingMediaRepository } from "@/modules/listing/media/media";
 
 export class PostgresListingMediaRepository implements ListingMediaRepository {
   constructor(private sql: SqlExecutor) {}

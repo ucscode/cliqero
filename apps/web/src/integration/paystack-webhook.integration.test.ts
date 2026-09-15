@@ -1,15 +1,15 @@
 import { createHmac } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContainer } from "@/infrastructure/container";
-import { PaystackProvider } from "@/providers/paystack/payment/provider";
-import { PaystackWebhookIngress } from "@/providers/paystack/payment/webhook";
+import { PaystackProvider } from "@/providers/payment/paystack/provider";
+import { PaystackWebhookIngress } from "@/providers/payment/paystack/webhook";
 import {
   OutboxDispatcher,
   OutboxHandlerRegistry,
   type WorkerLogger,
 } from "@/workers/outbox/dispatcher";
-import { PaystackChargeSucceededHandler } from "@/providers/paystack/payment/outbox-handler";
-import { PaystackRefundProcessedHandler } from "@/providers/paystack/payment/refund-handler";
+import { PaystackChargeSucceededHandler } from "@/providers/payment/paystack/outbox-handler";
+import { PaystackRefundProcessedHandler } from "@/providers/payment/paystack/refund-handler";
 import { PurchaseReversalEntitlementHandler } from "@/workers/outbox/handlers";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;

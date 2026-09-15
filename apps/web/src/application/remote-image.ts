@@ -2,7 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import http from "node:http";
 import https from "node:https";
-import { inspectImage, MAX_IMAGE_BYTES } from "@/modules/listing-media/image";
+import { inspectImage, MAX_IMAGE_BYTES } from "@/modules/listing/media/image";
 export async function fetchRemoteImage(
   source: string,
   redirects = 0,

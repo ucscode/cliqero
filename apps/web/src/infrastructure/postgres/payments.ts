@@ -1,5 +1,5 @@
 import { Money } from "@/modules/money/money";
-import type { PaymentRecord, PaymentRepository, PaymentState } from "@/modules/payment/payment";
+import type { PaymentRecord, PaymentRepository, PaymentState } from "@/modules/payment";
 import type { SqlExecutor } from "./database";
 
 interface PaymentRow {

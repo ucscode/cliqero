@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { Money } from "@/modules/money/money";
 import type { ExchangeRateService } from "@/modules/money/exchange-service";
-import { PaymentProviderRegistry, type PaymentProvider } from "@/modules/payment/payment";
-import { PaystackProvider } from "@/providers/paystack/payment/provider";
-import { NowPaymentsProvider } from "@/providers/nowpayments/provider";
-import { NowPaymentsExpiryProcessor } from "@/providers/nowpayments/expiry";
-import { BankTransferProvider } from "@/providers/bank-transfer/provider";
+import { PaymentProviderRegistry, type PaymentProvider } from "@/modules/payment";
+import { PaystackProvider } from "@/providers/payment/paystack/provider";
+import { NowPaymentsProvider } from "@/providers/payment/nowpayments/provider";
+import { NowPaymentsExpiryProcessor } from "@/providers/payment/nowpayments/expiry";
+import { BankTransferProvider } from "@/providers/payment/bank-transfer/provider";
 import {
   FundingInitializationProcessor,
   FundingService,

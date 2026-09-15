@@ -1,4 +1,4 @@
-import type { PaymentProviderRegistry } from "@/modules/payment/payment";
+import type { PaymentProviderRegistry } from "@/modules/payment";
 import type { PostgresPaymentRepository } from "@/infrastructure/postgres/payments";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 export class PaymentVerificationProcessor {

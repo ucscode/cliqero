@@ -21,14 +21,20 @@ its plan satisfies all of the following:
    the hierarchy into `src/payment/...`, `src/listing/...`, etc.
 2. **Libraries before redevelopment.** Before writing substantial custom code,
    investigate an official SDK or maintained library that already solves the
-   problem. Reimplementation requires a concrete documented reason.
+   problem. If no suitable external library exists and the implementation is
+   substantial enough to become infrastructure in its own right, prefer a
+   dedicated internal Cliqero library/workspace package over dumping that
+   complexity into application or provider code. Reimplementation requires a
+   concrete documented reason.
 3. **OOP for business workflows.** Prefer cohesive classes, interfaces,
    abstract bases, repositories, and services over scattered exported
    functions when behavior has one business owner.
 4. **Separate production and tests.** Production source directories must not
    become interleaved forests of `*.test.*` files.
 5. **Reference data is data, not config.** Static lookup/reference datasets
-   belong under the application data hierarchy, not runtime configuration.
+   belong under the owning application's `data/reference` hierarchy, not
+   runtime configuration and not the Next.js `src/app` route tree. For the web
+   app, use `apps/web/data/reference/`.
 6. **Shared code shares mechanism, not policy.** Provider/domain-specific
    decisions stay with their owner.
 7. **Human navigability is mandatory.** The tree must communicate ownership to
@@ -202,8 +208,12 @@ For any meaningful new integration or infrastructure concern:
    and whether the library actually removes meaningful custom code;
 4. prefer wrapping the selected library behind Cliqero's own interface when the
    project needs a stable internal contract;
-5. write custom infrastructure only when the available libraries are unsuitable,
-   and record the concrete technical reason in the implementation report.
+5. if no suitable external library exists, determine whether the implementation
+   is substantial enough to deserve its own internal Cliqero library/workspace
+   package instead of living directly in application/provider code;
+6. write custom application-local infrastructure only when external and
+   internal-library options are unsuitable, and record the concrete technical
+   reason in the implementation report.
 
 Do not rebuild an ecosystem library simply because the feature appears easy to
 write or because an agent can generate the code quickly.
@@ -235,6 +245,82 @@ when maintained libraries already provide those layers.
 Existing custom code is not exempt. During refactoring, investigate whether a
 library can delete or substantially simplify it rather than automatically
 preserving it.
+
+### Internal Cliqero libraries and workspace packages
+
+"Libraries first" does not mean "third-party npm packages only".
+
+When no suitable external library exists, substantial integration or protocol
+complexity should be considered for extraction into a dedicated internal
+Cliqero library/package instead of being accumulated inside application or
+provider implementation directories.
+
+Use this decision order:
+
+```text
+1. Suitable official or maintained external library
+2. Dedicated internal Cliqero library/workspace package
+3. Small application-local implementation
+```
+
+An internal library is appropriate when several of these are true:
+
+- the concern requires multiple cohesive files/classes;
+- it implements substantial third-party API or protocol mechanics;
+- it has its own dependency surface;
+- it benefits from isolated tests;
+- it could reasonably be reused by another Cliqero app/service;
+- keeping it inside a provider/application module would obscure business logic;
+- it has a clean API independent of Cliqero business policy.
+
+Do not create a package for a couple of simple helpers. Package extraction must
+reduce complexity, not merely move it elsewhere.
+
+Internal libraries should normally be workspace packages with explicit public
+exports rather than application code reaching through arbitrary deep relative
+imports. They do not need to be published to npm.
+
+Conceptually, a complex Paystack client with no suitable external SDK could be:
+
+```text
+packages/
+  payment/
+    paystack/
+      src/
+        client.ts
+        transactions.ts
+        webhooks.ts
+        errors.ts
+        types.ts
+      tests/
+      package.json
+
+apps/web/src/
+  providers/
+    payment/
+      paystack/
+        provider.ts
+```
+
+The dependency direction would be:
+
+```text
+Cliqero PaymentProvider contract
+  -> PaystackProvider
+      -> @cliqero/paystack
+          -> Paystack REST API
+```
+
+The internal library may know Paystack's API/protocol. It must not know
+Cliqero's funding state machine, wallet credits, canonical accounting,
+entitlements, account ownership, or other application business policy.
+
+The provider/application layer consumes the library and translates its protocol
+results into Cliqero's own contracts.
+
+This rule applies beyond payments as well. Storage, media, AI, external API, or
+other integrations may become internal packages when their implementation is
+large and cleanly reusable enough to justify that boundary.
 
 ## 4. OOP is a high-priority architectural requirement
 
@@ -323,11 +409,21 @@ must be explicit and narrowly scoped.
 Static datasets, country/currency mappings, reference tables, and similar JSON
 data are application data, not runtime configuration.
 
-Store them under the application data hierarchy, for example:
+For the web application, store reference datasets under the app-owned data root:
 
 ```text
-app/data/reference/country-currencies.json
+apps/web/data/reference/country-currencies.json
 ```
+
+More generally:
+
+```text
+apps/<app>/data/reference/*.json
+```
+
+Do not place these datasets under `apps/web/src/app/`: that directory belongs to
+the Next.js application/router source tree, not static application reference
+data.
 
 Do not place reference datasets in `config/` merely because they are JSON.
 
@@ -442,7 +538,8 @@ Before moving or rewriting a large part of the project:
 3. identify flat functionality that should become an internal directory;
 4. identify violations of the OOP and dependency rules;
 5. perform the library-first investigation for custom integrations and
-   infrastructure;
+   infrastructure, including whether a substantial custom integration belongs
+   in a dedicated internal workspace package;
 6. propose the target internal grouping without inverting the root hierarchy;
 7. move code in coherent groups;
 8. run validation after each coherent stage.
@@ -461,7 +558,11 @@ Before claiming a substantial feature or refactor complete, report:
 - how related functionality is grouped inside that root;
 - which official SDKs/libraries were investigated before custom code was
   written;
-- why any substantial custom implementation was necessary;
+- whether a dedicated internal Cliqero library/package was considered when no
+  suitable external library existed and the custom implementation was
+  substantial;
+- why any substantial custom implementation remained application-local instead
+  of using an external or internal library boundary;
 - which classes/interfaces own the business workflow;
 - where the tests live;
 - whether any provider/domain policy leaked into shared code;

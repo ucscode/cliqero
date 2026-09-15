@@ -4,7 +4,7 @@ import {
   BankTransferEvidenceService,
   validateProofFile,
   type BankTransferProofFile,
-} from "@/providers/bank-transfer/evidence";
+} from "@/providers/payment/bank-transfer/evidence";
 
 const fundingId = "00000000-0000-4000-8000-000000000001";
 const accountId = "00000000-0000-4000-8000-000000000002";

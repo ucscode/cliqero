@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 import type { Account } from "@/modules/identity/account";
-import type { ListingState } from "@/modules/listing/listing";
+import type { ListingState } from "@/modules/listing";
 import type { ListingService } from "@/application/listings";
 import type { ListingMediaService } from "@/application/listing-media";
-import type { ListingMedia, ListingMediaRepository } from "@/modules/listing-media/media";
+import type { ListingMedia, ListingMediaRepository } from "@/modules/listing/media/media";
 import { fetchRemoteImage } from "@/application/remote-image";
 
 const mediaSchema = z

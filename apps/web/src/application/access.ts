@@ -1,6 +1,6 @@
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { Account } from "@/modules/identity/account";
-import type { ListingRepository } from "@/modules/listing/listing";
+import type { ListingRepository } from "@/modules/listing";
 import { AccessService } from "@/modules/access/access";
 import type { PurchaseRepository } from "@/modules/purchase/purchase";
 import type { EntitlementRepository } from "@/modules/entitlement/entitlement";

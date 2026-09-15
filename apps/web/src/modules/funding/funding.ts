@@ -4,7 +4,7 @@ import type {
   PaymentConversionSnapshot,
   PaymentInitializationMetadata,
   PaymentVerificationObservation,
-} from "@/modules/payment/payment";
+} from "@/modules/payment";
 
 const verificationObservationStatuses = new Set<PaymentVerificationObservation["status"]>([
   "awaiting_transaction",

@@ -1,13 +1,13 @@
 import { newId, type Id } from "@/kernel/ids";
-import { Listing, type ListingMetadata, type ListingRepository } from "@/modules/listing/listing";
+import { Listing, type ListingMetadata, type ListingRepository } from "@/modules/listing";
 import { Money } from "@/modules/money/money";
 import type { Account } from "@/modules/identity/account";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
-import type { ListingMedia } from "@/modules/listing-media/media";
+import type { ListingMedia } from "@/modules/listing/media/media";
 import type { ListingMediaService } from "@/application/listing-media";
 import type { SqlExecutor } from "@/infrastructure/postgres/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import type { RatingSummary } from "@/modules/listing-review/review";
+import type { RatingSummary } from "@/modules/listing/reviews/review";
 
 export class ListingService {
   constructor(
@@ -210,7 +210,7 @@ export class ListingService {
     search?: string;
     cursor?: string;
     limit: number;
-    sort?: import("@/modules/listing/listing").ListingSort;
+    sort?: import("@/modules/listing").ListingSort;
     featuredOnly?: boolean;
   }) {
     return this.listings.query({ ...input, publicOnly: true });
@@ -218,21 +218,21 @@ export class ListingService {
   queryOwner(
     actor: Account,
     input: {
-      state?: import("@/modules/listing/listing").ListingState;
+      state?: import("@/modules/listing").ListingState;
       search?: string;
       cursor?: string;
       limit: number;
-      sort?: import("@/modules/listing/listing").ListingSort;
+      sort?: import("@/modules/listing").ListingSort;
     },
   ) {
     return this.listings.query({ ...input, sellerId: actor.id });
   }
   queryCatalogue(input: {
-    state?: import("@/modules/listing/listing").ListingState;
+    state?: import("@/modules/listing").ListingState;
     search?: string;
     cursor?: string;
     limit: number;
-    sort?: import("@/modules/listing/listing").ListingSort;
+    sort?: import("@/modules/listing").ListingSort;
   }) {
     return this.listings.query(input);
   }
