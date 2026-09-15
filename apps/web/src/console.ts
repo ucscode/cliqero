@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { PostgresDatabase } from "@/infrastructure/postgres/shared/database";
-import { AuthenticationService } from "@/modules/identity/authentication";
+import { AuthenticationService } from "@/application/identity/authentication";
 import { CAPABILITIES, type Capability } from "@/modules/identity/capabilities";
 type AccountRow = { id: string; email: string | null; username: string; country: string | null };
 type IdentityContext = { database: PostgresDatabase; authentication: AuthenticationService };

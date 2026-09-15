@@ -1,13 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createContainer } from "@/infrastructure/container";
-import { OperatorAuthorizationService } from "@/modules/identity/operator";
+import { PostgresOperatorAuthorizationService } from "@/infrastructure/postgres/identity/operator";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
 
 suite("capability administration persistence", () => {
   const app = createContainer(databaseUrl!);
-  const authorization = new OperatorAuthorizationService(app.database);
+  const authorization = new PostgresOperatorAuthorizationService(app.database);
 
   beforeEach(() =>
     app.database.query(

@@ -13,19 +13,19 @@ import {
   PostgresReferralGraphRepository,
 } from "./postgres/referral/referrals";
 import { PostgresReferralAttributionRepository } from "./postgres/referral/attributions";
-import { AuthenticationService } from "@/modules/identity/authentication";
+import { AuthenticationService } from "@/application/identity/authentication";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import { AccessService } from "@/modules/access/access";
-import { IntegrationService } from "@/modules/access/integrations";
+import { PostgresIntegrationService } from "@/infrastructure/postgres/access/integrations";
 import { PaymentProviderRegistry } from "@/modules/payment";
 import { registerDevelopmentPaymentProvider } from "@/providers/payment/development/registration";
 import { PaystackProvider } from "@/providers/payment/paystack/provider";
 import { loadPaystackConfiguration } from "@/providers/payment/paystack/config";
-import { PaystackWebhookIngress } from "@/providers/payment/paystack/webhook";
+import { PaystackWebhookIngress } from "@/application/payment/paystack/webhook";
 import { NowPaymentsProvider } from "@/providers/payment/nowpayments/provider";
 import { loadNowPaymentsConfiguration } from "@/providers/payment/nowpayments/config";
-import { NowPaymentsExpiryProcessor } from "@/providers/payment/nowpayments/expiry";
-import { NowPaymentsIpnIngress } from "@/providers/payment/nowpayments/ipn";
+import { NowPaymentsExpiryProcessor } from "@/application/funding/expiry";
+import { NowPaymentsIpnIngress } from "@/application/payment/nowpayments/ipn";
 import { DirectTrc20Provider } from "@/providers/payment/direct-trc20/provider";
 import { HttpDirectTrc20Verifier } from "@/providers/payment/direct-trc20/verifier";
 import { loadDirectTrc20Configuration } from "@/providers/payment/direct-trc20/config";
@@ -43,19 +43,17 @@ import {
   PostgresLedgerRepository,
 } from "./postgres/shared/ledger";
 import { PurchaseDistributionProcessor } from "@/processors/purchase/distribution";
-import { OperatorAuthorizationService } from "@/modules/identity/operator";
+import { PostgresOperatorAuthorizationService } from "@/infrastructure/postgres/identity/operator";
 import { PostgresPaymentOperationsRepository } from "./postgres/payment/operations";
 import {
   PaymentReconciliationService,
   PaystackOperationsInspectionService,
-} from "@/providers/payment/paystack/operations";
+} from "@/application/payment/paystack/reconciliation";
 import { PostgresReversalRepository } from "./postgres/purchase/reversals";
 import { PurchaseReversalProcessor } from "@/processors/purchase/reversal";
-import {
-  PostgresSettlementPolicyRepository,
-  SettlementProcessor,
-} from "@/modules/ledger/settlement";
-import { LedgerFundsReservationService } from "@/modules/ledger/reservations";
+import { SettlementProcessor } from "@/processors/ledger/settlement";
+import { PostgresSettlementPolicyRepository } from "@/infrastructure/postgres/ledger/settlement-policy";
+import { PostgresLedgerFundsReservationService } from "@/infrastructure/postgres/ledger/reservations";
 import {
   PostgresWithdrawalPolicyRepository,
   PostgresWithdrawalRepository,
@@ -68,7 +66,7 @@ import { PaystackPayoutProvider } from "@/providers/payout/paystack/provider";
 import { loadPaystackPayoutConfiguration } from "@/providers/payout/paystack/config";
 import { PostgresPaystackRecipientStore } from "@/providers/payout/paystack/persistence/recipients";
 import { PostgresPaystackPayoutEventRepository } from "@/providers/payout/paystack/persistence/payout-events";
-import { PaystackPayoutWebhookIngress } from "@/providers/payout/paystack/webhook";
+import { PaystackPayoutWebhookIngress } from "@/application/payout/paystack/webhook";
 import { PostgresPaystackOperationsRepository } from "@/providers/payment/paystack/persistence/operations";
 import { ExchangeRateService } from "@/modules/money/exchange-service";
 import { FrankfurterProvider } from "@/providers/money/frankfurter/provider";
@@ -107,20 +105,20 @@ import { TreasuryService } from "@/modules/treasury/treasury";
 import { TreasuryProcessor } from "@/processors/treasury/processor";
 import { OperatorTreasuryService } from "@/application/operator/treasury";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
-import { ApiPrincipalResolver } from "@/modules/identity/api/principal";
+import { ApiPrincipalResolver } from "@/infrastructure/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
 import { OperatorOverviewService } from "@/application/operator/overview";
 import { OperatorAccountService } from "@/application/operator/accounts";
 import { CapabilityAdministrationService } from "@/application/capability-administration";
 import { OperatorApiKeyService } from "@/application/operator/api-keys";
 import { OperatorFundingService } from "@/application/operator/funding";
-import { BankTransferEvidenceService } from "@/providers/payment/bank-transfer/evidence";
+import { BankTransferEvidenceService } from "@/application/funding/bank-transfer/evidence";
 import {
   OperatorDistributionService,
   OperatorEarningsService,
 } from "@/application/operator/distributions";
 import { OperatorWithdrawalService } from "@/application/operator/withdrawals";
-import { getBlogService } from "@/modules/blog/application/blog-service";
+import { getBlogService } from "@/application/blog/service";
 
 export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
@@ -150,7 +148,7 @@ export function createContainer(databaseUrl: string) {
   const listingReviews = new ListingReviewService(
     reviews,
     listings,
-    new OperatorAuthorizationService(database),
+    new PostgresOperatorAuthorizationService(database),
   );
   const listingTransfer = new ListingTransferService(
     listingService,
@@ -191,14 +189,14 @@ export function createContainer(databaseUrl: string) {
   const reversals = new PostgresReversalRepository(database);
   const withdrawalRepository = new PostgresWithdrawalRepository(database);
   const withdrawalPolicy = new PostgresWithdrawalPolicyRepository(database);
-  const fundsReservation = new LedgerFundsReservationService(database);
+  const fundsReservation = new PostgresLedgerFundsReservationService(database);
   const withdrawals = new WithdrawalService(
     withdrawalRepository,
     withdrawalPolicy,
     fundsReservation,
     outbox,
     database,
-    new OperatorAuthorizationService(database),
+    new PostgresOperatorAuthorizationService(database),
     database,
   );
   const payoutProviders = new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());
@@ -332,7 +330,7 @@ export function createContainer(databaseUrl: string) {
     database,
   );
   const entitlementIssuance = new EntitlementIssuanceProcessor(purchases, entitlements, database);
-  const operators = new OperatorAuthorizationService(database);
+  const operators = new PostgresOperatorAuthorizationService(database);
   const authentication = new AuthenticationService(database, databaseUrl);
   const apiKeyRepository = new PostgresApiKeyRepository(database);
   const apiKeys = new ApiKeyService(apiKeyRepository, database, database);
@@ -366,7 +364,7 @@ export function createContainer(databaseUrl: string) {
     operatorApiKeys,
     principalResolver,
     authorization: new AuthorizationPolicy(),
-    integrations: new IntegrationService(database, database),
+    integrations: new PostgresIntegrationService(database, database),
     profiles: new ProfileService(database),
     accountProjections: new AccountProjectionService(database),
     listingService,

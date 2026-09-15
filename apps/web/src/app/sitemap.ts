@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getBlogService } from "@/modules/blog/application/blog-service";
+import { getBlogService } from "@/application/blog/service";
 import { siteConfig } from "@/config/site";
 
 // Published posts live in the runtime SQLite volume; do not open that mutable

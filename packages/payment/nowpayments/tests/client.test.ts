@@ -55,4 +55,70 @@ describe("NOWPayments protocol client", () => {
       paymentStatus: null,
     });
   });
+
+  it("rejects a successful response without the payment identity and status", async () => {
+    const client = new NowPaymentsClient({
+      apiKey: "test-key",
+      apiBaseUrl: "https://api.nowpayments.test",
+      http: vi.fn().mockResolvedValue(response({ payment_status: "waiting" })),
+    });
+    await expect(client.getPaymentStatus("PAY-123")).rejects.toMatchObject({
+      name: "NowPaymentsResponseError",
+      status: 200,
+    });
+  });
+
+  it("preserves provider decimal strings without numeric coercion", async () => {
+    const client = new NowPaymentsClient({
+      apiKey: "test-key",
+      apiBaseUrl: "https://api.nowpayments.test",
+      http: vi.fn().mockResolvedValue(
+        response({
+          payment_id: "PAY-DECIMAL",
+          payment_status: "waiting",
+          pay_amount: "0.00991099",
+          price_amount: "25.00",
+        }),
+      ),
+    });
+    await expect(client.getPaymentStatus("PAY-DECIMAL")).resolves.toMatchObject({
+      pay_amount: "0.00991099",
+      price_amount: "25.00",
+    });
+  });
+
+  it("rejects unsafe numeric monetary values after JSON parsing", async () => {
+    const client = new NowPaymentsClient({
+      apiKey: "test-key",
+      apiBaseUrl: "https://api.nowpayments.test",
+      http: vi.fn().mockResolvedValue(
+        response({
+          payment_id: "PAY-UNSAFE",
+          payment_status: "waiting",
+          pay_amount: Number.MAX_SAFE_INTEGER + 1,
+        }),
+      ),
+    });
+    await expect(client.getPaymentStatus("PAY-UNSAFE")).rejects.toMatchObject({
+      name: "NowPaymentsResponseError",
+      status: 200,
+    });
+  });
+
+  it("normalizes a safe provider numeric decimal at the boundary", async () => {
+    const client = new NowPaymentsClient({
+      apiKey: "test-key",
+      apiBaseUrl: "https://api.nowpayments.test",
+      http: vi.fn().mockResolvedValue(
+        response({
+          payment_id: "PAY-NUMERIC",
+          payment_status: "waiting",
+          pay_amount: 0.00991099,
+        }),
+      ),
+    });
+    await expect(client.getPaymentStatus("PAY-NUMERIC")).resolves.toMatchObject({
+      pay_amount: "0.00991099",
+    });
+  });
 });

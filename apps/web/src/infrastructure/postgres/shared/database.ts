@@ -1,13 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "pg";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
+import type { SqlExecutor } from "@/kernel/sql";
 
-export interface SqlExecutor {
-  query<TRow extends QueryResultRow = QueryResultRow>(
-    sql: string,
-    values?: readonly unknown[],
-  ): Promise<QueryResult<TRow>>;
-}
+export type { SqlExecutor } from "@/kernel/sql";
 
 const transactionStorage = new AsyncLocalStorage<PoolClient>();
 

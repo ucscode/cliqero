@@ -4,7 +4,7 @@ import type { ExchangeRateService } from "@/modules/money/exchange-service";
 import { PaymentProviderRegistry, type PaymentProvider } from "@/modules/payment";
 import { PaystackProvider } from "@/providers/payment/paystack/provider";
 import { NowPaymentsProvider } from "@/providers/payment/nowpayments/provider";
-import { NowPaymentsExpiryProcessor } from "@/providers/payment/nowpayments/expiry";
+import { NowPaymentsExpiryProcessor } from "@/application/funding/expiry";
 import { BankTransferProvider } from "@/providers/payment/bank-transfer/provider";
 import { FundingService } from "@/application/funding/service";
 import { FundingInitializationProcessor } from "@/application/funding/initialization";

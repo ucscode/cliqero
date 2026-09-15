@@ -1,21 +1,42 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 import { PaystackApiError, PaystackResponseError, PaystackTransportError } from "./errors";
 import type {
   CreateTransferRecipientInput,
-  CreateTransferRecipientResult,
   InitializeTransactionInput,
-  InitializeTransactionResult,
   PaystackClientOptions,
   SubmitTransferInput,
-  TransactionResult,
-  TransferResult,
 } from "./types";
 
-interface Envelope<T> {
-  status: boolean;
-  message: string;
-  data: T;
-}
+const envelopeSchema = z.object({
+  status: z.boolean(),
+  message: z.string().optional(),
+  data: z.unknown().optional(),
+});
+const initializeTransactionSchema = z.object({
+  authorization_url: z.string().url(),
+  access_code: z.string().min(1),
+  reference: z.string().min(1),
+});
+const transactionSchema = z.object({
+  id: z.number().int(),
+  status: z.string().min(1),
+  reference: z.string().min(1),
+  amount: z.number(),
+  currency: z.string().min(1),
+  fees: z.number().nullable().optional(),
+});
+const transferRecipientSchema = z.object({
+  recipient_code: z.string().min(1),
+  active: z.boolean().optional(),
+});
+const transferSchema = z.object({
+  reference: z.string().min(1),
+  transfer_code: z.string().optional(),
+  status: z.string().min(1),
+  amount: z.number(),
+  currency: z.string().min(1),
+});
 
 export class PaystackClient {
   private readonly http: NonNullable<PaystackClientOptions["http"]>;
@@ -27,7 +48,7 @@ export class PaystackClient {
   }
 
   async initializeTransaction(input: InitializeTransactionInput) {
-    const data = await this.request<InitializeTransactionResult>(
+    const data = await this.request(
       "/transaction/initialize",
       {
         method: "POST",
@@ -40,20 +61,22 @@ export class PaystackClient {
         }),
       },
       true,
+      initializeTransactionSchema,
     );
     return data;
   }
 
   verifyTransaction(reference: string) {
-    return this.request<TransactionResult>(
+    return this.request(
       `/transaction/verify/${encodeURIComponent(reference)}`,
       { method: "GET" },
       false,
+      transactionSchema,
     );
   }
 
   createTransferRecipient(input: CreateTransferRecipientInput) {
-    return this.request<CreateTransferRecipientResult>(
+    return this.request(
       "/transferrecipient",
       {
         method: "POST",
@@ -66,11 +89,12 @@ export class PaystackClient {
         }),
       },
       false,
+      transferRecipientSchema,
     );
   }
 
   submitTransfer(input: SubmitTransferInput) {
-    return this.request<TransferResult>(
+    return this.request(
       "/transfer",
       {
         method: "POST",
@@ -84,14 +108,16 @@ export class PaystackClient {
         }),
       },
       true,
+      transferSchema,
     );
   }
 
   verifyTransfer(reference: string) {
-    return this.request<TransferResult>(
+    return this.request(
       `/transfer/verify/${encodeURIComponent(reference)}`,
       { method: "GET" },
       false,
+      transferSchema,
     );
   }
 
@@ -106,7 +132,12 @@ export class PaystackClient {
     return presented.length === expected.length && timingSafeEqual(presented, expected);
   }
 
-  private async request<T>(path: string, init: RequestInit, unknownOutcome: boolean): Promise<T> {
+  private async request<T>(
+    path: string,
+    init: RequestInit,
+    unknownOutcome: boolean,
+    dataSchema: z.ZodType<T>,
+  ): Promise<T> {
     let response: Response;
     try {
       response = await this.http(new URL(path, this.baseUrl), {
@@ -124,9 +155,9 @@ export class PaystackClient {
       );
     }
 
-    let envelope: Envelope<T>;
+    let envelope: z.infer<typeof envelopeSchema>;
     try {
-      envelope = (await response.json()) as Envelope<T>;
+      envelope = envelopeSchema.parse(await response.json());
     } catch {
       throw new PaystackResponseError(response.status);
     }
@@ -136,6 +167,10 @@ export class PaystackClient {
         providerStatus: envelope.status,
       });
     }
-    return envelope.data;
+    try {
+      return dataSchema.parse(envelope.data);
+    } catch {
+      throw new PaystackResponseError(response.status);
+    }
   }
 }

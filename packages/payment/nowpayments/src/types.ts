@@ -13,8 +13,8 @@ export interface MinimumAmountInput {
 }
 
 export interface MinimumAmountResult {
-  min_amount?: string | number | null;
-  fiat_equivalent?: string | number | null;
+  min_amount?: string | null;
+  fiat_equivalent?: string | null;
 }
 
 export interface CreatePaymentInput {
@@ -31,9 +31,9 @@ export interface PaymentResult {
   payment_id: string | number;
   payment_status: string;
   pay_address?: string | null;
-  pay_amount?: string | number | null;
+  pay_amount?: string | null;
   pay_currency?: string | null;
-  price_amount?: string | number | null;
+  price_amount?: string | null;
   price_currency?: string | null;
   order_id?: string | null;
   expiration_estimate_date?: string | null;

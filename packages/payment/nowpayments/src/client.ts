@@ -1,13 +1,47 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 import { NowPaymentsApiError, NowPaymentsResponseError, NowPaymentsTransportError } from "./errors";
 import type {
   CreatePaymentInput,
   MinimumAmountInput,
-  MinimumAmountResult,
   NowPaymentsClientOptions,
   NowPaymentsIpnPayload,
-  PaymentResult,
 } from "./types";
+
+const scalarAmountSchema = z.union([
+  z
+    .string()
+    .trim()
+    .regex(/^\d+(?:\.\d+)?$/),
+  z
+    .number()
+    .superRefine((value, context) => {
+      if (
+        !Number.isFinite(value) ||
+        value < 0 ||
+        (Number.isInteger(value) && !Number.isSafeInteger(value))
+      )
+        context.addIssue({ code: "custom", message: "unsafe provider decimal" });
+    })
+    .transform(numberDecimalToString),
+]);
+const minimumAmountSchema = z.object({
+  min_amount: scalarAmountSchema.nullable().optional(),
+  fiat_equivalent: scalarAmountSchema.nullable().optional(),
+});
+const paymentSchema = z.object({
+  payment_id: z.union([z.string().min(1), z.number().int()]),
+  payment_status: z.string().min(1),
+  pay_address: z.string().nullable().optional(),
+  pay_amount: scalarAmountSchema.nullable().optional(),
+  pay_currency: z.string().nullable().optional(),
+  price_amount: scalarAmountSchema.nullable().optional(),
+  price_currency: z.string().nullable().optional(),
+  order_id: z.string().nullable().optional(),
+  expiration_estimate_date: z.string().datetime({ offset: true }).nullable().optional(),
+  asset: z.string().nullable().optional(),
+  network: z.string().nullable().optional(),
+});
 
 export class NowPaymentsClient {
   private readonly http: NonNullable<NowPaymentsClientOptions["http"]>;
@@ -24,9 +58,11 @@ export class NowPaymentsClient {
       currency_to: input.currencyTo,
       ...(input.fiatEquivalent === undefined ? {} : { fiat_equivalent: input.fiatEquivalent }),
     });
-    return this.request<MinimumAmountResult>(`/v1/min-amount?${query.toString()}`, {
-      method: "GET",
-    });
+    return this.request(
+      `/v1/min-amount?${query.toString()}`,
+      { method: "GET" },
+      minimumAmountSchema,
+    );
   }
 
   createPayment(input: CreatePaymentInput) {
@@ -40,16 +76,22 @@ export class NowPaymentsClient {
       ...(input.ipnCallbackUrl ? { ipn_callback_url: input.ipnCallbackUrl } : {}),
       ...(input.sandboxCase ? { case: input.sandboxCase } : {}),
     };
-    return this.request<PaymentResult>("/v1/payment", {
-      method: "POST",
-      body: JSON.stringify(body).replace(JSON.stringify(priceAmountMarker), input.priceAmount),
-    });
+    return this.request(
+      "/v1/payment",
+      {
+        method: "POST",
+        body: JSON.stringify(body).replace(JSON.stringify(priceAmountMarker), input.priceAmount),
+      },
+      paymentSchema,
+    );
   }
 
   getPaymentStatus(paymentId: string) {
-    return this.request<PaymentResult>(`/v1/payment/${encodeURIComponent(paymentId)}`, {
-      method: "GET",
-    });
+    return this.request(
+      `/v1/payment/${encodeURIComponent(paymentId)}`,
+      { method: "GET" },
+      paymentSchema,
+    );
   }
 
   verifyIpnSignature(rawBody: Uint8Array, signature: string | null, secret: string) {
@@ -69,7 +111,7 @@ export class NowPaymentsClient {
     return parseIpnPayload(rawBody);
   }
 
-  private async request<T>(path: string, init: RequestInit): Promise<T> {
+  private async request<T>(path: string, init: RequestInit, dataSchema: z.ZodType<T>): Promise<T> {
     let response: Response;
     try {
       response = await this.http(new URL(path, this.baseUrl), {
@@ -121,7 +163,11 @@ export class NowPaymentsClient {
         providerCode: code,
       });
     }
-    return body as T;
+    try {
+      return dataSchema.parse(body);
+    } catch {
+      throw new NowPaymentsResponseError(response.status);
+    }
   }
 }
 
@@ -152,7 +198,26 @@ export function parseIpnPayload(rawBody: Uint8Array): NowPaymentsIpnPayload | nu
   return { orderId: value.order_id, paymentId, paymentStatus };
 }
 
-function isRecord(value: unknown): value is Record<string, any> {
+/**
+ * NOWPayments normally returns decimal amounts as strings. If its JSON response
+ * uses a number, JSON.parse has already discarded the original numeric token;
+ * retain the parser's canonical decimal form and reject unsafe integer values
+ * rather than introducing another numeric conversion in Cliqero.
+ */
+function numberDecimalToString(value: number): string {
+  const text = String(value);
+  const scientific = /^(\d+)(?:\.(\d+))?e([+-]?\d+)$/i.exec(text);
+  if (!scientific) return text;
+  const [, whole, fraction = "", exponentText] = scientific;
+  const exponent = parseInt(exponentText, 10);
+  const digits = whole + fraction;
+  const decimalIndex = whole.length + exponent;
+  if (decimalIndex <= 0) return `0.${"0".repeat(-decimalIndex)}${digits}`;
+  if (decimalIndex >= digits.length) return `${digits}${"0".repeat(decimalIndex - digits.length)}`;
+  return `${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

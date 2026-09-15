@@ -36,21 +36,23 @@ import {
   providerPreparationReady,
 } from "../payment/shared/preparation";
 import { LoaderCircle } from "lucide-react";
-import { PaymentProviderComponent } from "../payment/shared/provider-components";
+import { PaymentProviderComponent } from "../payment/provider";
 
 export {
-  bankStatusFieldRows,
   createFundingStatusPoller,
   FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
   FUNDING_STATUS_POLL_INTERVAL_MS,
   formatTimeRemaining,
   fundingActionLabel,
   fundingStatusMessage,
-  snapshotInstruction,
-  snapshotFields,
   verificationObservationClass,
   verificationObservationHeading,
-} from "../payment/shared/provider-components";
+} from "../payment/shared/status";
+export {
+  bankStatusFieldRows,
+  snapshotFields,
+  snapshotInstruction,
+} from "../payment/bank-transfer/payment";
 
 export function walletPanelComposition(fundingPage: boolean, persistedFunding = false) {
   return {

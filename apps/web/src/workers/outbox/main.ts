@@ -6,8 +6,8 @@ import {
   PurchaseReversalEntitlementHandler,
 } from "./handlers";
 import { JsonConsoleLogger, OutboxDispatcher, OutboxHandlerRegistry } from "./dispatcher";
-import { PaystackChargeSucceededHandler } from "@/providers/payment/paystack/outbox-handler";
-import { PaystackRefundProcessedHandler } from "@/providers/payment/paystack/refund-handler";
+import { PaystackChargeSucceededHandler } from "@/application/payment/paystack/outbox";
+import { PaystackRefundProcessedHandler } from "@/application/payment/paystack/refund";
 import { CommercialWorkflowDispatcher } from "@/workers/commercial/dispatcher";
 import { runWorkerLoop } from "./runner";
 

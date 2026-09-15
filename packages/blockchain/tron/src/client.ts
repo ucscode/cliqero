@@ -1,4 +1,5 @@
 import { TronProtocolError } from "./errors";
+import { z } from "zod";
 import type { TronClientOptions, TronTransactionObservation, TronTransferEvent } from "./types";
 
 export class TronGridClient {
@@ -11,13 +12,15 @@ export class TronGridClient {
   }
 
   async inspectTransaction(transactionHash: string): Promise<TronTransactionObservation> {
-    const transaction = await this.request<Record<string, unknown>>("/wallet/gettransactionbyid", {
+    const transaction = await this.request("/wallet/gettransactionbyid", {
       method: "POST",
       body: JSON.stringify({ value: transactionHash }),
     });
-    const eventsBody = await this.request<Record<string, unknown>>(
+    const eventsBody = await this.request(
       `/v1/transactions/${encodeURIComponent(transactionHash)}/events?limit=200&only_confirmed=false`,
     );
+    if (!Array.isArray(eventsBody.data))
+      throw new TronProtocolError("TRONGrid returned an invalid events payload");
     const transfers = parseTransfers(eventsBody);
     const exists = hasTransaction(transaction);
     if (!transfers.length && !exists)
@@ -29,19 +32,20 @@ export class TronGridClient {
         confirmations: 0,
       };
 
-    const transactionInfo = await this.request<Record<string, unknown>>(
-      "/walletsolidity/gettransactioninfobyid",
-      {
-        method: "POST",
-        body: JSON.stringify({ value: transactionHash }),
-      },
-    );
-    const blockNumber = parseBlockNumber(transactionInfo.blockNumber);
-    const receiptResult = String(
-      (transactionInfo.receipt as Record<string, unknown> | undefined)?.result ?? "",
-    ).toUpperCase();
+    const transactionInfo = await this.request("/walletsolidity/gettransactioninfobyid", {
+      method: "POST",
+      body: JSON.stringify({ value: transactionHash }),
+    });
+    const blockNumber = parseOptionalBlockNumber(transactionInfo.blockNumber);
+    const receipt = transactionInfo.receipt;
+    if (receipt !== undefined && !isRecord(receipt))
+      throw new TronProtocolError("TRONGrid returned an invalid receipt payload");
+    const receiptResult = receipt?.result;
+    if (receiptResult !== undefined && typeof receiptResult !== "string")
+      throw new TronProtocolError("TRONGrid returned an invalid receipt result");
+    const normalizedReceiptResult = receiptResult?.toUpperCase() ?? "";
     const timestamp = parseTimestamp(transaction);
-    if (receiptResult === "FAILED")
+    if (normalizedReceiptResult === "FAILED")
       return {
         exists: true,
         status: "failed",
@@ -51,7 +55,7 @@ export class TronGridClient {
         ...(blockNumber === null ? {} : { blockNumber }),
         confirmations: 0,
       };
-    if (blockNumber === null || receiptResult !== "SUCCESS")
+    if (blockNumber === null || normalizedReceiptResult !== "SUCCESS")
       return {
         exists: true,
         status: "pending",
@@ -61,14 +65,15 @@ export class TronGridClient {
         confirmations: 0,
       };
 
-    const latestBlock = await this.request<Record<string, unknown>>("/walletsolidity/getnowblock", {
+    const latestBlock = await this.request("/walletsolidity/getnowblock", {
       method: "POST",
     });
-    const latestBlockNumber = parseBlockNumber(
-      (latestBlock.block_header as Record<string, unknown> | undefined)?.raw_data &&
-        ((latestBlock.block_header as Record<string, unknown>).raw_data as Record<string, unknown>)
-          .number,
-    );
+    const latestHeader = latestBlock.block_header;
+    if (!isRecord(latestHeader) || !isRecord(latestHeader.raw_data))
+      throw new TronProtocolError("TRONGrid returned an invalid latest block payload");
+    const latestBlockNumber = parseOptionalBlockNumber(latestHeader.raw_data.number);
+    if (latestBlockNumber === null)
+      throw new TronProtocolError("TRONGrid returned an invalid latest block number");
     const confirmations =
       latestBlockNumber === null ? 0 : Math.max(0, latestBlockNumber - blockNumber + 1);
     return {
@@ -83,7 +88,7 @@ export class TronGridClient {
     };
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+  private async request(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
     try {
       const response = await this.http(new URL(path, this.baseUrl), {
         ...init,
@@ -93,7 +98,9 @@ export class TronGridClient {
         },
       });
       if (!response.ok) throw new TronProtocolError("TRONGrid request failed");
-      return (await response.json()) as T;
+      const parsed = z.record(z.string(), z.unknown()).safeParse(await response.json());
+      if (!parsed.success) throw new TronProtocolError("TRONGrid returned invalid JSON");
+      return parsed.data;
     } catch (error) {
       if (error instanceof TronProtocolError) throw error;
       throw new TronProtocolError("TRONGrid request failed");
@@ -103,22 +110,27 @@ export class TronGridClient {
 
 function parseTransfers(body: Record<string, unknown>): TronTransferEvent[] {
   const events = Array.isArray(body.data) ? body.data : [];
-  return events
-    .filter(
-      (item): item is Record<string, unknown> =>
-        !!item &&
-        typeof item === "object" &&
-        String(item.event_name ?? item.eventName ?? "").toLowerCase() === "transfer",
+  const transfers: TronTransferEvent[] = [];
+  for (const item of events) {
+    if (!isRecord(item)) continue;
+    const eventName = item.event_name ?? item.eventName;
+    if (typeof eventName !== "string" || eventName.toLowerCase() !== "transfer") continue;
+    if (!isRecord(item.result))
+      throw new TronProtocolError("TRONGrid returned an invalid transfer event");
+    const destination = item.result.to ?? item.result.to_address;
+    const amount = parseAmount(item.result.value ?? item.result.amount);
+    const contractAddress = item.contract_address ?? item.contractAddress;
+    if (
+      typeof contractAddress !== "string" ||
+      contractAddress.length === 0 ||
+      typeof destination !== "string" ||
+      destination.length === 0 ||
+      amount === null
     )
-    .map((item) => {
-      const result = item.result && typeof item.result === "object" ? item.result : {};
-      const values = result as Record<string, unknown>;
-      return {
-        contractAddress: String(item.contract_address ?? item.contractAddress ?? ""),
-        destination: String(values.to ?? values.to_address ?? ""),
-        amountBaseUnits: parseAmount(values.value ?? values.amount),
-      };
-    });
+      throw new TronProtocolError("TRONGrid returned an incomplete transfer event");
+    transfers.push({ contractAddress, destination, amountBaseUnits: amount });
+  }
+  return transfers;
 }
 
 function parseTimestamp(value: Record<string, unknown>): number | undefined {
@@ -135,7 +147,7 @@ function hasTransaction(value: Record<string, unknown>) {
   return (
     (typeof value.txID === "string" && value.txID.length > 0) ||
     (typeof value.txid === "string" && value.txid.length > 0) ||
-    (Boolean(value.raw_data) && typeof value.raw_data === "object") ||
+    (value.raw_data !== undefined && isRecord(value.raw_data)) ||
     Array.isArray(value.ret)
   );
 }
@@ -149,10 +161,19 @@ function parseBlockNumber(value: unknown): number | null {
   return null;
 }
 
-function parseAmount(value: unknown): bigint {
+function parseAmount(value: unknown): bigint | null {
   return typeof value === "bigint" || (typeof value === "string" && /^\d+$/.test(value))
     ? BigInt(value)
     : typeof value === "number" && Number.isSafeInteger(value) && value >= 0
       ? BigInt(value)
-      : 0n;
+      : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseOptionalBlockNumber(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  return parseBlockNumber(value);
 }

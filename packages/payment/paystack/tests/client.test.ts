@@ -63,4 +63,24 @@ describe("Paystack protocol client", () => {
     expect(client.verifyWebhookSignature(body, signature)).toBe(true);
     expect(client.verifyWebhookSignature(body, "0".repeat(128))).toBe(false);
   });
+
+  it("rejects a successful response with malformed endpoint data", async () => {
+    const client = new PaystackClient({
+      secretKey: "test-secret",
+      apiBaseUrl: "https://api.paystack.test",
+      http: vi
+        .fn()
+        .mockResolvedValue(
+          response({ status: true, message: "Initialized", data: { reference: "pay-1" } }),
+        ),
+    });
+    await expect(
+      client.initializeTransaction({
+        email: "customer@example.test",
+        amountMinor: "1000",
+        currency: "NGN",
+        reference: "pay-1",
+      }),
+    ).rejects.toMatchObject({ name: "PaystackResponseError", status: 200 });
+  });
 });
