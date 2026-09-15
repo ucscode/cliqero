@@ -1,5 +1,5 @@
-import { OperatorFundingList } from "@/components/operator-funding";
-import { OperatorShell } from "@/components/operator-shell";
+import { OperatorFundingList } from "@/components/operator/funding";
+import { OperatorShell } from "@/components/operator/shell";
 import { requireOperatorPage } from "../operator-access";
 
 export const dynamic = "force-dynamic";

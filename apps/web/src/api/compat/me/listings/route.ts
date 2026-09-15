@@ -1,6 +1,6 @@
 import { authenticatedAccount, apiError } from "../../http";
 import { getContainer } from "@/infrastructure/container";
-import { listingWithMediaView } from "@/application/listings";
+import { listingWithMediaView } from "@/application/listing/service";
 import type { ListingState } from "@/modules/listing";
 export async function GET(request: Request) {
   const account = await authenticatedAccount(request);

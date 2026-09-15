@@ -1,7 +1,7 @@
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { AccountReader } from "@/modules/identity/account";
 import type { ReferralGraphRepository } from "@/modules/referral/referral";
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 
 export class ReferralGraphService {
   constructor(

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiError, authenticatedAccount } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
-import { ownerListingView, listingWithMediaView } from "@/application/listings";
+import { ownerListingView, listingWithMediaView } from "@/application/listing/service";
 const schema = z
   .object({
     title: z.string().min(1),

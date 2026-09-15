@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { authenticatedAccount, apiError } from "../../../../http";
 import { getContainer } from "@/infrastructure/container";
-import { mediaView } from "@/application/listing-media";
+import { mediaView } from "@/application/listing/media";
 const patch = z
   .object({
     alt_text: z.string().max(500).optional(),

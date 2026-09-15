@@ -1,5 +1,5 @@
 import { SiteHeader } from "@/components/site-header";
-import { ListingDetail } from "@/components/listing-detail";
+import { ListingDetail } from "@/components/listing/detail";
 import { storefrontConfig } from "@/config/storefront";
 
 export default async function PublicListingPage({ params }: { params: Promise<{ id: string }> }) {

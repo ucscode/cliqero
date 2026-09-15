@@ -1,5 +1,5 @@
 import type { OutboxEventHandler } from "./dispatcher";
-import type { ClaimedOutboxEvent } from "@/infrastructure/postgres/outbox";
+import type { ClaimedOutboxEvent } from "@/infrastructure/postgres/shared/outbox";
 
 export class AuditedFactHandler implements OutboxEventHandler {
   readonly eventNames = [
@@ -22,7 +22,7 @@ export class AuditedFactHandler implements OutboxEventHandler {
   }
 }
 
-import type { PurchaseDistributionProcessor } from "@/processors/purchase-distribution";
+import type { PurchaseDistributionProcessor } from "@/processors/purchase/distribution";
 export class PurchaseCompletedDistributionHandler implements OutboxEventHandler {
   readonly eventNames = ["purchase.completed"];
   constructor(private readonly processor: PurchaseDistributionProcessor) {}

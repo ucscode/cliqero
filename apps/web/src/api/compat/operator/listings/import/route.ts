@@ -1,6 +1,6 @@
 import { authenticatedAccount, apiError } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
-import type { TransferFormat } from "@/application/listing-transfer";
+import type { TransferFormat } from "@/application/listing/transfer";
 export async function POST(request: Request) {
   const a = await authenticatedAccount(request);
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });

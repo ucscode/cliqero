@@ -1,5 +1,5 @@
-import { OperatorWithdrawalList } from "@/components/operator-withdrawals";
-import { OperatorShell } from "@/components/operator-shell";
+import { OperatorWithdrawalList } from "@/components/operator/withdrawals";
+import { OperatorShell } from "@/components/operator/shell";
 import { requireOperatorPage } from "../operator-access";
 
 export const dynamic = "force-dynamic";

@@ -1,4 +1,4 @@
-import type { ClaimedOutboxEvent, PostgresOutbox } from "@/infrastructure/postgres/outbox";
+import type { ClaimedOutboxEvent, PostgresOutbox } from "@/infrastructure/postgres/shared/outbox";
 
 export interface OutboxEventHandler {
   readonly eventNames: readonly string[];

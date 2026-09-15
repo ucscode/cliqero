@@ -1,0 +1,578 @@
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createContainer } from "@/infrastructure/container";
+import type { ObjectStorageProvider } from "@/modules/storage/object-storage";
+import {
+  ListingTransferService,
+  parseTransfer,
+  serializeTransfer,
+} from "@/application/listing/transfer";
+const url = process.env.TEST_DATABASE_URL;
+const suite = url ? describe : describe.skip;
+const png = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nL8AAAAASUVORK5CYII=",
+    "base64",
+  ),
+);
+
+suite("listing management and media", () => {
+  const app = createContainer(url!);
+  beforeEach(async () => {
+    await app.database.query(
+      `truncate table kernel.audit_records,listing_capability.media,listing_capability.listings,identity_capability.sessions,identity_capability.accounts restart identity cascade`,
+    );
+  });
+  afterAll(() => app.database.close());
+  async function accounts(suffix = "") {
+    const owner = await app.authentication.register({
+        email: `owner${suffix}.listing@example.com`,
+        username: `owner${suffix}listing`,
+        password: "correct-horse-battery",
+        country: "NG",
+      }),
+      other = await app.authentication.register({
+        email: `other${suffix}.listing@example.com`,
+        username: `other${suffix}listing`,
+        password: "correct-horse-battery",
+        country: "NG",
+      });
+    return { owner, other };
+  }
+  const fakeTransfer = () =>
+    new ListingTransferService(
+      app.listingService,
+      app.listingMedia,
+      app.listingMediaRepository,
+      async (source) => ({
+        bytes: png,
+        mimeType: "image/png",
+        filename: new URL(source).pathname.split("/").at(-1) || "image.png",
+      }),
+    );
+
+  it("uses listing state as the only public publication status", async () => {
+    const { owner, other } = await accounts();
+    const draft = await app.listingService.create(owner, {
+        title: "Secret searchable draft",
+        description: "needle",
+        priceMinor: "100",
+        currency: "USD",
+        destination: "https://private.example/draft",
+      }),
+      published = await app.listingService.create(owner, {
+        title: "Public searchable listing",
+        description: "needle",
+        priceMinor: "200",
+        currency: "USD",
+        destination: "https://private.example/public",
+      }),
+      archived = await app.listingService.create(owner, {
+        title: "Archived searchable listing",
+        description: "needle",
+        priceMinor: "300",
+        currency: "USD",
+        destination: "https://private.example/archive",
+      });
+    await app.listingService.publish(owner, published.id);
+    await app.listingService.publish(owner, archived.id);
+    await app.listingService.archive(owner, archived.id);
+    expect(
+      (await app.listingService.queryPublic({ search: "needle", limit: 20 })).items.map(
+        (item) => item.id,
+      ),
+    ).toEqual([published.id]);
+    expect(await app.listingService.getPublic(draft.id)).toBeNull();
+    expect(await app.listingService.getPublic(archived.id)).toBeNull();
+    expect((await app.listingService.getOwner(owner, draft.id)).state).toBe("draft");
+    expect((await app.listingService.getOwner(owner, archived.id)).state).toBe("archived");
+    await expect(app.listingService.getOwner(other, draft.id)).rejects.toThrow("Forbidden");
+    expect((await app.listingService.restore(owner, archived.id)).state).toBe("draft");
+  });
+
+  it("converges every import lifecycle target and remains idempotent", async () => {
+    const { owner } = await accounts();
+    const transitions: ["draft" | "published" | "archived", "draft" | "published" | "archived"][] =
+      [
+        ["draft", "draft"],
+        ["draft", "published"],
+        ["draft", "archived"],
+        ["published", "published"],
+        ["published", "archived"],
+        ["published", "draft"],
+        ["archived", "archived"],
+        ["archived", "draft"],
+        ["archived", "published"],
+      ];
+    for (const [source, target] of transitions) {
+      const key = `transition-${source}-${target}`,
+        listing = await app.listingService.create(owner, {
+          title: key,
+          description: "",
+          priceMinor: "100",
+          currency: "USD",
+          destination: "https://example.com/transition",
+          externalKey: key,
+        });
+      if (source === "published") await app.listingService.publish(owner, listing.id);
+      if (source === "archived") {
+        await app.listingService.publish(owner, listing.id);
+        await app.listingService.archive(owner, listing.id);
+      }
+      const body = JSON.stringify([
+        {
+          external_key: key,
+          title: key,
+          description: "",
+          price_minor: "100",
+          currency: "USD",
+          destination: "https://example.com/transition",
+          metadata: {},
+          state: target,
+          media: [],
+        },
+      ]);
+      const first = await app.listingTransfer.import(owner, {
+        format: "json",
+        mode: "upsert",
+        body,
+      });
+      expect(first).toMatchObject({ updated: 1, failed: 0 });
+      expect((await app.listings.findById(listing.id))?.state).toBe(target);
+      const second = await app.listingTransfer.import(owner, {
+        format: "json",
+        mode: "upsert",
+        body,
+      });
+      expect(second).toMatchObject({ updated: 1, failed: 0 });
+      expect((await app.listings.findById(listing.id))?.state).toBe(target);
+    }
+  });
+
+  it("keeps active positions contiguous and schedules claimed deletion retries", async () => {
+    const { owner } = await accounts();
+    const listing = await app.listingService.create(owner, {
+      title: "Media",
+      description: "",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://private.example/media",
+    });
+    const one = await app.listingMedia.create(owner, listing.id, {
+        bytes: png,
+        mimeType: "image/png",
+        filename: "one.png",
+        position: 0,
+        altText: "One",
+      }),
+      two = await app.listingMedia.create(owner, listing.id, {
+        bytes: png,
+        mimeType: "image/png",
+        filename: "two.png",
+        position: 1,
+        altText: "Two",
+      }),
+      three = await app.listingMedia.create(owner, listing.id, {
+        bytes: png,
+        mimeType: "image/png",
+        filename: "three.png",
+        position: 1,
+        altText: "Three",
+      });
+    expect(
+      (await app.listingMedia.list(owner, listing.id))
+        .filter((x) => x.state === "active")
+        .map((x) => [x.id, x.position]),
+    ).toEqual([
+      [one.id, 0],
+      [three.id, 1],
+      [two.id, 2],
+    ]);
+    await app.listingMedia.update(owner, listing.id, two.id, { position: 0 });
+    expect(
+      (await app.listingMedia.list(owner, listing.id))
+        .filter((x) => x.state === "active")
+        .map((x) => [x.id, x.position]),
+    ).toEqual([
+      [two.id, 0],
+      [one.id, 1],
+      [three.id, 2],
+    ]);
+    await Promise.all([
+      app.listingMedia.update(owner, listing.id, one.id, { position: 0 }),
+      app.listingMedia.update(owner, listing.id, three.id, { position: 0 }),
+    ]);
+    expect(
+      (await app.listingMedia.list(owner, listing.id))
+        .filter((x) => x.state === "active")
+        .map((x) => x.position),
+    ).toEqual([0, 1, 2]);
+    const original = app.objectStorage.get(one.storageProvider),
+      failing: ObjectStorageProvider = {
+        ...original,
+        name: original.name,
+        put: (input) => original.put(input),
+        publicUrl: (locator) => original.publicUrl!(locator),
+        delete: vi.fn(async () => {
+          throw new Error("temporary storage outage");
+        }),
+      };
+    app.objectStorage.register(failing);
+    await app.listingMedia.requestDeletion(owner, listing.id, one.id);
+    expect(
+      (await app.listingMedia.list(owner, listing.id))
+        .filter((x) => x.state === "active")
+        .map((x) => x.position),
+    ).toEqual([0, 1]);
+    const [claim] = await app.listingMediaDeletion.findWork();
+    expect(claim.id).toBe(one.id);
+    expect((await app.listingMediaDeletion.process(one.id))?.state).toBe("deletion_pending");
+    const failed = (await app.listingMediaRepository.findById(one.id))!;
+    expect(failed.deletionAttemptCount).toBe(1);
+    expect(failed.deletionNextAttemptAt!.getTime()).toBeGreaterThan(
+      failed.deletionAttemptedAt!.getTime(),
+    );
+    expect(await app.listingMediaDeletion.findWork()).toHaveLength(0);
+    await app.database.query(
+      `update listing_capability.media set deletion_next_attempt_at=now()-interval '1 second',deletion_lease_until=now()+interval '5 minutes' where uuid=$1`,
+      [one.id],
+    );
+    expect(await app.listingMediaDeletion.findWork()).toHaveLength(0);
+    await app.database.query(
+      `update listing_capability.media set deletion_lease_until=now()-interval '1 second' where uuid=$1`,
+      [one.id],
+    );
+    const competing = await Promise.all([
+      app.listingMediaDeletion.findWork(),
+      app.listingMediaDeletion.findWork(),
+    ]);
+    expect(competing.flat().map((item) => item.id)).toEqual([one.id]);
+    app.objectStorage.register(original);
+    expect((await app.listingMediaDeletion.process(one.id))?.state).toBe("deleted");
+  });
+
+  it("scopes catalogue access credentials to a listing rather than a seller", async () => {
+    const { owner, other } = await accounts("integration");
+    const listing = await app.listingService.create(owner, {
+      title: "Managed destination",
+      description: "",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://private.example/destination",
+    });
+    const created = await app.integrations.createManaged(owner.id, "destination", listing.id);
+    expect((await app.integrations.listForListing(listing.id)).map((item) => item.id)).toEqual([
+      created.id,
+    ]);
+    const rotated = await app.integrations.rotateForListing(owner.id, listing.id, created.id);
+    expect(await app.integrations.authenticate(created.credential)).toBeNull();
+    expect(await app.integrations.authenticate(rotated.credential)).not.toBeNull();
+    await app.integrations.revokeForListing(owner.id, listing.id, created.id);
+    expect(await app.integrations.authenticate(rotated.credential)).toBeNull();
+    const rotatedAgain = await app.integrations.rotateForListing(owner.id, listing.id, created.id);
+    expect(await app.integrations.authenticate(rotatedAgain.credential)).not.toBeNull();
+    expect(await app.integrations.list(other.id)).toEqual([]);
+    const audit = (
+      await app.database.query<{
+        action: string;
+        actor_id: string;
+        previous_state: unknown;
+        new_state: unknown;
+      }>(
+        `select action,actor.uuid actor_id,previous_state,new_state from kernel.audit_records audit left join identity_capability.accounts actor on actor.id=audit.actor_id where subject_type='integration' and subject_id=$1 order by audit.id`,
+        [created.id],
+      )
+    ).rows;
+    expect(audit.map((row) => [row.action, row.actor_id])).toEqual([
+      ["integration.created", owner.id],
+      ["integration.rotated", owner.id],
+      ["integration.revoked", owner.id],
+      ["integration.rotated", owner.id],
+    ]);
+    expect(audit[0].previous_state).toBeNull();
+    expect(audit[0].new_state).toMatchObject({ listing_id: listing.id, state: "active" });
+    expect(audit[2].previous_state).toMatchObject({ listing_id: listing.id, state: "active" });
+    expect(audit[2].new_state).toMatchObject({ listing_id: listing.id, state: "revoked" });
+    expect(audit[3].previous_state).toMatchObject({ listing_id: listing.id, state: "revoked" });
+    expect(audit[3].new_state).toMatchObject({ listing_id: listing.id, state: "active" });
+  });
+
+  it("uses catalogue capability rather than legacy seller_id for management authority", async () => {
+    const managerA = await app.authentication.register({
+        email: "manager-a.catalogue@example.com",
+        username: "manageracatalogue",
+        password: "correct-horse-battery",
+        country: "NG",
+      }),
+      managerB = await app.authentication.register({
+        email: "manager-b.catalogue@example.com",
+        username: "managerbcatalogue",
+        password: "correct-horse-battery",
+        country: "NG",
+      }),
+      ordinary = await app.authentication.register({
+        email: "ordinary.catalogue@example.com",
+        username: "ordinarycatalogue",
+        password: "correct-horse-battery",
+        country: "NG",
+      });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'catalogue.manage'),((select id from identity_capability.accounts where uuid=$2),'catalogue.manage')`,
+      [managerA.id, managerB.id],
+    );
+    const listing = await app.listingService.createCatalogue(managerA, {
+      title: "Platform listing",
+      description: "",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://private.example/platform",
+    });
+    const createdAudit = (
+      await app.database.query<{
+        action: string;
+        actor_id: string;
+        previous_state: unknown;
+        new_state: unknown;
+      }>(
+        `select action,actor.uuid actor_id,previous_state,new_state from kernel.audit_records audit left join identity_capability.accounts actor on actor.id=audit.actor_id where subject_type='listing' and subject_id=$1 order by audit.id`,
+        [listing.id],
+      )
+    ).rows;
+    expect(createdAudit).toHaveLength(1);
+    expect(createdAudit[0]).toMatchObject({ action: "listing.created", actor_id: managerA.id });
+    expect(createdAudit[0].previous_state).toBeNull();
+    expect(createdAudit[0].new_state).toMatchObject({ state: "draft", title: "Platform listing" });
+    await app.operators.requireCapability(managerB.id, "catalogue.manage");
+    await expect(app.operators.requireCapability(ordinary.id, "catalogue.manage")).rejects.toThrow(
+      "Forbidden",
+    );
+    expect(
+      (await app.listingService.updateCatalogue(managerB, listing.id, { title: "Curated" })).title,
+    ).toBe("Curated");
+    await app.listingService.publishCatalogue(managerB, listing.id);
+    await app.listingService.archiveCatalogue(managerB, listing.id);
+    await app.listingService.restoreCatalogue(managerB, listing.id);
+    const listingAudit = (
+      await app.database.query<{
+        action: string;
+        actor_id: string;
+        previous_state: unknown;
+        new_state: unknown;
+      }>(
+        `select action,actor.uuid actor_id,previous_state,new_state from kernel.audit_records audit left join identity_capability.accounts actor on actor.id=audit.actor_id where subject_type='listing' and subject_id=$1 order by audit.id`,
+        [listing.id],
+      )
+    ).rows;
+    expect(listingAudit.map((row) => [row.action, row.actor_id])).toEqual([
+      ["listing.created", managerA.id],
+      ["listing.updated", managerB.id],
+      ["listing.published", managerB.id],
+      ["listing.archived", managerB.id],
+      ["listing.restored", managerB.id],
+    ]);
+    expect(listingAudit[2].previous_state).toMatchObject({ state: "draft" });
+    expect(listingAudit[2].new_state).toMatchObject({ state: "published" });
+    expect(listingAudit[3].previous_state).toMatchObject({ state: "published" });
+    expect(listingAudit[3].new_state).toMatchObject({ state: "archived" });
+  });
+
+  it("reports durable partial imports and retries the same listing without duplicate active media", async () => {
+    const { owner } = await accounts();
+    const transfer = fakeTransfer(),
+      original = app.objectStorage.default();
+    let puts = 0;
+    const failsSecond: ObjectStorageProvider = {
+      ...original,
+      name: original.name,
+      publicUrl: (l) => original.publicUrl!(l),
+      delete: (l) => original.delete(l),
+      put: async (input) => {
+        puts++;
+        if (puts === 2) throw new Error("second upload failed");
+        return original.put(input);
+      },
+    };
+    app.objectStorage.register(failsSecond);
+    const record = {
+      external_key: "durable-import",
+      title: "Durable",
+      description: "",
+      price_minor: "100",
+      currency: "USD",
+      destination: "https://example.com/item",
+      metadata: { batch: 1 },
+      state: "published",
+      media: [
+        { url: "https://images.example/one.png", alt_text: "One", position: 0 },
+        { url: "https://images.example/two.png", alt_text: "Two", position: 1 },
+      ],
+    };
+    const first = await transfer.import(owner, {
+      format: "json",
+      mode: "create",
+      body: JSON.stringify([record]),
+    });
+    expect(first).toMatchObject({
+      created: 0,
+      failed: 1,
+      records: [
+        {
+          status: "failed",
+          listing_id: expect.any(String),
+          retry_identity: expect.stringMatching(/^listing:/),
+          retryable: true,
+        },
+      ],
+    });
+    const id = first.records[0].listing_id!;
+    expect(
+      (await app.listingMediaRepository.listByListing(id, true)).some(
+        (item) => item.state === "deletion_pending",
+      ),
+    ).toBe(true);
+    app.objectStorage.register(original);
+    const retry = await transfer.import(owner, {
+      format: "json",
+      mode: "create",
+      body: JSON.stringify([{ ...record, retry_identity: first.records[0].retry_identity }]),
+    });
+    expect(retry).toMatchObject({ updated: 1, failed: 0, records: [{ listing_id: id }] });
+    expect(
+      (await app.listingService.queryOwner(owner, { limit: 20 })).items.filter(
+        (item) => item.id === id,
+      ),
+    ).toHaveLength(1);
+    expect(
+      (await app.listingMediaRepository.listByListing(id)).filter(
+        (item) => item.state === "active",
+      ),
+    ).toHaveLength(2);
+    const repeated = await transfer.import(owner, {
+      format: "json",
+      mode: "create",
+      body: JSON.stringify([{ ...record, retry_identity: first.records[0].retry_identity }]),
+    });
+    expect(repeated.failed).toBe(0);
+    expect(
+      (await app.listingMediaRepository.listByListing(id)).filter(
+        (item) => item.state === "active",
+      ),
+    ).toHaveLength(2);
+  });
+
+  for (const format of ["json", "csv", "yaml"] as const)
+    it(`performs a real ${format} database export/import round trip with gallery reconciliation`, async () => {
+      const { owner } = await accounts(format),
+        target = (await accounts(`${format}target`)).owner;
+      const listing = await app.listingService.create(owner, {
+        title: `${format} listing`,
+        description: "Round trip",
+        priceMinor: "425",
+        currency: "USD",
+        destination: "https://destination.example/item",
+        metadata: { format, featured: true },
+        externalKey: `roundtrip-${format}`,
+      });
+      await app.listingMedia.create(owner, listing.id, {
+        bytes: png,
+        mimeType: "image/png",
+        altText: "Cover",
+        position: 0,
+      });
+      await app.listingMedia.create(owner, listing.id, {
+        bytes: png,
+        mimeType: "image/png",
+        altText: "Detail",
+        position: 1,
+      });
+      await app.listingService.publish(owner, listing.id);
+      const exported = await app.listingTransfer.export(owner),
+        transfer = fakeTransfer(),
+        result = await transfer.import(target, {
+          format,
+          mode: "create",
+          body: serializeTransfer(exported, format),
+        });
+      expect(result).toMatchObject({ created: 1, failed: 0 });
+      const copy = (await app.listingService.findByExternalKey(target, `roundtrip-${format}`))!;
+      expect(copy).toMatchObject({
+        title: `${format} listing`,
+        description: "Round trip",
+        state: "published",
+        metadata: { format, featured: true },
+      });
+      expect(copy.price.snapshot()).toEqual({ minorAmount: "425", currency: "USD" });
+      const gallery = (await app.listingMediaRepository.listByListing(copy.id)).filter(
+        (item) => item.state === "active",
+      );
+      expect(gallery.map((item) => [item.position, item.altText])).toEqual([
+        [0, "Cover"],
+        [1, "Detail"],
+      ]);
+      expect(
+        (
+          await app.listingService.queryPublic({ search: `${format} listing`, limit: 20 })
+        ).items.map((item) => item.id),
+      ).toContain(copy.id);
+      const desired = [
+        {
+          ...exported[0],
+          id: copy.id,
+          media: [{ ...exported[0].media[1], alt_text: "New cover", position: 0 }],
+        },
+      ];
+      await transfer.import(target, {
+        format: "json",
+        mode: "upsert",
+        body: JSON.stringify(desired),
+      });
+      await transfer.import(target, {
+        format: "json",
+        mode: "upsert",
+        body: JSON.stringify(desired),
+      });
+      const reconciled = await app.listingMediaRepository.listByListing(copy.id, true);
+      expect(
+        reconciled
+          .filter((item) => item.state === "active")
+          .map((item) => [item.position, item.altText]),
+      ).toEqual([[0, "New cover"]]);
+      expect(reconciled.some((item) => item.state === "deletion_pending")).toBe(true);
+    });
+
+  it("isolates invalid records and owner-scoped upserts while preserving resource management", async () => {
+    const { owner, other } = await accounts();
+    const input = [
+      {
+        external_key: "catalog-one",
+        title: "Imported",
+        description: "",
+        price_minor: "100",
+        currency: "USD",
+        destination: "https://example.com/imported",
+        metadata: { rank: 1 },
+        state: "published",
+        media: [],
+      },
+      { title: "" },
+    ];
+    const result = await app.listingTransfer.import(owner, {
+      format: "json",
+      mode: "create",
+      body: JSON.stringify(input),
+    });
+    expect(result).toMatchObject({ total: 2, created: 1, failed: 1 });
+    const listing = (await app.listingService.findByExternalKey(owner, "catalog-one"))!;
+    const forbidden = await app.listingTransfer.import(other, {
+      format: "json",
+      mode: "upsert",
+      body: JSON.stringify([{ ...input[0], external_key: undefined, id: listing.id }]),
+    });
+    expect(forbidden.failed).toBe(1);
+    expect(
+      (await app.profiles.update(owner.id, { username: "ownerupdated", country: null })).country,
+    ).toBeNull();
+    const integration = await app.integrations.create(owner.id, "Delivery", listing.id);
+    await app.integrations.rotate(owner.id, integration.id);
+    await app.integrations.revoke(owner.id, integration.id);
+  });
+});

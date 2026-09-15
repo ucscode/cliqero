@@ -2,6 +2,9 @@ FROM node:22-slim AS base
 WORKDIR /workspace
 COPY package.json package-lock.json* ./
 COPY apps/web/package.json apps/web/package.json
+COPY packages/blockchain/tron/package.json packages/blockchain/tron/package.json
+COPY packages/payment/paystack/package.json packages/payment/paystack/package.json
+COPY packages/payment/nowpayments/package.json packages/payment/nowpayments/package.json
 RUN npm ci
 
 FROM base AS development

@@ -1,6 +1,6 @@
 import { apiError, authenticatedAccount } from "../../../../http";
 import { getContainer } from "@/infrastructure/container";
-import { ownerListingView } from "@/application/listings";
+import { ownerListingView } from "@/application/listing/service";
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const a = await authenticatedAccount(request);
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { ObjectStorageRegistry, StoredObject } from "@/modules/storage/object-storage";
 import { DuplicateProviderTransactionError } from "@/kernel/errors";

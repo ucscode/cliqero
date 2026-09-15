@@ -14,7 +14,7 @@
     "seed:catalogue": "node --import tsx src/scripts/seed-catalogue.ts",
     "seed:blog": "node --import tsx src/modules/blog/infrastructure/seed.ts",
     "test": "vitest run",
-    "test:integration": "vitest run src/integration",
+    "test:integration": "vitest run tests/integration",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

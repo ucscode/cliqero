@@ -1,10 +1,10 @@
 import { Money } from "@/modules/money/money";
-import type { PostgresProviderEventRepository } from "@/infrastructure/postgres/provider-events";
+import type { PostgresProviderEventRepository } from "@/infrastructure/postgres/payment/provider-events";
 import type { PaymentRepository } from "@/modules/payment";
 import type { PurchaseRepository } from "@/modules/purchase/purchase";
-import type { PurchaseReversalProcessor } from "@/processors/purchase-reversal";
+import type { PurchaseReversalProcessor } from "@/processors/purchase/reversal";
 import type { OutboxEventHandler } from "@/workers/outbox/dispatcher";
-import type { ClaimedOutboxEvent } from "@/infrastructure/postgres/outbox";
+import type { ClaimedOutboxEvent } from "@/infrastructure/postgres/shared/outbox";
 export class PaystackRefundProcessedHandler implements OutboxEventHandler {
   readonly eventNames = ["payment.paystack.refund-processed"];
   constructor(

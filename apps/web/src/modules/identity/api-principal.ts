@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import { Account } from "./account";
 import type { ApiKeyService } from "@/infrastructure/postgres/api-keys";
 import { AuthenticationService } from "./authentication";

@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { newId } from "@/kernel/ids";
 import type { PaystackPayoutProvider } from "./provider";
 import type { PostgresPaystackPayoutEventRepository } from "./persistence/payout-events";
-import type { PostgresPayoutRepository } from "@/infrastructure/postgres/payouts";
-import type { PayoutExecutionProcessor } from "@/processors/payout-execution";
+import type { PostgresPayoutRepository } from "@/infrastructure/postgres/payout/payouts";
+import type { PayoutExecutionProcessor } from "@/processors/payout/execution";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { Money } from "@/modules/money/money";
 export class PaystackPayoutWebhookIngress {

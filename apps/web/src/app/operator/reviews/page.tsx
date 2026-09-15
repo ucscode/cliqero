@@ -1,5 +1,5 @@
-import { OperatorReviews } from "@/components/operator-reviews";
-import { OperatorShell } from "@/components/operator-shell";
+import { OperatorReviews } from "@/components/operator/reviews";
+import { OperatorShell } from "@/components/operator/shell";
 import { requireOperatorPage } from "../operator-access";
 
 export default async function OperatorReviewsPage() {

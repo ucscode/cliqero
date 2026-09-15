@@ -1,5 +1,5 @@
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
-import type { FundingVerificationProcessor } from "@/application/wallet-commerce";
+import type { FundingVerificationProcessor } from "@/application/funding/verification";
 
 /** NOWPayments owns the meaning of its provider-issued expiry timestamp. */
 export class NowPaymentsExpiryProcessor {

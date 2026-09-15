@@ -1,7 +1,7 @@
 import { Money } from "@/modules/money/money";
 import type { PaymentRepository } from "@/modules/payment";
-import type { PostgresProviderEventRepository } from "@/infrastructure/postgres/provider-events";
-import type { ClaimedOutboxEvent } from "@/infrastructure/postgres/outbox";
+import type { PostgresProviderEventRepository } from "@/infrastructure/postgres/payment/provider-events";
+import type { ClaimedOutboxEvent } from "@/infrastructure/postgres/shared/outbox";
 import type { OutboxEventHandler } from "@/workers/outbox/dispatcher";
 import type { FundingRepository } from "@/modules/funding/funding";
 

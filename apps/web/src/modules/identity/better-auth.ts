@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { betterAuth, type Auth } from "better-auth";
 import { bearer } from "better-auth/plugins/bearer";
 import { nextCookies } from "better-auth/next-js";
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import { sendAuthEmail, type AuthEmail } from "@/lib/email";
 import { siteConfig } from "@/config/site";
 import { getEnabledSocialProviders } from "@/config/auth";

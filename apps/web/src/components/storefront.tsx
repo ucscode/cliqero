@@ -12,7 +12,7 @@ import { Select } from "./ui/select";
 import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
-import { ListingCard } from "./listing-card";
+import { ListingCard } from "./listing/card";
 import { HoneypotField } from "./honeypot-field";
 
 const sortOptions = [

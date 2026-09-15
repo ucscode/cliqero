@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "./database";
+import type { SqlExecutor } from "./shared/database";
 import type { ExchangeRateCache } from "@/modules/money/exchange-service";
 import type { ExchangeRateQuote } from "@/modules/money/exchange";
 interface Row {

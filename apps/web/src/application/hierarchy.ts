@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import { loadYamlConfiguration } from "@/config/yaml";
 
 const visualizationSchema = z.object({

@@ -1,5 +1,5 @@
-import { OperatorShell } from "@/components/operator-shell";
-import { OperatorUsersList } from "@/components/operator-users";
+import { OperatorShell } from "@/components/operator/shell";
+import { OperatorUsersList } from "@/components/operator/users";
 import { requireOperatorPage } from "../operator-access";
 
 export const dynamic = "force-dynamic";

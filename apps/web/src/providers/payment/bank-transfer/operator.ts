@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 /** Bank Transfer owns the rules for operator confirmation of its evidence. */

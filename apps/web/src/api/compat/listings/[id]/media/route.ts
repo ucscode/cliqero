@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { authenticatedAccount, apiError } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
-import { mediaView } from "@/application/listing-media";
+import { mediaView } from "@/application/listing/media";
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });

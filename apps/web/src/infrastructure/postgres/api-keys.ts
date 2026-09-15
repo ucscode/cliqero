@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import type { SqlExecutor } from "./database";
+import type { SqlExecutor } from "./shared/database";
 import { assertApiScopes } from "@/modules/identity/api-scopes";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 

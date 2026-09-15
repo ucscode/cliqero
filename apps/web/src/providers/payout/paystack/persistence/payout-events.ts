@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 export class PostgresPaystackPayoutEventRepository {
   constructor(private readonly sql: SqlExecutor) {}
   async record(input: {

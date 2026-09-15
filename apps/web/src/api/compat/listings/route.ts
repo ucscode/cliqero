@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiError, authenticatedAccount } from "../http";
 import { getContainer } from "@/infrastructure/container";
-import { listingWithMediaView } from "@/application/listings";
+import { listingWithMediaView } from "@/application/listing/service";
 import { storefrontConfig } from "@/config/storefront";
 
 const sorts = ["newest", "oldest", "price_asc", "price_desc", "title_asc"] as const;
@@ -34,9 +34,12 @@ export async function POST(request: Request) {
       metadata: body.metadata,
       externalKey: body.external_key,
     });
-    return Response.json((await import("@/application/listings")).ownerListingView(listing), {
-      status: 201,
-    });
+    return Response.json(
+      (await import("@/application/listing/service")).ownerListingView(listing),
+      {
+        status: 201,
+      },
+    );
   } catch (error) {
     return apiError(error);
   }

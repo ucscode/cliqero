@@ -1,9 +1,9 @@
-import type { PaymentVerificationProcessor } from "@/processors/payment-verification";
-import type { PostgresPaymentRepository } from "@/infrastructure/postgres/payments";
+import type { PaymentVerificationProcessor } from "@/processors/payment/verification";
+import type { PostgresPaymentRepository } from "@/infrastructure/postgres/payment/payments";
 import type {
   PostgresPaymentOperationsRepository,
   ReconciliationAttempt,
-} from "@/infrastructure/postgres/payment-operations";
+} from "@/infrastructure/postgres/payment/operations";
 import type { PostgresPaystackOperationsRepository } from "@/providers/payment/paystack/persistence/operations";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 

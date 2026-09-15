@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import type { PaystackRecipientStore } from "../provider";
 export class PostgresPaystackRecipientStore implements PaystackRecipientStore {
   constructor(private readonly sql: SqlExecutor) {}

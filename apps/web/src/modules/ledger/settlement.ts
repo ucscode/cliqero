@@ -1,5 +1,5 @@
 import type { Money } from "@/modules/money/money";
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import type { LedgerRepository } from "./ledger";
 import { newId } from "@/kernel/ids";
 import type { UnitOfWork } from "@/kernel/unit-of-work";

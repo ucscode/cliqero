@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 
 /** Paystack-specific operator projection for persisted provider events. */
 export class PostgresPaystackOperationsRepository {

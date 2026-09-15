@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import { hasCapability, type Capability } from "./capabilities";
 
 export class OperatorAuthorizationService {

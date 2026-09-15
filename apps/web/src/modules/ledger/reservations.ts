@@ -1,6 +1,6 @@
 import { newId } from "@/kernel/ids";
 import type { Money } from "@/modules/money/money";
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 
 export interface FundsReservation {
   id: string;

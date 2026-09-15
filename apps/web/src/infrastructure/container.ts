@@ -1,20 +1,18 @@
-import { PostgresDatabase } from "./postgres/database";
-import { PostgresOutbox } from "./postgres/outbox";
-import { PostgresIdempotencyRepository } from "./postgres/idempotency";
-import {
-  PostgresAccountRepository,
-  PostgresAccessGrantRepository,
-  PostgresEntitlementRepository,
-  PostgresListingRepository,
-  PostgresPurchaseRepository,
-} from "./postgres/repositories";
-import { PostgresPaymentRepository } from "./postgres/payments";
-import { PostgresProviderEventRepository } from "./postgres/provider-events";
+import { PostgresDatabase } from "./postgres/shared/database";
+import { PostgresOutbox } from "./postgres/shared/outbox";
+import { PostgresIdempotencyRepository } from "./postgres/shared/idempotency";
+import { PostgresAccountRepository } from "./postgres/identity/accounts";
+import { PostgresAccessGrantRepository } from "./postgres/access/repository";
+import { PostgresEntitlementRepository } from "./postgres/entitlement/repository";
+import { PostgresListingRepository } from "./postgres/listing/repository";
+import { PostgresPurchaseRepository } from "./postgres/purchase/repository";
+import { PostgresPaymentRepository } from "./postgres/payment/payments";
+import { PostgresProviderEventRepository } from "./postgres/payment/provider-events";
 import {
   PostgresCommissionPolicyRepository,
   PostgresReferralGraphRepository,
-} from "./postgres/referrals";
-import { PostgresReferralAttributionRepository } from "./postgres/attributions";
+} from "./postgres/referral/referrals";
+import { PostgresReferralAttributionRepository } from "./postgres/referral/attributions";
 import { AuthenticationService } from "@/modules/identity/authentication";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import { AccessService } from "@/modules/access/access";
@@ -33,8 +31,9 @@ import { HttpDirectTrc20Verifier } from "@/providers/payment/direct-trc20/verifi
 import { loadDirectTrc20Configuration } from "@/providers/payment/direct-trc20/config";
 import { BankTransferProvider } from "@/providers/payment/bank-transfer/provider";
 import { loadBankTransferConfiguration } from "@/providers/payment/bank-transfer/config";
-import { ListingService } from "@/application/listings";
-import { CheckoutService, PaymentCompletionService } from "@/application/commerce";
+import { ListingService } from "@/application/listing/service";
+import { CheckoutService } from "@/application/checkout/service";
+import { PaymentCompletionService } from "@/application/checkout/completion";
 import { BuyerAccessService } from "@/application/access";
 import { ReferralGraphService } from "@/application/referrals";
 import { ReferralAttributionService } from "@/application/attributions";
@@ -42,16 +41,16 @@ import { CommissionDistributionService } from "@/modules/referral/commission";
 import {
   PostgresFinancialDistributionPolicyRepository,
   PostgresLedgerRepository,
-} from "./postgres/ledger";
-import { PurchaseDistributionProcessor } from "@/processors/purchase-distribution";
+} from "./postgres/shared/ledger";
+import { PurchaseDistributionProcessor } from "@/processors/purchase/distribution";
 import { OperatorAuthorizationService } from "@/modules/identity/operator";
-import { PostgresPaymentOperationsRepository } from "./postgres/payment-operations";
+import { PostgresPaymentOperationsRepository } from "./postgres/payment/operations";
 import {
   PaymentReconciliationService,
   PaystackOperationsInspectionService,
 } from "@/providers/payment/paystack/operations";
-import { PostgresReversalRepository } from "./postgres/reversals";
-import { PurchaseReversalProcessor } from "@/processors/purchase-reversal";
+import { PostgresReversalRepository } from "./postgres/purchase/reversals";
+import { PurchaseReversalProcessor } from "@/processors/purchase/reversal";
 import {
   PostgresSettlementPolicyRepository,
   SettlementProcessor,
@@ -60,11 +59,11 @@ import { LedgerFundsReservationService } from "@/modules/ledger/reservations";
 import {
   PostgresWithdrawalPolicyRepository,
   PostgresWithdrawalRepository,
-} from "@/infrastructure/postgres/withdrawals";
-import { WithdrawalService } from "@/application/withdrawals";
+} from "@/infrastructure/postgres/withdrawal/withdrawals";
+import { WithdrawalService } from "@/application/withdrawal/service";
 import { PayoutProviderRegistry, DevelopmentPayoutProvider } from "@/modules/withdrawal/provider";
-import { PostgresPayoutRepository } from "@/infrastructure/postgres/payouts";
-import { PayoutExecutionProcessor } from "@/processors/payout-execution";
+import { PostgresPayoutRepository } from "@/infrastructure/postgres/payout/payouts";
+import { PayoutExecutionProcessor } from "@/processors/payout/execution";
 import { PaystackPayoutProvider } from "@/providers/payout/paystack/provider";
 import { loadPaystackPayoutConfiguration } from "@/providers/payout/paystack/config";
 import { PostgresPaystackRecipientStore } from "@/providers/payout/paystack/persistence/recipients";
@@ -75,56 +74,52 @@ import { ExchangeRateService } from "@/modules/money/exchange-service";
 import { FrankfurterProvider } from "@/providers/money/frankfurter/provider";
 import { FawazProvider } from "@/providers/money/fawaz/provider";
 import { PostgresExchangeRateCache } from "./postgres/exchange-rates";
-import { PaymentInitializationProcessor } from "@/processors/payment-initialization";
-import { PaymentInitializationWorker } from "@/workers/payment-initialization/worker";
-import { PaymentVerificationProcessor } from "@/processors/payment-verification";
-import {
-  PostgresFundingRepository,
-  PostgresWalletRepository,
-  PostgresCheckoutRepository,
-} from "./postgres/wallet-commerce";
-import {
-  FundingService,
-  FundingInitializationProcessor,
-  FundingVerificationProcessor,
-  WalletService,
-  WalletCheckoutService,
-} from "@/application/wallet-commerce";
+import { PaymentInitializationProcessor } from "@/processors/payment/initialization";
+import { PaymentInitializationWorker } from "@/workers/payment/initialization/worker";
+import { PaymentVerificationProcessor } from "@/processors/payment/verification";
+import { PostgresFundingRepository } from "./postgres/funding/repository";
+import { PostgresWalletRepository } from "./postgres/wallet/repository";
+import { PostgresCheckoutRepository } from "./postgres/checkout/repository";
+import { FundingService } from "@/application/funding/service";
+import { FundingInitializationProcessor } from "@/application/funding/initialization";
+import { FundingVerificationProcessor } from "@/application/funding/verification";
+import { WalletService } from "@/application/wallet/service";
+import { WalletCheckoutService } from "@/application/checkout/wallet";
 import {
   WalletCreditProcessor,
   WalletAvailabilityProcessor,
   CheckoutPaymentProcessor,
   EntitlementIssuanceProcessor,
-} from "@/processors/wallet-commerce";
-import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing-media";
-import { PostgresListingReviewRepository } from "@/infrastructure/postgres/listing-reviews";
+} from "@/processors/wallet/commerce";
+import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing/media";
+import { PostgresListingReviewRepository } from "@/infrastructure/postgres/listing/reviews";
 import { loadMediaStorage } from "@/providers/storage/media-config";
 import { requirePrivateStorage } from "@/providers/storage/media-config";
 import { storefrontConfig, resolveStorefrontMediaProvider } from "@/config/storefront";
-import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing-media";
-import { ListingTransferService } from "@/application/listing-transfer";
-import { ListingReviewService } from "@/application/listing-reviews";
-import { ProfileService } from "@/application/profile";
-import { AccountProjectionService } from "@/application/account-projections";
+import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing/media";
+import { ListingTransferService } from "@/application/listing/transfer";
+import { ListingReviewService } from "@/application/listing/reviews";
+import { ProfileService } from "@/application/account/profile";
+import { AccountProjectionService } from "@/application/account/projections";
 import { loadYamlCommissionPolicy } from "@/modules/referral/yaml-policy";
-import { PostgresTreasuryRepository } from "./postgres/treasury";
+import { PostgresTreasuryRepository } from "./postgres/treasury/treasury";
 import { TreasuryService } from "@/modules/treasury/treasury";
-import { TreasuryProcessor } from "@/processors/treasury";
-import { OperatorTreasuryService } from "@/application/operator-treasury";
+import { TreasuryProcessor } from "@/processors/treasury/processor";
+import { OperatorTreasuryService } from "@/application/operator/treasury";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
 import { ApiPrincipalResolver } from "@/modules/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
-import { OperatorOverviewService } from "@/application/operator-overview";
-import { OperatorAccountService } from "@/application/operator-accounts";
+import { OperatorOverviewService } from "@/application/operator/overview";
+import { OperatorAccountService } from "@/application/operator/accounts";
 import { CapabilityAdministrationService } from "@/application/capability-administration";
-import { OperatorApiKeyService } from "@/application/operator-api-keys";
-import { OperatorFundingService } from "@/application/operator-funding";
+import { OperatorApiKeyService } from "@/application/operator/api-keys";
+import { OperatorFundingService } from "@/application/operator/funding";
 import { BankTransferEvidenceService } from "@/providers/payment/bank-transfer/evidence";
 import {
   OperatorDistributionService,
   OperatorEarningsService,
-} from "@/application/operator-distributions";
-import { OperatorWithdrawalService } from "@/application/operator-withdrawals";
+} from "@/application/operator/distributions";
+import { OperatorWithdrawalService } from "@/application/operator/withdrawals";
 import { getBlogService } from "@/modules/blog/application/blog-service";
 
 export function createContainer(databaseUrl: string) {

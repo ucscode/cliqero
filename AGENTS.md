@@ -15,9 +15,14 @@ model, agent, branch, and context handoffs.
 Before substantial implementation or refactoring, an agent must confirm that
 its plan satisfies all of the following:
 
-1. **Preserve architectural roots.** Group project functionality inside
-   `api`, `app`, `components`, `infrastructure`, `modules`, `providers`,
-   `types`, `workers`, and other justified architectural roots. Do not invert
+1. **Preserve architectural roots and apply the grouping convention everywhere.**
+   Group project functionality inside `api`, `app`, `application`, `components`,
+   `infrastructure`, `modules`, `processors`, `providers`, `types`, `workers`,
+   and other justified architectural roots. The functional grouping convention
+   is repository-wide, not a special rule for `modules/`. Do not leave related
+   families flattened as filename prefixes such as `listing-media.ts`,
+   `listing-reviews.ts`, `operator-distributions.ts`, or `payment-verification.ts`
+   when a clear owning directory can express that relationship. Do not invert
    the hierarchy into `src/payment/...`, `src/listing/...`, etc.
 2. **Libraries before redevelopment.** Before writing substantial custom code,
    investigate an official SDK or maintained library that already solves the
@@ -56,9 +61,11 @@ Examples include:
 src/
   api/
   app/
+  application/
   components/
   infrastructure/
   modules/
+  processors/
   providers/
   types/
   workers/
@@ -98,9 +105,8 @@ providers/
     nowpayments/
     direct-trc20/
     bank-transfer/
-  media/
-    pexels/
-    wikimedia/
+  money/
+  storage/
 ```
 
 Wrong:
@@ -119,10 +125,13 @@ listing/
 The architectural root communicates what kind of code it is. The nested
 functionality directory communicates what part of Cliqero it belongs to.
 
-## 2. Group related functionality internally; do not encode grouping in filenames
+## 2. Functional grouping is a repository-wide convention
 
-Within each architectural root, related project functionality must be grouped
-under a clear directory.
+The same grouping convention applies inside every architectural root where
+related application functionality exists. `modules/` is only one example.
+
+Related functionality must be grouped under a clear owning directory rather
+than encoded repeatedly in filenames.
 
 Prefer:
 
@@ -132,15 +141,61 @@ modules/
     index.ts
     media/
     reviews/
+
+application/
+  listing/
+    service.ts
+    media.ts
+    reviews.ts
+    transfer.ts
+  operator/
+    accounts.ts
+    distributions.ts
+    funding.ts
+    treasury.ts
+
+components/
+  listing/
+  operator/
+  payment/
+    shared/
+    paystack/
+    nowpayments/
+    direct-trc20/
+    bank-transfer/
+
+infrastructure/
+  postgres/
+    listing/
+    payment/
+    wallet/
+    checkout/
+
+processors/
+  payment/
+    initialization.ts
+    verification.ts
+  purchase/
+    completion.ts
+    distribution.ts
+
+workers/
+  payment/
+    initialization/
+  outbox/
+  commercial/
 ```
 
-instead of:
+instead of flattening related families such as:
 
 ```text
-modules/
-  listing.ts
-  listing-media.ts
-  listing-reviews.ts
+application/listing-media.ts
+application/listing-reviews.ts
+application/operator-distributions.ts
+components/payment-provider-components.tsx
+infrastructure/postgres/listing-media.ts
+processors/payment-verification.ts
+workers/payment-initialization/
 ```
 
 Likewise, do not flatten provider families:
@@ -149,8 +204,8 @@ Likewise, do not flatten provider families:
 providers/
   paystack/
   nowpayments/
-  pexels/
-  wikimedia/
+  fawaz/
+  filesystem/
 ```
 
 Use grouping that preserves both the architectural root and the functional
@@ -161,13 +216,29 @@ providers/
   payment/
     paystack/
     nowpayments/
-  media/
-    pexels/
-    wikimedia/
+  payout/
+    paystack/
+  money/
+    fawaz/
+    frankfurter/
+  storage/
+    filesystem/
+    supabase/
+    cloudflare-r2/
 ```
 
 Use directories to communicate ownership and relationships. Do not create long
 filename prefixes as a substitute for structure.
+
+This is a convention for the whole project. A refactor is not structurally
+complete merely because one root such as `modules/` has been cleaned while
+other roots still encode the same ownership through flattened filename
+prefixes.
+
+Framework-owned structures may keep framework-required conventions. For
+example, Next.js `app/` routing follows Next.js filesystem semantics. Do not
+force unrelated nesting where a framework defines the tree. Everywhere else,
+prefer the smallest directory hierarchy that makes ownership obvious.
 
 ## 3. Libraries first; custom redevelopment requires justification
 
@@ -533,22 +604,27 @@ context.
 Before moving or rewriting a large part of the project:
 
 1. preserve and identify the existing architectural roots (`api`, `app`,
-   `modules`, `providers`, `components`, `types`, `infrastructure`, etc.);
-2. audit grouping inside each architectural root;
-3. identify flat functionality that should become an internal directory;
+   `application`, `modules`, `providers`, `components`, `processors`, `types`,
+   `infrastructure`, `workers`, etc.);
+2. audit grouping inside every architectural root, not just `modules/`;
+3. identify flat related families in each root that should become internal
+   directories;
 4. identify violations of the OOP and dependency rules;
 5. perform the library-first investigation for custom integrations and
    infrastructure, including whether a substantial custom integration belongs
    in a dedicated internal workspace package;
-6. propose the target internal grouping without inverting the root hierarchy;
-7. move code in coherent groups;
+6. propose the target internal grouping consistently across the repository
+   without inverting the root hierarchy;
+7. move code in coherent functional groups, including matching tests, across
+   the affected roots;
 8. run validation after each coherent stage.
 
 Do not perform a repository-wide move as an unreviewed mechanical shuffle.
 Do not introduce `src/payment/...`, `src/listing/...`, or similar business-root
 structures merely to claim domain grouping.
 
-The desired direction is architecture-root first, functional grouping second.
+The desired direction is architecture-root first, functional grouping second,
+consistently throughout the project.
 
 ## 14. Anti-drift implementation checklist
 
@@ -556,6 +632,8 @@ Before claiming a substantial feature or refactor complete, report:
 
 - which architectural root owns the new code;
 - how related functionality is grouped inside that root;
+- whether the same functional family is still flattened elsewhere in another
+  architectural root;
 - which official SDKs/libraries were investigated before custom code was
   written;
 - whether a dedicated internal Cliqero library/package was considered when no
@@ -591,8 +669,8 @@ credential/configuration files out of formatting and lint runs.
 ## Local worker development
 
 The development `outbox-worker` uses a live repository source mount and keeps
-its dependencies in Docker-owned anonymous volumes. Ordinary worker
-TypeScript and YAML configuration changes do not require
+its dependencies in Docker-owned anonymous volumes. Ordinary worker TypeScript
+and YAML configuration changes do not require
 `docker compose build outbox-worker`; the worker watch command restarts the
 process for changes under `apps/web/src` and `config/`. Changes to `.env` or
 Compose environment values require recreating the service, for example with

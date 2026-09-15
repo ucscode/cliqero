@@ -2,7 +2,7 @@ import { APIError } from "better-auth";
 import { newId } from "@/kernel/ids";
 import { PublicApplicationError } from "@/kernel/errors";
 import { Account } from "./account";
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import { BetterAuthBoundary, type BetterAuthInstance } from "./better-auth";
 import { assertPasswordMinimum } from "./password-policy";
 import { normalizeUsername } from "./username";

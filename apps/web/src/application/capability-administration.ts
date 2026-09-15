@@ -1,6 +1,6 @@
 import { PublicApplicationError } from "@/kernel/errors";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import type { SqlExecutor } from "@/infrastructure/postgres/database";
+import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
 import {
   CAPABILITIES,
   canManageCapability,

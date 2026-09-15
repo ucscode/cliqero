@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { OperatorBlogEditor } from "@/components/operator-blog";
-import { OperatorShell } from "@/components/operator-shell";
+import { OperatorBlogEditor } from "@/components/operator/blog";
+import { OperatorShell } from "@/components/operator/shell";
 import { requireOperatorPage } from "../../operator-access";
 import { getBlogService } from "@/modules/blog/application/blog-service";
 export const dynamic = "force-dynamic";

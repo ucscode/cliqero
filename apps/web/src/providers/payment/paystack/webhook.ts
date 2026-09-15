@@ -3,7 +3,7 @@ import { newId } from "@/kernel/ids";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { EventOutbox } from "@/kernel/events";
 import type { PaystackProvider } from "./provider";
-import type { PostgresProviderEventRepository } from "@/infrastructure/postgres/provider-events";
+import type { PostgresProviderEventRepository } from "@/infrastructure/postgres/payment/provider-events";
 
 interface PaystackChargeSuccess {
   event: "charge.success";
