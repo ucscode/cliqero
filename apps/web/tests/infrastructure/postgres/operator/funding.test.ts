@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { QueryResult } from "pg";
-import { OperatorFundingService } from "@/infrastructure/postgres/operator/funding";
+import { PostgresOperatorFundingReader } from "@/infrastructure/postgres/operator/funding";
 
 function result<T extends object>(rows: T[]): QueryResult<T> {
   return { command: "SELECT", rowCount: rows.length, oid: 0, fields: [], rows };
@@ -13,6 +13,7 @@ const baseRow = {
   email: "buyer@example.com",
   provider_name: "development",
   provider_reference: "dev-ref-1",
+  provider_transaction_id: null,
   canonical_amount_minor: "1000",
   collection_amount_minor: "1000",
   collection_currency: "USD",
@@ -28,87 +29,16 @@ const baseRow = {
   credit_available_at: "2026-01-01T00:02:00.000Z",
 };
 
-describe("operator funding projection", () => {
-  it("confirms bank transfers transactionally and audits the state change", async () => {
-    const statements: string[] = [];
-    const service = new OperatorFundingService(
-      {
-        query: async <T extends object>(sql: string) => {
-          statements.push(sql);
-          if (sql.includes("for update"))
-            return result<T>([
-              {
-                id: baseRow.id,
-                provider_name: "bank_transfer",
-                provider_reference: "bank-ref",
-                state: "awaiting_payment",
-                collection_amount_minor: "1000",
-                collection_currency: "USD",
-                confirmed_at: null,
-              },
-            ] as T[]);
-          return result<T>([]) as QueryResult<T>;
-        },
-      },
-      { transaction: async (operation) => operation() },
-    );
-    await expect(
-      service.confirmBankTransfer("00000000-0000-4000-8000-000000000001", baseRow.id),
-    ).resolves.toMatchObject({ id: baseRow.id, state: "confirmed" });
-    expect(statements.some((sql) => sql.includes("set state='confirmed'"))).toBe(true);
-    expect(statements.some((sql) => sql.includes("insert into kernel.audit_records"))).toBe(true);
-  });
-
-  it("makes repeated bank-transfer confirmation a no-op", async () => {
-    const statements: string[] = [];
-    const service = new OperatorFundingService({
-      query: async <T extends object>(sql: string) => {
-        statements.push(sql);
-        if (sql.includes("for update"))
-          return result<T>([
-            {
-              id: baseRow.id,
-              provider_name: "bank_transfer",
-              provider_reference: "bank-ref",
-              state: "confirmed",
-              confirmed_at: "2026-01-01T00:01:00.000Z",
-            },
-          ] as T[]);
-        return result<T>([]) as QueryResult<T>;
-      },
-    });
-    await service.confirmBankTransfer("actor", baseRow.id);
-    expect(statements.some((sql) => sql.includes("insert into kernel.audit_records"))).toBe(false);
-  });
-
-  it("rejects non-bank funding confirmation", async () => {
-    const service = new OperatorFundingService({
-      query: async <T extends object>(sql: string) =>
-        sql.includes("for update")
-          ? result<T>([
-              {
-                id: baseRow.id,
-                provider_name: "paystack",
-                provider_reference: "pay-ref",
-                state: "awaiting_payment",
-              },
-            ] as T[])
-          : (result<T>([]) as QueryResult<T>),
-    });
-    await expect(service.confirmBankTransfer("actor", baseRow.id)).rejects.toThrow(
-      "Funding provider mismatch",
-    );
-  });
-
+describe("PostgresOperatorFundingReader", () => {
   it("keeps canonical and collection amounts separate and projects wallet credit state", async () => {
-    const service = new OperatorFundingService({
+    const reader = new PostgresOperatorFundingReader({
       query: async <T extends object>(sql: string) => {
         if (sql.includes("from funding_capability.funding_transactions f"))
           return result<T>([baseRow] as T[]);
         return result<T>([]) as QueryResult<T>;
       },
     });
-    await expect(service.list({ limit: 25 })).resolves.toMatchObject({
+    await expect(reader.list({ limit: 25 })).resolves.toMatchObject({
       items: [
         expect.objectContaining({
           canonicalAmountMinor: "1000",
@@ -123,7 +53,7 @@ describe("operator funding projection", () => {
   });
 
   it("does not expose access codes or provider payloads in detail", async () => {
-    const service = new OperatorFundingService({
+    const reader = new PostgresOperatorFundingReader({
       query: async <T extends object>(sql: string) => {
         if (sql.includes("from funding_capability.funding_transactions f"))
           return result<T>([
@@ -160,7 +90,7 @@ describe("operator funding projection", () => {
         return result<T>([]) as QueryResult<T>;
       },
     });
-    const detail = await service.get(baseRow.id);
+    const detail = await reader.get(baseRow.id);
     expect(detail.providerInitialization).toEqual({
       authorizationUrl: "https://example.test/authorize",
     });
@@ -169,8 +99,8 @@ describe("operator funding projection", () => {
   });
 
   it("rejects malformed opaque cursors", async () => {
-    const service = new OperatorFundingService({ query: async () => result([]) });
-    await expect(service.list({ limit: 25, cursor: "not-a-cursor" })).rejects.toThrow(
+    const reader = new PostgresOperatorFundingReader({ query: async () => result([]) });
+    await expect(reader.list({ limit: 25, cursor: "not-a-cursor" })).rejects.toThrow(
       "Invalid pagination cursor",
     );
   });
