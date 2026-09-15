@@ -7,6 +7,38 @@ If existing code conflicts with these rules, report the conflict and fix the
 architecture deliberately. Do not silently copy a bad existing pattern merely
 because it already exists.
 
+## Non-negotiable invariants
+
+These requirements are the durable project contract. They must survive chat,
+model, agent, branch, and context handoffs.
+
+Before substantial implementation or refactoring, an agent must confirm that
+its plan satisfies all of the following:
+
+1. **Preserve architectural roots.** Group project functionality inside
+   `api`, `app`, `components`, `infrastructure`, `modules`, `providers`,
+   `types`, `workers`, and other justified architectural roots. Do not invert
+   the hierarchy into `src/payment/...`, `src/listing/...`, etc.
+2. **Libraries before redevelopment.** Before writing substantial custom code,
+   investigate an official SDK or maintained library that already solves the
+   problem. Reimplementation requires a concrete documented reason.
+3. **OOP for business workflows.** Prefer cohesive classes, interfaces,
+   abstract bases, repositories, and services over scattered exported
+   functions when behavior has one business owner.
+4. **Separate production and tests.** Production source directories must not
+   become interleaved forests of `*.test.*` files.
+5. **Reference data is data, not config.** Static lookup/reference datasets
+   belong under the application data hierarchy, not runtime configuration.
+6. **Shared code shares mechanism, not policy.** Provider/domain-specific
+   decisions stay with their owner.
+7. **Human navigability is mandatory.** The tree must communicate ownership to
+   a human without requiring repository-wide AI search.
+8. **Do not patch around structural mistakes.** Repeated fixes are a signal to
+   inspect ownership, grouping, dependencies, and available libraries first.
+
+If a proposed implementation violates any invariant above, stop and surface the
+conflict before writing code.
+
 ## 1. Preserve architectural roots; group functionality inside them
 
 Cliqero's top-level source directories represent architectural/technical
@@ -131,11 +163,14 @@ providers/
 Use directories to communicate ownership and relationships. Do not create long
 filename prefixes as a substitute for structure.
 
-## 3. Libraries first; custom infrastructure requires justification
+## 3. Libraries first; custom redevelopment requires justification
+
+This rule is non-negotiable.
 
 Before implementing a substantial integration, protocol, infrastructure layer,
-UI system, parser, validator, client, or framework-like abstraction manually,
-first investigate whether a maintained library already solves the requirement.
+UI system, parser, validator, client, SDK wrapper, state machine, or
+framework-like abstraction manually, first investigate whether an official SDK
+or maintained library already solves the requirement.
 
 This applies especially to:
 
@@ -150,18 +185,56 @@ This applies especially to:
 - storage integrations;
 - UI component systems;
 - styling systems;
+- forms and form validation;
+- money/currency handling;
+- country/currency/reference datasets;
+- retry/backoff implementations;
 - protocol implementations.
 
-If a suitable maintained library exists, prefer installing and using it.
-Custom implementation is the exception and must have a concrete technical
-reason.
+### Required workflow before custom implementation
+
+For any meaningful new integration or infrastructure concern:
+
+1. check for the provider/vendor's official SDK first;
+2. check for a well-maintained ecosystem library if no suitable official SDK
+   exists;
+3. inspect maintenance/activity, TypeScript support, license, dependency weight,
+   and whether the library actually removes meaningful custom code;
+4. prefer wrapping the selected library behind Cliqero's own interface when the
+   project needs a stable internal contract;
+5. write custom infrastructure only when the available libraries are unsuitable,
+   and record the concrete technical reason in the implementation report.
 
 Do not rebuild an ecosystem library simply because the feature appears easy to
-write. Less custom code is preferred when it produces a cleaner, safer, and
-more maintainable system.
+write or because an agent can generate the code quickly.
 
-When implementing a new integration, explicitly check for an official SDK or a
-well-maintained library before writing a custom client.
+Agent generation speed is not a reason to own more code.
+
+Less custom code is preferred when it produces a cleaner, safer, faster to
+maintain, and more deterministic system.
+
+Examples of the desired direction:
+
+```text
+Cliqero PaymentProvider
+  -> official/maintained provider SDK
+```
+
+rather than:
+
+```text
+Cliqero PaymentProvider
+  -> custom HTTP client
+  -> custom DTO parser
+  -> custom signature implementation
+  -> custom retry implementation
+```
+
+when maintained libraries already provide those layers.
+
+Existing custom code is not exempt. During refactoring, investigate whether a
+library can delete or substantially simplify it rather than automatically
+preserving it.
 
 ## 4. OOP is a high-priority architectural requirement
 
@@ -355,6 +428,10 @@ The repository is the durable source of architectural requirements.
 When a requested change would conflict with these rules, surface the conflict
 instead of silently deviating from them.
 
+At the start of a substantial task, the agent should explicitly verify the
+non-negotiable invariants above instead of relying on remembered conversation
+context.
+
 ## 13. Architecture before large refactors
 
 Before moving or rewriting a large part of the project:
@@ -364,7 +441,8 @@ Before moving or rewriting a large part of the project:
 2. audit grouping inside each architectural root;
 3. identify flat functionality that should become an internal directory;
 4. identify violations of the OOP and dependency rules;
-5. identify mature libraries that can replace custom infrastructure;
+5. perform the library-first investigation for custom integrations and
+   infrastructure;
 6. propose the target internal grouping without inverting the root hierarchy;
 7. move code in coherent groups;
 8. run validation after each coherent stage.
@@ -374,6 +452,24 @@ Do not introduce `src/payment/...`, `src/listing/...`, or similar business-root
 structures merely to claim domain grouping.
 
 The desired direction is architecture-root first, functional grouping second.
+
+## 14. Anti-drift implementation checklist
+
+Before claiming a substantial feature or refactor complete, report:
+
+- which architectural root owns the new code;
+- how related functionality is grouped inside that root;
+- which official SDKs/libraries were investigated before custom code was
+  written;
+- why any substantial custom implementation was necessary;
+- which classes/interfaces own the business workflow;
+- where the tests live;
+- whether any provider/domain policy leaked into shared code;
+- whether static data was incorrectly placed in configuration;
+- whether the result remains understandable from the file tree alone.
+
+A completion report that cannot answer these points should not claim the work is
+architecturally complete.
 
 # Contributor checks
 
