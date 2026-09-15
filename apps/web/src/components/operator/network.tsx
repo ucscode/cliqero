@@ -16,8 +16,8 @@ import { Input } from "../ui/input";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
-import { HierarchyGraph } from "../hierarchy-graph";
-import { mergeHierarchyChildren } from "../hierarchy-graph-model";
+import { HierarchyGraph } from "../hierarchy/graph";
+import { mergeHierarchyChildren } from "../hierarchy/graph-model";
 
 function errorMessage(error: unknown) {
   return error instanceof Error

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { siteConfig } from "@/config/site";
-import { AuthShell } from "@/components/auth-shell";
+import { AuthShell } from "@/components/auth/shell";
 
 export default async function EmailVerifiedPage({
   searchParams,

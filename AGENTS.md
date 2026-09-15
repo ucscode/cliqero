@@ -19,11 +19,15 @@ its plan satisfies all of the following:
    Group project functionality inside `api`, `app`, `application`, `components`,
    `infrastructure`, `modules`, `processors`, `providers`, `types`, `workers`,
    and other justified architectural roots. The functional grouping convention
-   is repository-wide, not a special rule for `modules/`. Do not leave related
-   families flattened as filename prefixes such as `listing-media.ts`,
-   `listing-reviews.ts`, `operator-distributions.ts`, or `payment-verification.ts`
-   when a clear owning directory can express that relationship. Do not invert
-   the hierarchy into `src/payment/...`, `src/listing/...`, etc.
+   is repository-wide, not a special rule for `modules/`. When two or more
+   sibling files share the same meaningful functional/ownership prefix, that
+   prefix is a required directory boundary. For example, `auth-form.tsx` and
+   `auth-shell.tsx` become `auth/form.tsx` and `auth/shell.tsx`; a `blog-*`
+   family belongs under `blog/`; a `hierarchy-*` family belongs under
+   `hierarchy/`. Do not leave related families flattened as filename prefixes
+   such as `listing-media.ts`, `listing-reviews.ts`, `operator-distributions.ts`,
+   or `payment-verification.ts`. Do not invert the hierarchy into
+   `src/payment/...`, `src/listing/...`, etc.
 2. **Libraries before redevelopment.** Before writing substantial custom code,
    investigate an official SDK or maintained library that already solves the
    problem. If no suitable external library exists and the implementation is
@@ -125,13 +129,102 @@ listing/
 The architectural root communicates what kind of code it is. The nested
 functionality directory communicates what part of Cliqero it belongs to.
 
-## 2. Functional grouping is a repository-wide convention
+## 2. Functional grouping is mandatory across the repository
 
 The same grouping convention applies inside every architectural root where
 related application functionality exists. `modules/` is only one example.
 
-Related functionality must be grouped under a clear owning directory rather
-than encoded repeatedly in filenames.
+This is not an optional cleanup preference. A repeated meaningful functional or
+ownership prefix is evidence of a missing directory boundary.
+
+### Mandatory repeated-prefix rule
+
+When **two or more sibling code files** share the same meaningful prefix because
+they belong to the same feature, owner, subsystem, or capability, create a
+directory for that prefix and place the files inside it.
+
+For example:
+
+```text
+components/
+  auth-form.tsx
+  auth-shell.tsx
+
+  blog-card.tsx
+  blog-editor.tsx
+  blog-list.tsx
+
+  hierarchy-node.tsx
+  hierarchy-tree.tsx
+```
+
+must become:
+
+```text
+components/
+  auth/
+    form.tsx
+    shell.tsx
+  blog/
+    card.tsx
+    editor.tsx
+    list.tsx
+  hierarchy/
+    node.tsx
+    tree.tsx
+```
+
+Likewise:
+
+```text
+application/
+  operator-accounts.ts
+  operator-distributions.ts
+  operator-funding.ts
+```
+
+must become:
+
+```text
+application/
+  operator/
+    accounts.ts
+    distributions.ts
+    funding.ts
+```
+
+And:
+
+```text
+processors/
+  payment-initialization.ts
+  payment-verification.ts
+```
+
+must become:
+
+```text
+processors/
+  payment/
+    initialization.ts
+    verification.ts
+```
+
+Do not justify a repeated semantic prefix as "legitimately flat" merely because
+each individual file is cohesive. If the prefix communicates shared ownership,
+the directory must communicate that ownership instead.
+
+A single isolated file does not require a directory solely because its filename
+contains a hyphen. The rule activates when the same meaningful ownership prefix
+appears on two or more siblings, or when one feature already warrants multiple
+files.
+
+The prefix must represent actual ownership/functionality, not incidental syntax
+or a generic grammatical word. Framework- or tool-mandated filesystem names are
+also exempt where changing them would break the framework. Any exception for a
+repeated ownership prefix must be concrete and technical, not stylistic.
+
+### Repository-wide examples
 
 Prefer:
 
@@ -155,6 +248,11 @@ application/
     treasury.ts
 
 components/
+  auth/
+    form.tsx
+    shell.tsx
+  blog/
+  hierarchy/
   listing/
   operator/
   payment/
@@ -192,6 +290,12 @@ instead of flattening related families such as:
 application/listing-media.ts
 application/listing-reviews.ts
 application/operator-distributions.ts
+components/auth-form.tsx
+components/auth-shell.tsx
+components/blog-card.tsx
+components/blog-editor.tsx
+components/hierarchy-node.tsx
+components/hierarchy-tree.tsx
 components/payment-provider-components.tsx
 infrastructure/postgres/listing-media.ts
 processors/payment-verification.ts
@@ -607,17 +711,19 @@ Before moving or rewriting a large part of the project:
    `application`, `modules`, `providers`, `components`, `processors`, `types`,
    `infrastructure`, `workers`, etc.);
 2. audit grouping inside every architectural root, not just `modules/`;
-3. identify flat related families in each root that should become internal
-   directories;
-4. identify violations of the OOP and dependency rules;
-5. perform the library-first investigation for custom integrations and
+3. search each root for repeated meaningful filename prefixes; when two or more
+   siblings share the same ownership prefix, make that prefix a directory unless
+   a concrete framework/tool constraint forbids it;
+4. identify other flat related families that should become internal directories;
+5. identify violations of the OOP and dependency rules;
+6. perform the library-first investigation for custom integrations and
    infrastructure, including whether a substantial custom integration belongs
    in a dedicated internal workspace package;
-6. propose the target internal grouping consistently across the repository
+7. propose the target internal grouping consistently across the repository
    without inverting the root hierarchy;
-7. move code in coherent functional groups, including matching tests, across
+8. move code in coherent functional groups, including matching tests, across
    the affected roots;
-8. run validation after each coherent stage.
+9. run validation after each coherent stage.
 
 Do not perform a repository-wide move as an unreviewed mechanical shuffle.
 Do not introduce `src/payment/...`, `src/listing/...`, or similar business-root
@@ -632,6 +738,9 @@ Before claiming a substantial feature or refactor complete, report:
 
 - which architectural root owns the new code;
 - how related functionality is grouped inside that root;
+- whether any two or more sibling files still repeat the same meaningful
+  functional/ownership prefix instead of using a directory, and if so the exact
+  technical/framework reason;
 - whether the same functional family is still flattened elsewhere in another
   architectural root;
 - which official SDKs/libraries were investigated before custom code was

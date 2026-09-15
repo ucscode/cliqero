@@ -9,11 +9,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
-import { Button } from "./ui/button";
-import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "./ui/sheet";
+} from "../ui/dropdown-menu";
+import { Button } from "../ui/button";
+import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "../ui/sheet";
 import { siteConfig } from "@/config/site";
-import { BrandIdentity, BrandLink } from "./brand-identity";
+import { BrandIdentity, BrandLink } from "../brand-identity";
 
 export function SiteHeader() {
   const router = useRouter();

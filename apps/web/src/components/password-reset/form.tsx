@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Alert } from "./ui/alert";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { HoneypotField } from "./honeypot-field";
-import { AuthShell } from "./auth-shell";
+import { Alert } from "../ui/alert";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { HoneypotField } from "../honeypot-field";
+import { AuthShell } from "../auth/shell";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";

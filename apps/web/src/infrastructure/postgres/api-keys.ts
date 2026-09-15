@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SqlExecutor } from "./shared/database";
-import { assertApiScopes } from "@/modules/identity/api-scopes";
+import { assertApiScopes } from "@/modules/identity/api/scopes";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 
 export interface ApiKeyRecord {

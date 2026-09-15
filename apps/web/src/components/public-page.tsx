@@ -1,5 +1,5 @@
-import { SiteHeader } from "./site-header";
-import { SiteFooter } from "./site-footer";
+import { SiteHeader } from "./site/header";
+import { SiteFooter } from "./site/footer";
 
 export function PublicPage({
   title,

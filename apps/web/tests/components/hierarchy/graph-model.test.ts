@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hierarchyGraphFromTree, mergeHierarchyChildren } from "@/components/hierarchy-graph-model";
+import { hierarchyGraphFromTree, mergeHierarchyChildren } from "@/components/hierarchy/graph-model";
 import type { HierarchyTree } from "@/lib/api-client";
 
 const tree: HierarchyTree = {

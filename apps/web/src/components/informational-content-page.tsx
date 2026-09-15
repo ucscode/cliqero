@@ -1,6 +1,6 @@
 import type { ContentMetadata } from "@/content/loader";
-import { SiteFooter } from "./site-footer";
-import { SiteHeader } from "./site-header";
+import { SiteFooter } from "./site/footer";
+import { SiteHeader } from "./site/header";
 
 export function InformationalContentPage({
   meta,

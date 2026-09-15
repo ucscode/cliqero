@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { AuthForm } from "@/components/auth-form";
+import { AuthForm } from "@/components/auth/form";
 import { getCaptchaPublicConfiguration } from "@/security/captcha";
 import { hasGoogleAuthentication } from "@/config/auth";
 

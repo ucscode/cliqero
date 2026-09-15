@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { layoutHierarchyGraph } from "@/components/hierarchy-graph-layout";
-import type { HierarchyGraph } from "@/components/hierarchy-graph-model";
+import { layoutHierarchyGraph } from "@/components/hierarchy/graph-layout";
+import type { HierarchyGraph } from "@/components/hierarchy/graph-model";
 
 const graph: HierarchyGraph = {
   nodes: [

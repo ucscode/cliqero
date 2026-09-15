@@ -14,11 +14,11 @@ import {
 } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 import type { HierarchyTree } from "@/lib/api-client";
-import { hierarchyGraphFromTree, type HierarchyGraphNode } from "./hierarchy-graph-model";
-import { layoutHierarchyGraph } from "./hierarchy-graph-layout";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Card } from "./ui/card";
+import { hierarchyGraphFromTree, type HierarchyGraphNode } from "./graph-model";
+import { layoutHierarchyGraph } from "./graph-layout";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Card } from "../ui/card";
 
 type HierarchyNodeData = HierarchyGraphNode & {
   onViewBranch: (id: string) => void;

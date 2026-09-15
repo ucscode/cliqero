@@ -1,8 +1,8 @@
 import type { SqlExecutor } from "@/infrastructure/postgres/shared/database";
-import { Account } from "./account";
+import { Account } from "../account";
 import type { ApiKeyService } from "@/infrastructure/postgres/api-keys";
-import { AuthenticationService } from "./authentication";
-import type { Capability } from "./capabilities";
+import { AuthenticationService } from "../authentication";
+import type { Capability } from "../capabilities";
 
 export type ApiPrincipalKind = "user_session" | "api_key";
 export interface ApiPrincipal {

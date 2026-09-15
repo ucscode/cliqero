@@ -18,7 +18,7 @@ import {
   CAPABILITY_METADATA,
   type Capability,
 } from "@/modules/identity/capabilities";
-import { API_SCOPE_METADATA } from "@/modules/identity/api-scopes";
+import { API_SCOPE_METADATA } from "@/modules/identity/api/scopes";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";

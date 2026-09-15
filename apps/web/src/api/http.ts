@@ -1,5 +1,5 @@
 import type { Account } from "@/modules/identity/account";
-import type { ApiPrincipal } from "@/modules/identity/api-principal";
+import type { ApiPrincipal } from "@/modules/identity/api/principal";
 import { getContainer } from "@/infrastructure/container";
 import { publicErrorPayload, validationErrorPayload } from "./error";
 import { logDevelopmentError } from "@/infrastructure/development-log";

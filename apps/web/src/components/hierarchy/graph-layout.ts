@@ -1,9 +1,5 @@
 import dagre from "@dagrejs/dagre";
-import type {
-  HierarchyGraph,
-  HierarchyGraphEdge,
-  HierarchyGraphNode,
-} from "./hierarchy-graph-model";
+import type { HierarchyGraph, HierarchyGraphEdge, HierarchyGraphNode } from "./graph-model";
 
 export type PositionedHierarchyNode = HierarchyGraphNode & {
   position: { x: number; y: number };

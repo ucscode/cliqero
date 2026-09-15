@@ -1,6 +1,6 @@
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader } from "@/components/site/header";
 import { FeaturedStorefront } from "@/components/storefront";
-import { SiteFooter } from "@/components/site-footer";
+import { SiteFooter } from "@/components/site/footer";
 import { siteConfig } from "@/config/site";
 import { storefrontConfig } from "@/config/storefront";
 

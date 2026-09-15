@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import type { ApiPrincipal } from "@/modules/identity/api-principal";
-import { apiScopeSchema, operatorCapabilitiesForScope } from "@/modules/identity/api-scopes";
+import type { ApiPrincipal } from "@/modules/identity/api/principal";
+import { apiScopeSchema, operatorCapabilitiesForScope } from "@/modules/identity/api/scopes";
 import { canAccessOperator, hasCapability, type Capability } from "@/modules/identity/capabilities";
 import { dispatchLegacyApi, legacyApiPaths } from "./legacy-dispatch";
 import { publicErrorPayload, validationErrorPayload } from "./error";

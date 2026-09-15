@@ -107,7 +107,7 @@ import { TreasuryService } from "@/modules/treasury/treasury";
 import { TreasuryProcessor } from "@/processors/treasury/processor";
 import { OperatorTreasuryService } from "@/application/operator/treasury";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
-import { ApiPrincipalResolver } from "@/modules/identity/api-principal";
+import { ApiPrincipalResolver } from "@/modules/identity/api/principal";
 import { HierarchyService } from "@/application/hierarchy";
 import { OperatorOverviewService } from "@/application/operator/overview";
 import { OperatorAccountService } from "@/application/operator/accounts";

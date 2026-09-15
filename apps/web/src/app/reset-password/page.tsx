@@ -1,5 +1,5 @@
-import { PasswordResetForm } from "@/components/password-reset-form";
-import { AuthShell } from "@/components/auth-shell";
+import { PasswordResetForm } from "@/components/password-reset/form";
+import { AuthShell } from "@/components/auth/shell";
 
 export default async function ResetPasswordQueryPage({
   searchParams,

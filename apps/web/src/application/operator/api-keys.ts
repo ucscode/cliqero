@@ -8,7 +8,7 @@ import {
   assertApiScopes,
   operatorCapabilitiesForScope,
   type ApiScope,
-} from "@/modules/identity/api-scopes";
+} from "@/modules/identity/api/scopes";
 
 export type OperatorApiKeyInput = {
   name: string;

@@ -70,8 +70,8 @@ import * as walletTransactions from "@/api/compat/wallet/transactions/route";
 import * as withdrawals from "@/api/compat/withdrawals/route";
 import * as withdrawalById from "@/api/compat/withdrawals/[id]/route";
 import * as withdrawalPolicy from "@/api/compat/withdrawals/policy/route";
-import type { ApiPrincipal } from "@/modules/identity/api-principal";
-import type { ApiScope } from "@/modules/identity/api-scopes";
+import type { ApiPrincipal } from "@/modules/identity/api/principal";
+import type { ApiScope } from "@/modules/identity/api/scopes";
 import type { Capability } from "@/modules/identity/capabilities";
 import { hasCapability } from "@/modules/identity/capabilities";
 

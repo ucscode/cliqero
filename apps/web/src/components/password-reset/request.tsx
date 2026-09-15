@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useState, type FormEvent } from "react";
-import { Alert } from "./ui/alert";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { HoneypotField } from "./honeypot-field";
-import { Captcha, captchaTokenPayload, type CaptchaClientConfig } from "./captcha";
-import { AuthShell } from "./auth-shell";
+import { Alert } from "../ui/alert";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { HoneypotField } from "../honeypot-field";
+import { Captcha, captchaTokenPayload, type CaptchaClientConfig } from "../captcha";
+import { AuthShell } from "../auth/shell";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
 export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig }) {

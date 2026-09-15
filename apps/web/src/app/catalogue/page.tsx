@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site/footer";
+import { SiteHeader } from "@/components/site/header";
 import { Storefront, StorefrontFallback } from "@/components/storefront";
 import { storefrontConfig } from "@/config/storefront";
 

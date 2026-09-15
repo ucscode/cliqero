@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { BlogEditor } from "../blog-editor";
-import { BlogMarkdown } from "../blog-markdown";
+import { BlogEditor } from "../blog/editor";
+import { BlogMarkdown } from "../blog/markdown";
 import { apiFetch } from "@/lib/api-client";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";

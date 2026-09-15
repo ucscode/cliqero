@@ -11,7 +11,7 @@ import { Label } from "./ui/label";
 import { Skeleton } from "./ui/skeleton";
 import { CountrySelect } from "./country-select";
 import { HoneypotField } from "./honeypot-field";
-import { AuthShell } from "./auth-shell";
+import { AuthShell } from "./auth/shell";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 

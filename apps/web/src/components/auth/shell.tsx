@@ -1,5 +1,5 @@
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { BrandLink } from "./brand-identity";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { BrandLink } from "../brand-identity";
 
 export function AuthBrandHeader() {
   return <BrandLink />;

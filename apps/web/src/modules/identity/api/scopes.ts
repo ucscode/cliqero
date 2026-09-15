@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Capability } from "./capabilities";
+import type { Capability } from "../capabilities";
 
 export const API_SCOPES = [
   "hierarchy:read",

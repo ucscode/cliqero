@@ -1,4 +1,4 @@
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader } from "@/components/site/header";
 import { ListingDetail } from "@/components/listing/detail";
 import { storefrontConfig } from "@/config/storefront";
 

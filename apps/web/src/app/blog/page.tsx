@@ -2,8 +2,8 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site/header";
+import { SiteFooter } from "@/components/site/footer";
 import { getBlogService } from "@/modules/blog/application/blog-service";
 import { siteConfig } from "@/config/site";
 import { Separator } from "@/components/ui/separator";
