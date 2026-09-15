@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { inspectImage } from "@/modules/listing/media/image";
-import { fixturePng } from "@/scripts/fixture-media";
+import { fixturePng } from "@/infrastructure/postgres/seed/fixture-media";
 
 describe("catalogue fixture media", () => {
   it("generates a valid image for the listing-media pipeline", () => {
