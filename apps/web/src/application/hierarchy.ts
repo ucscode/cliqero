@@ -56,7 +56,11 @@ export interface HierarchyReader {
     edges: { parent: string; child: string }[];
   }>;
   parent(root: string): Promise<Omit<HierarchyParent, "canNavigate"> | null>;
-  children(parentId: string, cursor: string | undefined, limit: number): Promise<HierarchyChildren>;
+  children(
+    parentId: string,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<HierarchyChildren>;
   search(
     query: string,
     scopeRoot: string | null,
@@ -95,7 +99,11 @@ export class HierarchyService {
 
   async tree(requester: string, root: string, admin: boolean): Promise<HierarchyTree> {
     await this.assertRoot(requester, root, admin);
-    const result = await this.reader.tree(root, this.config.childLimit, this.config.depth);
+    const result = await this.reader.tree(
+      root,
+      this.config.childLimit,
+      this.config.depth,
+    );
     const parent = await this.reader.parent(root);
     return {
       root,
@@ -104,7 +112,8 @@ export class HierarchyService {
       parent: parent
         ? {
             ...parent,
-            canNavigate: admin || (await this.reader.isDescendantOrSelf(requester, parent.id)),
+            canNavigate:
+              admin || (await this.reader.isDescendantOrSelf(requester, parent.id)),
           }
         : null,
       nodes: result.nodes,
