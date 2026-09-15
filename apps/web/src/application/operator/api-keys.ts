@@ -1,7 +1,9 @@
-import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
-import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { PublicApplicationError } from "@/kernel/errors";
-import { hasCapability, type Capability } from "@/modules/identity/capabilities";
+import type { UnitOfWork } from "@/kernel/unit-of-work";
+import type { AuditRecorder } from "@/application/shared/audit";
+import type { AccountReader } from "@/modules/identity/account";
+import { hasCapability } from "@/modules/identity/capabilities";
+import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import {
   API_SCOPES,
   assertApiScopes,
@@ -23,16 +25,18 @@ function forbidden(message: string, code = "forbidden") {
 export class OperatorApiKeyService {
   constructor(
     private readonly apiKeys: ApiKeyManagementService,
-    private readonly sql: QueryExecutor,
+    private readonly accounts: AccountReader,
+    private readonly operators: OperatorAuthorizationService,
+    private readonly audit: AuditRecorder,
     private readonly uow: UnitOfWork,
   ) {}
 
   async list(actorId: string, targetId: string) {
-    const actorCapabilities = await this.capabilities(actorId);
+    const actorCapabilities = await this.operators.capabilities(actorId);
     if (!hasCapability(actorCapabilities, "api_keys.manage"))
       throw forbidden("You are not allowed to administer API keys.");
     await this.ensureAccount(targetId);
-    const targetCapabilities = await this.capabilities(targetId);
+    const targetCapabilities = await this.operators.capabilities(targetId);
     const root = hasCapability(actorCapabilities, "system.root");
     const manageableScopes = API_SCOPES.filter((scope) => {
       const required = operatorCapabilitiesForScope(scope);
@@ -47,11 +51,11 @@ export class OperatorApiKeyService {
 
   async create(actorId: string, targetId: string, input: OperatorApiKeyInput) {
     return this.uow.transaction(async () => {
-      const actorCapabilities = await this.capabilities(actorId);
+      const actorCapabilities = await this.operators.capabilities(actorId);
       if (!hasCapability(actorCapabilities, "api_keys.manage"))
         throw forbidden("You are not allowed to administer API keys.");
-      const targetCapabilities = await this.capabilities(targetId);
       await this.ensureAccount(targetId);
+      const targetCapabilities = await this.operators.capabilities(targetId);
       const scopes = this.validateScopes(input.scopes);
       this.authorizeScopes(actorCapabilities, targetCapabilities, scopes);
       const name = input.name.trim();
@@ -59,7 +63,6 @@ export class OperatorApiKeyService {
         throw new PublicApplicationError("API-key name is required.", "invalid_request", 400);
       if (input.expiresAt && input.expiresAt <= new Date())
         throw new PublicApplicationError("Expiry must be in the future.", "invalid_request", 400);
-
       const created = await this.apiKeys.create({
         accountId: targetId,
         name,
@@ -67,12 +70,20 @@ export class OperatorApiKeyService {
         createdBy: actorId,
         expiresAt: input.expiresAt ?? null,
       });
-      await this.audit(actorId, "api_key.created", created.id, {
-        target_account_id: targetId,
-        name: created.name,
-        key_prefix: created.keyPrefix,
-        scopes: created.scopes,
-        expires_at: created.expiresAt?.toISOString() ?? null,
+      await this.audit.record({
+        actorId,
+        action: "api_key.created",
+        subjectType: "api_key",
+        subjectId: created.id,
+        previousState: null,
+        newState: {
+          target_account_id: targetId,
+          name: created.name,
+          key_prefix: created.keyPrefix,
+          scopes: created.scopes,
+          expires_at: created.expiresAt?.toISOString() ?? null,
+          active: true,
+        },
       });
       return created;
     });
@@ -80,7 +91,7 @@ export class OperatorApiKeyService {
 
   async revoke(actorId: string, targetId: string, keyId: string) {
     return this.uow.transaction(async () => {
-      const actorCapabilities = await this.capabilities(actorId);
+      const actorCapabilities = await this.operators.capabilities(actorId);
       if (!hasCapability(actorCapabilities, "api_keys.manage"))
         throw forbidden("You are not allowed to administer API keys.");
       await this.ensureAccount(targetId);
@@ -88,13 +99,22 @@ export class OperatorApiKeyService {
       if (!key) throw new PublicApplicationError("API key not found.", "not_found", 404);
       if (key.revokedAt) return { changed: false, key };
       const changed = await this.apiKeys.revoke(keyId, targetId);
-      if (changed)
-        await this.audit(actorId, "api_key.revoked", keyId, {
+      if (changed) {
+        const state = {
           target_account_id: targetId,
           name: key.name,
           key_prefix: key.keyPrefix,
           scopes: key.scopes,
+        };
+        await this.audit.record({
+          actorId,
+          action: "api_key.revoked",
+          subjectType: "api_key",
+          subjectId: keyId,
+          previousState: { ...state, active: true },
+          newState: { ...state, active: false },
         });
+      }
       return { changed, key };
     });
   }
@@ -132,42 +152,8 @@ export class OperatorApiKeyService {
     }
   }
 
-  private async capabilities(accountId: string) {
-    const result = await this.sql.query<{ capability: string }>(
-      `select ac.capability
-         from identity_capability.account_capabilities ac
-         join identity_capability.accounts a on a.id=ac.account_id
-        where a.uuid=$1`,
-      [accountId],
-    );
-    return result.rows.map((row) => row.capability as Capability);
-  }
-
   private async ensureAccount(accountId: string) {
-    const result = await this.sql.query(
-      `select 1 from identity_capability.accounts where uuid=$1`,
-      [accountId],
-    );
-    if (!result.rowCount)
+    if (!(await this.accounts.exists(accountId)))
       throw new PublicApplicationError("Account not found.", "account_not_found", 404);
-  }
-
-  private async audit(
-    actorId: string,
-    action: "api_key.created" | "api_key.revoked",
-    keyId: string,
-    state: Record<string, unknown>,
-  ) {
-    await this.sql.query(
-      `insert into kernel.audit_records(actor_id,action,subject_type,subject_id,previous_state,new_state,correlation_id)
-       values((select id from identity_capability.accounts where uuid=$1),$2,'api_key',$3,$4::jsonb,$5::jsonb,gen_random_uuid())`,
-      [
-        actorId,
-        action,
-        keyId,
-        action === "api_key.revoked" ? JSON.stringify({ ...state, active: true }) : null,
-        JSON.stringify({ ...state, active: action === "api_key.created" }),
-      ],
-    );
   }
 }
