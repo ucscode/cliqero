@@ -43,6 +43,8 @@ export interface PaymentVerificationObservation {
   message: string;
   /** Customer-safe severity for rendering the latest verification result. */
   level?: PaymentVerificationObservationLevel;
+  /** Whether this observation settles the current provider/funding path. */
+  resolved: boolean;
   checkedAt?: string;
   confirmations?: number;
   confirmationsRequired?: number;

@@ -38,6 +38,7 @@ export class DevelopmentPaymentProvider extends AbstractPaymentProvider {
         status: confirmed ? ("success" as const) : ("failed" as const),
         message: confirmed ? "Payment verified successfully." : "Development payment failed.",
         level: confirmed ? ("success" as const) : ("error" as const),
+        resolved: true,
       },
     };
   }

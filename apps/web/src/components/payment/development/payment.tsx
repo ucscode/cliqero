@@ -16,7 +16,7 @@ export function DevelopmentPayment(props: PaymentProviderProps) {
   async function initialize() {
     setInitializing(true);
     try {
-      props.onFundingChange(await initializeFundingStatus(props.funding.id));
+      props.onFundingChange(await initializeFundingStatus(props.funding.id, props.onFundingChange));
       props.onError("");
     } catch (cause) {
       props.onError(

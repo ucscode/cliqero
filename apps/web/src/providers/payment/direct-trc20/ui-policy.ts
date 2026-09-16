@@ -1,14 +1,17 @@
 import type { FundingStatus } from "@/lib/api-client";
 
 export function shouldShowTransactionHashInput(
-  funding: Pick<FundingStatus, "provider" | "state" | "provider_transaction_id">,
+  funding: Pick<FundingStatus, "provider" | "state" | "provider_transaction_id" | "verification">,
 ) {
+  const unresolved = funding.verification == null || funding.verification.resolved === false;
   return (
     funding.provider === "usdt_trc20" &&
     !funding.provider_transaction_id &&
+    unresolved &&
     (funding.state === "initialization_pending" ||
       funding.state === "awaiting_payment" ||
-      funding.state === "verification_pending")
+      funding.state === "verification_pending" ||
+      (funding.state === "failed" && funding.verification !== null))
   );
 }
 

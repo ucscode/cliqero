@@ -210,6 +210,7 @@ export class NowPaymentsProvider extends AbstractPaymentProvider {
             ? "NOWPayments did not complete this payment."
             : "NOWPayments is still waiting for this payment.",
         level: terminalSuccess ? "success" : terminalFailure ? "error" : "info",
+        resolved: terminalSuccess || terminalFailure,
       },
     };
   }

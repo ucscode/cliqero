@@ -154,6 +154,7 @@ export class BankTransferProvider extends AbstractPaymentProvider {
         status: "awaiting_transaction",
         message: "Your bank transfer is awaiting manual verification.",
         level: "info",
+        resolved: false,
       },
     };
   }

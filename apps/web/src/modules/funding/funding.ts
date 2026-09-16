@@ -30,6 +30,13 @@ export function projectVerificationObservation(value: unknown) {
   return {
     status: observation.status,
     message: observation.message,
+    // Older persisted observations have no resolution bit. Success is the
+    // only unambiguous terminal observation; all other legacy observations
+    // remain retryable/conservative until a provider supplies the field.
+    resolved:
+      typeof observation.resolved === "boolean"
+        ? observation.resolved
+        : observation.status === "success",
     level:
       observation.level ??
       (observation.status === "success"
@@ -45,6 +52,14 @@ export function projectVerificationObservation(value: unknown) {
       ? { confirmations_required: observation.confirmationsRequired }
       : {}),
   };
+}
+
+export function isVerificationResolved(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const observation = value as { resolved?: unknown; status?: unknown };
+  return typeof observation.resolved === "boolean"
+    ? observation.resolved
+    : observation.status === "success";
 }
 
 export type FundingState =

@@ -23,6 +23,7 @@ function configure(state = "verification_pending") {
       verification: {
         status: "not_found",
         message: "Transaction not found on TRON yet.",
+        resolved: false,
         checkedAt: "2026-09-14T10:00:00.000Z",
       },
     },
@@ -57,6 +58,7 @@ describe("wallet funding foreground verification API", () => {
       verification: {
         status: "not_found",
         message: "Transaction not found on TRON yet.",
+        resolved: false,
       },
     });
   });

@@ -15,10 +15,10 @@ export const fundingStatePresentation: Record<
   verification_pending: { label: "Verifying payment", tone: "info" },
   confirmed: { label: "Payment confirmed", tone: "success" },
   failed: { label: "Payment unsuccessful", tone: "danger" },
-  blocked: { label: "Action needed", tone: "warning" },
+  blocked: { label: "Payment cannot continue", tone: "danger" },
   cancelled: { label: "Cancelled", tone: "neutral" },
   expired: { label: "Expired", tone: "neutral" },
-  reconciliation_pending: { label: "Action needed", tone: "warning" },
+  reconciliation_pending: { label: "Payment under review", tone: "info" },
 };
 
 export function presentFundingState(state: string) {

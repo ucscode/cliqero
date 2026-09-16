@@ -243,6 +243,7 @@ describe("customer-facing funding presentation", () => {
           status: "confirming",
           level: "info",
           message: "Transaction found. Waiting for 3 more confirmations.",
+          resolved: false,
           checked_at: "2026-09-14T10:00:00.000Z",
           confirmations: 3,
           confirmations_required: 6,
@@ -290,6 +291,9 @@ describe("customer-facing funding presentation", () => {
     }
     expect(shouldPollDirectTrc20Funding({ state: "awaiting_payment" })).toBe(false);
     expect(shouldPollDirectTrc20Funding({ state: "verification_pending" })).toBe(true);
+    for (const state of ["confirmed", "failed", "cancelled", "expired"] as const) {
+      expect(shouldPollDirectTrc20Funding({ state })).toBe(false);
+    }
     expect(paystackFundingPollInterval({ state: "awaiting_payment" })).toBe(
       FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,
     );
@@ -450,6 +454,7 @@ describe("customer-facing funding presentation", () => {
         provider: "usdt_trc20",
         state: "awaiting_payment",
         provider_transaction_id: null,
+        verification: null,
       }),
     ).toBe(true);
     expect(
@@ -457,6 +462,7 @@ describe("customer-facing funding presentation", () => {
         provider: "usdt_trc20",
         state: "verification_pending",
         provider_transaction_id: null,
+        verification: null,
       }),
     ).toBe(true);
     expect(
@@ -470,6 +476,35 @@ describe("customer-facing funding presentation", () => {
         provider: "usdt_trc20",
         state: "verification_pending",
         provider_transaction_id: "AbCd".repeat(16),
+        verification: null,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowTransactionHashInput({
+        provider: "usdt_trc20",
+        state: "failed",
+        provider_transaction_id: null,
+        verification: {
+          status: "mismatch",
+          level: "error",
+          message: "Wrong destination.",
+          resolved: false,
+          checked_at: null,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowTransactionHashInput({
+        provider: "usdt_trc20",
+        state: "failed",
+        provider_transaction_id: null,
+        verification: {
+          status: "failed",
+          level: "error",
+          message: "Transaction failed.",
+          resolved: true,
+          checked_at: null,
+        },
       }),
     ).toBe(false);
   });
@@ -480,6 +515,7 @@ describe("customer-facing funding presentation", () => {
         status: "not_found",
         level: "error",
         message: "Transaction not found.",
+        resolved: false,
         checked_at: null,
       }),
     ).toBe("Transaction not found");
@@ -488,6 +524,7 @@ describe("customer-facing funding presentation", () => {
         status: "provider_error",
         level: "error",
         message: "Try again.",
+        resolved: false,
         checked_at: null,
       }),
     ).toBe("Verification temporarily unavailable");
@@ -496,6 +533,7 @@ describe("customer-facing funding presentation", () => {
         status: "confirming",
         level: "info",
         message: "Waiting for confirmations.",
+        resolved: false,
         checked_at: null,
       }),
     ).toContain("bg-blue-50");
@@ -504,6 +542,7 @@ describe("customer-facing funding presentation", () => {
         status: "success",
         level: "success",
         message: "Payment verified.",
+        resolved: true,
         checked_at: null,
       }),
     ).toContain("bg-emerald-50");

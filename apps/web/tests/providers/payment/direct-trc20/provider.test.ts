@@ -65,14 +65,17 @@ describe("direct TRC20 provider", () => {
         reference: "ref",
         expectedAmount,
       }),
-    ).resolves.toMatchObject({ state: "pending", observation: { status: "awaiting_transaction" } });
+    ).resolves.toMatchObject({
+      state: "pending",
+      observation: { status: "awaiting_transaction", resolved: false },
+    });
   });
 
   it("accepts a confirming transaction identity before final confirmation", async () => {
     await expect(verify(validTransfer({ confirmations: 5 }))).resolves.toMatchObject({
       state: "pending",
       providerTransactionId: transactionHash,
-      observation: { level: "info" },
+      observation: { level: "info", resolved: false },
     });
   });
 
@@ -83,12 +86,13 @@ describe("direct TRC20 provider", () => {
     });
   });
 
-  it("accepts an otherwise valid insufficient transfer and retains its identity", async () => {
+  it("rejects an insufficient transfer without admitting its identity", async () => {
     await expect(verify(validTransfer({ amountBaseUnits: 1_000_000n }))).resolves.toMatchObject({
-      state: "failed",
-      providerTransactionId: transactionHash,
-      observation: { level: "error" },
+      state: "pending",
+      observation: { level: "error", resolved: false },
     });
+    const result = await verify(validTransfer({ amountBaseUnits: 1_000_000n }));
+    expect(result.providerTransactionId).toBeUndefined();
   });
 
   it("retains a matching failed transaction as an admitted identity", async () => {
@@ -110,7 +114,7 @@ describe("direct TRC20 provider", () => {
   ] as const)("rejects %s without accepting its identity", async (label, transfer, status) => {
     const result = await verify(validTransfer(transfer));
     expect(result).toMatchObject({
-      state: label === "not found" ? "pending" : "failed",
+      state: "pending",
       observation: { status },
     });
     expect(result.providerTransactionId).toBeUndefined();
@@ -121,7 +125,7 @@ describe("direct TRC20 provider", () => {
       validTransfer({ status: "pending", destination: "", amountBaseUnits: 0n }),
     );
     expect(result).toMatchObject({
-      state: "failed",
+      state: "pending",
       observation: {
         status: "mismatch",
         message: expect.stringContaining("details are not available"),

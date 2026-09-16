@@ -727,7 +727,11 @@ describe("provider transaction identity", () => {
           state: "pending",
           reference: current.providerReference,
           amount: current.collectionAmount,
-          observation: { status: "confirming" as const, message: "Not yet final." },
+          observation: {
+            status: "confirming" as const,
+            message: "Not yet final.",
+            resolved: false,
+          },
         }),
       }),
       { transaction: async (operation) => operation() },
@@ -827,13 +831,21 @@ describe("provider transaction identity", () => {
           state: "pending" as const,
           reference: context.reference,
           amount: context.expectedAmount,
-          observation: { status: "not_found" as const, message: "Transaction not found." },
+          observation: {
+            status: "not_found" as const,
+            message: "Transaction not found.",
+            resolved: false,
+          },
         }),
         verify: async ({ reference, expectedAmount }) => ({
           state: "failed",
           reference,
           amount: expectedAmount,
-          observation: { status: "mismatch" as const, message: "Wrong destination." },
+          observation: {
+            status: "mismatch" as const,
+            message: "Wrong destination.",
+            resolved: false,
+          },
         }),
       }),
       { transaction: async (operation) => operation() },
@@ -847,7 +859,11 @@ describe("provider transaction identity", () => {
           state: "pending" as const,
           reference: context.reference,
           amount: context.expectedAmount,
-          observation: { status: "not_found" as const, message: "Transaction not found." },
+          observation: {
+            status: "not_found" as const,
+            message: "Transaction not found.",
+            resolved: false,
+          },
         }),
       }),
       {} as never,
@@ -943,7 +959,11 @@ describe("foreground funding verification", () => {
       reference: current.providerReference,
       amount: current.collectionAmount,
       providerTransactionId: hash,
-      observation: { status: "success" as const, message: "Payment verified successfully." },
+      observation: {
+        status: "success" as const,
+        message: "Payment verified successfully.",
+        resolved: true,
+      },
     }));
     const repository = {
       findById: async () => current,
@@ -1005,6 +1025,7 @@ describe("foreground funding verification", () => {
           status: "confirming" as const,
           level: "info" as const,
           message: "Waiting for confirmations.",
+          resolved: false,
           confirmations: 2,
           confirmationsRequired: 6,
         },
@@ -1018,6 +1039,7 @@ describe("foreground funding verification", () => {
           status: "confirming" as const,
           level: "info" as const,
           message: "Waiting for confirmations.",
+          resolved: false,
           confirmations: 2,
           confirmationsRequired: 6,
         },
@@ -1050,6 +1072,9 @@ describe("foreground funding verification", () => {
       confirmations: 2,
       confirmationsRequired: 6,
     });
+    await expect(
+      service.submitProviderRequest({ accountId, fundingId, payload: { transaction_hash: hash } }),
+    ).rejects.toThrow("Funding is not available for provider interaction");
   });
 
   it("persists a provider-rejected not-found result without binding an identity", async () => {
@@ -1071,6 +1096,7 @@ describe("foreground funding verification", () => {
         observation: {
           status: "not_found" as const,
           message: "Transaction not found on TRON yet.",
+          resolved: false,
         },
       }),
       verify: async ({ reference, expectedAmount }) => ({
@@ -1080,6 +1106,7 @@ describe("foreground funding verification", () => {
         observation: {
           status: "not_found" as const,
           message: "Transaction not found on TRON yet.",
+          resolved: false,
         },
       }),
     };
@@ -1103,9 +1130,64 @@ describe("foreground funding verification", () => {
     ).resolves.toMatchObject({ state: "awaiting_payment" });
     expect(current.providerTransactionId).toBeUndefined();
     expect(current.providerInitialization?.verification).toMatchObject({
-      status: "awaiting_transaction",
+      status: "not_found",
     });
     expect(repository.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows a new direct candidate after an unresolved rejection", async () => {
+    const hash = "AbCd".repeat(16);
+    let current: any = existingFunding({
+      providerName: "usdt_trc20",
+      state: "failed",
+      providerTransactionId: null,
+      providerInitialization: {
+        verification: {
+          status: "mismatch",
+          message: "The previous candidate did not match.",
+          resolved: false,
+        },
+      },
+    });
+    const repository = {
+      findById: async () => current,
+      findByProviderTransactionId: async () => null,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const candidateProvider: PaymentProvider = {
+      ...provider,
+      name: "usdt_trc20",
+      handleRequest: async (_payload, context) => ({
+        state: "confirmed" as const,
+        reference: context.reference,
+        amount: context.expectedAmount,
+        providerTransactionId: hash,
+      }),
+    };
+    const providers = new PaymentProviderRegistry().register(candidateProvider);
+    const unitOfWork = { transaction: async (operation: any) => operation() };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      providers,
+      unitOfWork,
+    );
+    const service = new FundingService(
+      repository as never,
+      providers,
+      {} as never,
+      {} as never,
+      unitOfWork,
+      verification,
+    );
+
+    await expect(
+      service.submitProviderRequest({ accountId, fundingId, payload: { transaction_hash: hash } }),
+    ).resolves.toMatchObject({
+      state: "confirmed",
+      providerTransactionId: hash,
+    });
   });
 
   it("keeps transient provider errors retryable while persisting customer-safe feedback", async () => {

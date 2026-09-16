@@ -180,6 +180,7 @@ export class PaystackProvider extends AbstractPaymentProvider {
             ? "Paystack did not complete this payment."
             : "Paystack is still processing this payment.",
         level: confirmed ? "success" : failed ? "error" : "info",
+        resolved: confirmed || failed,
       },
     };
   }

@@ -11,9 +11,25 @@ import { CopyValue } from "../../copy-value";
 import { PaymentInstructions } from "./instructions";
 import { canonicalWalletFundingUrl } from "@/lib/api-client";
 import { fundingToneClass, presentFundingState } from "@/modules/funding/presentation";
+import { LoaderCircle } from "lucide-react";
 
-export async function initializeFundingStatus(fundingId: string) {
-  return apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}/initialize`, { method: "POST" });
+export async function initializeFundingStatus(
+  fundingId: string,
+  onRecovered?: (funding: FundingStatus) => void,
+) {
+  try {
+    return await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}/initialize`, {
+      method: "POST",
+    });
+  } catch (error) {
+    try {
+      const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
+      onRecovered?.(latest);
+    } catch {
+      // Preserve the initialization error when the recovery read is unavailable.
+    }
+    throw error;
+  }
 }
 
 export function fundingStatusMessage(
@@ -242,9 +258,7 @@ export function PaymentComponent({
       {showInitializationStatus &&
         (funding.state === "initialization_pending" || funding.state === "initializing") && (
           <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-            <span aria-hidden="true" className="text-lg leading-none">
-              …
-            </span>
+            <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
             <span>
               {funding.state === "initialization_pending"
                 ? "Preparing payment…"

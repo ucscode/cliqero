@@ -107,6 +107,7 @@ export class FundingVerificationProcessor {
             message: shouldReconcile
               ? "We couldn't verify this transaction automatically. It has been held for reconciliation."
               : "We couldn't reach the verification service. Your transaction has been saved and verification will retry automatically.",
+            resolved: false,
           },
           now,
         );
@@ -144,6 +145,7 @@ export class FundingVerificationProcessor {
           status: "failed",
           message: "This payment session has expired without a confirmed payment.",
           level: "error",
+          resolved: true,
         },
         now,
       );
@@ -193,12 +195,15 @@ export class FundingVerificationProcessor {
       if (!identityMismatch && factsMatch && result.state === "pending") {
         locked.state = locked.providerTransactionId ? "verification_pending" : "awaiting_payment";
         const pendingObservation =
-          !locked.providerTransactionId && !result.providerTransactionId
+          !locked.providerTransactionId &&
+          !result.providerTransactionId &&
+          (!result.observation || result.observation.status === "confirming")
             ? {
                 status: "awaiting_transaction" as const,
                 message:
                   "Payment has not been identified yet; verification will continue automatically.",
                 level: "info" as const,
+                resolved: false,
               }
             : observation;
         locked.providerInitialization = withVerificationObservation(
@@ -320,23 +325,31 @@ function verificationObservation(result: PaymentResult, now: Date) {
 
 function defaultVerificationObservation(result: PaymentResult): PaymentVerificationObservation {
   if (result.state === "confirmed")
-    return { status: "success", message: "Payment verified successfully.", level: "success" };
+    return {
+      status: "success",
+      message: "Payment verified successfully.",
+      level: "success",
+      resolved: true,
+    };
   if (result.state === "pending")
     return {
       status: "confirming",
       message: "Transaction found. Waiting for confirmation.",
       level: "info",
+      resolved: false,
     };
   if (result.state === "failed")
     return {
       status: "failed",
       message: result.message ?? "This payment could not be confirmed.",
       level: "error",
+      resolved: true,
     };
   return {
     status: "provider_error",
     message: result.message ?? "This payment requires provider reconciliation.",
     level: "info",
+    resolved: false,
   };
 }
 

@@ -32,7 +32,7 @@ export function NowPaymentsPayment(props: PaymentProviderProps) {
   );
   const initialize = useCallback(async () => {
     try {
-      applyFunding(await initializeFundingStatus(funding.id));
+      applyFunding(await initializeFundingStatus(funding.id, applyFunding));
       onError("");
     } catch (cause) {
       onError(

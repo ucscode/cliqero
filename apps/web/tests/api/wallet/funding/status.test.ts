@@ -7,6 +7,7 @@ vi.mock("@/infrastructure/container", () => ({
 }));
 
 import { GET, customerFailureMessage } from "@/api/compat/wallet/fund/[id]/route";
+import { projectVerificationObservation } from "@/modules/funding/funding";
 
 const fundingId = "00000000-0000-4000-8000-000000000010";
 const account = { id: "00000000-0000-4000-8000-000000000001" };
@@ -44,6 +45,7 @@ function configure(owner = account.id, state = "awaiting_payment", providerName 
           verification: {
             status: "confirming",
             message: "Transaction found. Waiting for 3 more confirmations.",
+            resolved: false,
             checkedAt: "2026-09-13T08:01:00.000Z",
             confirmations: 3,
             confirmationsRequired: 6,
@@ -72,6 +74,22 @@ function configure(owner = account.id, state = "awaiting_payment", providerName 
 }
 
 describe("wallet funding status projection", () => {
+  it("conservatively projects legacy observations without resolution metadata", () => {
+    expect(projectVerificationObservation({ status: "success", message: "Done." })).toMatchObject({
+      resolved: true,
+    });
+    expect(
+      projectVerificationObservation({ status: "not_found", message: "Not found." }),
+    ).toMatchObject({ resolved: false });
+    expect(
+      projectVerificationObservation({
+        status: "confirming",
+        message: "Waiting.",
+        resolved: true,
+      }),
+    ).toMatchObject({ resolved: true });
+  });
+
   it("returns persisted funding state and provider next action", async () => {
     configure();
     const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
@@ -98,6 +116,7 @@ describe("wallet funding status projection", () => {
         status: "confirming",
         level: "info",
         message: "Transaction found. Waiting for 3 more confirmations.",
+        resolved: false,
         checked_at: "2026-09-13T08:01:00.000Z",
         confirmations: 3,
         confirmations_required: 6,

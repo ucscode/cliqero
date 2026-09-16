@@ -10,6 +10,7 @@ import type {
 } from "@/modules/payment";
 import type { AccountReader } from "@/modules/identity/account";
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
+import { isVerificationResolved } from "@/modules/funding/funding";
 import type { FundingVerificationProcessor } from "./verification";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 
@@ -213,8 +214,9 @@ export class FundingService {
     const persisted = await this.uow.transaction(async () => {
       const funding = await this.funding.findById(input.fundingId, { forUpdate: true });
       if (!funding || funding.accountId !== input.accountId) throw new Error("Funding not found");
-      const directTrc20Submission =
-        funding.providerName === "usdt_trc20" && funding.state === "initialization_pending";
+      const directTrc20Submission = isRetryableDirectTrc20Funding(funding);
+      if (funding.providerName === "usdt_trc20" && !directTrc20Submission)
+        throw new Error("Funding is not available for provider interaction");
       if (
         !directTrc20Submission &&
         funding.state !== "awaiting_payment" &&
@@ -236,4 +238,16 @@ export class FundingService {
     const result = await provider.handleRequest(input.payload, context);
     return this.verification.admitResult(persisted.id, result);
   }
+}
+
+function isRetryableDirectTrc20Funding(funding: FundingTransaction) {
+  if (funding.providerName !== "usdt_trc20" || funding.providerTransactionId) return false;
+  if (
+    funding.state !== "initialization_pending" &&
+    funding.state !== "awaiting_payment" &&
+    funding.state !== "verification_pending" &&
+    funding.state !== "failed"
+  )
+    return false;
+  return !isVerificationResolved(funding.providerInitialization?.verification);
 }

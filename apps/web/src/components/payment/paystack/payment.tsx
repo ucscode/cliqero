@@ -35,7 +35,7 @@ export function PaystackPayment(props: PaymentProviderProps) {
   }, [onError]);
   const initialize = useCallback(async () => {
     try {
-      applyFunding(await initializeFundingStatus(funding.id));
+      applyFunding(await initializeFundingStatus(funding.id, applyFunding));
       onError("");
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Paystack payment could not be prepared.");
