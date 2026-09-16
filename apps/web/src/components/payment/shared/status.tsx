@@ -9,13 +9,11 @@ import { Toast } from "../../toast";
 import { Money } from "../../money";
 import { CopyValue } from "../../copy-value";
 import { PaymentInstructions } from "./instructions";
-import { LoaderCircle } from "lucide-react";
 import { canonicalWalletFundingUrl } from "@/lib/api-client";
 import { fundingToneClass, presentFundingState } from "@/modules/funding/presentation";
 
 export async function initializeFundingStatus(fundingId: string) {
-  await apiFetch(`/api/wallet/fund/${fundingId}/initialize`, { method: "POST" });
-  return apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
+  return apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}/initialize`, { method: "POST" });
 }
 
 export function fundingStatusMessage(
@@ -51,6 +49,7 @@ export function fundingActionLabel(funding: Pick<FundingStatus, "customer_action
 }
 
 export const FUNDING_STATUS_POLL_INITIAL_DELAY_MS = 1000;
+export const FUNDING_STATUS_POLL_INITIALIZING_INTERVAL_MS = 2500;
 export const FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS = 10_000;
 export const FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS = 5_000;
 export const FUNDING_STATUS_POLL_INTERVAL_MS = FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS;
@@ -212,9 +211,7 @@ type PaymentComponentProps = Omit<PaymentProviderProps, "onError"> & {
 export function PaymentComponent({
   funding,
   returnTo,
-  refreshing,
   submitting,
-  onRefresh,
   onCancel,
   sessionExpired,
   currentTime,
@@ -244,22 +241,15 @@ export function PaymentComponent({
       {pendingMessage && <p>{pendingMessage}</p>}
       {showInitializationStatus &&
         (funding.state === "initialization_pending" || funding.state === "initializing") && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-            <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
+          <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+            <span aria-hidden="true" className="text-lg leading-none">
+              …
+            </span>
             <span>
               {funding.state === "initialization_pending"
                 ? "Preparing payment…"
                 : "Contacting payment provider…"}
             </span>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </Button>
           </div>
         )}
       {showInstructions && !sessionExpired && (

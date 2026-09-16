@@ -7,6 +7,7 @@ import {
   formatTimeRemaining,
   createFundingStatusPoller,
   FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
+  FUNDING_STATUS_POLL_INITIALIZING_INTERVAL_MS,
   FUNDING_STATUS_POLL_INTERVAL_MS,
   FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,
   FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS,
@@ -30,7 +31,10 @@ import {
   nowPaymentsFundingPollInterval,
   shouldPollNowPaymentsFunding,
 } from "@/providers/payment/nowpayments/ui-policy";
-import { paystackFundingPollInterval } from "@/providers/payment/paystack/ui-policy";
+import {
+  paystackFundingPollInterval,
+  shouldPollPaystackFunding,
+} from "@/providers/payment/paystack/ui-policy";
 import {
   formatExchangeRate,
   formatMinorAmount,
@@ -278,6 +282,7 @@ describe("customer-facing funding presentation", () => {
   });
 
   it("keeps provider polling policy in provider modules", () => {
+    expect(shouldPollNowPaymentsFunding({ state: "initializing" })).toBe(true);
     expect(shouldPollNowPaymentsFunding({ state: "awaiting_payment" })).toBe(true);
     expect(shouldPollNowPaymentsFunding({ state: "verification_pending" })).toBe(true);
     for (const state of ["confirmed", "failed", "cancelled", "expired"] as const) {
@@ -287,6 +292,9 @@ describe("customer-facing funding presentation", () => {
     expect(shouldPollDirectTrc20Funding({ state: "verification_pending" })).toBe(true);
     expect(paystackFundingPollInterval({ state: "awaiting_payment" })).toBe(
       FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,
+    );
+    expect(paystackFundingPollInterval({ state: "initializing" })).toBe(
+      FUNDING_STATUS_POLL_INITIALIZING_INTERVAL_MS,
     );
     expect(paystackFundingPollInterval({ state: "verification_pending" })).toBe(
       FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS,
@@ -352,6 +360,47 @@ describe("customer-facing funding presentation", () => {
     expect(requests).toEqual(["GET /api/wallet/fund/funding-1", "GET /api/wallet/fund/funding-1"]);
     expect(observed.at(-1)?.state).toBe("confirmed");
     expect(scheduledDelays).toHaveLength(2);
+    stop();
+  });
+
+  it("recovers an initializing funding with passive GET polling", async () => {
+    const callbacks: Array<() => void> = [];
+    const scheduledDelays: number[] = [];
+    const timers = {
+      setTimeout: (handler: () => void, delay: number) => {
+        scheduledDelays.push(delay);
+        callbacks.push(handler);
+        return callbacks.length - 1;
+      },
+      clearTimeout: () => undefined,
+    };
+    const requests: string[] = [];
+    const stop = createFundingStatusPoller({
+      initialFunding: { state: "initializing" },
+      getStatus: async () => {
+        requests.push("GET /api/wallet/fund/funding-1");
+        return {
+          id: "funding-1",
+          provider: "paystack",
+          state: "awaiting_payment",
+        } as FundingStatus;
+      },
+      onStatus: () => undefined,
+      timers,
+      isVisible: () => true,
+      shouldContinue: shouldPollPaystackFunding,
+      getPollInterval: paystackFundingPollInterval,
+    });
+
+    expect(scheduledDelays).toEqual([FUNDING_STATUS_POLL_INITIAL_DELAY_MS]);
+    callbacks.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(requests).toEqual(["GET /api/wallet/fund/funding-1"]);
+    expect(scheduledDelays).toEqual([
+      FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
+      FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,
+    ]);
     stop();
   });
 

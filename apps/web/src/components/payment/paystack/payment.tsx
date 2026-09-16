@@ -16,7 +16,6 @@ import { Button } from "../../ui/button";
 
 export function PaystackPayment(props: PaymentProviderProps) {
   const [currentTime] = useState(() => Date.now());
-  const [initializing, setInitializing] = useState(false);
   const [pollingUnavailable, setPollingUnavailable] = useState(false);
   const attemptedFundingId = useRef<string | null>(null);
   const funding = props.funding;
@@ -35,14 +34,11 @@ export function PaystackPayment(props: PaymentProviderProps) {
     onError("Automatic status updates are temporarily unavailable. Retrying…");
   }, [onError]);
   const initialize = useCallback(async () => {
-    setInitializing(true);
     try {
       applyFunding(await initializeFundingStatus(funding.id));
       onError("");
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Paystack payment could not be prepared.");
-    } finally {
-      setInitializing(false);
     }
   }, [applyFunding, funding.id, onError]);
   useEffect(() => {
@@ -70,11 +66,6 @@ export function PaystackPayment(props: PaymentProviderProps) {
         {safeUrl && props.funding.state === "awaiting_payment" && (
           <Button asChild>
             <a href={safeUrl}>{fundingActionLabel(props.funding)}</a>
-          </Button>
-        )}
-        {props.funding.state === "initialization_pending" && (
-          <Button type="button" onClick={() => void initialize()} disabled={initializing}>
-            {initializing ? "Preparing…" : "Prepare Paystack payment"}
           </Button>
         )}
         {pollingUnavailable && shouldPollPaystackFunding(funding) && (

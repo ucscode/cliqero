@@ -1,19 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { apiFetch, type Listing, type ListingPage, ApiClientError } from "@/lib/api-client";
-import { Button } from "./ui/button";
-import { Card } from "./ui/card";
-import { Input } from "./ui/input";
-import { Select } from "./ui/select";
-import { Skeleton } from "./ui/skeleton";
-import { EmptyState } from "./empty-state";
-import { Toast } from "./toast";
-import { ListingCard } from "./listing/card";
-import { HoneypotField } from "./honeypot-field";
+import { apiFetch, ApiClientError, type ListingPage } from "@/lib/api-client";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Select } from "../ui/select";
+import { Skeleton } from "../ui/skeleton";
+import { EmptyState } from "../empty-state";
+import { Toast } from "../toast";
+import { HoneypotField } from "../honeypot-field";
+import { LoadingGrid, ListingGrid } from "./grid";
 
 const sortOptions = [
   ["newest", "Newest"],
@@ -177,64 +175,5 @@ export function StorefrontFallback() {
       </div>
       <LoadingGrid />
     </section>
-  );
-}
-
-export function FeaturedStorefront({ reviewsVisible }: { reviewsVisible: boolean }) {
-  const [page, setPage] = useState<ListingPage | null>(null);
-  useEffect(() => {
-    void apiFetch<ListingPage>("/api/listings?featured=true").then(setPage);
-  }, []);
-  return (
-    <section className="mt-12 border-t border-slate-200 pt-10" aria-labelledby="featured-listings">
-      <div className="mb-7 flex items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Selected catalogue</p>
-          <h2 id="featured-listings" className="!mb-0 !text-3xl">
-            Featured listings
-          </h2>
-        </div>
-        <Button asChild variant="secondary">
-          <Link href="/catalogue">View all</Link>
-        </Button>
-      </div>
-      {!page ? (
-        <LoadingGrid />
-      ) : page.items.length ? (
-        <ListingGrid listings={page.items} reviewsVisible={reviewsVisible} />
-      ) : (
-        <p className="text-slate-600">New catalogue selections are coming soon.</p>
-      )}
-    </section>
-  );
-}
-function ListingGrid({
-  listings,
-  reviewsVisible,
-}: {
-  listings: Listing[];
-  reviewsVisible: boolean;
-}) {
-  return (
-    <div className="grid max-w-6xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {listings.map((listing) => (
-        <ListingCard listing={listing} key={listing.id} reviewsVisible={reviewsVisible} />
-      ))}
-    </div>
-  );
-}
-function LoadingGrid() {
-  return (
-    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }, (_, index) => (
-        <Card key={index} className="overflow-hidden">
-          <Skeleton className="aspect-[1.34] rounded-none" />
-          <div className="grid gap-3 p-5">
-            <Skeleton className="h-4 w-1/3" />
-            <Skeleton className="h-4 w-5/6" />
-          </div>
-        </Card>
-      ))}
-    </div>
   );
 }

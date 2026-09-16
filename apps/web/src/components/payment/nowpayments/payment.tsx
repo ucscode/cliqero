@@ -19,7 +19,6 @@ import { LoaderCircle } from "lucide-react";
 export function NowPaymentsPayment(props: PaymentProviderProps) {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const { onError } = props;
-  const [initializing, setInitializing] = useState(false);
   const [pollingUnavailable, setPollingUnavailable] = useState(false);
   const attemptedFundingId = useRef<string | null>(null);
   const funding = props.funding;
@@ -32,7 +31,6 @@ export function NowPaymentsPayment(props: PaymentProviderProps) {
     [onFundingChange],
   );
   const initialize = useCallback(async () => {
-    setInitializing(true);
     try {
       applyFunding(await initializeFundingStatus(funding.id));
       onError("");
@@ -40,8 +38,6 @@ export function NowPaymentsPayment(props: PaymentProviderProps) {
       onError(
         cause instanceof Error ? cause.message : "NOWPayments payment could not be prepared.",
       );
-    } finally {
-      setInitializing(false);
     }
   }, [applyFunding, funding.id, onError]);
   useEffect(() => {
@@ -74,11 +70,6 @@ export function NowPaymentsPayment(props: PaymentProviderProps) {
         getPollInterval={nowPaymentsFundingPollInterval}
       />
       <PaymentComponent {...props} sessionExpired={expired} currentTime={currentTime}>
-        {props.funding.state === "initialization_pending" && (
-          <Button type="button" onClick={() => void initialize()} disabled={initializing}>
-            {initializing ? "Preparing…" : "Prepare NOWPayments payment"}
-          </Button>
-        )}
         {!expired && props.funding.payment_amount && (
           <div className="grid gap-1">
             <span className="text-slate-600">Payment amount</span>

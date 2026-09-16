@@ -42,6 +42,7 @@ export {
   createFundingStatusPoller,
   FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,
   FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
+  FUNDING_STATUS_POLL_INITIALIZING_INTERVAL_MS,
   FUNDING_STATUS_POLL_INTERVAL_MS,
   FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS,
   formatTimeRemaining,
@@ -353,11 +354,8 @@ export function WalletPanel({
           }),
         },
       );
-      const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${created.id}`);
-      applyFundingStatus(latest);
-      setFundOpen(false);
-      setAmount("");
-      setPaymentCurrency("");
+      // Do not mount provider UI on this transient creation route. The
+      // canonical funding URL owns loading and provider initialization.
       router.replace(walletFundingStatusUrl(created.id, returnTo));
     } catch (cause) {
       setProviderError(

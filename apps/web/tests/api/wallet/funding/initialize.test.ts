@@ -17,6 +17,8 @@ function configure(state: string, providerName = "paystack") {
     accountId: account.id,
     providerName,
     providerReference: "pay-reference",
+    canonicalAmount: { minorAmount: 100n, currency: "USD" },
+    collectionAmount: { minorAmount: 132688n, currency: "NGN" },
     providerInitialization:
       state === "awaiting_payment"
         ? { authorizationUrl: "https://pay.example.test/continue", accessCode: "access" }
@@ -51,8 +53,11 @@ describe("wallet funding initialization endpoint", () => {
     expect(await response.json()).toMatchObject({
       id: fundingId,
       state: "awaiting_payment",
+      amount_minor: "100",
+      currency: "USD",
+      collection_amount_minor: "132688",
+      collection_currency: "NGN",
       authorization_url: "https://pay.example.test/continue",
-      access_code: "access",
     });
   });
 

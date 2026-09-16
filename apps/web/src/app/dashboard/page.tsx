@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { DashboardShell } from "@/components/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard";
 import { canonicalWalletFundingUrl, safeContinuation } from "@/lib/api-client";
 
 type DashboardSearchParams = Promise<Record<string, string | string[] | undefined>>;

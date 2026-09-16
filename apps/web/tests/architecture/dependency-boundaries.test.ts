@@ -84,6 +84,23 @@ function importViolations(root: string, forbiddenRoots: readonly string[]) {
 }
 
 describe("architectural boundaries", () => {
+  it("groups dashboard, settings, checkout, and storefront ownership", () => {
+    const components = resolve(sourceRoot, "components");
+    expect(existsSync(join(components, "dashboard/index.ts"))).toBe(true);
+    expect(existsSync(join(components, "dashboard/shell.tsx"))).toBe(true);
+    expect(existsSync(join(components, "dashboard/navigation.tsx"))).toBe(true);
+    expect(existsSync(join(components, "checkout/flow.tsx"))).toBe(true);
+    expect(existsSync(join(components, "settings/panel.tsx"))).toBe(true);
+    expect(existsSync(join(components, "settings/profile.tsx"))).toBe(true);
+    expect(existsSync(join(components, "settings/api-keys.tsx"))).toBe(true);
+    expect(existsSync(join(components, "storefront/catalogue.tsx"))).toBe(true);
+    expect(existsSync(join(components, "storefront/featured.tsx"))).toBe(true);
+    expect(existsSync(join(components, "storefront/grid.tsx"))).toBe(true);
+    expect(existsSync(join(components, "dashboard-shell.tsx"))).toBe(false);
+    expect(existsSync(join(components, "settings-panel.tsx"))).toBe(false);
+    expect(existsSync(join(components, "storefront.tsx"))).toBe(false);
+  });
+
   it("keeps modules independent from outer application and infrastructure layers", () => {
     const forbidden = [
       "infrastructure",

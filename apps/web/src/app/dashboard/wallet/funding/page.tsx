@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { DashboardShell } from "@/components/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard";
 
 export default function WalletFundingHistoryPage() {
   return (
