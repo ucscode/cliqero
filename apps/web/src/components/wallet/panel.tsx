@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -40,8 +40,10 @@ import { PaymentProviderComponent } from "../payment/provider";
 
 export {
   createFundingStatusPoller,
+  FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,
   FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
   FUNDING_STATUS_POLL_INTERVAL_MS,
+  FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS,
   formatTimeRemaining,
   fundingActionLabel,
   fundingStatusMessage,
@@ -66,6 +68,10 @@ export function walletPanelComposition(fundingPage: boolean, persistedFunding = 
 export function activeFundingAction(_funding: Pick<ActiveFunding, "state" | "authorization_url">) {
   void _funding;
   return { label: "View payment", kind: "status" as const };
+}
+
+export function isCurrentFundingStatusResponse(requestVersion: number, currentVersion: number) {
+  return requestVersion === currentVersion;
 }
 
 export function validatedPreparationAmount(value: string | undefined): string | null {
@@ -129,6 +135,7 @@ export function WalletPanel({
   const [activityError, setActivityError] = useState<string | null>(null);
   const [preparationError, setPreparationError] = useState<string | null>(null);
   const persistedFunding = fundingPage && Boolean(fundingId);
+  const fundingStatusVersion = useRef(0);
   const composition = walletPanelComposition(fundingPage, persistedFunding);
   const showActivity = composition.showActivity;
   const providerPreparation = Boolean(fundingProvider);
@@ -137,13 +144,8 @@ export function WalletPanel({
     if (!fundingId) return;
     setRefreshing(true);
     try {
-      await apiFetch<{
-        id: string;
-        state: FundingStatus["state"];
-        provider_transaction_id: string | null;
-        verification: FundingStatus["verification"];
-      }>(`/api/wallet/fund/${fundingId}/verify`, { method: "POST" });
       const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
+      fundingStatusVersion.current += 1;
       setFunding(latest);
       setProviderError(null);
     } catch {
@@ -152,6 +154,10 @@ export function WalletPanel({
       setRefreshing(false);
     }
   }, [fundingId]);
+  const applyFundingStatus = useCallback((latest: FundingStatus) => {
+    fundingStatusVersion.current += 1;
+    setFunding(latest);
+  }, []);
 
   const loadWallet = useCallback(
     async (background = false) => {
@@ -207,6 +213,7 @@ export function WalletPanel({
   useEffect(() => {
     // Route changes can preserve this client component instance. Reset the
     // route-scoped mode so an old funding status cannot bleed into creation.
+    fundingStatusVersion.current += 1;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFunding(null);
     setFundOpen(fundingPage && !fundingId);
@@ -225,8 +232,13 @@ export function WalletPanel({
 
   useEffect(() => {
     if (!fundingId) return;
+    const requestVersion = fundingStatusVersion.current;
     void apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`)
-      .then(setFunding)
+      .then((latest) => {
+        if (isCurrentFundingStatusResponse(requestVersion, fundingStatusVersion.current)) {
+          setFunding(latest);
+        }
+      })
       .catch(() => setProviderError("We couldn't load this funding attempt right now."));
   }, [fundingId]);
 
@@ -342,7 +354,7 @@ export function WalletPanel({
         },
       );
       const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${created.id}`);
-      setFunding(latest);
+      applyFundingStatus(latest);
       setFundOpen(false);
       setAmount("");
       setPaymentCurrency("");
@@ -365,6 +377,7 @@ export function WalletPanel({
         `/api/wallet/fund/${funding.id}/cancel`,
         { method: "POST" },
       );
+      fundingStatusVersion.current += 1;
       setFunding((current) => (current ? { ...current, state: result.state } : current));
       await loadWallet(true);
     } catch (cause) {
@@ -462,7 +475,7 @@ export function WalletPanel({
           submitting={submitting}
           onRefresh={() => void refreshFunding()}
           onCancel={() => void cancelFunding()}
-          onFundingChange={setFunding}
+          onFundingChange={applyFundingStatus}
           onConfirmed={handleFundingConfirmed}
           onError={setProviderError}
           providerError={providerError}

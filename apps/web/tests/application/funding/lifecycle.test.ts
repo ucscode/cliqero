@@ -755,7 +755,7 @@ describe("provider transaction identity", () => {
         ...provider,
         name: "usdt_trc20",
         handleRequest: async (_payload, context) => ({
-          state: "failed" as const,
+          state: "pending" as const,
           reference: context.reference,
           amount: context.expectedAmount,
           observation: { status: "not_found" as const, message: "Transaction not found." },
@@ -775,7 +775,7 @@ describe("provider transaction identity", () => {
         ...provider,
         name: "usdt_trc20",
         handleRequest: async (_payload, context) => ({
-          state: "failed" as const,
+          state: "pending" as const,
           reference: context.reference,
           amount: context.expectedAmount,
           observation: { status: "not_found" as const, message: "Transaction not found." },
@@ -793,7 +793,7 @@ describe("provider transaction identity", () => {
         fundingId,
         payload: { transaction_hash: `  ${hash}  ` },
       }),
-    ).resolves.toMatchObject({ state: "failed" });
+    ).resolves.toMatchObject({ state: "awaiting_payment" });
     expect(current.providerTransactionId).toBeUndefined();
     expect(repository.save).toHaveBeenCalled();
   });
@@ -996,7 +996,7 @@ describe("foreground funding verification", () => {
       ...provider,
       name: "usdt_trc20",
       handleRequest: async (_payload, context) => ({
-        state: "failed" as const,
+        state: "pending" as const,
         reference: context.reference,
         amount: context.expectedAmount,
         observation: {
@@ -1005,7 +1005,7 @@ describe("foreground funding verification", () => {
         },
       }),
       verify: async ({ reference, expectedAmount }) => ({
-        state: "failed" as const,
+        state: "pending" as const,
         reference,
         amount: expectedAmount,
         observation: {
@@ -1031,9 +1031,11 @@ describe("foreground funding verification", () => {
 
     await expect(
       service.submitProviderRequest({ accountId, fundingId, payload: { transaction_hash: hash } }),
-    ).resolves.toMatchObject({ state: "failed" });
+    ).resolves.toMatchObject({ state: "awaiting_payment" });
     expect(current.providerTransactionId).toBeUndefined();
-    expect(current.providerInitialization?.verification).toMatchObject({ status: "not_found" });
+    expect(current.providerInitialization?.verification).toMatchObject({
+      status: "awaiting_transaction",
+    });
     expect(repository.save).toHaveBeenCalledTimes(1);
   });
 

@@ -64,7 +64,12 @@ export function DirectTrc20Payment(props: PaymentProviderProps) {
         onConfirmed={props.onConfirmed}
         onError={pollingError}
       />
-      <PaymentComponent {...props} sessionExpired={false} currentTime={currentTime}>
+      <PaymentComponent
+        {...props}
+        sessionExpired={false}
+        currentTime={currentTime}
+        showInitializationStatus={false}
+      >
         {props.funding.payment_amount && (
           <div className="grid gap-1">
             <span className="text-slate-600">Payment amount</span>

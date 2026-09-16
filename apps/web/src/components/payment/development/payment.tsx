@@ -1,13 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch, type FundingStatus } from "@/lib/api-client";
-import { PaymentComponent, type PaymentProviderProps } from "../shared/status";
+import {
+  initializeFundingStatus,
+  PaymentComponent,
+  type PaymentProviderProps,
+} from "../shared/status";
 import { Button } from "../../ui/button";
 
 export function DevelopmentPayment(props: PaymentProviderProps) {
   const [currentTime] = useState(() => Date.now());
   const [submitting, setSubmitting] = useState(false);
+  const [initializing, setInitializing] = useState(false);
+  async function initialize() {
+    setInitializing(true);
+    try {
+      props.onFundingChange(await initializeFundingStatus(props.funding.id));
+      props.onError("");
+    } catch (cause) {
+      props.onError(
+        cause instanceof Error ? cause.message : "Development funding could not be prepared.",
+      );
+    } finally {
+      setInitializing(false);
+    }
+  }
+  useEffect(() => {
+    if (props.funding.state !== "initialization_pending") return;
+    const timer = window.setTimeout(() => void initialize(), 0);
+    return () => window.clearTimeout(timer);
+    // Initialization is tied to this funding identity and state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.funding.id, props.funding.state]);
   async function verify() {
     setSubmitting(true);
     try {
@@ -28,6 +53,11 @@ export function DevelopmentPayment(props: PaymentProviderProps) {
   }
   return (
     <PaymentComponent {...props} sessionExpired={false} currentTime={currentTime}>
+      {props.funding.state === "initialization_pending" && (
+        <Button type="button" onClick={() => void initialize()} disabled={initializing}>
+          {initializing ? "Preparing…" : "Prepare development funding"}
+        </Button>
+      )}
       {(props.funding.state === "awaiting_payment" ||
         props.funding.state === "verification_pending") && (
         <Button

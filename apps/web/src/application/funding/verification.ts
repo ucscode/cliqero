@@ -8,6 +8,7 @@ import type { FundingRepository, FundingTransaction } from "@/modules/funding/fu
 import type { FundingOperations } from "./contracts";
 import { ProviderOperationError } from "@/kernel/provider-error";
 import { DuplicateProviderTransactionError } from "@/kernel/errors";
+import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 
 export class FundingVerificationProcessor {
   private readonly inFlight = new Set<string>();
@@ -17,6 +18,7 @@ export class FundingVerificationProcessor {
     private providers: PaymentProviderRegistry,
     private uow: UnitOfWork,
     private operations?: FundingOperations,
+    private diagnostics?: LifecycleDiagnosticWriter,
   ) {}
 
   async process(
@@ -47,7 +49,17 @@ export class FundingVerificationProcessor {
     const now = options.now ?? new Date();
     let result;
     try {
+      this.diagnostics?.write({
+        level: "info",
+        event: "funding.verification.requested",
+        metadata: { funding_id: f.id, provider: f.providerName },
+      });
       result = await this.verify(f);
+      this.diagnostics?.write({
+        level: "info",
+        event: "funding.verification.result",
+        metadata: { funding_id: f.id, provider: f.providerName, state: result.state },
+      });
     } catch (error) {
       const diagnostic =
         error instanceof ProviderOperationError
@@ -179,6 +191,7 @@ export class FundingVerificationProcessor {
         return locked;
       }
       if (result.state === "reconciliation_required") {
+        const previousState = locked.state;
         locked.state = "reconciliation_pending";
         locked.providerInitialization = withVerificationObservation(
           locked.providerInitialization,
@@ -186,6 +199,16 @@ export class FundingVerificationProcessor {
           now,
         );
         await this.funding.save(locked);
+        this.diagnostics?.write({
+          level: "warn",
+          event: "funding.state.transition",
+          metadata: {
+            funding_id: locked.id,
+            provider: locked.providerName,
+            from: previousState,
+            to: locked.state,
+          },
+        });
         return locked;
       }
       const mismatch =
@@ -196,6 +219,7 @@ export class FundingVerificationProcessor {
         !result.reference ||
         !result.amount;
       if (mismatch) {
+        const previousState = locked.state;
         const code =
           result.state !== "confirmed"
             ? "verification_unsuccessful"
@@ -226,6 +250,16 @@ export class FundingVerificationProcessor {
           now,
         );
         await this.funding.save(locked);
+        this.diagnostics?.write({
+          level: "warn",
+          event: "funding.state.transition",
+          metadata: {
+            funding_id: locked.id,
+            provider: locked.providerName,
+            from: previousState,
+            to: locked.state,
+          },
+        });
         return locked;
       }
       await this.operations?.recordFundingSuccess({
@@ -233,6 +267,7 @@ export class FundingVerificationProcessor {
         provider: locked.providerName,
         operation: "transaction.verify",
       });
+      const previousState = locked.state;
       locked.state = "confirmed";
       locked.confirmedAt = now;
       locked.providerInitialization = withVerificationObservation(
@@ -241,6 +276,16 @@ export class FundingVerificationProcessor {
         now,
       );
       await this.funding.save(locked);
+      this.diagnostics?.write({
+        level: "info",
+        event: "funding.state.transition",
+        metadata: {
+          funding_id: locked.id,
+          provider: locked.providerName,
+          from: previousState,
+          to: locked.state,
+        },
+      });
       return locked;
     });
   }

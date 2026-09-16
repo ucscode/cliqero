@@ -86,6 +86,8 @@ export function DashboardShell({
 }) {
   const session = authClient.useSession();
   const { refetch: refetchSession } = session;
+  const userId = session.data?.user?.id;
+  const lastSessionRefreshAt = useRef(0);
   const params = useSearchParams();
   const section =
     dedicatedWalletFunding || fundingHistoryPage
@@ -107,19 +109,23 @@ export function DashboardShell({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session.data?.user) return;
+    if (!userId) return;
     void apiFetch<{ username: string; email: string }>("/api/me/profile")
       .then(setProfile)
       .catch(() => undefined);
     void apiFetch<AccountAccess>("/api/me/access")
       .then(setAccountAccess)
       .catch(() => undefined);
-  }, [session.data?.user]);
+  }, [userId]);
 
   useEffect(() => {
-    if (!session.data?.user) return;
+    if (!userId) return;
     const refreshSession = () => {
-      if (document.visibilityState === "visible") void refetchSession();
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastSessionRefreshAt.current < 1000) return;
+      lastSessionRefreshAt.current = now;
+      void refetchSession();
     };
     window.addEventListener("focus", refreshSession);
     document.addEventListener("visibilitychange", refreshSession);
@@ -127,7 +133,7 @@ export function DashboardShell({
       window.removeEventListener("focus", refreshSession);
       document.removeEventListener("visibilitychange", refreshSession);
     };
-  }, [session.data?.user, refetchSession]);
+  }, [refetchSession, userId]);
 
   useEffect(() => {
     if (!buy) return;

@@ -5,12 +5,14 @@ import type { WalletRepository } from "@/modules/wallet/wallet";
 import type { CheckoutRepository } from "@/modules/checkout/checkout";
 import type { PurchaseRepository } from "@/modules/purchase/purchase";
 import { Entitlement, type EntitlementRepository } from "@/modules/entitlement/entitlement";
+import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 
 export class WalletCreditProcessor {
   constructor(
     private funding: FundingRepository,
     private wallet: WalletRepository,
     private uow: UnitOfWork,
+    private diagnostics?: LifecycleDiagnosticWriter,
   ) {}
   async process(id: string) {
     return this.uow.transaction(async () => {
@@ -26,6 +28,15 @@ export class WalletCreditProcessor {
         state: "pending" as const,
       };
       await this.wallet.createCredit(credit);
+      this.diagnostics?.write({
+        level: "info",
+        event: "wallet.credit.created",
+        metadata: {
+          funding_id: f.id,
+          credit_id: credit.id,
+          amount_minor: credit.amount.minorAmount.toString(),
+        },
+      });
       return credit;
     });
   }
@@ -37,10 +48,16 @@ export class WalletAvailabilityProcessor {
   constructor(
     private wallet: WalletRepository,
     private uow: UnitOfWork,
+    private diagnostics?: LifecycleDiagnosticWriter,
   ) {}
   async process(id: string) {
     return this.uow.transaction(async () => {
       await this.wallet.makeCreditAvailable(id);
+      this.diagnostics?.write({
+        level: "info",
+        event: "wallet.credit.available",
+        metadata: { credit_id: id },
+      });
       return true;
     });
   }

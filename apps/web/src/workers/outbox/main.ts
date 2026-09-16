@@ -10,6 +10,7 @@ import { PaystackChargeSucceededHandler } from "@/application/payment/paystack/o
 import { PaystackRefundProcessedHandler } from "@/application/payment/paystack/refund";
 import { CommercialWorkflowDispatcher } from "@/workers/commercial/dispatcher";
 import { runWorkerLoop } from "./runner";
+import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
 
 const container = getContainer();
 const workerId = process.env.OUTBOX_WORKER_ID ?? `outbox-${randomUUID()}`;
@@ -40,7 +41,9 @@ const dispatcher = new OutboxDispatcher(workerId, container.outbox, handlers, lo
   pollMilliseconds: positiveInteger(process.env.OUTBOX_POLL_MS, 1000),
   staleAfterMilliseconds: positiveInteger(process.env.OUTBOX_STALE_AFTER_MS, 300_000),
 });
-const commercial = new CommercialWorkflowDispatcher(container);
+const commercial = new CommercialWorkflowDispatcher(container, logger, {
+  write: writeDevelopmentDiagnostic,
+});
 const abortController = new AbortController();
 for (const signal of ["SIGTERM", "SIGINT"] as const)
   process.once(signal, () => abortController.abort());

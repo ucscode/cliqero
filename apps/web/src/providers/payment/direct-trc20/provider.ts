@@ -70,6 +70,21 @@ export class DirectTrc20Provider extends AbstractPaymentProvider {
     } satisfies PaymentInitialization;
   }
 
+  async prepareFunding(input: { canonicalAmount: Money }) {
+    const amount = formatAmount(input.canonicalAmount);
+    return {
+      collectionAmount: input.canonicalAmount,
+      initializationMetadata: {
+        paymentAddress: this.config.walletAddress,
+        paymentAmount: amount,
+        paymentCurrency: "USDT",
+        asset: "USDT",
+        network: "TRC20",
+        instructions: `Send exactly **${amount} USDT** on **TRC20** to **${this.config.walletAddress}**.`,
+      },
+    };
+  }
+
   async handleRequest(input: unknown, context: ProviderRequestContext): Promise<PaymentResult> {
     if (!input || typeof input !== "object" || Array.isArray(input))
       throw new InvalidDirectTrc20TransactionError();
@@ -218,7 +233,10 @@ function rejectedVerification(
   observation: PaymentVerificationObservation,
 ): PaymentResult {
   return {
-    state: observation.status === "awaiting_transaction" ? "pending" : "failed",
+    state:
+      observation.status === "awaiting_transaction" || observation.status === "not_found"
+        ? "pending"
+        : "failed",
     reference: input.reference,
     amount: input.expectedAmount,
     observation,

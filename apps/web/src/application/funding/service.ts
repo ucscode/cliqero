@@ -11,6 +11,7 @@ import type {
 import type { AccountReader } from "@/modules/identity/account";
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
 import type { FundingVerificationProcessor } from "./verification";
+import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 
 export class FundingService {
   constructor(
@@ -20,6 +21,7 @@ export class FundingService {
     private accounts: AccountReader,
     private uow: UnitOfWork,
     private verification?: FundingVerificationProcessor,
+    private diagnostics?: LifecycleDiagnosticWriter,
   ) {}
   private async resolvePreparation(input: {
     accountId: string;
@@ -74,6 +76,7 @@ export class FundingService {
         collectionAmount: providerPreparation.collectionAmount,
         paymentCurrency: providerPreparation.paymentCurrency ?? resolved.paymentCurrency,
         conversionSnapshot: providerPreparation.conversionSnapshot,
+        initializationMetadata: providerPreparation.initializationMetadata,
       };
     const quote =
       resolved.collectionCurrency === "USD"
@@ -168,6 +171,7 @@ export class FundingService {
       providerInitialization: {
         providerDisplayName: resolved.provider.displayName,
         ...(prepared.paymentCurrency ? { paymentCurrency: prepared.paymentCurrency } : {}),
+        ...(prepared.initializationMetadata ?? {}),
         ...(resolved.fundingOptionId ? { providerAccountId: resolved.fundingOptionId } : {}),
         ...(providerAccountSnapshot ? { providerAccountSnapshot } : {}),
       },
@@ -176,6 +180,16 @@ export class FundingService {
       const prior = await this.funding.findByIdempotency(input.accountId, input.idempotencyKey);
       if (prior) return prior;
       await this.funding.save(value);
+      this.diagnostics?.write({
+        level: "info",
+        event: "funding.created",
+        metadata: {
+          funding_id: value.id,
+          provider: value.providerName,
+          amount_minor: value.canonicalAmount.minorAmount.toString(),
+          currency: value.canonicalAmount.currency,
+        },
+      });
       return value;
     });
   }
@@ -199,7 +213,13 @@ export class FundingService {
     const persisted = await this.uow.transaction(async () => {
       const funding = await this.funding.findById(input.fundingId, { forUpdate: true });
       if (!funding || funding.accountId !== input.accountId) throw new Error("Funding not found");
-      if (funding.state !== "awaiting_payment" && funding.state !== "verification_pending")
+      const directTrc20Submission =
+        funding.providerName === "usdt_trc20" && funding.state === "initialization_pending";
+      if (
+        !directTrc20Submission &&
+        funding.state !== "awaiting_payment" &&
+        funding.state !== "verification_pending"
+      )
         throw new Error("Funding is not available for provider interaction");
       return funding;
     });

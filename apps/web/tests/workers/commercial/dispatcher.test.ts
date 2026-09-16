@@ -9,10 +9,6 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
         if (id.endsWith("poison")) throw new Error(`${family} failed`);
       };
     return {
-      fundingInitialization: {
-        findWork: async () => items("initialization"),
-        process: processing("initialization"),
-      },
       funding: {
         findWork: async (state: string) =>
           state === "verification_pending" ? items("verification") : items("funding"),
@@ -46,9 +42,8 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
   it("continues past poison items and across every processor family", async () => {
     const events: string[] = [],
       logger = { error: vi.fn() };
-    expect(await new CommercialWorkflowDispatcher(application(events), logger).runOnce()).toBe(10);
+    expect(await new CommercialWorkflowDispatcher(application(events), logger).runOnce()).toBe(9);
     for (const family of [
-      "initialization",
       "expiry",
       "verification",
       "wallet-credit",
@@ -62,12 +57,12 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
       expect(events).toContain(
         `${family}:${family === "wallet-credit" ? "funding" : family === "wallet-availability" ? "credit" : family}-healthy`,
       );
-    expect(logger.error).toHaveBeenCalledTimes(10);
+    expect(logger.error).toHaveBeenCalledTimes(9);
   });
   it("continues to unrelated families when discovery fails", async () => {
     const events: string[] = [],
       app = application(events);
-    app.fundingInitialization.findWork = async () => {
+    app.fundingExpiry.findWork = async () => {
       throw new Error("discovery unavailable");
     };
     const logger = { error: vi.fn() };
@@ -79,13 +74,13 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
   it("stops the iteration on a database outage so the worker backs off once", async () => {
     const events: string[] = [];
     const app = application(events);
-    app.fundingInitialization.findWork = async () => {
+    app.fundingExpiry.findWork = async () => {
       throw Object.assign(new Error("getaddrinfo EAI_AGAIN postgres"), { code: "EAI_AGAIN" });
     };
     const logger = { error: vi.fn() };
     await expect(new CommercialWorkflowDispatcher(app, logger).runOnce()).rejects.toMatchObject({
       name: "WorkerInfrastructureError",
-      family: "funding-initialization",
+      family: "funding-expiry",
     });
     expect(logger.error).not.toHaveBeenCalled();
     expect(events).toEqual([]);

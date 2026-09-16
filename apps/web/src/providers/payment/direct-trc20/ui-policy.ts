@@ -6,7 +6,9 @@ export function shouldShowTransactionHashInput(
   return (
     funding.provider === "usdt_trc20" &&
     !funding.provider_transaction_id &&
-    (funding.state === "awaiting_payment" || funding.state === "verification_pending")
+    (funding.state === "initialization_pending" ||
+      funding.state === "awaiting_payment" ||
+      funding.state === "verification_pending")
   );
 }
 

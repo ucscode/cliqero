@@ -79,7 +79,12 @@ export function BankTransferPayment(props: PaymentProviderProps) {
     }
   }
   return (
-    <PaymentComponent {...props} sessionExpired={false} currentTime={currentTime}>
+    <PaymentComponent
+      {...props}
+      sessionExpired={false}
+      currentTime={currentTime}
+      showInitializationStatus={false}
+    >
       <div className="grid gap-1 border-t border-slate-200 pt-3">
         <span className="text-slate-600">Transfer amount</span>
         <CopyValue

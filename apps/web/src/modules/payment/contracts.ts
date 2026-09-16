@@ -27,6 +27,7 @@ export interface PaymentPreparation {
   collectionAmount: Money;
   paymentCurrency?: string;
   conversionSnapshot?: PaymentConversionSnapshot;
+  initializationMetadata?: PaymentInitializationMetadata;
 }
 export type PaymentVerificationObservationStatus =
   | "awaiting_transaction"

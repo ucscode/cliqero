@@ -1,5 +1,6 @@
 import { newId } from "@/kernel/ids";
 import type { ApplicationContainer } from "@/infrastructure/container";
+import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 export interface CommercialWorkflowLogger {
   error(fields: Record<string, unknown>, message: string): void;
 }
@@ -22,14 +23,10 @@ export class CommercialWorkflowDispatcher {
   constructor(
     private app: ApplicationContainer,
     private logger: CommercialWorkflowLogger = consoleLogger,
+    private diagnostics?: LifecycleDiagnosticWriter,
   ) {}
   async runOnce() {
     let processed = 0;
-    processed += await this.family(
-      "funding-initialization",
-      () => this.app.fundingInitialization.findWork(),
-      (item) => this.app.fundingInitialization.process(item.id),
-    );
     processed += await this.family(
       "funding-expiry",
       () => this.app.fundingExpiry.findWork(),
@@ -104,6 +101,12 @@ export class CommercialWorkflowDispatcher {
     return processed;
   }
   private failure(family: string, workId: string | undefined, error: unknown, message: string) {
+    this.diagnostics?.write({
+      level: "error",
+      event: "worker.workflow.failed",
+      error,
+      metadata: { processor_family: family, work_id: workId ?? null },
+    });
     this.logger.error(
       {
         processor_family: family,

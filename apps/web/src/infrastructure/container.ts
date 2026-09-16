@@ -129,6 +129,12 @@ import { OperatorWithdrawalService } from "@/infrastructure/postgres/operator/wi
 import { getBlogService } from "@/infrastructure/blog/service";
 import { PostgresAuditRecorder } from "@/infrastructure/postgres/shared/audit";
 import { PostgresWithdrawalPersistence } from "@/infrastructure/postgres/withdrawal/transaction";
+import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
+import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
+
+const lifecycleDiagnostics: LifecycleDiagnosticWriter = {
+  write: writeDevelopmentDiagnostic,
+};
 
 export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
@@ -316,12 +322,16 @@ export function createContainer(databaseUrl: string) {
     accounts,
     database,
     paymentOperations,
+    5 * 60_000,
+    () => new Date(),
+    lifecycleDiagnostics,
   );
   const fundingVerification = new FundingVerificationProcessor(
     funding,
     providers,
     database,
     paymentOperations,
+    lifecycleDiagnostics,
   );
   const fundingService = new FundingService(
     funding,
@@ -330,6 +340,7 @@ export function createContainer(databaseUrl: string) {
     accounts,
     database,
     fundingVerification,
+    lifecycleDiagnostics,
   );
   const fundingExpiry = new NowPaymentsExpiryProcessor(
     funding,
@@ -338,8 +349,17 @@ export function createContainer(databaseUrl: string) {
     () => new Date(),
   );
   const wallet = new WalletService(walletRepository);
-  const walletCredit = new WalletCreditProcessor(funding, walletRepository, database);
-  const walletAvailability = new WalletAvailabilityProcessor(walletRepository, database);
+  const walletCredit = new WalletCreditProcessor(
+    funding,
+    walletRepository,
+    database,
+    lifecycleDiagnostics,
+  );
+  const walletAvailability = new WalletAvailabilityProcessor(
+    walletRepository,
+    database,
+    lifecycleDiagnostics,
+  );
   const checkoutPayment = new CheckoutPaymentProcessor(
     checkoutRepository,
     walletRepository,

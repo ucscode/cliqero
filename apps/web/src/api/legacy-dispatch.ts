@@ -75,6 +75,8 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern === "/api/wallet/fund/:id") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/fund/:id/cancel") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/wallet/fund/:id/evidence") return { mode: "account", scope: "wallet:fund" };
+  if (pattern === "/api/wallet/fund/:id/initialize")
+    return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/wallet/fund/:id/transaction")
     return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/wallet/fund/:id/verify") return { mode: "account", scope: "wallet:fund" };

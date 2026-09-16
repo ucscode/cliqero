@@ -13,6 +13,11 @@ import { LoaderCircle } from "lucide-react";
 import { canonicalWalletFundingUrl } from "@/lib/api-client";
 import { fundingToneClass, presentFundingState } from "@/modules/funding/presentation";
 
+export async function initializeFundingStatus(fundingId: string) {
+  await apiFetch(`/api/wallet/fund/${fundingId}/initialize`, { method: "POST" });
+  return apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
+}
+
 export function fundingStatusMessage(
   funding: Pick<FundingStatus, "provider" | "state" | "expires_at" | "error_message"> & {
     verification?: FundingStatus["verification"];
@@ -46,7 +51,9 @@ export function fundingActionLabel(funding: Pick<FundingStatus, "customer_action
 }
 
 export const FUNDING_STATUS_POLL_INITIAL_DELAY_MS = 1000;
-export const FUNDING_STATUS_POLL_INTERVAL_MS = 4000;
+export const FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS = 10_000;
+export const FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS = 5_000;
+export const FUNDING_STATUS_POLL_INTERVAL_MS = FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS;
 
 type FundingStatusPollerTimers = {
   setTimeout: (handler: () => void, timeout: number) => number;
@@ -61,6 +68,7 @@ export function createFundingStatusPoller({
   timers,
   isVisible = () => document.visibilityState !== "hidden",
   shouldContinue = (funding) => funding.state === "verification_pending",
+  getPollInterval = () => FUNDING_STATUS_POLL_INTERVAL_MS,
 }: {
   initialFunding: Pick<FundingStatus, "state">;
   getStatus: () => Promise<FundingStatus>;
@@ -69,6 +77,7 @@ export function createFundingStatusPoller({
   timers: FundingStatusPollerTimers;
   isVisible?: () => boolean;
   shouldContinue?: (funding: Pick<FundingStatus, "state">) => boolean;
+  getPollInterval?: (funding: Pick<FundingStatus, "state">) => number;
 }) {
   let currentFunding = initialFunding;
   let disposed = false;
@@ -86,7 +95,7 @@ export function createFundingStatusPoller({
   const poll = async () => {
     if (disposed || inFlight) return;
     if (!isVisible()) {
-      schedule(FUNDING_STATUS_POLL_INTERVAL_MS);
+      schedule(getPollInterval(currentFunding));
       return;
     }
 
@@ -104,7 +113,7 @@ export function createFundingStatusPoller({
       inFlight = false;
     }
 
-    schedule(FUNDING_STATUS_POLL_INTERVAL_MS);
+    schedule(getPollInterval(currentFunding));
   };
 
   schedule(FUNDING_STATUS_POLL_INITIAL_DELAY_MS);
@@ -121,12 +130,14 @@ function useProviderStatusPolling({
   onStatus,
   onConfirmed,
   onError,
+  getPollInterval,
 }: {
   funding: FundingStatus;
   shouldContinue: (funding: Pick<FundingStatus, "state">) => boolean;
   onStatus: (funding: FundingStatus) => void;
   onConfirmed: () => void;
   onError: () => void;
+  getPollInterval?: (funding: Pick<FundingStatus, "state">) => number;
 }) {
   const fundingId = funding.id;
   const fundingState = funding.state;
@@ -143,12 +154,13 @@ function useProviderStatusPolling({
       },
       onError,
       shouldContinue,
+      getPollInterval,
       timers: {
         setTimeout: (handler, delay) => window.setTimeout(handler, delay),
         clearTimeout: (handle) => window.clearTimeout(handle),
       },
     });
-  }, [fundingId, fundingState, onConfirmed, onError, onStatus, shouldContinue]);
+  }, [fundingId, fundingState, getPollInterval, onConfirmed, onError, onStatus, shouldContinue]);
 }
 
 export function verificationObservationHeading(verification: FundingStatus["verification"]) {
@@ -193,6 +205,7 @@ type PaymentComponentProps = Omit<PaymentProviderProps, "onError"> & {
   sessionExpired: boolean;
   currentTime: number;
   showInstructions?: boolean;
+  showInitializationStatus?: boolean;
   children: ReactNode;
 };
 
@@ -208,6 +221,7 @@ export function PaymentComponent({
   showInstructions = true,
   children,
   providerError,
+  showInitializationStatus = true,
 }: PaymentComponentProps) {
   const statePresentation = presentFundingState(funding.state);
   const pendingMessage = fundingStatusMessage(funding, currentTime);
@@ -228,25 +242,26 @@ export function PaymentComponent({
         </Badge>
       </div>
       {pendingMessage && <p>{pendingMessage}</p>}
-      {(funding.state === "initialization_pending" || funding.state === "initializing") && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-          <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
-          <span>
-            {funding.state === "initialization_pending"
-              ? "Preparing payment…"
-              : "Contacting payment provider…"}
-          </span>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={onRefresh}
-            disabled={refreshing}
-          >
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </Button>
-        </div>
-      )}
+      {showInitializationStatus &&
+        (funding.state === "initialization_pending" || funding.state === "initializing") && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+            <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
+            <span>
+              {funding.state === "initialization_pending"
+                ? "Preparing payment…"
+                : "Contacting payment provider…"}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </Button>
+          </div>
+        )}
       {showInstructions && !sessionExpired && (
         <PaymentInstructions content={funding.instructions} />
       )}
@@ -327,9 +342,11 @@ export function ProviderStatusPolling({
   onFundingChange,
   onConfirmed,
   onError,
+  getPollInterval,
 }: Pick<PaymentProviderProps, "funding" | "onFundingChange" | "onConfirmed"> & {
   shouldContinue: (funding: Pick<FundingStatus, "state">) => boolean;
   onError: () => void;
+  getPollInterval?: (funding: Pick<FundingStatus, "state">) => number;
 }) {
   useProviderStatusPolling({
     funding,
@@ -337,6 +354,7 @@ export function ProviderStatusPolling({
     onStatus: onFundingChange,
     onConfirmed,
     onError,
+    getPollInterval,
   });
   return null;
 }

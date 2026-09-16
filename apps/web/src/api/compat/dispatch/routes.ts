@@ -62,6 +62,7 @@ import * as walletFunding from "@/api/compat/wallet/fund/route";
 import * as walletFundingById from "@/api/compat/wallet/fund/[id]/route";
 import * as walletFundingCancel from "@/api/compat/wallet/fund/[id]/cancel/route";
 import * as walletFundingEvidence from "@/api/compat/wallet/fund/[id]/evidence/route";
+import * as walletFundingInitialize from "@/api/compat/wallet/fund/[id]/initialize/route";
 import * as walletFundingTransaction from "@/api/compat/wallet/fund/[id]/transaction/route";
 import * as walletFundingVerify from "@/api/compat/wallet/fund/[id]/verify/route";
 import * as walletFundingPrepare from "@/api/compat/wallet/funding/prepare/route";
@@ -149,6 +150,7 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/wallet/fund", module: walletFunding },
   { pattern: "/api/wallet/fund/:id/cancel", module: walletFundingCancel },
   { pattern: "/api/wallet/fund/:id/evidence", module: walletFundingEvidence },
+  { pattern: "/api/wallet/fund/:id/initialize", module: walletFundingInitialize },
   { pattern: "/api/wallet/fund/:id/transaction", module: walletFundingTransaction },
   { pattern: "/api/wallet/fund/:id/verify", module: walletFundingVerify },
   { pattern: "/api/wallet/fund/:id", module: walletFundingById },

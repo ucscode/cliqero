@@ -107,9 +107,12 @@ describe("direct TRC20 provider", () => {
     ["wrong destination", { issue: "wrong_destination" }, "mismatch"],
     ["missing transfer details", { destination: "", amountBaseUnits: 0n }, "mismatch"],
     ["missing timestamp", { timestamp: 0 }, "mismatch"],
-  ] as const)("rejects %s without accepting its identity", async (_label, transfer, status) => {
+  ] as const)("rejects %s without accepting its identity", async (label, transfer, status) => {
     const result = await verify(validTransfer(transfer));
-    expect(result).toMatchObject({ state: "failed", observation: { status } });
+    expect(result).toMatchObject({
+      state: label === "not found" ? "pending" : "failed",
+      observation: { status },
+    });
     expect(result.providerTransactionId).toBeUndefined();
   });
 

@@ -6,6 +6,7 @@ import type { FundingRepository } from "@/modules/funding/funding";
 import type { FundingOperations } from "./contracts";
 import { ProviderOperationError } from "@/kernel/provider-error";
 import { DuplicateProviderTransactionError } from "@/kernel/errors";
+import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 
 export class FundingInitializationProcessor {
   constructor(
@@ -16,6 +17,7 @@ export class FundingInitializationProcessor {
     private operations?: FundingOperations,
     private staleClaimMs = 5 * 60_000,
     private clock: () => Date = () => new Date(),
+    private diagnostics?: LifecycleDiagnosticWriter,
   ) {}
   findWork(limit = 50) {
     const now = this.clock();
@@ -27,11 +29,16 @@ export class FundingInitializationProcessor {
       this.funding.claimInitialization(id, new Date(now.getTime() - this.staleClaimMs), now),
     );
     if (!claim) return null;
-    const account = await this.accounts.findById?.(claim.accountId);
-    if (!account) throw new Error("Account not found");
-    const buyerEmail = await this.accounts.findAuthenticationEmail?.(claim.accountId);
-    if (!buyerEmail) throw new Error("Authentication email not found");
+    this.diagnostics?.write({
+      level: "info",
+      event: "funding.initialization.started",
+      metadata: { funding_id: claim.id, provider: claim.providerName },
+    });
     try {
+      const account = await this.accounts.findById?.(claim.accountId);
+      if (!account) throw new Error("Account not found");
+      const buyerEmail = await this.accounts.findAuthenticationEmail?.(claim.accountId);
+      if (!buyerEmail) throw new Error("Authentication email not found");
       const provider = this.providers.get(claim.providerName);
       const paymentCurrency = claim.providerInitialization?.paymentCurrency;
       if (provider.minimumPaymentAmount && paymentCurrency) {
@@ -105,6 +112,11 @@ export class FundingInitializationProcessor {
         f.state = "awaiting_payment";
         f.initializationClaimedAt = undefined;
         await this.funding.save(f);
+        this.diagnostics?.write({
+          level: "info",
+          event: "funding.initialization.succeeded",
+          metadata: { funding_id: f.id, provider: f.providerName },
+        });
         return f;
       });
     } catch (error) {
@@ -146,6 +158,17 @@ export class FundingInitializationProcessor {
           f.state = diagnostic.kind === "ambiguous" ? "reconciliation_pending" : "blocked";
           f.initializationClaimedAt = undefined;
           await this.funding.save(f);
+          this.diagnostics?.write({
+            level: "error",
+            event: "funding.initialization.failed",
+            error,
+            metadata: {
+              funding_id: f.id,
+              provider: f.providerName,
+              outcome: diagnostic.kind,
+              state: f.state,
+            },
+          });
         }
       });
       throw error;

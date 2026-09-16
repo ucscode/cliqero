@@ -8,6 +8,8 @@ import {
   createFundingStatusPoller,
   FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
   FUNDING_STATUS_POLL_INTERVAL_MS,
+  FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,
+  FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS,
   snapshotInstruction,
   verificationObservationClass,
   verificationObservationHeading,
@@ -16,6 +18,7 @@ import {
   walletActivityReference,
   walletActivityState,
   walletPanelComposition,
+  isCurrentFundingStatusResponse,
 } from "@/components/wallet/panel";
 import { canSubmitBankTransferEvidence } from "@/providers/payment/bank-transfer/ui-policy";
 import {
@@ -23,7 +26,11 @@ import {
   shouldShowSubmittedTransactionHash,
   shouldShowTransactionHashInput,
 } from "@/providers/payment/direct-trc20/ui-policy";
-import { shouldPollNowPaymentsFunding } from "@/providers/payment/nowpayments/ui-policy";
+import {
+  nowPaymentsFundingPollInterval,
+  shouldPollNowPaymentsFunding,
+} from "@/providers/payment/nowpayments/ui-policy";
+import { paystackFundingPollInterval } from "@/providers/payment/paystack/ui-policy";
 import {
   formatExchangeRate,
   formatMinorAmount,
@@ -76,6 +83,13 @@ describe("wallet page composition", () => {
       showFundingForm: true,
     });
     expect(walletPanelComposition(true, true).showFundingForm).toBe(false);
+  });
+});
+
+describe("funding status response ordering", () => {
+  it("ignores an initial GET response after initialization applied a newer status", () => {
+    expect(isCurrentFundingStatusResponse(0, 1)).toBe(false);
+    expect(isCurrentFundingStatusResponse(2, 2)).toBe(true);
   });
 });
 
@@ -271,6 +285,15 @@ describe("customer-facing funding presentation", () => {
     }
     expect(shouldPollDirectTrc20Funding({ state: "awaiting_payment" })).toBe(false);
     expect(shouldPollDirectTrc20Funding({ state: "verification_pending" })).toBe(true);
+    expect(paystackFundingPollInterval({ state: "awaiting_payment" })).toBe(
+      FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,
+    );
+    expect(paystackFundingPollInterval({ state: "verification_pending" })).toBe(
+      FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS,
+    );
+    expect(nowPaymentsFundingPollInterval({ state: "awaiting_payment" })).toBe(
+      FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,
+    );
   });
 
   it("polls status with GET semantics and applies a pending-to-confirmed response", async () => {

@@ -1,10 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { shouldPollNowPaymentsFunding } from "@/providers/payment/nowpayments/ui-policy";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  nowPaymentsFundingPollInterval,
+  shouldPollNowPaymentsFunding,
+} from "@/providers/payment/nowpayments/ui-policy";
 import {
   PaymentComponent,
   ProviderStatusPolling,
+  initializeFundingStatus,
   formatTimeRemaining,
   type PaymentProviderProps,
 } from "../shared/status";
@@ -15,29 +19,66 @@ import { LoaderCircle } from "lucide-react";
 export function NowPaymentsPayment(props: PaymentProviderProps) {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const { onError } = props;
-  const pollingError = useCallback(
-    () => onError("Automatic status updates are temporarily unavailable. Retrying…"),
-    [onError],
+  const [initializing, setInitializing] = useState(false);
+  const [pollingUnavailable, setPollingUnavailable] = useState(false);
+  const attemptedFundingId = useRef<string | null>(null);
+  const funding = props.funding;
+  const { onFundingChange, onConfirmed } = props;
+  const applyFunding = useCallback(
+    (funding: Parameters<PaymentProviderProps["onFundingChange"]>[0]) => {
+      setPollingUnavailable(false);
+      onFundingChange(funding);
+    },
+    [onFundingChange],
   );
+  const initialize = useCallback(async () => {
+    setInitializing(true);
+    try {
+      applyFunding(await initializeFundingStatus(funding.id));
+      onError("");
+    } catch (cause) {
+      onError(
+        cause instanceof Error ? cause.message : "NOWPayments payment could not be prepared.",
+      );
+    } finally {
+      setInitializing(false);
+    }
+  }, [applyFunding, funding.id, onError]);
+  useEffect(() => {
+    if (funding.state !== "initialization_pending") return;
+    if (attemptedFundingId.current === funding.id) return;
+    attemptedFundingId.current = funding.id;
+    void initialize();
+  }, [funding.id, funding.state, initialize]);
+  const handlePollingError = useCallback(() => {
+    setPollingUnavailable(true);
+    onError("Automatic status updates are temporarily unavailable. Retrying…");
+  }, [onError]);
   const expired = Boolean(
-    props.funding.state === "expired" ||
-    (props.funding.expires_at && Date.parse(props.funding.expires_at) <= currentTime),
+    funding.state === "expired" ||
+    (funding.expires_at && Date.parse(funding.expires_at) <= currentTime),
   );
   useEffect(() => {
-    if (!props.funding.expires_at) return;
+    if (!funding.expires_at) return;
     const timer = window.setInterval(() => setCurrentTime(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [props.funding.expires_at]);
+  }, [funding.expires_at]);
   return (
     <>
       <ProviderStatusPolling
-        funding={props.funding}
+        funding={funding}
         shouldContinue={shouldPollNowPaymentsFunding}
-        onFundingChange={props.onFundingChange}
-        onConfirmed={props.onConfirmed}
-        onError={pollingError}
+        onFundingChange={applyFunding}
+        onConfirmed={onConfirmed}
+        onError={handlePollingError}
+        getPollInterval={nowPaymentsFundingPollInterval}
       />
       <PaymentComponent {...props} sessionExpired={expired} currentTime={currentTime}>
+        {props.funding.state === "initialization_pending" && (
+          <Button type="button" onClick={() => void initialize()} disabled={initializing}>
+            {initializing ? "Preparing…" : "Prepare NOWPayments payment"}
+          </Button>
+        )}
         {!expired && props.funding.payment_amount && (
           <div className="grid gap-1">
             <span className="text-slate-600">Payment amount</span>
@@ -78,15 +119,17 @@ export function NowPaymentsPayment(props: PaymentProviderProps) {
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
               <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
               <strong>Waiting for payment</strong>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={props.onRefresh}
-                disabled={props.refreshing}
-              >
-                {props.refreshing ? "Refreshing…" : "Refresh status"}
-              </Button>
+              {pollingUnavailable && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={props.onRefresh}
+                  disabled={props.refreshing}
+                >
+                  {props.refreshing ? "Checking…" : "Check status"}
+                </Button>
+              )}
             </div>
           )}
         {props.funding.expires_at && props.funding.state !== "expired" && !expired && (
