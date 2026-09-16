@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import { DuplicateProviderTransactionError } from "@/kernel/errors";
 import type { AuditRecorder } from "@/application/shared/audit";
 import type { FundingRepository } from "@/modules/funding/funding";
 import type { ObjectStorageRegistry, StoredObject } from "@/modules/storage/object-storage";
@@ -92,17 +91,6 @@ export class BankTransferEvidenceService {
         )
           throw new Error("Funding is not available for evidence");
 
-        if (transferReference) {
-          if (current.providerTransactionId && current.providerTransactionId !== transferReference)
-            throw new Error("Funding already has a different provider transaction");
-          const duplicate = await this.funding.findByProviderTransactionId(
-            "bank_transfer",
-            transferReference,
-          );
-          if (duplicate && duplicate.id !== fundingId)
-            throw new DuplicateProviderTransactionError();
-        }
-
         if (proofFile) {
           if (!this.storage || !this.storageInstanceName)
             throw new Error("Evidence storage instance is unavailable");
@@ -135,7 +123,7 @@ export class BankTransferEvidenceService {
         });
         await this.funding.save({
           ...current,
-          providerTransactionId: current.providerTransactionId ?? transferReference ?? null,
+          providerTransactionId: current.providerTransactionId ?? null,
           state: "verification_pending",
         });
         await this.audit.record({

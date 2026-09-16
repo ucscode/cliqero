@@ -35,12 +35,10 @@ function makeService(
   storageName?: string,
 ) {
   let existing: BankTransferEvidence | null = null;
-  let duplicate: FundingTransaction | null = null;
   const fundingSaves: FundingTransaction[] = [];
   const audits: AuditRecordInput[] = [];
   const funding = {
     findById: async () => current,
-    findByProviderTransactionId: async () => duplicate,
     save: async (value: FundingTransaction) => void fundingSaves.push(value),
   } as unknown as FundingRepository;
   const evidence: BankTransferEvidenceRepository = {
@@ -70,7 +68,6 @@ function makeService(
     fundingSaves,
     audits,
     setExisting: (value: BankTransferEvidence | null) => (existing = value),
-    setDuplicate: (value: FundingTransaction | null) => (duplicate = value),
   };
 }
 
@@ -87,17 +84,9 @@ describe("BankTransferEvidenceService", () => {
     });
     expect(fundingSaves[0]).toMatchObject({
       state: "verification_pending",
-      providerTransactionId: "BaNk-Ref-ABC123",
+      providerTransactionId: null,
     });
     expect(audits[0].action).toBe("funding.bank_transfer.evidence_submitted");
-  });
-
-  it("rejects a transfer reference already claimed by another funding", async () => {
-    const setup = makeService();
-    setup.setDuplicate({ ...fundingTransaction(), id: "other-funding" });
-    await expect(
-      setup.service.submit(accountId, fundingId, { transferReference: "bank-ref" }),
-    ).rejects.toMatchObject({ code: "provider_transaction_reused", status: 409 });
   });
 
   it("returns existing evidence without duplicating persistence", async () => {

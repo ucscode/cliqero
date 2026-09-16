@@ -94,6 +94,26 @@ describe("NowPayments IPN ingress", () => {
     expect(test.saved).toHaveLength(0);
   });
 
+  it("rejects an IPN that tries to replace an already-bound provider identity", async () => {
+    const current = funding();
+    current.providerTransactionId = "PAYMENT-Original";
+    const test = harness(current);
+    const body = new TextEncoder().encode(
+      JSON.stringify({
+        order_id: "np-reference",
+        payment_id: "PAYMENT-Replacement",
+        payment_status: "waiting",
+      }),
+    );
+
+    await expect(test.ingress.ingest(body, "signature")).resolves.toEqual({
+      status: 409,
+      disposition: "pending",
+    });
+    expect(current.providerTransactionId).toBe("PAYMENT-Original");
+    expect(test.saved).toHaveLength(0);
+  });
+
   it("rejects an unauthenticated body before parsing or mutating funding", async () => {
     const current = funding();
     const test = harness(current);
