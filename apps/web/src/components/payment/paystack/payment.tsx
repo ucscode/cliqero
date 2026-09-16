@@ -34,10 +34,20 @@ export function PaystackPayment(props: PaymentProviderProps) {
     onError("Automatic status updates are temporarily unavailable. Retrying…");
   }, [onError]);
   const initialize = useCallback(async () => {
+    let recovered = false;
     try {
-      applyFunding(await initializeFundingStatus(funding.id, applyFunding));
+      applyFunding(
+        await initializeFundingStatus(funding.id, (latest) => {
+          recovered = true;
+          applyFunding(latest);
+        }),
+      );
       onError("");
     } catch (cause) {
+      if (recovered) {
+        onError("");
+        return;
+      }
       onError(cause instanceof Error ? cause.message : "Paystack payment could not be prepared.");
     }
   }, [applyFunding, funding.id, onError]);
