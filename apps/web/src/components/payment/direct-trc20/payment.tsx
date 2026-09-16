@@ -32,6 +32,18 @@ export function DirectTrc20Payment(props: PaymentProviderProps) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+
+    // A rejected hash is only a candidate-verification observation. Once the
+    // customer submits another candidate, the previous unresolved observation
+    // is no longer the current interaction result and should not be rendered
+    // alongside a new request error.
+    if (
+      props.funding.verification?.resolved === false &&
+      !props.funding.provider_transaction_id
+    ) {
+      props.onFundingChange({ ...props.funding, verification: null });
+    }
+
     try {
       const result = await apiFetch<{
         state: FundingStatus["state"];
