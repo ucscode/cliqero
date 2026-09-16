@@ -8,19 +8,25 @@ import type {
   NowPaymentsIpnPayload,
 } from "./types";
 
-// NOWPayments documents monetary response fields as decimal strings. Reject
-// JSON numbers because response.json() has already passed them through
-// IEEE-754 before validation can inspect their original digits.
+// NOWPayments currently returns monetary response fields as either JSON numbers
+// or decimal strings depending on endpoint/environment. Normalize both forms to
+// decimal strings at the package boundary so the app never performs floating
+// point arithmetic on provider amounts.
 const scalarAmountSchema = z
-  .string()
-  .trim()
-  .regex(/^\d+(?:\.\d+)?$/);
+  .union([
+    z
+      .string()
+      .trim()
+      .regex(/^\d+(?:\.\d+)?$/),
+    z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  ])
+  .transform((value) => (typeof value === "string" ? value.trim() : String(value)));
 const minimumAmountSchema = z.object({
   min_amount: scalarAmountSchema.nullable().optional(),
   fiat_equivalent: scalarAmountSchema.nullable().optional(),
 });
 const paymentSchema = z.object({
-  payment_id: z.union([z.string().min(1), z.number().int()]),
+  payment_id: z.union([z.string().min(1), z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)]),
   payment_status: z.string().min(1),
   pay_address: z.string().nullable().optional(),
   pay_amount: scalarAmountSchema.nullable().optional(),
