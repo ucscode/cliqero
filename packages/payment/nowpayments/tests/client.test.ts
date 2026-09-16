@@ -87,7 +87,31 @@ describe("NOWPayments protocol client", () => {
     });
   });
 
-  it("rejects unsafe numeric monetary values after JSON parsing", async () => {
+  it("accepts documented numeric monetary responses and normalizes them to strings", async () => {
+    const client = new NowPaymentsClient({
+      apiKey: "test-key",
+      apiBaseUrl: "https://api-sandbox.nowpayments.io",
+      http: vi.fn().mockResolvedValue(
+        response({
+          payment_id: "5745459419",
+          payment_status: "waiting",
+          pay_address: "TTEST",
+          pay_amount: 0.17070286,
+          pay_currency: "usdttrc20",
+          price_amount: 25,
+          price_currency: "usd",
+          order_id: "np-1",
+          expiration_estimate_date: "2026-09-15T12:00:00Z",
+        }),
+      ),
+    });
+    await expect(client.getPaymentStatus("5745459419")).resolves.toMatchObject({
+      pay_amount: "0.17070286",
+      price_amount: "25",
+    });
+  });
+
+  it("rejects monetary numbers outside the safe JSON number range", async () => {
     const client = new NowPaymentsClient({
       apiKey: "test-key",
       apiBaseUrl: "https://api.nowpayments.test",
@@ -100,24 +124,6 @@ describe("NOWPayments protocol client", () => {
       ),
     });
     await expect(client.getPaymentStatus("PAY-UNSAFE")).rejects.toMatchObject({
-      name: "NowPaymentsResponseError",
-      status: 200,
-    });
-  });
-
-  it("rejects provider numeric decimal values at the boundary", async () => {
-    const client = new NowPaymentsClient({
-      apiKey: "test-key",
-      apiBaseUrl: "https://api.nowpayments.test",
-      http: vi.fn().mockResolvedValue(
-        response({
-          payment_id: "PAY-NUMERIC",
-          payment_status: "waiting",
-          pay_amount: 0.00991099,
-        }),
-      ),
-    });
-    await expect(client.getPaymentStatus("PAY-NUMERIC")).rejects.toMatchObject({
       name: "NowPaymentsResponseError",
       status: 200,
     });
