@@ -10,6 +10,7 @@ import { BankTransferProvider } from "@/providers/payment/bank-transfer/provider
 import { FundingService } from "@/application/funding/service";
 import { FundingInitializationProcessor } from "@/application/funding/initialization";
 import { FundingVerificationProcessor } from "@/application/funding/verification";
+import { PaystackVerificationRecoveryPolicy } from "@/application/payment/paystack/recovery";
 
 const accountId = "00000000-0000-4000-8000-000000000001";
 const fundingId = "00000000-0000-4000-8000-000000000002";
@@ -639,6 +640,74 @@ describe("provider transaction identity", () => {
     );
   });
 
+  it("recovers a legacy Paystack pending state by persisting the returned identity", async () => {
+    let current: any = existingFunding({
+      providerName: "paystack",
+      state: "verification_pending",
+      providerTransactionId: null,
+    });
+    const repository = {
+      findById: async () => current,
+      findByProviderTransactionId: async () => null,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "paystack",
+        verify: async () => ({
+          state: "pending" as const,
+          reference: current.providerReference,
+          amount: current.collectionAmount,
+          providerTransactionId: "Paystack-Pending-123",
+        }),
+      }),
+      { transaction: async (operation) => operation() },
+    );
+
+    await expect(verification.process(fundingId)).resolves.toMatchObject({
+      state: "verification_pending",
+      providerTransactionId: "Paystack-Pending-123",
+    });
+  });
+
+  it("persists a Paystack identity before applying a failed status", async () => {
+    let current: any = existingFunding({
+      providerName: "paystack",
+      state: "verification_pending",
+      providerTransactionId: null,
+    });
+    const repository = {
+      findById: async () => current,
+      findByProviderTransactionId: async () => null,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "paystack",
+        verify: async () => ({
+          state: "failed" as const,
+          reference: current.providerReference,
+          amount: current.collectionAmount,
+          providerTransactionId: "Paystack-Failed-123",
+        }),
+      }),
+      { transaction: async (operation) => operation() },
+    );
+
+    await expect(verification.process(fundingId)).resolves.toMatchObject({
+      state: "failed",
+      providerTransactionId: "Paystack-Failed-123",
+    });
+  });
+
   it("never persists a confirming observation without an accepted identity", async () => {
     let current: any = existingFunding({
       state: "verification_pending",
@@ -1068,6 +1137,89 @@ describe("foreground funding verification", () => {
     ).resolves.toMatchObject({ state: "verification_pending" });
     expect((current.providerInitialization as any)?.verification).toMatchObject({
       status: "provider_error",
+    });
+  });
+
+  it("bounds repeated ambiguous Paystack verification failures", async () => {
+    let current = existingFunding({
+      providerName: "paystack",
+      state: "verification_pending",
+      providerTransactionId: null,
+    });
+    const repository = {
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const operations = {
+      recordFundingSuccess: vi.fn(async () => undefined),
+      recordFundingFailure: vi.fn(async () => undefined),
+      countAmbiguousFundingFailures: vi.fn(async () => 5),
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "paystack",
+        verify: async () => {
+          throw new Error("Paystack unavailable");
+        },
+      }),
+      { transaction: async (operation) => operation() },
+      operations,
+      undefined,
+      new PaystackVerificationRecoveryPolicy(5),
+    );
+
+    await expect(
+      verification.process(fundingId, { rethrowProviderErrors: false }),
+    ).resolves.toMatchObject({
+      state: "reconciliation_pending",
+      providerTransactionId: null,
+    });
+    expect(operations.countAmbiguousFundingFailures).toHaveBeenCalledWith({
+      fundingId,
+      provider: "paystack",
+      operation: "transaction.verify",
+    });
+  });
+
+  it("keeps Paystack awaiting payment when verification fails before an identity is found", async () => {
+    let current = existingFunding({
+      providerName: "paystack",
+      state: "awaiting_payment",
+      providerTransactionId: null,
+    });
+    const repository = {
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        name: "paystack",
+        verify: async () => {
+          throw new Error("Paystack unavailable");
+        },
+      }),
+      { transaction: async (operation) => operation() },
+      {
+        recordFundingSuccess: async () => undefined,
+        recordFundingFailure: async () => undefined,
+      },
+      undefined,
+      new PaystackVerificationRecoveryPolicy(5),
+    );
+
+    await expect(
+      verification.process(fundingId, { rethrowProviderErrors: false }),
+    ).resolves.toMatchObject({
+      state: "awaiting_payment",
+      providerTransactionId: null,
     });
   });
 });

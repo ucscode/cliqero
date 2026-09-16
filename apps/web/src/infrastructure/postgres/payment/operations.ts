@@ -89,6 +89,20 @@ export class PostgresPaymentOperationsRepository {
       ],
     );
   }
+  async countAmbiguousFundingFailures(input: {
+    fundingId: string;
+    provider: string;
+    operation: string;
+  }) {
+    const result = await this.sql.query<{ count: string }>(
+      `select count(*)::text as count
+         from payment_capability.provider_operations
+        where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)
+          and provider=$2 and operation=$3 and outcome='failed' and failure_kind='ambiguous'`,
+      [input.fundingId, input.provider, input.operation],
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
   async begin(input: {
     paymentId: string;
     idempotencyKey: string;

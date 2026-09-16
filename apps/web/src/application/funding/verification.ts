@@ -5,7 +5,7 @@ import type {
   PaymentVerificationObservation,
 } from "@/modules/payment";
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
-import type { FundingOperations } from "./contracts";
+import type { FundingOperations, FundingVerificationRecoveryPolicy } from "./contracts";
 import { ProviderOperationError } from "@/kernel/provider-error";
 import { DuplicateProviderTransactionError } from "@/kernel/errors";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
@@ -19,6 +19,7 @@ export class FundingVerificationProcessor {
     private uow: UnitOfWork,
     private operations?: FundingOperations,
     private diagnostics?: LifecycleDiagnosticWriter,
+    private recoveryPolicy?: FundingVerificationRecoveryPolicy,
   ) {}
 
   async process(
@@ -79,15 +80,33 @@ export class FundingVerificationProcessor {
         operation: "transaction.verify",
         error: diagnostic,
       });
+      const failureCount =
+        diagnostic.kind === "ambiguous"
+          ? await this.operations?.countAmbiguousFundingFailures?.({
+              fundingId: f.id,
+              provider: f.providerName,
+              operation: "transaction.verify",
+            })
+          : undefined;
+      const shouldReconcile =
+        failureCount !== undefined &&
+        (this.recoveryPolicy?.shouldReconcile({
+          funding: f,
+          failureCount,
+          error: diagnostic,
+        }) ??
+          false);
       const saved = await this.uow.transaction(async () => {
         const locked = await this.funding.findById(id, { forUpdate: true });
         if (!locked || locked.state === "confirmed") return locked;
+        locked.state = shouldReconcile ? "reconciliation_pending" : locked.state;
         locked.providerInitialization = withVerificationObservation(
           locked.providerInitialization,
           {
             status: "provider_error",
-            message:
-              "We couldn't reach the verification service. Your transaction has been saved and verification will retry automatically.",
+            message: shouldReconcile
+              ? "We couldn't verify this transaction automatically. It has been held for reconciliation."
+              : "We couldn't reach the verification service. Your transaction has been saved and verification will retry automatically.",
           },
           now,
         );

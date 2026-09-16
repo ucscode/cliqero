@@ -92,6 +92,34 @@ describe("PaystackProvider", () => {
     expect(result.amount).toEqual(Money.of(40333n, "NGN"));
     expect(result.providerFee).toEqual(Money.of(123n, "NGN"));
   });
+  it.each([
+    ["pending", "verification_pending"],
+    ["failed", "failed"],
+  ] as const)(
+    "preserves the provider transaction identity for %s status",
+    async (status, state) => {
+      const http = vi.fn(async () =>
+        Response.json({
+          status: true,
+          message: "Verification response",
+          data: {
+            id: 4099260517,
+            status,
+            reference: "reference-1",
+            amount: 40333,
+            currency: "NGN",
+          },
+        }),
+      );
+      const result = await new PaystackProvider(config, http).verify({
+        reference: "reference-1",
+        expectedAmount: Money.of(40333n, "NGN"),
+      });
+
+      expect(result.state).toBe(state === "failed" ? "failed" : "pending");
+      expect(result.providerTransactionId).toBe("4099260517");
+    },
+  );
   it("validates the exact raw webhook payload with HMAC-SHA512", () => {
     const provider = new PaystackProvider(config, vi.fn());
     const raw = Buffer.from('{"event":"charge.success","data":{"id":1}}');

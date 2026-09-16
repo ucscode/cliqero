@@ -84,6 +84,7 @@ import { PostgresCheckoutRepository } from "./postgres/checkout/repository";
 import { FundingService } from "@/application/funding/service";
 import { FundingInitializationProcessor } from "@/application/funding/initialization";
 import { FundingVerificationProcessor } from "@/application/funding/verification";
+import { PaystackVerificationRecoveryPolicy } from "@/application/payment/paystack/recovery";
 import { WalletService } from "@/application/wallet/service";
 import { WalletCheckoutService } from "@/application/checkout/wallet";
 import {
@@ -332,6 +333,7 @@ export function createContainer(databaseUrl: string) {
     database,
     paymentOperations,
     lifecycleDiagnostics,
+    new PaystackVerificationRecoveryPolicy(),
   );
   const fundingService = new FundingService(
     funding,

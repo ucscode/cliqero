@@ -8,13 +8,12 @@ const funding = {
   providerReference: "pay-example",
 };
 const findByProviderReference = vi.fn();
-const findById = vi.fn();
-const save = vi.fn();
+const process = vi.fn();
 
 vi.mock("@/infrastructure/container", () => ({
   getContainer: () => ({
-    funding: { findByProviderReference, findById, save },
-    database: { transaction: async (work: () => Promise<unknown>) => work() },
+    funding: { findByProviderReference },
+    fundingVerification: { process },
     payments: { findByProviderReference: vi.fn(async () => null) },
   }),
 }));
@@ -22,8 +21,7 @@ vi.mock("@/infrastructure/container", () => ({
 describe("Paystack browser callback", () => {
   beforeEach(() => {
     findByProviderReference.mockReset();
-    findById.mockReset();
-    save.mockReset();
+    process.mockReset();
   });
 
   it("uses APP_URL rather than a server bind address for browser redirects", () => {
@@ -33,7 +31,7 @@ describe("Paystack browser callback", () => {
 
   it("redirects an existing payment to its persisted funding status", async () => {
     findByProviderReference.mockResolvedValue(funding);
-    findById.mockResolvedValue({ ...funding });
+    process.mockResolvedValue({ ...funding, state: "awaiting_payment" });
 
     const response = await GET(
       new Request(
@@ -45,8 +43,18 @@ describe("Paystack browser callback", () => {
     expect(response.headers.get("location")).toBe(
       "http://localhost:3000/dashboard/wallet/fund?funding=11111111-1111-4111-8111-111111111111",
     );
-    expect(findById).toHaveBeenCalledWith(funding.id, { forUpdate: true });
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({ state: "verification_pending" }));
+    expect(process).toHaveBeenCalledWith(funding.id, { rethrowProviderErrors: false });
+  });
+
+  it("delegates pending callbacks to normal verification without inventing a state", async () => {
+    findByProviderReference.mockResolvedValue({ ...funding, state: "verification_pending" });
+
+    const response = await GET(
+      new Request("http://localhost:3000/payments/paystack/callback?reference=pay-example"),
+    );
+
+    expect(response.status).toBe(303);
+    expect(process).toHaveBeenCalledWith(funding.id, { rethrowProviderErrors: false });
   });
 
   it("does not change an already confirmed funding", async () => {
@@ -57,7 +65,7 @@ describe("Paystack browser callback", () => {
     );
 
     expect(response.status).toBe(303);
-    expect(save).not.toHaveBeenCalled();
+    expect(process).not.toHaveBeenCalled();
   });
 
   it("rejects malformed or unknown references safely", async () => {

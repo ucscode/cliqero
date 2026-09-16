@@ -28,14 +28,10 @@ export async function GET(request: Request) {
     const container = getContainer();
     const funding = await container.funding.findByProviderReference("paystack", reference);
     if (funding) {
-      if (funding.state === "confirmed") return redirectToFunding(funding.id);
-      await container.database.transaction(async () => {
-        const locked = await container.funding.findById(funding.id, { forUpdate: true });
-        if (locked && locked.state === "awaiting_payment") {
-          locked.state = "verification_pending";
-          await container.funding.save(locked);
-        }
-      });
+      if (funding.state === "awaiting_payment" || funding.state === "verification_pending")
+        await container.fundingVerification.process(funding.id, {
+          rethrowProviderErrors: false,
+        });
       return redirectToFunding(funding.id);
     }
     const payment = await container.payments.findByProviderReference("paystack", reference);

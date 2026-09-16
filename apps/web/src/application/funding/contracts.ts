@@ -22,6 +22,19 @@ export interface FundingOperations {
         }
       | ProviderOperationError;
   }): Promise<void>;
+  countAmbiguousFundingFailures?(input: {
+    fundingId: string;
+    provider: string;
+    operation: string;
+  }): Promise<number>;
+}
+
+export interface FundingVerificationRecoveryPolicy {
+  shouldReconcile(input: {
+    funding: FundingTransaction;
+    failureCount: number;
+    error: ProviderOperationError;
+  }): boolean;
 }
 
 export interface FundingExpiryPolicy {
