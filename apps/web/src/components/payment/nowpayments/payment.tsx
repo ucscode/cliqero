@@ -31,10 +31,20 @@ export function NowPaymentsPayment(props: PaymentProviderProps) {
     [onFundingChange],
   );
   const initialize = useCallback(async () => {
+    let recovered = false;
     try {
-      applyFunding(await initializeFundingStatus(funding.id, applyFunding));
+      applyFunding(
+        await initializeFundingStatus(funding.id, (latest) => {
+          recovered = true;
+          applyFunding(latest);
+        }),
+      );
       onError("");
     } catch (cause) {
+      if (recovered) {
+        onError("");
+        return;
+      }
       onError(
         cause instanceof Error ? cause.message : "NOWPayments payment could not be prepared.",
       );
