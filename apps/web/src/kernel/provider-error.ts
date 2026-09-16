@@ -15,7 +15,7 @@ export class ProviderOperationError extends Error {
     kind: ProviderFailureKind = "rejection",
     readonly details?: ProviderFailureDetails,
   ) {
-    super("Payment initialization failed");
+    super(providerMessage || "Payment provider operation failed");
     this.name = "ProviderOperationError";
     this.kind = kind;
   }
