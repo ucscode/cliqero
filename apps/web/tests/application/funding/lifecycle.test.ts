@@ -1267,6 +1267,36 @@ describe("foreground funding verification", () => {
     });
   });
 
+  it("blocks local provider configuration failures without entering reconciliation", async () => {
+    let current = existingFunding({
+      providerName: "paystack",
+      state: "verification_pending",
+    });
+    const repository = {
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().registerFailure(
+        "paystack",
+        new Error("invalid Paystack configuration"),
+      ),
+      { transaction: async (operation) => operation() },
+      {
+        recordFundingSuccess: async () => undefined,
+        recordFundingFailure: async () => undefined,
+      },
+    );
+
+    await expect(
+      verification.process(fundingId, { rethrowProviderErrors: false }),
+    ).resolves.toMatchObject({ state: "blocked" });
+    expect(current.state).toBe("blocked");
+  });
+
   it("keeps Paystack awaiting payment when verification fails before an identity is found", async () => {
     let current = existingFunding({
       providerName: "paystack",

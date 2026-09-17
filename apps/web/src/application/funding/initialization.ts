@@ -4,7 +4,7 @@ import type { PaymentProviderRegistry } from "@/modules/payment";
 import type { AccountReader } from "@/modules/identity/account";
 import type { FundingRepository } from "@/modules/funding/funding";
 import type { FundingOperations } from "./contracts";
-import { ProviderOperationError } from "@/kernel/provider-error";
+import { isProviderConfigurationFailure, ProviderOperationError } from "@/kernel/provider-error";
 import { DuplicateProviderTransactionError } from "@/kernel/errors";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 
@@ -128,9 +128,11 @@ export class FundingInitializationProcessor {
               "transaction.initialize",
               undefined,
               undefined,
-              "Provider initialization failed",
+              isProviderConfigurationFailure(error)
+                ? error.message
+                : "Provider initialization failed",
               undefined,
-              "ambiguous",
+              isProviderConfigurationFailure(error) ? "rejection" : "ambiguous",
             );
       await this.uow.transaction(async () => {
         const f = await this.funding.findById(claim.id, { forUpdate: true });

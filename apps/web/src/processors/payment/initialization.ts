@@ -1,4 +1,4 @@
-import { ProviderOperationError } from "@/kernel/provider-error";
+import { isProviderConfigurationFailure, ProviderOperationError } from "@/kernel/provider-error";
 import type { PaymentProviderRegistry, PaymentRepository } from "@/modules/payment";
 import type { PostgresPaymentOperationsRepository } from "@/infrastructure/postgres/payment/operations";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
@@ -65,13 +65,11 @@ export class PaymentInitializationProcessor {
               "transaction.initialize",
               undefined,
               undefined,
-              error instanceof Error && /unavailable|unsupported/i.test(error.message)
+              isProviderConfigurationFailure(error)
                 ? error.message
                 : "Provider initialization failed",
               undefined,
-              error instanceof Error && /unavailable|unsupported/i.test(error.message)
-                ? "rejection"
-                : "ambiguous",
+              isProviderConfigurationFailure(error) ? "rejection" : "ambiguous",
             );
       await this.operations.recordProviderFailure({
         paymentId: current.id,

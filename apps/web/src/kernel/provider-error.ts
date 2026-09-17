@@ -3,6 +3,31 @@ export interface ProviderFailureDetails {
   amountMinor?: string;
   currency?: string;
 }
+
+export class ProviderConfigurationError extends Error {
+  constructor(
+    readonly provider: string,
+    message: string,
+    readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "ProviderConfigurationError";
+  }
+}
+
+export class ProviderUnavailableError extends Error {
+  constructor(readonly provider: string) {
+    super(`Payment provider is unavailable: ${provider}`);
+    this.name = "ProviderUnavailableError";
+  }
+}
+
+export function isProviderConfigurationFailure(
+  error: unknown,
+): error is ProviderConfigurationError | ProviderUnavailableError {
+  return error instanceof ProviderConfigurationError || error instanceof ProviderUnavailableError;
+}
+
 export class ProviderOperationError extends Error {
   readonly kind: ProviderFailureKind;
   constructor(

@@ -44,15 +44,31 @@ describe("application container feature isolation", () => {
     expect(loaders.bankTransfer).not.toHaveBeenCalled();
     expect(loaders.paystackPayout).not.toHaveBeenCalled();
 
-    expect(() => container.providers.get("bank_transfer")).toThrow(
+    await container.authentication.betterAuth.close();
+    await container.database.close();
+
+    vi.clearAllMocks();
+    const paystackContainer = createContainer("postgresql://localhost/cliqero-test");
+    expect(() => paystackContainer.providers.get("paystack")).toThrow(
+      "Payment provider is unavailable: paystack",
+    );
+    expect(loaders.paystack).toHaveBeenCalledOnce();
+    expect(loaders.nowPayments).not.toHaveBeenCalled();
+    expect(loaders.directTrc20).not.toHaveBeenCalled();
+    expect(loaders.bankTransfer).not.toHaveBeenCalled();
+    await paystackContainer.authentication.betterAuth.close();
+    await paystackContainer.database.close();
+
+    vi.clearAllMocks();
+    const bankContainer = createContainer("postgresql://localhost/cliqero-test");
+    expect(() => bankContainer.providers.get("bank_transfer")).toThrow(
       "Payment provider configuration is invalid: bank_transfer",
     );
     expect(loaders.bankTransfer).toHaveBeenCalledOnce();
-    expect(loaders.paystack).toHaveBeenCalledOnce();
-    expect(loaders.nowPayments).toHaveBeenCalledOnce();
-    expect(loaders.directTrc20).toHaveBeenCalledOnce();
-
-    await container.authentication.betterAuth.close();
-    await container.database.close();
+    expect(loaders.paystack).not.toHaveBeenCalled();
+    expect(loaders.nowPayments).not.toHaveBeenCalled();
+    expect(loaders.directTrc20).not.toHaveBeenCalled();
+    await bankContainer.authentication.betterAuth.close();
+    await bankContainer.database.close();
   });
 });

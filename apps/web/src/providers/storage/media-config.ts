@@ -2,6 +2,7 @@ import { z } from "zod";
 import { loadYamlConfiguration } from "@/config/yaml";
 import {
   ObjectStorageRegistry,
+  StorageConfigurationError,
   type ObjectStorageProvider,
 } from "@/modules/storage/object-storage";
 import { FilesystemObjectStorageProvider } from "@/providers/storage/filesystem/provider";
@@ -48,33 +49,12 @@ const storageConfig = z.discriminatedUnion("provider", [
   }),
 ]);
 
-const schema = z
+const rootSchema = z
   .object({
     default_provider: instanceName,
-    providers: z.record(instanceName, storageConfig),
+    providers: z.record(instanceName, z.unknown()),
   })
-  .strict()
-  .superRefine((config, context) => {
-    const defaultProvider = config.providers[config.default_provider];
-    if (!defaultProvider)
-      context.addIssue({
-        code: "custom",
-        path: ["default_provider"],
-        message: "default_provider must reference a configured storage instance",
-      });
-    for (const [name, provider] of Object.entries(config.providers)) {
-      if (provider.visibility === "public") {
-        const hasPublicUrl =
-          provider.provider === "supabase" || Boolean(provider.config.public_base_url);
-        if (!hasPublicUrl)
-          context.addIssue({
-            code: "custom",
-            path: ["providers", name, "config", "public_base_url"],
-            message: "Public storage instances must define public_base_url",
-          });
-      }
-    }
-  });
+  .strict();
 
 export function loadMediaStorage(
   path = "config/storage/media.yaml",
@@ -84,13 +64,33 @@ export function loadMediaStorage(
       process.env.MEDIA_ROOT ??
       (process.env.NODE_ENV === "test" ? "/tmp/cliqero-media" : "/var/lib/cliqero/media"),
   },
+  options: { onFailure?: (error: StorageConfigurationError) => void } = {},
 ) {
-  const config = schema.parse(loadYamlConfiguration(path, environment, { required: true }));
+  const config = rootSchema.parse(loadYamlConfiguration(path, environment, { required: true }));
+  if (!(config.default_provider in config.providers))
+    throw new Error("default_provider must reference a configured storage instance");
   const registry = new ObjectStorageRegistry(config.default_provider);
   for (const [name, instance] of Object.entries(config.providers))
-    registry.register(name, createProvider(name, instance));
+    registry.registerLazy(
+      name,
+      () => createProvider(name, parseStorageConfig(name, instance)),
+      options,
+    );
   registry.default();
   return registry;
+}
+
+function parseStorageConfig(name: string, value: unknown): z.infer<typeof storageConfig> {
+  const provider = storageConfig.parse(value);
+  if (provider.visibility === "public") {
+    const hasPublicUrl =
+      provider.provider === "supabase" || Boolean(provider.config.public_base_url);
+    if (!hasPublicUrl)
+      throw new Error(
+        `config.providers.${name}.config.public_base_url: Public storage instances must define public_base_url`,
+      );
+  }
+  return provider;
 }
 
 function createProvider(

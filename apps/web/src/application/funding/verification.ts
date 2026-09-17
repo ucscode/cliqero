@@ -6,7 +6,7 @@ import type {
 } from "@/modules/payment";
 import type { FundingRepository, FundingTransaction } from "@/modules/funding/funding";
 import type { FundingOperations, FundingVerificationRecoveryPolicy } from "./contracts";
-import { ProviderOperationError } from "@/kernel/provider-error";
+import { isProviderConfigurationFailure, ProviderOperationError } from "@/kernel/provider-error";
 import { DuplicateProviderTransactionError } from "@/kernel/errors";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 
@@ -96,10 +96,15 @@ export class FundingVerificationProcessor {
           error: diagnostic,
         }) ??
           false);
+      const blockedByProviderConfiguration = isProviderConfigurationFailure(error);
       const saved = await this.uow.transaction(async () => {
         const locked = await this.funding.findById(id, { forUpdate: true });
         if (!locked || locked.state === "confirmed") return locked;
-        locked.state = shouldReconcile ? "reconciliation_pending" : locked.state;
+        locked.state = blockedByProviderConfiguration
+          ? "blocked"
+          : shouldReconcile
+            ? "reconciliation_pending"
+            : locked.state;
         locked.providerInitialization = withVerificationObservation(
           locked.providerInitialization,
           {

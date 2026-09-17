@@ -45,6 +45,38 @@ providers:
     }
   });
 
+  it("does not parse or materialize malformed non-default instances until selected", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
+    try {
+      const config = join(root, "config.yaml");
+      await writeFile(
+        config,
+        `default_provider: local_files
+providers:
+  local_files:
+    provider: filesystem
+    visibility: private
+    config:
+      root: /tmp/cliqero-media
+  broken_supabase:
+    provider: supabase
+    visibility: private
+    config:
+      endpoint: not-a-url
+      bucket: evidence
+      service_key: broken
+`,
+      );
+      const registry = loadMediaStorage(config, environment);
+      expect(registry.default().name).toBe("local_files");
+      expect(() => registry.get("broken_supabase")).toThrow(
+        "Storage configuration is invalid: broken_supabase",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("uses the filesystem instance name as container identity when container is omitted", async () => {
     const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
     try {

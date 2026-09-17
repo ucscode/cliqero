@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PaymentProviderRegistry } from "@/modules/payment";
 import { DevelopmentPaymentProvider } from "@/providers/payment/development/provider";
 import {
@@ -35,6 +35,50 @@ describe("payment provider eligibility", () => {
       "Payment provider configuration is invalid: paystack",
     );
     expect(registry.get("nowpayments").name).toBe("nowpayments");
+  });
+  it("materializes only the requested lazy provider and memoizes success", () => {
+    const paystack = new PaystackProvider({
+      secretKey: "test",
+      apiBaseUrl: "https://api.paystack.co",
+    });
+    const nowPayments = new NowPaymentsProvider({
+      apiKey: "test",
+      apiBaseUrl: "https://api.nowpayments.io",
+      payCurrencies: ["usdttrc20"],
+    });
+    const paystackFactory = vi.fn(() => ({ provider: paystack }));
+    const nowPaymentsFactory = vi.fn(() => ({ provider: nowPayments }));
+    const registry = new PaymentProviderRegistry()
+      .registerLazy("paystack", paystackFactory)
+      .registerLazy("nowpayments", nowPaymentsFactory);
+
+    expect(paystackFactory).not.toHaveBeenCalled();
+    expect(nowPaymentsFactory).not.toHaveBeenCalled();
+    expect(registry.get("paystack")).toBe(paystack);
+    expect(registry.get("paystack")).toBe(paystack);
+    expect(paystackFactory).toHaveBeenCalledOnce();
+    expect(nowPaymentsFactory).not.toHaveBeenCalled();
+  });
+  it("isolates lazy configuration failures from available methods", () => {
+    const valid = new NowPaymentsProvider({
+      apiKey: "test",
+      apiBaseUrl: "https://api.nowpayments.io",
+      payCurrencies: ["usdttrc20"],
+    });
+    const brokenFactory = vi.fn(() => {
+      throw new Error("invalid bank-transfer configuration");
+    });
+    const registry = new PaymentProviderRegistry()
+      .registerLazy("bank_transfer", brokenFactory)
+      .register(valid);
+
+    expect(registry.availableMethodsFor(context("NG")).map((item) => item.provider.name)).toEqual([
+      "nowpayments",
+    ]);
+    expect(brokenFactory).toHaveBeenCalledOnce();
+    expect(() => registry.get("bank_transfer")).toThrow(
+      "Payment provider configuration is invalid",
+    );
   });
   it("keeps Paystack collection currency separate from country eligibility", () => {
     const registry = new PaymentProviderRegistry().register(

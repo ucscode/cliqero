@@ -1,4 +1,5 @@
 import type { PaymentProviderRegistry } from "@/modules/payment";
+import { isProviderConfigurationFailure } from "@/kernel/provider-error";
 import type { PostgresPaymentRepository } from "@/infrastructure/postgres/payment/payments";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 export class PaymentVerificationProcessor {
@@ -47,11 +48,11 @@ export class PaymentVerificationProcessor {
           await this.payments.save(locked);
         }
       });
-    } catch {
+    } catch (error) {
       await this.uow.transaction(async () => {
         const locked = await this.payments.findById(paymentId, { forUpdate: true });
         if (!locked) return;
-        locked.state = "verification_pending";
+        locked.state = isProviderConfigurationFailure(error) ? "failed" : "verification_pending";
         await this.payments.save(locked);
       });
     }

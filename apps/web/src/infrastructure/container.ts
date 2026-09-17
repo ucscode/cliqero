@@ -18,11 +18,7 @@ import { BetterAuthBoundary } from "@/infrastructure/identity/better-auth";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import { AccessService } from "@/modules/access/access";
 import { PostgresIntegrationService } from "@/infrastructure/postgres/access/integrations";
-import {
-  PaymentProviderRegistry,
-  type PaymentProvider,
-  type PaymentProviderFilters,
-} from "@/modules/payment";
+import { PaymentProviderRegistry, type PaymentProvider } from "@/modules/payment";
 import { registerDevelopmentPaymentProvider } from "@/providers/payment/development/registration";
 import { PaystackProvider } from "@/providers/payment/paystack/provider";
 import { loadPaystackConfiguration } from "@/providers/payment/paystack/config";
@@ -136,6 +132,7 @@ import { PostgresAuditRecorder } from "@/infrastructure/postgres/shared/audit";
 import { PostgresWithdrawalPersistence } from "@/infrastructure/postgres/withdrawal/transaction";
 import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
+import { ProviderConfigurationError, ProviderUnavailableError } from "@/kernel/provider-error";
 
 const lifecycleDiagnostics: LifecycleDiagnosticWriter = {
   write: writeDevelopmentDiagnostic,
@@ -148,7 +145,11 @@ export function createContainer(databaseUrl: string) {
   const listings = lazy(() => new PostgresListingRepository(database));
   const reviews = lazy(() => new PostgresListingReviewRepository(database));
   const listingMediaRepository = lazy(() => new PostgresListingMediaRepository(database));
-  const objectStorage = lazy(() => loadMediaStorage());
+  const objectStorage = lazy(() =>
+    loadMediaStorage(undefined, undefined, {
+      onFailure: (error) => recordConfigurationFailure("storage", error.instanceName, error),
+    }),
+  );
   const storefrontProviderName = lazy(
     () => resolveStorefrontMediaProvider(loadStorefrontConfiguration(), objectStorage()).name,
   );
@@ -236,33 +237,39 @@ export function createContainer(databaseUrl: string) {
       ),
   );
 
-  const payoutState = lazy(() => {
-    const registry = new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());
-    let paystackPayout: PaystackPayoutProvider | null = null;
-    let failed = false;
-    try {
-      const configuration = loadPaystackPayoutConfiguration();
-      if (configuration) {
-        paystackPayout = new PaystackPayoutProvider(
-          configuration,
-          new PostgresPaystackRecipientStore(database),
-        );
-        registry.register(paystackPayout);
-      }
-    } catch (error) {
-      failed = true;
-      registry.registerFailure("paystack", error);
-      recordConfigurationFailure("payout", "paystack", error);
-    }
-    return {
-      registry,
-      paystackPayout,
-      defaultProvider: failed || paystackPayout ? "paystack" : "development",
-    };
+  const paystackPayoutDefinition = lazy(() => {
+    const configuration = loadPaystackPayoutConfiguration();
+    return configuration
+      ? new PaystackPayoutProvider(configuration, new PostgresPaystackRecipientStore(database))
+      : null;
   });
-  const payoutProviders = lazy(() => payoutState().registry);
+  const payoutProviders = lazy(() => {
+    const registry = new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());
+    registry.registerLazy("paystack", () => paystackPayoutDefinition(), {
+      onFailure: (error) => recordConfigurationFailure("payout", "paystack", error),
+    });
+    return registry;
+  });
   const payoutRepository = lazy(() => new PostgresPayoutRepository(database));
-  const paystackPayout = lazy(() => payoutState().paystackPayout);
+  const payoutDefaultProvider = lazy(() => {
+    try {
+      payoutProviders().get("paystack");
+      return "paystack";
+    } catch (error) {
+      if (error instanceof ProviderUnavailableError) return "development";
+      if (error instanceof ProviderConfigurationError) return "paystack";
+      throw error;
+    }
+  });
+  const paystackPayout = lazy(() => {
+    try {
+      return payoutProviders().get("paystack") as PaystackPayoutProvider;
+    } catch (error) {
+      if (error instanceof ProviderConfigurationError || error instanceof ProviderUnavailableError)
+        return null;
+      throw error;
+    }
+  });
   const paystackPayoutEvents = lazy(() => new PostgresPaystackPayoutEventRepository(database));
   const payoutExecution = lazy(
     () =>
@@ -273,7 +280,7 @@ export function createContainer(databaseUrl: string) {
         fundsReservation(),
         outbox(),
         database,
-        payoutState().defaultProvider,
+        payoutDefaultProvider(),
       ),
   );
   const paystackPayoutWebhook = lazy(() => {
@@ -289,78 +296,69 @@ export function createContainer(databaseUrl: string) {
       : null;
   });
 
-  const paymentState = lazy(() => {
-    const registry = registerDevelopmentPaymentProvider(new PaymentProviderRegistry());
-    const instances = new Map<string, PaymentProvider>();
-    let bankEvidenceStorageName: string | undefined;
-    const register = <T extends { provider: PaymentProvider; filters: PaymentProviderFilters }>(
-      name: string,
-      load: () => T | null,
-    ) => {
-      try {
-        const loaded = load();
-        if (!loaded) return;
-        instances.set(name, loaded.provider);
-        registry.register(loaded.provider, { filters: loaded.filters });
-      } catch (error) {
-        registry.registerFailure(name, error);
-        recordConfigurationFailure("payment", name, error);
-      }
-    };
-    register("paystack", () => {
-      const configuration = loadPaystackConfiguration();
-      return configuration
-        ? {
-            provider: new PaystackProvider(
-              configuration.provider,
-              fetch,
-              undefined,
-              exchangeRates(),
-            ),
-            filters: configuration.filters,
-          }
-        : null;
-    });
-    register("nowpayments", () => {
-      const configuration = loadNowPaymentsConfiguration("config/modules/payment/nowpayments.yaml");
-      return configuration
-        ? {
-            provider: new NowPaymentsProvider(configuration.provider),
-            filters: configuration.filters,
-          }
-        : null;
-    });
-    register("direct_trc20", () => {
-      const configuration = loadDirectTrc20Configuration("config/modules/payment/usdt_trc20.yaml");
-      if (!configuration) return null;
-      const verifier = new HttpDirectTrc20Verifier({
-        ...configuration.provider.verification,
-        tokenContract: configuration.provider.tokenContract,
-      });
-      return {
-        provider: new DirectTrc20Provider(configuration.provider, verifier),
-        filters: configuration.filters,
-      };
-    });
-    register("bank_transfer", () => {
-      const configuration = loadBankTransferConfiguration();
-      if (!configuration) return null;
-      bankEvidenceStorageName = configuration.provider.mediaProvider;
-      return {
-        provider: new BankTransferProvider(configuration.provider),
-        filters: configuration.filters,
-      };
-    });
-    return { registry, instances, bankEvidenceStorageName };
+  const paystackDefinition = lazy(() => {
+    const configuration = loadPaystackConfiguration();
+    return configuration
+      ? {
+          provider: new PaystackProvider(configuration.provider, fetch, undefined, exchangeRates()),
+          filters: configuration.filters,
+        }
+      : null;
   });
-  const providers = lazy(() => paymentState().registry);
-  const paystack = lazy(
-    () => (paymentState().instances.get("paystack") as PaystackProvider | undefined) ?? null,
+  const nowPaymentsDefinition = lazy(() => {
+    const configuration = loadNowPaymentsConfiguration("config/modules/payment/nowpayments.yaml");
+    return configuration
+      ? {
+          provider: new NowPaymentsProvider(configuration.provider),
+          filters: configuration.filters,
+        }
+      : null;
+  });
+  const directTrc20Definition = lazy(() => {
+    const configuration = loadDirectTrc20Configuration("config/modules/payment/usdt_trc20.yaml");
+    if (!configuration) return null;
+    const verifier = new HttpDirectTrc20Verifier({
+      ...configuration.provider.verification,
+      tokenContract: configuration.provider.tokenContract,
+    });
+    return {
+      provider: new DirectTrc20Provider(configuration.provider, verifier),
+      filters: configuration.filters,
+    };
+  });
+  const bankTransferDefinition = lazy(() => {
+    const configuration = loadBankTransferConfiguration();
+    return configuration
+      ? {
+          provider: new BankTransferProvider(configuration.provider),
+          filters: configuration.filters,
+          mediaProvider: configuration.provider.mediaProvider,
+        }
+      : null;
+  });
+  const providers = lazy(() => {
+    const registry = registerDevelopmentPaymentProvider(new PaymentProviderRegistry());
+    registry.registerLazy("paystack", () => paystackDefinition(), {
+      onFailure: (error) => recordConfigurationFailure("payment", "paystack", error),
+    });
+    registry.registerLazy("nowpayments", () => nowPaymentsDefinition(), {
+      onFailure: (error) => recordConfigurationFailure("payment", "nowpayments", error),
+    });
+    registry.registerLazy("direct_trc20", () => directTrc20Definition(), {
+      onFailure: (error) => recordConfigurationFailure("payment", "direct_trc20", error),
+    });
+    registry.registerLazy("bank_transfer", () => bankTransferDefinition(), {
+      onFailure: (error) => recordConfigurationFailure("payment", "bank_transfer", error),
+    });
+    return registry;
+  });
+  const paystack = lazy(() =>
+    resolveOptionalPaymentProvider<PaystackProvider>(providers, "paystack"),
   );
-  const nowPayments = lazy(
-    () => (paymentState().instances.get("nowpayments") as NowPaymentsProvider | undefined) ?? null,
+  const nowPayments = lazy(() =>
+    resolveOptionalPaymentProvider<NowPaymentsProvider>(providers, "nowpayments"),
   );
-  const bankEvidenceStorageName = lazy(() => paymentState().bankEvidenceStorageName);
+  const bankEvidenceStorageName = lazy(() => bankTransferDefinition()?.mediaProvider);
   const paystackWebhook = lazy(() => {
     const provider = paystack();
     return provider
@@ -882,6 +880,23 @@ function recordConfigurationFailure(feature: string, provider: string, error: un
       error: error instanceof Error ? error.message : "Unknown configuration error",
     },
   });
+}
+
+function resolveOptionalPaymentProvider<T extends PaymentProvider>(
+  registryFactory: () => PaymentProviderRegistry,
+  name: string,
+): T | null;
+function resolveOptionalPaymentProvider<T extends PaymentProvider>(
+  registryFactory: () => PaymentProviderRegistry,
+  name: string,
+): T | null {
+  try {
+    return registryFactory().get(name) as T;
+  } catch (error) {
+    if (error instanceof ProviderConfigurationError || error instanceof ProviderUnavailableError)
+      return null;
+    throw error;
+  }
 }
 
 function configuredDurationMs(value: string | undefined, fallback: number) {

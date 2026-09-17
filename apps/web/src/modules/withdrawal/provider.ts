@@ -1,5 +1,6 @@
 import type { Money } from "@/modules/money/money";
 import type { Withdrawal } from "./withdrawal";
+import { ProviderConfigurationError, ProviderUnavailableError } from "@/kernel/provider-error";
 
 export type PayoutFailureCategory =
   | "retryable_technical"
@@ -37,23 +38,73 @@ export interface PayoutProvider {
 }
 export class PayoutProviderRegistry {
   private providers = new Map<string, PayoutProvider>();
-  private failures = new Map<string, Error>();
+  private factories = new Map<string, () => PayoutProvider | null>();
+  private failures = new Map<string, ProviderConfigurationError>();
   register(provider: PayoutProvider) {
     this.providers.set(provider.name, provider);
+    this.factories.delete(provider.name);
     this.failures.delete(provider.name);
+    return this;
+  }
+  registerLazy(
+    name: string,
+    factory: () => PayoutProvider | null,
+    options?: { onFailure?: (error: ProviderConfigurationError) => void },
+  ) {
+    this.providers.delete(name);
+    this.failures.delete(name);
+    this.factories.set(name, () => {
+      try {
+        const provider = factory();
+        if (!provider) return null;
+        if (provider.name !== name)
+          throw new Error(`Provider name does not match lazy registration: ${name}`);
+        return provider;
+      } catch (error) {
+        const configurationError =
+          error instanceof ProviderConfigurationError
+            ? error
+            : new ProviderConfigurationError(
+                name,
+                `Payout provider configuration is invalid: ${name}: ${error instanceof Error ? error.message : "Provider configuration is invalid"}`,
+                error,
+              );
+        this.factories.delete(name);
+        this.failures.set(name, configurationError);
+        options?.onFailure?.(configurationError);
+        throw configurationError;
+      }
+    });
     return this;
   }
   registerFailure(name: string, error: unknown) {
     this.providers.delete(name);
-    this.failures.set(name, error instanceof Error ? error : new Error(String(error)));
+    this.factories.delete(name);
+    this.failures.set(
+      name,
+      error instanceof ProviderConfigurationError
+        ? error
+        : new ProviderConfigurationError(
+            name,
+            `Payout provider configuration is invalid: ${name}: ${error instanceof Error ? error.message : String(error)}`,
+            error,
+          ),
+    );
     return this;
   }
   get(name: string) {
-    const provider = this.providers.get(name);
+    const provider = this.providers.get(name) ?? this.materialize(name);
     const failure = this.failures.get(name);
-    if (failure)
-      throw new Error(`Payout provider configuration is invalid: ${name}: ${failure.message}`);
-    if (!provider) throw new Error(`Payout provider is unavailable: ${name}`);
+    if (failure) throw failure;
+    if (!provider) throw new ProviderUnavailableError(name);
+    return provider;
+  }
+  private materialize(name: string) {
+    const factory = this.factories.get(name);
+    if (!factory) return undefined;
+    const provider = factory();
+    this.factories.delete(name);
+    if (provider) this.register(provider);
     return provider;
   }
 }
