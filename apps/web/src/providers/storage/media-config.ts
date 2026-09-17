@@ -123,19 +123,3 @@ function createProvider(
     instance.visibility,
   );
 }
-
-export function requirePublicStorage(registry: ObjectStorageRegistry, name?: string) {
-  const provider = name ? registry.get(name) : registry.default();
-  if (provider.visibility === "private")
-    throw new Error(`Storage instance must be public: ${name ?? provider.name}`);
-  if (!provider.publicUrl)
-    throw new Error(`Storage instance cannot produce public URLs: ${name ?? provider.name}`);
-  return provider;
-}
-
-export function requirePrivateStorage(registry: ObjectStorageRegistry, name: string) {
-  const provider = registry.get(name);
-  if (provider.visibility !== "private")
-    throw new Error(`Storage instance must be private: ${name}`);
-  return provider;
-}

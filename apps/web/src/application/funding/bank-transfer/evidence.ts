@@ -95,8 +95,6 @@ export class BankTransferEvidenceService {
           if (!this.storage || !this.storageInstanceName)
             throw new Error("Evidence storage instance is unavailable");
           const provider = this.storage.get(this.storageInstanceName);
-          if (provider.visibility !== "private")
-            throw new Error("Bank-transfer evidence storage must be private");
           stored = await provider.put({
             key: `funding-evidence/${fundingId}/${randomUUID()}${proofExtension(proofFile.mimeType)}`,
             bytes: proofFile.bytes,

@@ -108,8 +108,14 @@ describe("BankTransferEvidenceService", () => {
     expect(setup.audits).toHaveLength(0);
   });
 
-  it("requires private storage for proof files", async () => {
-    const put = vi.fn();
+  it("accepts configured public storage for proof files", async () => {
+    const put = vi.fn(async () => ({
+      provider: "public_media",
+      container: "media",
+      key: "funding-evidence/receipt.png",
+      byteSize: 8,
+      mimeType: "image/png",
+    }));
     const storage = {
       get: () => ({
         name: "public_media",
@@ -127,8 +133,8 @@ describe("BankTransferEvidenceService", () => {
           mimeType: "image/png",
         },
       }),
-    ).rejects.toThrow("must be private");
-    expect(put).not.toHaveBeenCalled();
+    ).resolves.toMatchObject({ fundingId });
+    expect(put).toHaveBeenCalledOnce();
   });
 
   it("rejects unsupported or spoofed proof files before storage", () => {

@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getEnabledSocialProviders, loadAuthConfiguration } from "@/config/auth";
+import {
+  getEnabledSocialProviders,
+  hasGoogleAuthentication,
+  loadAuthConfiguration,
+} from "@/config/auth";
 
 const files: string[] = [];
 afterEach(() => {
@@ -24,12 +28,13 @@ describe("YAML Better Auth providers", () => {
     expect(getEnabledSocialProviders(file)).toEqual({
       google: { clientId: "client", clientSecret: "secret" },
     });
+    expect(hasGoogleAuthentication(file)).toBe(true);
   });
 
   it("omits disabled providers", () => {
-    expect(
-      getEnabledSocialProviders(configuration("social:\n  google:\n    enabled: false\n")),
-    ).toEqual({});
+    const file = configuration("social:\n  google:\n    enabled: false\n");
+    expect(getEnabledSocialProviders(file)).toEqual({});
+    expect(hasGoogleAuthentication(file)).toBe(false);
   });
 
   it("rejects incomplete enabled provider credentials", () => {

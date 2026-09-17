@@ -14,11 +14,7 @@ export class ListingMediaService {
     private storage: ObjectStorageRegistry,
     private uow: UnitOfWork,
     private storefrontProviderName = storage.default().name,
-  ) {
-    const provider = storage.get(storefrontProviderName);
-    if (provider.visibility === "private" || !provider.publicUrl)
-      throw new Error(`Storefront media storage must be public: ${storefrontProviderName}`);
-  }
+  ) {}
   async create(
     owner: Account,
     listingId: string,

@@ -18,7 +18,11 @@ import { BetterAuthBoundary } from "@/infrastructure/identity/better-auth";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import { AccessService } from "@/modules/access/access";
 import { PostgresIntegrationService } from "@/infrastructure/postgres/access/integrations";
-import { PaymentProviderRegistry } from "@/modules/payment";
+import {
+  PaymentProviderRegistry,
+  type PaymentProvider,
+  type PaymentProviderFilters,
+} from "@/modules/payment";
 import { registerDevelopmentPaymentProvider } from "@/providers/payment/development/registration";
 import { PaystackProvider } from "@/providers/payment/paystack/provider";
 import { loadPaystackConfiguration } from "@/providers/payment/paystack/config";
@@ -95,8 +99,8 @@ import {
 } from "@/processors/wallet/commerce";
 import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing/media";
 import { PostgresListingReviewRepository } from "@/infrastructure/postgres/listing/reviews";
-import { loadMediaStorage, requirePrivateStorage } from "@/providers/storage/media-config";
-import { storefrontConfig, resolveStorefrontMediaProvider } from "@/config/storefront";
+import { loadMediaStorage } from "@/providers/storage/media-config";
+import { loadStorefrontConfiguration, resolveStorefrontMediaProvider } from "@/config/storefront";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing/media";
 import { ListingTransferService } from "@/application/listing/transfer";
 import { ListingReviewService } from "@/application/listing/reviews";
@@ -139,408 +143,745 @@ const lifecycleDiagnostics: LifecycleDiagnosticWriter = {
 
 export function createContainer(databaseUrl: string) {
   const database = PostgresDatabase.connect(databaseUrl);
-  const auditRecorder = new PostgresAuditRecorder(database);
-  const accounts = new PostgresAccountRepository(database);
-  const listings = new PostgresListingRepository(database);
-  const reviews = new PostgresListingReviewRepository(database);
-  const listingMediaRepository = new PostgresListingMediaRepository(database);
-  const objectStorage = loadMediaStorage();
-  const storefrontStorage = resolveStorefrontMediaProvider(storefrontConfig, objectStorage);
-  const listingMedia = new ListingMediaService(
-    listings,
-    listingMediaRepository,
-    objectStorage,
-    database,
-    storefrontStorage.name,
+  const auditRecorder = lazy(() => new PostgresAuditRecorder(database));
+  const accounts = lazy(() => new PostgresAccountRepository(database));
+  const listings = lazy(() => new PostgresListingRepository(database));
+  const reviews = lazy(() => new PostgresListingReviewRepository(database));
+  const listingMediaRepository = lazy(() => new PostgresListingMediaRepository(database));
+  const objectStorage = lazy(() => loadMediaStorage());
+  const storefrontProviderName = lazy(
+    () => resolveStorefrontMediaProvider(loadStorefrontConfiguration(), objectStorage()).name,
   );
-  const listingMediaDeletion = new ListingMediaDeletionProcessor(
-    listingMediaRepository,
-    objectStorage,
+  const listingMedia = lazy(
+    () =>
+      new ListingMediaService(
+        listings(),
+        listingMediaRepository(),
+        objectStorage(),
+        database,
+        storefrontProviderName(),
+      ),
   );
-  const listingService = new ListingService(
-    listings,
-    new AuthorizationPolicy(),
-    auditRecorder,
-    database,
+  const listingMediaDeletion = lazy(
+    () => new ListingMediaDeletionProcessor(listingMediaRepository(), objectStorage()),
   );
-  const operators = new PostgresOperatorAuthorizationService(database);
-  const listingReviews = new ListingReviewService(reviews, listings, operators);
-  const listingTransfer = new ListingTransferService(
-    listingService,
-    listingMedia,
-    listingMediaRepository,
+  const authorization = lazy(() => new AuthorizationPolicy());
+  const listingService = lazy(
+    () => new ListingService(listings(), authorization(), auditRecorder(), database),
   );
-  const exchangeRates = new ExchangeRateService(
-    [new FrankfurterProvider(), new FawazProvider()],
-    new PostgresExchangeRateCache(database),
-    configuredDurationMs(process.env.EXCHANGE_RATE_CACHE_TTL_MS, 24 * 60 * 60_000),
-    configuredDurationMs(process.env.EXCHANGE_RATE_CACHE_STALE_TTL_MS, 48 * 60 * 60_000),
+  const operators = lazy(() => new PostgresOperatorAuthorizationService(database));
+  const listingReviews = lazy(() => new ListingReviewService(reviews(), listings(), operators()));
+  const listingTransfer = lazy(
+    () => new ListingTransferService(listingService(), listingMedia(), listingMediaRepository()),
   );
-  const purchases = new PostgresPurchaseRepository(database);
-  const entitlements = new PostgresEntitlementRepository(database);
-  const grants = new PostgresAccessGrantRepository(database);
-  const payments = new PostgresPaymentRepository(database);
-  const paymentOperations = new PostgresPaymentOperationsRepository(database);
-  const outbox = new PostgresOutbox(database);
-  const idempotency = new PostgresIdempotencyRepository(database);
-  const providerEvents = new PostgresProviderEventRepository(database);
-  const funding = new PostgresFundingRepository(database);
-  const walletRepository = new PostgresWalletRepository(database);
-  const checkoutRepository = new PostgresCheckoutRepository(database);
-  const referralGraph = new PostgresReferralGraphRepository(database);
-  const commissionPolicy = new PostgresCommissionPolicyRepository(database);
-  const referralAttributionRepository = new PostgresReferralAttributionRepository(database);
-  const ledger = new PostgresLedgerRepository(database);
-  const financialDistributionPolicy = new PostgresFinancialDistributionPolicyRepository(database);
-  const loadedYamlCommissionPolicy = loadYamlCommissionPolicy();
-  const yamlCommissionPolicy = { getActive: async () => loadedYamlCommissionPolicy };
-  const treasuryRepository = new PostgresTreasuryRepository(database);
-  const treasury = new TreasuryService(treasuryRepository);
-  const treasuryProcessor = new TreasuryProcessor(
-    new PostgresTreasuryDistributionStore(database),
-    treasuryRepository,
+  const exchangeRates = lazy(
+    () =>
+      new ExchangeRateService(
+        [new FrankfurterProvider(), new FawazProvider()],
+        new PostgresExchangeRateCache(database),
+        configuredDurationMs(process.env.EXCHANGE_RATE_CACHE_TTL_MS, 24 * 60 * 60_000),
+        configuredDurationMs(process.env.EXCHANGE_RATE_CACHE_STALE_TTL_MS, 48 * 60 * 60_000),
+      ),
   );
-  const settlementPolicy = new PostgresSettlementPolicyRepository(database);
-  const settlement = new SettlementProcessor(
-    new PostgresSettlementStore(database, database),
-    settlementPolicy,
+  const purchases = lazy(() => new PostgresPurchaseRepository(database));
+  const entitlements = lazy(() => new PostgresEntitlementRepository(database));
+  const grants = lazy(() => new PostgresAccessGrantRepository(database));
+  const payments = lazy(() => new PostgresPaymentRepository(database));
+  const paymentOperations = lazy(() => new PostgresPaymentOperationsRepository(database));
+  const outbox = lazy(() => new PostgresOutbox(database));
+  const idempotency = lazy(() => new PostgresIdempotencyRepository(database));
+  const providerEvents = lazy(() => new PostgresProviderEventRepository(database));
+  const funding = lazy(() => new PostgresFundingRepository(database));
+  const walletRepository = lazy(() => new PostgresWalletRepository(database));
+  const checkoutRepository = lazy(() => new PostgresCheckoutRepository(database));
+  const referralGraph = lazy(() => new PostgresReferralGraphRepository(database));
+  const commissionPolicy = lazy(() => new PostgresCommissionPolicyRepository(database));
+  const referralAttributionRepository = lazy(
+    () => new PostgresReferralAttributionRepository(database),
   );
-  const reversals = new PostgresReversalRepository(database);
-  const withdrawalRepository = new PostgresWithdrawalRepository(database);
-  const withdrawalPolicy = new PostgresWithdrawalPolicyRepository(database);
-  const fundsReservation = new PostgresLedgerFundsReservationService(database);
-  const withdrawalPersistence = new PostgresWithdrawalPersistence(database, database);
-  const withdrawals = new WithdrawalService(
-    withdrawalRepository,
-    withdrawalPolicy,
-    fundsReservation,
-    outbox,
-    database,
-    operators,
-    withdrawalPersistence,
+  const ledger = lazy(() => new PostgresLedgerRepository(database));
+  const financialDistributionPolicy = lazy(
+    () => new PostgresFinancialDistributionPolicyRepository(database),
   );
-  const payoutProviders = new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());
-  const payoutRepository = new PostgresPayoutRepository(database);
-  const paystackPayoutConfiguration = loadPaystackPayoutConfiguration();
-  const paystackPayout = paystackPayoutConfiguration
-    ? new PaystackPayoutProvider(
-        paystackPayoutConfiguration,
-        new PostgresPaystackRecipientStore(database),
-      )
-    : null;
-  if (paystackPayout) payoutProviders.register(paystackPayout);
-  const paystackPayoutEvents = new PostgresPaystackPayoutEventRepository(database);
-  const payoutExecution = new PayoutExecutionProcessor(
-    withdrawalRepository,
-    payoutRepository,
-    payoutProviders,
-    fundsReservation,
-    outbox,
-    database,
-    paystackPayout ? "paystack" : "development",
-  );
-  const providers = registerDevelopmentPaymentProvider(new PaymentProviderRegistry());
-  const paystackInspectionOperations = new PostgresPaystackOperationsRepository(database);
-  const paystackConfiguration = loadPaystackConfiguration();
-  const paystack = paystackConfiguration
-    ? new PaystackProvider(paystackConfiguration.provider, fetch, undefined, exchangeRates)
-    : null;
-  if (paystack)
-    providers.register(paystack, { enabled: true, filters: paystackConfiguration!.filters });
-  const nowPaymentsConfiguration = loadNowPaymentsConfiguration(
-    "config/modules/payment/nowpayments.yaml",
-  );
-  const nowPayments = nowPaymentsConfiguration
-    ? new NowPaymentsProvider(nowPaymentsConfiguration.provider)
-    : null;
-  if (nowPayments && nowPaymentsConfiguration)
-    providers.register(nowPayments, {
-      filters: nowPaymentsConfiguration.filters,
-    });
-  const directTrc20Configuration = loadDirectTrc20Configuration(
-    "config/modules/payment/usdt_trc20.yaml",
-  );
-  if (directTrc20Configuration) {
-    const verifier = new HttpDirectTrc20Verifier({
-      ...directTrc20Configuration.provider.verification,
-      tokenContract: directTrc20Configuration.provider.tokenContract,
-    });
-    providers.register(new DirectTrc20Provider(directTrc20Configuration.provider, verifier), {
-      filters: directTrc20Configuration.filters,
-    });
-  }
-  const bankTransfer = loadBankTransferConfiguration();
-  const bankEvidenceStorageName = bankTransfer?.provider.mediaProvider;
-  if (bankTransfer) {
-    if (!bankEvidenceStorageName)
-      throw new Error("Bank-transfer evidence storage instance is required");
-    requirePrivateStorage(objectStorage, bankEvidenceStorageName);
-    providers.register(new BankTransferProvider(bankTransfer.provider), {
-      filters: bankTransfer.filters,
-    });
-  }
-  const paymentInitialization = new PaymentInitializationProcessor(
-    payments,
-    providers,
-    paymentOperations,
-    database,
-    accounts,
-  );
-  const paymentInitializationWorker = new PaymentInitializationWorker(
-    payments,
-    paymentInitialization,
-  );
-  const paymentVerification = new PaymentVerificationProcessor(payments, providers, database);
-  const access = new AccessService(entitlements, grants);
-  const referralAttribution = new ReferralAttributionService(
-    referralAttributionRepository,
-    listings,
-    accounts,
-  );
-  const paymentCompletion = new PaymentCompletionService(
-    payments,
-    purchases,
-    entitlements,
-    providers,
-    idempotency,
-    outbox,
-    database,
-  );
-  const commissionDistribution = new CommissionDistributionService(referralGraph);
-  const purchaseDistribution = new PurchaseDistributionProcessor(
-    purchases,
-    commissionDistribution,
-    commissionPolicy,
-    financialDistributionPolicy,
-    ledger,
-    outbox,
-    database,
-    yamlCommissionPolicy,
-  );
-  const fundingInitialization = new FundingInitializationProcessor(
-    funding,
-    providers,
-    accounts,
-    database,
-    paymentOperations,
-    5 * 60_000,
-    () => new Date(),
-    lifecycleDiagnostics,
-  );
-  const fundingVerification = new FundingVerificationProcessor(
-    funding,
-    providers,
-    database,
-    paymentOperations,
-    lifecycleDiagnostics,
-    new PaystackVerificationRecoveryPolicy(),
-  );
-  const fundingService = new FundingService(
-    funding,
-    providers,
-    exchangeRates,
-    accounts,
-    database,
-    fundingVerification,
-    lifecycleDiagnostics,
-  );
-  const fundingExpiry = new NowPaymentsExpiryProcessor(
-    funding,
-    fundingVerification,
-    new NowPaymentsExpiryPolicy(),
-    () => new Date(),
-  );
-  const wallet = new WalletService(walletRepository);
-  const walletCredit = new WalletCreditProcessor(
-    funding,
-    walletRepository,
-    database,
-    lifecycleDiagnostics,
-  );
-  const walletAvailability = new WalletAvailabilityProcessor(
-    walletRepository,
-    database,
-    lifecycleDiagnostics,
-  );
-  const checkoutPayment = new CheckoutPaymentProcessor(
-    checkoutRepository,
-    walletRepository,
-    purchases,
-    database,
-  );
-  const entitlementIssuance = new EntitlementIssuanceProcessor(purchases, entitlements, database);
-  const betterAuth = new BetterAuthBoundary(database, databaseUrl);
-  const authentication = Object.assign(new AuthenticationService(accounts, betterAuth, database), {
-    auth: betterAuth.auth,
-    betterAuth,
+  const yamlCommissionPolicy = lazy(() => {
+    const policy = loadYamlCommissionPolicy();
+    return { getActive: async () => policy };
   });
-  const apiKeyRepository = new PostgresApiKeyRepository(database);
-  const apiKeys = new ApiKeyService(apiKeyRepository, database, database);
-  const operatorApiKeys = new OperatorApiKeyService(
-    apiKeys,
-    accounts,
-    operators,
-    auditRecorder,
-    database,
+  const treasuryRepository = lazy(() => new PostgresTreasuryRepository(database));
+  const treasury = lazy(() => new TreasuryService(treasuryRepository()));
+  const treasuryProcessor = lazy(
+    () =>
+      new TreasuryProcessor(new PostgresTreasuryDistributionStore(database), treasuryRepository()),
   );
-  const principalResolver = new ApiPrincipalResolver(authentication, apiKeys, database);
-  const capabilityAdministration = new CapabilityAdministrationService(
-    accounts,
-    operators,
-    new PostgresCapabilityAssignmentStore(database),
-    auditRecorder,
-    database,
+  const settlementPolicy = lazy(() => new PostgresSettlementPolicyRepository(database));
+  const settlement = lazy(
+    () =>
+      new SettlementProcessor(new PostgresSettlementStore(database, database), settlementPolicy()),
   );
-  const bankTransferConfirmation = new BankTransferConfirmationService(
-    funding,
-    auditRecorder,
-    database,
+  const reversals = lazy(() => new PostgresReversalRepository(database));
+  const withdrawalRepository = lazy(() => new PostgresWithdrawalRepository(database));
+  const withdrawalPolicy = lazy(() => new PostgresWithdrawalPolicyRepository(database));
+  const fundsReservation = lazy(() => new PostgresLedgerFundsReservationService(database));
+  const withdrawalPersistence = lazy(() => new PostgresWithdrawalPersistence(database, database));
+  const withdrawals = lazy(
+    () =>
+      new WithdrawalService(
+        withdrawalRepository(),
+        withdrawalPolicy(),
+        fundsReservation(),
+        outbox(),
+        database,
+        operators(),
+        withdrawalPersistence(),
+      ),
   );
-  const operatorFunding = new OperatorFundingService(
-    new PostgresOperatorFundingReader(database),
-    bankTransferConfirmation,
+
+  const payoutState = lazy(() => {
+    const registry = new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());
+    let paystackPayout: PaystackPayoutProvider | null = null;
+    let failed = false;
+    try {
+      const configuration = loadPaystackPayoutConfiguration();
+      if (configuration) {
+        paystackPayout = new PaystackPayoutProvider(
+          configuration,
+          new PostgresPaystackRecipientStore(database),
+        );
+        registry.register(paystackPayout);
+      }
+    } catch (error) {
+      failed = true;
+      registry.registerFailure("paystack", error);
+      recordConfigurationFailure("payout", "paystack", error);
+    }
+    return {
+      registry,
+      paystackPayout,
+      defaultProvider: failed || paystackPayout ? "paystack" : "development",
+    };
+  });
+  const payoutProviders = lazy(() => payoutState().registry);
+  const payoutRepository = lazy(() => new PostgresPayoutRepository(database));
+  const paystackPayout = lazy(() => payoutState().paystackPayout);
+  const paystackPayoutEvents = lazy(() => new PostgresPaystackPayoutEventRepository(database));
+  const payoutExecution = lazy(
+    () =>
+      new PayoutExecutionProcessor(
+        withdrawalRepository(),
+        payoutRepository(),
+        payoutProviders(),
+        fundsReservation(),
+        outbox(),
+        database,
+        payoutState().defaultProvider,
+      ),
   );
-  const bankTransferEvidence = new BankTransferEvidenceService(
-    funding,
-    new PostgresBankTransferEvidenceRepository(database),
-    auditRecorder,
-    database,
-    objectStorage,
-    bankEvidenceStorageName,
-  );
-  return {
-    database,
-    accounts,
-    listings,
-    reviews,
-    listingReviews,
-    listingMediaRepository,
-    objectStorage,
-    listingMedia,
-    listingMediaDeletion,
-    purchases,
-    entitlements,
-    grants,
-    payments,
-    providerEvents,
-    outbox,
-    idempotency,
-    providers,
-    paystack,
-    referralGraph,
-    commissionPolicy,
-    referralAttributionRepository,
-    referralAttribution,
-    authentication,
-    apiKeys,
-    operatorApiKeys,
-    principalResolver,
-    authorization: new AuthorizationPolicy(),
-    integrations: new PostgresIntegrationService(database, database),
-    profiles: new ProfileService(accounts),
-    accountProjections: new AccountProjectionService(database),
-    listingService,
-    listingTransfer,
-    legacyProviderCheckout: new CheckoutService(
-      listings,
-      payments,
-      purchases,
-      providers,
-      idempotency,
-      referralAttribution,
-      database,
-      accounts,
-      exchangeRates,
-    ),
-    walletCheckout: new WalletCheckoutService(
-      listings,
-      checkoutRepository,
-      purchases,
-      referralAttribution,
-      database,
-    ),
-    checkoutRepository,
-    funding,
-    fundingService,
-    fundingInitialization,
-    fundingVerification,
-    fundingExpiry,
-    wallet,
-    walletRepository,
-    walletCredit,
-    walletAvailability,
-    checkoutPayment,
-    entitlementIssuance,
-    referralGraphService: new ReferralGraphService(
-      accounts,
-      referralGraph,
-      database,
-      auditRecorder,
-    ),
-    commissionDistribution,
-    ledger,
-    financialDistributionPolicy,
-    yamlCommissionPolicy,
-    purchaseDistribution,
-    treasuryRepository,
-    treasury,
-    treasuryProcessor,
-    legacyPaymentCompletion: paymentCompletion,
-    paystackWebhook: paystack
-      ? new PaystackWebhookIngress(paystack, providerEvents, outbox, database)
-      : null,
-    nowPaymentsIpn: nowPayments ? new NowPaymentsIpnIngress(nowPayments, funding, database) : null,
-    paystackPayoutWebhook: paystackPayout
+  const paystackPayoutWebhook = lazy(() => {
+    const provider = paystackPayout();
+    return provider
       ? new PaystackPayoutWebhookIngress(
-          paystackPayout,
-          paystackPayoutEvents,
-          payoutRepository,
-          payoutExecution,
+          provider,
+          paystackPayoutEvents(),
+          payoutRepository(),
+          payoutExecution(),
           database,
         )
-      : null,
-    operators,
-    paymentOperations,
-    paymentInitialization,
-    paymentInitializationWorker,
-    paymentVerification,
-    paymentReconciliation: new PaymentReconciliationService(
-      payments,
-      paymentVerification,
-      paymentOperations,
-      operators,
-    ),
-    paystackInspection: new PaystackOperationsInspectionService(
-      paystackInspectionOperations,
-      operators,
-    ),
-    settlementPolicy,
-    settlement,
-    reversals,
-    purchaseReversal: new PurchaseReversalProcessor(purchases, ledger, reversals, outbox, database),
-    withdrawalRepository,
-    withdrawalPolicy,
-    fundsReservation,
-    withdrawals,
-    payoutProviders,
-    payoutRepository,
-    payoutExecution,
-    paystackPayout,
-    exchangeRates,
-    buyerAccess: new BuyerAccessService(access, listings, database, purchases, entitlements),
-    access,
-    hierarchy: new HierarchyService(new PostgresHierarchyReader(database)),
-    operatorOverview: new OperatorOverviewService(database),
-    operatorAccounts: new OperatorAccountService(database),
-    capabilityAdministration,
-    operatorFunding,
-    bankTransferEvidence,
-    operatorDistributions: new OperatorDistributionService(database),
-    operatorEarnings: new OperatorEarningsService(database),
-    operatorWithdrawals: new OperatorWithdrawalService(database),
-    operatorTreasury: new OperatorTreasuryService(database),
-    blog: getBlogService(),
+      : null;
+  });
+
+  const paymentState = lazy(() => {
+    const registry = registerDevelopmentPaymentProvider(new PaymentProviderRegistry());
+    const instances = new Map<string, PaymentProvider>();
+    let bankEvidenceStorageName: string | undefined;
+    const register = <T extends { provider: PaymentProvider; filters: PaymentProviderFilters }>(
+      name: string,
+      load: () => T | null,
+    ) => {
+      try {
+        const loaded = load();
+        if (!loaded) return;
+        instances.set(name, loaded.provider);
+        registry.register(loaded.provider, { filters: loaded.filters });
+      } catch (error) {
+        registry.registerFailure(name, error);
+        recordConfigurationFailure("payment", name, error);
+      }
+    };
+    register("paystack", () => {
+      const configuration = loadPaystackConfiguration();
+      return configuration
+        ? {
+            provider: new PaystackProvider(
+              configuration.provider,
+              fetch,
+              undefined,
+              exchangeRates(),
+            ),
+            filters: configuration.filters,
+          }
+        : null;
+    });
+    register("nowpayments", () => {
+      const configuration = loadNowPaymentsConfiguration("config/modules/payment/nowpayments.yaml");
+      return configuration
+        ? {
+            provider: new NowPaymentsProvider(configuration.provider),
+            filters: configuration.filters,
+          }
+        : null;
+    });
+    register("direct_trc20", () => {
+      const configuration = loadDirectTrc20Configuration("config/modules/payment/usdt_trc20.yaml");
+      if (!configuration) return null;
+      const verifier = new HttpDirectTrc20Verifier({
+        ...configuration.provider.verification,
+        tokenContract: configuration.provider.tokenContract,
+      });
+      return {
+        provider: new DirectTrc20Provider(configuration.provider, verifier),
+        filters: configuration.filters,
+      };
+    });
+    register("bank_transfer", () => {
+      const configuration = loadBankTransferConfiguration();
+      if (!configuration) return null;
+      bankEvidenceStorageName = configuration.provider.mediaProvider;
+      return {
+        provider: new BankTransferProvider(configuration.provider),
+        filters: configuration.filters,
+      };
+    });
+    return { registry, instances, bankEvidenceStorageName };
+  });
+  const providers = lazy(() => paymentState().registry);
+  const paystack = lazy(
+    () => (paymentState().instances.get("paystack") as PaystackProvider | undefined) ?? null,
+  );
+  const nowPayments = lazy(
+    () => (paymentState().instances.get("nowpayments") as NowPaymentsProvider | undefined) ?? null,
+  );
+  const bankEvidenceStorageName = lazy(() => paymentState().bankEvidenceStorageName);
+  const paystackWebhook = lazy(() => {
+    const provider = paystack();
+    return provider
+      ? new PaystackWebhookIngress(provider, providerEvents(), outbox(), database)
+      : null;
+  });
+  const nowPaymentsIpn = lazy(() => {
+    const provider = nowPayments();
+    return provider ? new NowPaymentsIpnIngress(provider, funding(), database) : null;
+  });
+  const paystackInspectionOperations = lazy(
+    () => new PostgresPaystackOperationsRepository(database),
+  );
+  const paymentInitialization = lazy(
+    () =>
+      new PaymentInitializationProcessor(
+        payments(),
+        providers(),
+        paymentOperations(),
+        database,
+        accounts(),
+      ),
+  );
+  const paymentInitializationWorker = lazy(
+    () => new PaymentInitializationWorker(payments(), paymentInitialization()),
+  );
+  const paymentVerification = lazy(
+    () => new PaymentVerificationProcessor(payments(), providers(), database),
+  );
+  const access = lazy(() => new AccessService(entitlements(), grants()));
+  const referralAttribution = lazy(
+    () => new ReferralAttributionService(referralAttributionRepository(), listings(), accounts()),
+  );
+  const paymentCompletion = lazy(
+    () =>
+      new PaymentCompletionService(
+        payments(),
+        purchases(),
+        entitlements(),
+        providers(),
+        idempotency(),
+        outbox(),
+        database,
+      ),
+  );
+  const commissionDistribution = lazy(() => new CommissionDistributionService(referralGraph()));
+  const purchaseDistribution = lazy(
+    () =>
+      new PurchaseDistributionProcessor(
+        purchases(),
+        commissionDistribution(),
+        commissionPolicy(),
+        financialDistributionPolicy(),
+        ledger(),
+        outbox(),
+        database,
+        yamlCommissionPolicy(),
+      ),
+  );
+  const fundingInitialization = lazy(
+    () =>
+      new FundingInitializationProcessor(
+        funding(),
+        providers(),
+        accounts(),
+        database,
+        paymentOperations(),
+        5 * 60_000,
+        () => new Date(),
+        lifecycleDiagnostics,
+      ),
+  );
+  const fundingVerification = lazy(
+    () =>
+      new FundingVerificationProcessor(
+        funding(),
+        providers(),
+        database,
+        paymentOperations(),
+        lifecycleDiagnostics,
+        new PaystackVerificationRecoveryPolicy(),
+      ),
+  );
+  const fundingService = lazy(
+    () =>
+      new FundingService(
+        funding(),
+        providers(),
+        exchangeRates(),
+        accounts(),
+        database,
+        fundingVerification(),
+        lifecycleDiagnostics,
+      ),
+  );
+  const fundingExpiry = lazy(
+    () =>
+      new NowPaymentsExpiryProcessor(
+        funding(),
+        fundingVerification(),
+        new NowPaymentsExpiryPolicy(),
+        () => new Date(),
+      ),
+  );
+  const wallet = lazy(() => new WalletService(walletRepository()));
+  const walletCredit = lazy(
+    () => new WalletCreditProcessor(funding(), walletRepository(), database, lifecycleDiagnostics),
+  );
+  const walletAvailability = lazy(
+    () => new WalletAvailabilityProcessor(walletRepository(), database, lifecycleDiagnostics),
+  );
+  const checkoutPayment = lazy(
+    () =>
+      new CheckoutPaymentProcessor(checkoutRepository(), walletRepository(), purchases(), database),
+  );
+  const entitlementIssuance = lazy(
+    () => new EntitlementIssuanceProcessor(purchases(), entitlements(), database),
+  );
+  const betterAuth = lazy(() => new BetterAuthBoundary(database, databaseUrl));
+  const authentication = lazy(() =>
+    Object.assign(new AuthenticationService(accounts(), betterAuth(), database), {
+      auth: betterAuth().auth,
+      betterAuth: betterAuth(),
+    }),
+  );
+  const apiKeyRepository = lazy(() => new PostgresApiKeyRepository(database));
+  const apiKeys = lazy(() => new ApiKeyService(apiKeyRepository(), database, database));
+  const operatorApiKeys = lazy(
+    () => new OperatorApiKeyService(apiKeys(), accounts(), operators(), auditRecorder(), database),
+  );
+  const principalResolver = lazy(
+    () => new ApiPrincipalResolver(authentication(), apiKeys(), database),
+  );
+  const capabilityAdministration = lazy(
+    () =>
+      new CapabilityAdministrationService(
+        accounts(),
+        operators(),
+        new PostgresCapabilityAssignmentStore(database),
+        auditRecorder(),
+        database,
+      ),
+  );
+  const bankTransferConfirmation = lazy(
+    () => new BankTransferConfirmationService(funding(), auditRecorder(), database),
+  );
+  const operatorFunding = lazy(
+    () =>
+      new OperatorFundingService(
+        new PostgresOperatorFundingReader(database),
+        bankTransferConfirmation(),
+      ),
+  );
+  const bankTransferEvidence = lazy(() => {
+    providers().get("bank_transfer");
+    return new BankTransferEvidenceService(
+      funding(),
+      new PostgresBankTransferEvidenceRepository(database),
+      auditRecorder(),
+      database,
+      objectStorage(),
+      bankEvidenceStorageName(),
+    );
+  });
+  const checkout = lazy(
+    () =>
+      new CheckoutService(
+        listings(),
+        payments(),
+        purchases(),
+        providers(),
+        idempotency(),
+        referralAttribution(),
+        database,
+        accounts(),
+        exchangeRates(),
+      ),
+  );
+  const walletCheckout = lazy(
+    () =>
+      new WalletCheckoutService(
+        listings(),
+        checkoutRepository(),
+        purchases(),
+        referralAttribution(),
+        database,
+      ),
+  );
+  const referralGraphService = lazy(
+    () => new ReferralGraphService(accounts(), referralGraph(), database, auditRecorder()),
+  );
+  const paymentReconciliation = lazy(
+    () =>
+      new PaymentReconciliationService(
+        payments(),
+        paymentVerification(),
+        paymentOperations(),
+        operators(),
+      ),
+  );
+  const paystackInspection = lazy(
+    () => new PaystackOperationsInspectionService(paystackInspectionOperations(), operators()),
+  );
+  const purchaseReversal = lazy(
+    () => new PurchaseReversalProcessor(purchases(), ledger(), reversals(), outbox(), database),
+  );
+  const buyerAccess = lazy(
+    () => new BuyerAccessService(access(), listings(), database, purchases(), entitlements()),
+  );
+  const hierarchy = lazy(() => new HierarchyService(new PostgresHierarchyReader(database)));
+  const integrations = lazy(() => new PostgresIntegrationService(database, database));
+  const profiles = lazy(() => new ProfileService(accounts()));
+  const accountProjections = lazy(() => new AccountProjectionService(database));
+  const operatorOverview = lazy(() => new OperatorOverviewService(database));
+  const operatorAccounts = lazy(() => new OperatorAccountService(database));
+  const operatorDistributions = lazy(() => new OperatorDistributionService(database));
+  const operatorEarnings = lazy(() => new OperatorEarningsService(database));
+  const operatorWithdrawals = lazy(() => new OperatorWithdrawalService(database));
+  const operatorTreasury = lazy(() => new OperatorTreasuryService(database));
+  const blog = lazy(() => getBlogService());
+
+  return {
+    database,
+    get accounts() {
+      return accounts();
+    },
+    get listings() {
+      return listings();
+    },
+    get reviews() {
+      return reviews();
+    },
+    get listingReviews() {
+      return listingReviews();
+    },
+    get listingMediaRepository() {
+      return listingMediaRepository();
+    },
+    get objectStorage() {
+      return objectStorage();
+    },
+    get listingMedia() {
+      return listingMedia();
+    },
+    get listingMediaDeletion() {
+      return listingMediaDeletion();
+    },
+    get purchases() {
+      return purchases();
+    },
+    get entitlements() {
+      return entitlements();
+    },
+    get grants() {
+      return grants();
+    },
+    get payments() {
+      return payments();
+    },
+    get providerEvents() {
+      return providerEvents();
+    },
+    get outbox() {
+      return outbox();
+    },
+    get idempotency() {
+      return idempotency();
+    },
+    get providers() {
+      return providers();
+    },
+    get paystack() {
+      return paystack();
+    },
+    get referralGraph() {
+      return referralGraph();
+    },
+    get commissionPolicy() {
+      return commissionPolicy();
+    },
+    get referralAttributionRepository() {
+      return referralAttributionRepository();
+    },
+    get referralAttribution() {
+      return referralAttribution();
+    },
+    get authentication() {
+      return authentication();
+    },
+    get apiKeys() {
+      return apiKeys();
+    },
+    get operatorApiKeys() {
+      return operatorApiKeys();
+    },
+    get principalResolver() {
+      return principalResolver();
+    },
+    get authorization() {
+      return authorization();
+    },
+    get integrations() {
+      return integrations();
+    },
+    get profiles() {
+      return profiles();
+    },
+    get accountProjections() {
+      return accountProjections();
+    },
+    get listingService() {
+      return listingService();
+    },
+    get listingTransfer() {
+      return listingTransfer();
+    },
+    get legacyProviderCheckout() {
+      return checkout();
+    },
+    get walletCheckout() {
+      return walletCheckout();
+    },
+    get checkoutRepository() {
+      return checkoutRepository();
+    },
+    get funding() {
+      return funding();
+    },
+    get fundingService() {
+      return fundingService();
+    },
+    get fundingInitialization() {
+      return fundingInitialization();
+    },
+    get fundingVerification() {
+      return fundingVerification();
+    },
+    get fundingExpiry() {
+      return fundingExpiry();
+    },
+    get wallet() {
+      return wallet();
+    },
+    get walletRepository() {
+      return walletRepository();
+    },
+    get walletCredit() {
+      return walletCredit();
+    },
+    get walletAvailability() {
+      return walletAvailability();
+    },
+    get checkoutPayment() {
+      return checkoutPayment();
+    },
+    get entitlementIssuance() {
+      return entitlementIssuance();
+    },
+    get referralGraphService() {
+      return referralGraphService();
+    },
+    get commissionDistribution() {
+      return commissionDistribution();
+    },
+    get ledger() {
+      return ledger();
+    },
+    get financialDistributionPolicy() {
+      return financialDistributionPolicy();
+    },
+    get yamlCommissionPolicy() {
+      return yamlCommissionPolicy();
+    },
+    get purchaseDistribution() {
+      return purchaseDistribution();
+    },
+    get treasuryRepository() {
+      return treasuryRepository();
+    },
+    get treasury() {
+      return treasury();
+    },
+    get treasuryProcessor() {
+      return treasuryProcessor();
+    },
+    get legacyPaymentCompletion() {
+      return paymentCompletion();
+    },
+    get paystackWebhook() {
+      return paystackWebhook();
+    },
+    get nowPaymentsIpn() {
+      return nowPaymentsIpn();
+    },
+    get paystackPayoutWebhook() {
+      return paystackPayoutWebhook();
+    },
+    get operators() {
+      return operators();
+    },
+    get paymentOperations() {
+      return paymentOperations();
+    },
+    get paymentInitialization() {
+      return paymentInitialization();
+    },
+    get paymentInitializationWorker() {
+      return paymentInitializationWorker();
+    },
+    get paymentVerification() {
+      return paymentVerification();
+    },
+    get paymentReconciliation() {
+      return paymentReconciliation();
+    },
+    get paystackInspection() {
+      return paystackInspection();
+    },
+    get settlementPolicy() {
+      return settlementPolicy();
+    },
+    get settlement() {
+      return settlement();
+    },
+    get reversals() {
+      return reversals();
+    },
+    get purchaseReversal() {
+      return purchaseReversal();
+    },
+    get withdrawalRepository() {
+      return withdrawalRepository();
+    },
+    get withdrawalPolicy() {
+      return withdrawalPolicy();
+    },
+    get fundsReservation() {
+      return fundsReservation();
+    },
+    get withdrawals() {
+      return withdrawals();
+    },
+    get payoutProviders() {
+      return payoutProviders();
+    },
+    get payoutRepository() {
+      return payoutRepository();
+    },
+    get payoutExecution() {
+      return payoutExecution();
+    },
+    get paystackPayout() {
+      return paystackPayout();
+    },
+    get exchangeRates() {
+      return exchangeRates();
+    },
+    get buyerAccess() {
+      return buyerAccess();
+    },
+    get access() {
+      return access();
+    },
+    get hierarchy() {
+      return hierarchy();
+    },
+    get operatorOverview() {
+      return operatorOverview();
+    },
+    get operatorAccounts() {
+      return operatorAccounts();
+    },
+    get capabilityAdministration() {
+      return capabilityAdministration();
+    },
+    get operatorFunding() {
+      return operatorFunding();
+    },
+    get bankTransferEvidence() {
+      return bankTransferEvidence();
+    },
+    get operatorDistributions() {
+      return operatorDistributions();
+    },
+    get operatorEarnings() {
+      return operatorEarnings();
+    },
+    get operatorWithdrawals() {
+      return operatorWithdrawals();
+    },
+    get operatorTreasury() {
+      return operatorTreasury();
+    },
+    get blog() {
+      return blog();
+    },
   };
+}
+
+function lazy<T>(factory: () => T): () => T {
+  let initialized = false;
+  let value!: T;
+  return () => {
+    if (!initialized) {
+      value = factory();
+      initialized = true;
+    }
+    return value;
+  };
+}
+
+function recordConfigurationFailure(feature: string, provider: string, error: unknown) {
+  writeDevelopmentDiagnostic({
+    level: "error",
+    event: "configuration.feature_failed",
+    metadata: {
+      feature,
+      provider,
+      error: error instanceof Error ? error.message : "Unknown configuration error",
+    },
+  });
 }
 
 function configuredDurationMs(value: string | undefined, fallback: number) {

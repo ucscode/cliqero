@@ -2,7 +2,7 @@ import { z } from "zod";
 import { apiError, authenticatedAccount } from "../http";
 import { getContainer } from "@/infrastructure/container";
 import { listingWithMediaView } from "@/application/listing/service";
-import { storefrontConfig } from "@/config/storefront";
+import { loadStorefrontConfiguration } from "@/config/storefront";
 
 const sorts = ["newest", "oldest", "price_asc", "price_desc", "title_asc"] as const;
 
@@ -47,18 +47,19 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const featuredOnly = url.searchParams.get("featured") === "true";
-  const configuredLimit = featuredOnly
-    ? storefrontConfig.home.featured_limit
-    : storefrontConfig.catalogue.page_size;
-  const requestedLimit = Number(url.searchParams.get("limit") ?? configuredLimit);
-  const limit = Math.max(
-    1,
-    Math.min(Number.isFinite(requestedLimit) ? requestedLimit : configuredLimit, configuredLimit),
-  );
   const sort = sorts.includes(url.searchParams.get("sort") as (typeof sorts)[number])
     ? (url.searchParams.get("sort") as (typeof sorts)[number])
     : "newest";
   try {
+    const storefrontConfig = loadStorefrontConfiguration();
+    const configuredLimit = featuredOnly
+      ? storefrontConfig.home.featured_limit
+      : storefrontConfig.catalogue.page_size;
+    const requestedLimit = Number(url.searchParams.get("limit") ?? configuredLimit);
+    const limit = Math.max(
+      1,
+      Math.min(Number.isFinite(requestedLimit) ? requestedLimit : configuredLimit, configuredLimit),
+    );
     const c = getContainer(),
       page = await c.listingService.queryPublic({
         search: url.searchParams.get("search") ?? undefined,

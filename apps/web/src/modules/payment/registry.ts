@@ -7,6 +7,7 @@ import type {
 
 export class PaymentProviderRegistry {
   private readonly providers = new Map<string, PaymentProviderRegistration>();
+  private readonly failures = new Map<string, Error>();
 
   register(
     provider: PaymentProvider,
@@ -26,6 +27,13 @@ export class PaymentProviderRegistry {
         (filters.countries === null ||
           (context.country !== null && filters.countries.includes(context.country))),
     });
+    this.failures.delete(provider.name);
+    return this;
+  }
+
+  registerFailure(name: string, error: unknown): this {
+    this.providers.delete(name);
+    this.failures.set(name, error instanceof Error ? error : new Error(String(error)));
     return this;
   }
 
@@ -47,6 +55,9 @@ export class PaymentProviderRegistry {
 
   get(name: string, context?: PaymentProviderEligibilityContext): PaymentProvider {
     const registration = this.providers.get(name);
+    const failure = this.failures.get(name);
+    if (failure)
+      throw new Error(`Payment provider configuration is invalid: ${name}: ${failure.message}`);
     if (!registration || !registration.enabled || (context && !registration.isEligible(context)))
       throw new Error(`Payment provider is unavailable: ${name}`);
     return registration.provider;

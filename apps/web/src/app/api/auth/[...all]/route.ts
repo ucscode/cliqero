@@ -1,6 +1,6 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import { getContainer } from "@/infrastructure/container";
-import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
+import { logDevelopmentError, writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
 import { honeypotRejectionResponse, requestHoneypotSource } from "@/security/honeypot";
 import { verifyCaptchaToken } from "@/security/captcha";
 
@@ -43,8 +43,22 @@ async function route(method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", reques
       return Response.json({ error: "CAPTCHA verification failed" }, { status: 400 });
     }
   }
-  const handler = toNextJsHandler(getContainer().authentication.auth);
-  return handler[method](request);
+  try {
+    const handler = toNextJsHandler(getContainer().authentication.auth);
+    return await handler[method](request);
+  } catch (error) {
+    const url = new URL(request.url);
+    logDevelopmentError(error, {
+      event: "auth.request.failed",
+      method: request.method,
+      path: url.pathname,
+      metadata: {
+        operation: url.pathname.replace(/^\/api\/auth\/?/, "") || "root",
+        callback_origin: url.origin,
+      },
+    });
+    throw error;
+  }
 }
 export const GET = (request: Request) => route("GET", request);
 export const POST = (request: Request) => route("POST", request);

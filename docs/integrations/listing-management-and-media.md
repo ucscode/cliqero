@@ -42,9 +42,10 @@ that instance's `provider` field selects the driver implementation. Persisted
 `storage_provider` values contain the instance key, so multiple filesystem,
 Supabase, or R2 instances can coexist without rewriting existing records.
 Listing media uses `storefront.media_provider` when present and otherwise uses
-`media.default_provider`; the selected instance must be public. Bank-transfer
-proofs use `bank_transfer.config.media_provider`, which must name a configured
-private instance. Credentials never enter media records or API responses.
+`media.default_provider`. Bank-transfer proofs use
+`bank_transfer.config.media_provider`, which must name a configured instance.
+Neither feature imposes a product-level public/private storage policy;
+credentials never enter media records or API responses.
 
 The `visibility` field controls whether an instance may produce a public object
 URL. Private instances remain available to authenticated server-side reads but

@@ -37,12 +37,22 @@ export interface PayoutProvider {
 }
 export class PayoutProviderRegistry {
   private providers = new Map<string, PayoutProvider>();
+  private failures = new Map<string, Error>();
   register(provider: PayoutProvider) {
     this.providers.set(provider.name, provider);
+    this.failures.delete(provider.name);
+    return this;
+  }
+  registerFailure(name: string, error: unknown) {
+    this.providers.delete(name);
+    this.failures.set(name, error instanceof Error ? error : new Error(String(error)));
     return this;
   }
   get(name: string) {
     const provider = this.providers.get(name);
+    const failure = this.failures.get(name);
+    if (failure)
+      throw new Error(`Payout provider configuration is invalid: ${name}: ${failure.message}`);
     if (!provider) throw new Error(`Payout provider is unavailable: ${name}`);
     return provider;
   }

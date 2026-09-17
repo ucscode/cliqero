@@ -69,15 +69,25 @@ describe("listing media storage instance selection", () => {
     expect(service.publicUrl(media)).toContain("https://media.example/");
   });
 
-  it("rejects a private selected storefront instance", () => {
+  it("allows a private selected storefront instance until public URL generation", () => {
     const registry = new ObjectStorageRegistry("private_media").register(
       storageProvider("private_media", "private"),
     );
 
-    expect(
-      () =>
-        new ListingMediaService({} as never, {} as never, registry, {} as never, "private_media"),
-    ).toThrow("Storefront media storage must be public");
+    const service = new ListingMediaService(
+      {} as never,
+      {} as never,
+      registry,
+      {} as never,
+      "private_media",
+    );
+    expect(() =>
+      service.publicUrl({
+        storageProvider: "private_media",
+        storageContainer: "media",
+        objectKey: "x",
+      } as ListingMedia),
+    ).toThrow("private");
   });
 
   it("deletes existing media through its persisted storage instance", async () => {

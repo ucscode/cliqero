@@ -17,7 +17,7 @@ describe("storefront configuration", () => {
     ).toBeUndefined();
   });
 
-  it("resolves an explicit public instance and rejects a private one", () => {
+  it("resolves configured instances without enforcing feature visibility policy", () => {
     const provider = (name: string, visibility: "public" | "private") => ({
       name,
       visibility,
@@ -42,12 +42,12 @@ describe("storefront configuration", () => {
       resolveStorefrontMediaProvider({ ...config, media_provider: "storefront_public" }, storage)
         .name,
     ).toBe("storefront_public");
-    expect(() =>
-      resolveStorefrontMediaProvider({ ...config, media_provider: "private_media" }, storage),
-    ).toThrow("Storefront media storage must be public");
+    expect(
+      resolveStorefrontMediaProvider({ ...config, media_provider: "private_media" }, storage).name,
+    ).toBe("private_media");
   });
 
-  it("rejects a private default when storefront media falls back to it", () => {
+  it("allows a private default until an operation requires a public URL", () => {
     const provider = {
       name: "private_default",
       visibility: "private" as const,
@@ -63,11 +63,13 @@ describe("storefront configuration", () => {
     };
     const storage = new ObjectStorageRegistry("private_default").register(provider);
 
+    const resolved = resolveStorefrontMediaProvider(
+      loadStorefrontConfiguration("config/storefront.example.yaml"),
+      storage,
+    );
+    expect(resolved.name).toBe("private_default");
     expect(() =>
-      resolveStorefrontMediaProvider(
-        loadStorefrontConfiguration("config/storefront.example.yaml"),
-        storage,
-      ),
-    ).toThrow("Storefront media storage must be public");
+      storage.publicUrl({ provider: resolved.name, container: "media", key: "x" }),
+    ).toThrow("private");
   });
 });

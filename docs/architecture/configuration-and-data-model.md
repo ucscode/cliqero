@@ -18,8 +18,10 @@ YAML can explicitly reference environment values with `%env(NAME)%`; environment
 Object storage configuration uses named instances. The `providers` map key is
 the persisted storage instance identity; the nested `provider` value is only
 the driver implementation. `visibility: public` permits public URL generation,
-while `visibility: private` is reserved for server-side access. Module-level
-`media_provider` values reference these instance keys.
+while `visibility: private` is reserved for server-side access. Visibility is
+provider capability metadata, not a feature-level policy: each operation checks
+the capability it actually needs. Module-level `media_provider` values
+reference these instance keys.
 
 ## Deployment values
 

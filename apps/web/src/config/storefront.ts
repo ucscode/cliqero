@@ -23,12 +23,5 @@ export function resolveStorefrontMediaProvider(
   config: ReturnType<typeof loadStorefrontConfiguration>,
   storage: ObjectStorageRegistry,
 ): ObjectStorageProvider {
-  const provider = config.media_provider ? storage.get(config.media_provider) : storage.default();
-  if (provider.visibility === "private")
-    throw new Error(`Storefront media storage must be public: ${provider.name}`);
-  if (!provider.publicUrl)
-    throw new Error(`Storefront media storage cannot produce public URLs: ${provider.name}`);
-  return provider;
+  return config.media_provider ? storage.get(config.media_provider) : storage.default();
 }
-
-export const storefrontConfig = loadStorefrontConfiguration();

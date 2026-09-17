@@ -20,6 +20,22 @@ describe("payment provider eligibility", () => {
     expect(registry.availableFor(context("NG"))).toHaveLength(1);
     expect(registry.availableFor(context("GH"))).toHaveLength(0);
   });
+  it("keeps valid providers usable when another provider configuration fails", () => {
+    const registry = new PaymentProviderRegistry()
+      .registerFailure("paystack", new Error("invalid Paystack test configuration"))
+      .register(
+        new NowPaymentsProvider({
+          apiKey: "test",
+          apiBaseUrl: "https://api-sandbox.nowpayments.io",
+          payCurrencies: ["usdttrc20"],
+        }),
+      );
+
+    expect(() => registry.get("paystack")).toThrow(
+      "Payment provider configuration is invalid: paystack",
+    );
+    expect(registry.get("nowpayments").name).toBe("nowpayments");
+  });
   it("keeps Paystack collection currency separate from country eligibility", () => {
     const registry = new PaymentProviderRegistry().register(
       new PaystackProvider({ secretKey: "test", apiBaseUrl: "https://api.paystack.co" }),
