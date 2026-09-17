@@ -12,7 +12,7 @@ filters:
     - US
 config:
   # Named private media.yaml instance for sensitive transfer evidence.
-  media_provider: supabase
+  media_provider: filesystem
   # Optional country-to-fiat preparation mapping. Accounting remains USD.
   currency_mapping:
     enabled: true
@@ -43,10 +43,6 @@ config:
           label: Account Number
           value: "0000000000"
           copyable: true
-
-        - key: custom_instruction
-          label: Transfer instruction
-          value: Include the funding reference in the transfer narration.
 
     - id: international_usd
       filters:
@@ -82,7 +78,3 @@ config:
         - key: bank_address
           label: Bank Address
           value: Example address
-
-        - key: custom_instruction
-          label: Transfer instruction
-          value: Include the funding reference in the transfer narration.
