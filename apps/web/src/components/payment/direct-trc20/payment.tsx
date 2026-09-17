@@ -37,10 +37,7 @@ export function DirectTrc20Payment(props: PaymentProviderProps) {
     // customer submits another candidate, the previous unresolved observation
     // is no longer the current interaction result and should not be rendered
     // alongside a new request error.
-    if (
-      props.funding.verification?.resolved === false &&
-      !props.funding.provider_transaction_id
-    ) {
+    if (props.funding.verification?.resolved === false && !props.funding.provider_transaction_id) {
       props.onFundingChange({ ...props.funding, verification: null });
     }
 

@@ -151,6 +151,8 @@ export interface PaymentInitializationMetadata {
 export interface PaymentProvider {
   readonly name: string;
   readonly environmentOnly?: "development" | "test";
+  /** Whether the commercial worker should perform automated verification. */
+  readonly automatedVerification?: boolean;
   readonly displayName: string;
   readonly imageUrl: string;
   readonly description: string;

@@ -75,14 +75,14 @@ describe("wallet funding initialization endpoint", () => {
     });
   });
 
-  it("keeps Bank Transfer outside the initialization endpoint", async () => {
+  it("initializes Bank Transfer funding through the initialization endpoint", async () => {
     const { process } = configure("initialization_pending", "bank_transfer");
     const response = await POST(new Request("http://localhost/api/wallet/fund/${id}/initialize"), {
       params: Promise.resolve({ id: fundingId }),
     });
 
     expect(response.status).toBe(200);
-    expect(process).not.toHaveBeenCalled();
-    expect(await response.json()).toMatchObject({ state: "initialization_pending" });
+    expect(process).toHaveBeenCalledOnce();
+    expect(await response.json()).toMatchObject({ state: "awaiting_payment" });
   });
 });

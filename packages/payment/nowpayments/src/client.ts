@@ -26,7 +26,10 @@ const minimumAmountSchema = z.object({
   fiat_equivalent: scalarAmountSchema.nullable().optional(),
 });
 const paymentSchema = z.object({
-  payment_id: z.union([z.string().min(1), z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)]),
+  payment_id: z.union([
+    z.string().min(1),
+    z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  ]),
   payment_status: z.string().min(1),
   pay_address: z.string().nullable().optional(),
   pay_amount: scalarAmountSchema.nullable().optional(),

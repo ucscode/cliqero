@@ -18,7 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (
       funding.state === "initialization_pending" &&
-      ["paystack", "nowpayments", "development"].includes(funding.providerName)
+      ["paystack", "nowpayments", "bank_transfer", "development"].includes(funding.providerName)
     )
       await container.fundingInitialization.process(funding.id);
 

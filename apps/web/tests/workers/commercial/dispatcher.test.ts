@@ -13,6 +13,7 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
         findWork: async (state: string) =>
           state === "verification_pending" ? items("verification") : items("funding"),
       },
+      providers: { get: () => ({}) },
       fundingVerification: { process: processing("verification") },
       fundingExpiry: {
         findWork: async () => items("expiry"),
@@ -84,5 +85,28 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
     });
     expect(logger.error).not.toHaveBeenCalled();
     expect(events).toEqual([]);
+  });
+
+  it("does not automatically verify providers that require manual confirmation", async () => {
+    const events: string[] = [];
+    const app = application(events);
+    app.providers.get = (providerName: string) =>
+      ({
+        name: providerName,
+        displayName: providerName,
+        imageUrl: "",
+        description: "",
+        automatedVerification: providerName === "bank_transfer" ? false : undefined,
+        initiate: vi.fn(),
+        verify: vi.fn(),
+      }) as any;
+    app.funding.findWork = async (state: string) =>
+      state === "verification_pending"
+        ? ([{ id: "bank-manual", providerName: "bank_transfer" }] as any)
+        : [];
+
+    await new CommercialWorkflowDispatcher(app, { error: vi.fn() }).runOnce();
+
+    expect(events).not.toContain("verification:bank-manual");
   });
 });

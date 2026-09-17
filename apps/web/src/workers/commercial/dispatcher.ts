@@ -34,7 +34,12 @@ export class CommercialWorkflowDispatcher {
     );
     processed += await this.family(
       "funding-verification",
-      () => this.app.funding.findWork("verification_pending"),
+      async () => {
+        const work = await this.app.funding.findWork("verification_pending");
+        return work.filter(
+          (funding) => this.app.providers.get(funding.providerName).automatedVerification !== false,
+        );
+      },
       (item) => this.app.fundingVerification.process(item.id),
     );
     processed += await this.family(

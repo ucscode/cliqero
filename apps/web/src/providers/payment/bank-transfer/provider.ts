@@ -36,6 +36,7 @@ export interface BankTransferAccount {
 /** Manual bank transfer funding. Confirmation is deliberately never inferred from submission. */
 export class BankTransferProvider extends AbstractPaymentProvider {
   readonly name = "bank_transfer";
+  readonly automatedVerification = false;
   readonly displayName: string;
   readonly imageUrl: string;
   readonly description: string;

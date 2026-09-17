@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { apiFetch, formatMinorAmount, type FundingStatus } from "@/lib/api-client";
 import { canSubmitBankTransferEvidence } from "@/providers/payment/bank-transfer/ui-policy";
-import { PaymentComponent, type PaymentProviderProps } from "../shared/status";
+import {
+  initializeFundingStatus,
+  PaymentComponent,
+  type PaymentProviderProps,
+} from "../shared/status";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
@@ -38,15 +42,32 @@ export function bankStatusFieldRows(fields: readonly BankStatusField[]) {
 
 export function BankTransferPayment(props: PaymentProviderProps) {
   const [currentTime] = useState(() => Date.now());
+  const attemptedFundingId = useRef<string | null>(null);
+  const { funding, onError, onFundingChange } = props;
   const [transferReference, setTransferReference] = useState("");
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [customerNote, setCustomerNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const fields = snapshotFields(props.funding.provider_account_snapshot);
-  const instruction = snapshotInstruction(props.funding.provider_account_snapshot);
-  const evidenceAllowed = canSubmitBankTransferEvidence(props.funding) && !props.funding.evidence;
+  const fields = snapshotFields(funding.provider_account_snapshot);
+  const instruction = snapshotInstruction(funding.provider_account_snapshot);
+  const evidenceAllowed = canSubmitBankTransferEvidence(funding) && !funding.evidence;
+  useEffect(() => {
+    if (funding.state !== "initialization_pending") return;
+    if (attemptedFundingId.current === funding.id) return;
+    attemptedFundingId.current = funding.id;
+    void initializeFundingStatus(funding.id)
+      .then((latest) => {
+        onFundingChange(latest);
+        onError("");
+      })
+      .catch((cause) => {
+        onError(
+          cause instanceof Error ? cause.message : "Bank-transfer funding could not be prepared.",
+        );
+      });
+  }, [funding.id, funding.state, onError, onFundingChange]);
   async function submitEvidence(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const reference = transferReference.trim();
