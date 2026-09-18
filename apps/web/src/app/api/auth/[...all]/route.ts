@@ -1,6 +1,9 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import { getContainer } from "@/infrastructure/container";
-import { logDevelopmentError, writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
+import {
+  logDevelopmentError,
+  writeApiDevelopmentDiagnostic,
+} from "@/infrastructure/development-log";
 import { honeypotRejectionResponse, requestHoneypotSource } from "@/security/honeypot";
 import { verifyCaptchaToken } from "@/security/captcha";
 
@@ -10,7 +13,7 @@ import { verifyCaptchaToken } from "@/security/captcha";
 async function route(method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", request: Request) {
   const honeypotSource = await requestHoneypotSource(request);
   if (honeypotSource) {
-    writeDevelopmentDiagnostic({
+    writeApiDevelopmentDiagnostic({
       level: "warn",
       event: "security.honeypot.rejected",
       method: request.method,
@@ -34,7 +37,7 @@ async function route(method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", reques
         true,
       ))
     ) {
-      writeDevelopmentDiagnostic({
+      writeApiDevelopmentDiagnostic({
         level: "warn",
         event: "security.captcha.rejected",
         method: request.method,

@@ -103,6 +103,15 @@ export class PostgresFundingRepository implements FundingRepository {
       Boolean,
     ) as FundingTransaction[];
   }
+  async findVerificationWork(now: Date, limit = 50) {
+    const rows = (
+      await this.sql.query<any>(
+        `select f.*,f.uuid as id,a.uuid as account_uuid from funding_capability.funding_transactions f join identity_capability.accounts a on a.id=f.account_id where f.state='verification_pending' and (f.next_verification_at is null or f.next_verification_at <= $1) order by f.next_verification_at nulls first,f.updated_at,f.id limit $2`,
+        [now, Math.max(1, Math.min(limit, 50))],
+      )
+    ).rows;
+    return rows.map((row) => this.map(row));
+  }
   async findInitializationWork(staleBefore: Date, limit = 50) {
     const rows = (
       await this.sql.query<any>(
@@ -124,8 +133,8 @@ export class PostgresFundingRepository implements FundingRepository {
   async save(v: FundingTransaction) {
     try {
       await this.sql.query(
-        `insert into funding_capability.funding_transactions(uuid,account_id,provider_name,provider_reference,provider_transaction_id,canonical_amount_minor,canonical_currency,collection_amount_minor,collection_currency,conversion_snapshot,state,idempotency_key,provider_initialization,confirmed_at,initialization_claimed_at)
-      values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13::jsonb,$14,$15) on conflict(uuid) do update set state=excluded.state,provider_transaction_id=case when funding_capability.funding_transactions.provider_transaction_id is null then excluded.provider_transaction_id when excluded.provider_transaction_id is null then funding_capability.funding_transactions.provider_transaction_id else excluded.provider_transaction_id end,provider_initialization=coalesce(excluded.provider_initialization,funding_capability.funding_transactions.provider_initialization),confirmed_at=coalesce(excluded.confirmed_at,funding_capability.funding_transactions.confirmed_at),initialization_claimed_at=excluded.initialization_claimed_at,updated_at=now()`,
+        `insert into funding_capability.funding_transactions(uuid,account_id,provider_name,provider_reference,provider_transaction_id,canonical_amount_minor,canonical_currency,collection_amount_minor,collection_currency,conversion_snapshot,state,idempotency_key,provider_initialization,confirmed_at,initialization_claimed_at,next_verification_at)
+      values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13::jsonb,$14,$15,$16) on conflict(uuid) do update set state=excluded.state,provider_transaction_id=case when funding_capability.funding_transactions.provider_transaction_id is null then excluded.provider_transaction_id when excluded.provider_transaction_id is null then funding_capability.funding_transactions.provider_transaction_id else excluded.provider_transaction_id end,provider_initialization=coalesce(excluded.provider_initialization,funding_capability.funding_transactions.provider_initialization),confirmed_at=coalesce(excluded.confirmed_at,funding_capability.funding_transactions.confirmed_at),initialization_claimed_at=excluded.initialization_claimed_at,next_verification_at=excluded.next_verification_at,updated_at=now()`,
         [
           v.id,
           v.accountId,
@@ -147,6 +156,7 @@ export class PostgresFundingRepository implements FundingRepository {
           v.providerInitialization ? JSON.stringify(v.providerInitialization) : null,
           v.confirmedAt ?? null,
           v.initializationClaimedAt ?? null,
+          v.nextVerificationAt ?? null,
         ],
       );
     } catch (error) {
@@ -183,6 +193,7 @@ export class PostgresFundingRepository implements FundingRepository {
       providerInitialization: r.provider_initialization ?? undefined,
       confirmedAt: r.confirmed_at ?? undefined,
       initializationClaimedAt: r.initialization_claimed_at ?? undefined,
+      nextVerificationAt: r.next_verification_at ?? undefined,
       createdAt: r.created_at ?? undefined,
     } as FundingTransaction;
   }

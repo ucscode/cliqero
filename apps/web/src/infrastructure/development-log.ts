@@ -1,7 +1,10 @@
 import { appendFile, mkdir, stat, truncate } from "node:fs/promises";
 import path from "node:path";
+import type { LifecycleDiagnostic, LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
+const DEFAULT_LOG_FILE = "development.log";
+const SAFE_LOG_FILE = /^[A-Za-z0-9][A-Za-z0-9_-]*\.log$/;
 
 type DiagnosticValue =
   string | number | boolean | null | DiagnosticValue[] | { [key: string]: DiagnosticValue };
@@ -67,26 +70,38 @@ function maximumLogBytes(): number {
   return Number.isSafeInteger(configured) && configured > 0 ? configured : DEFAULT_MAX_BYTES;
 }
 
-async function appendDiagnostic(filePath: string, record: string): Promise<void> {
+function safeLogFileName(fileName: string): string {
+  if (path.basename(fileName) !== fileName || !SAFE_LOG_FILE.test(fileName))
+    throw new Error(`Invalid development diagnostic log file: ${fileName}`);
+  return fileName;
+}
+
+function boundedRecord(record: string, limit: number): string {
+  if (Buffer.byteLength(record, "utf8") <= limit) return record;
+  const marker = `${JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: "warn",
+    event: "development_log_record_truncated",
+  })}\n`;
+  if (Buffer.byteLength(marker, "utf8") <= limit) return marker;
+  return Buffer.from(marker, "utf8").subarray(0, limit).toString("utf8");
+}
+
+async function appendDiagnostic(filePath: string, record: string, limit: number): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
-  const limit = maximumLogBytes();
   let size = 0;
   try {
     size = (await stat(filePath)).size;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  if (size >= limit) await truncate(filePath, 0);
-  await appendFile(filePath, record, "utf8");
+  const bounded = boundedRecord(record, limit);
+  if (size >= limit || size + Buffer.byteLength(bounded, "utf8") > limit)
+    await truncate(filePath, 0);
+  await appendFile(filePath, bounded, "utf8");
 }
 
-/**
- * Append a development-only diagnostic without ever making the request depend
- * on the log file being writable. Production services continue to use their
- * normal container logging.
- */
-export function writeDevelopmentDiagnostic(entry: DevelopmentDiagnostic): void {
-  if (process.env.NODE_ENV !== "development") return;
+function writeToDevelopmentLog(entry: DevelopmentDiagnostic, fileName: string): void {
   try {
     const record = {
       timestamp: new Date().toISOString(),
@@ -98,8 +113,8 @@ export function writeDevelopmentDiagnostic(entry: DevelopmentDiagnostic): void {
       ...(entry.error ? safeError(entry.error) : {}),
       ...(entry.metadata ? { metadata: safeValue(entry.metadata) } : {}),
     };
-    const filePath = path.resolve(projectRoot(), "var", "log", "development.log");
-    void appendDiagnostic(filePath, `${JSON.stringify(record)}\n`).catch(() => {
+    const filePath = path.resolve(projectRoot(), "var", "log", safeLogFileName(fileName));
+    void appendDiagnostic(filePath, `${JSON.stringify(record)}\n`, maximumLogBytes()).catch(() => {
       // Diagnostics are best effort and must never break an application request.
     });
   } catch {
@@ -107,9 +122,56 @@ export function writeDevelopmentDiagnostic(entry: DevelopmentDiagnostic): void {
   }
 }
 
+/**
+ * Append a development-only diagnostic without ever making the request depend
+ * on the log file being writable. Production services continue to use their
+ * normal container logging.
+ */
+export function writeDevelopmentDiagnostic(
+  entry: DevelopmentDiagnostic,
+  options: { fileName?: string } = {},
+): void {
+  if (process.env.NODE_ENV !== "development") return;
+  writeToDevelopmentLog(entry, options.fileName ?? DEFAULT_LOG_FILE);
+}
+
+export function createDevelopmentDiagnosticWriter(
+  fileName = DEFAULT_LOG_FILE,
+): LifecycleDiagnosticWriter {
+  safeLogFileName(fileName);
+  return {
+    write(entry: LifecycleDiagnostic) {
+      writeDevelopmentDiagnostic(entry, { fileName });
+    },
+  };
+}
+
+export function writeApiDevelopmentDiagnostic(entry: DevelopmentDiagnostic): void {
+  writeDevelopmentDiagnostic(entry, { fileName: "api.log" });
+}
+
+export function installDevelopmentProcessDiagnostics(): void {
+  if (process.env.NODE_ENV !== "development") return;
+  const state = globalThis as typeof globalThis & {
+    __cliqeroProcessDiagnosticsInstalled?: boolean;
+  };
+  if (state.__cliqeroProcessDiagnosticsInstalled) return;
+  state.__cliqeroProcessDiagnosticsInstalled = true;
+  let exitScheduled = false;
+  const failFast = (event: string, error: unknown) => {
+    writeDevelopmentDiagnostic({ level: "error", event, error }, { fileName: "process.log" });
+    if (exitScheduled) return;
+    exitScheduled = true;
+    process.exitCode = 1;
+    setImmediate(() => process.exit(1));
+  };
+  process.on("uncaughtException", (error) => failFast("process.uncaught_exception", error));
+  process.on("unhandledRejection", (reason) => failFast("process.unhandled_rejection", reason));
+}
+
 export function logDevelopmentError(
   error: unknown,
   context: Omit<DevelopmentDiagnostic, "level" | "error">,
 ): void {
-  writeDevelopmentDiagnostic({ ...context, level: "error", error });
+  writeApiDevelopmentDiagnostic({ ...context, level: "error", error });
 }

@@ -24,6 +24,7 @@ export class CommercialWorkflowDispatcher {
     private app: ApplicationContainer,
     private logger: CommercialWorkflowLogger = consoleLogger,
     private diagnostics?: LifecycleDiagnosticWriter,
+    private clock: () => Date = () => new Date(),
   ) {}
   async runOnce() {
     let processed = 0;
@@ -35,7 +36,9 @@ export class CommercialWorkflowDispatcher {
     processed += await this.family(
       "funding-verification",
       async () => {
-        const work = await this.app.funding.findWork("verification_pending");
+        const work = this.app.funding.findVerificationWork
+          ? await this.app.funding.findVerificationWork(this.clock())
+          : await this.app.funding.findWork("verification_pending");
         return work.filter(
           (funding) => this.app.providers.get(funding.providerName).automatedVerification !== false,
         );

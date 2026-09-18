@@ -134,11 +134,20 @@ import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 import { ProviderConfigurationError, ProviderUnavailableError } from "@/kernel/provider-error";
 
-const lifecycleDiagnostics: LifecycleDiagnosticWriter = {
+const defaultLifecycleDiagnostics: LifecycleDiagnosticWriter = {
   write: writeDevelopmentDiagnostic,
 };
 
-export function createContainer(databaseUrl: string) {
+export type ContainerOptions = {
+  lifecycleDiagnostics?: LifecycleDiagnosticWriter;
+  verificationPollMilliseconds?: number;
+};
+
+export function createContainer(databaseUrl: string, options: ContainerOptions = {}) {
+  const lifecycleDiagnostics = options.lifecycleDiagnostics ?? defaultLifecycleDiagnostics;
+  const verificationPollMilliseconds =
+    options.verificationPollMilliseconds ??
+    positiveInteger(process.env.FUNDING_VERIFICATION_POLL_MS, 10_000);
   const database = PostgresDatabase.connect(databaseUrl);
   const auditRecorder = lazy(() => new PostgresAuditRecorder(database));
   const accounts = lazy(() => new PostgresAccountRepository(database));
@@ -450,6 +459,7 @@ export function createContainer(databaseUrl: string) {
         paymentOperations(),
         lifecycleDiagnostics,
         new PaystackVerificationRecoveryPolicy(),
+        verificationPollMilliseconds,
       ),
   );
   const fundingService = lazy(
@@ -936,11 +946,16 @@ const globalContainer = globalThis as typeof globalThis & {
   __cliqeroContainer?: ApplicationContainer;
 };
 
-export function getContainer(): ApplicationContainer {
+export function getContainer(options: ContainerOptions = {}): ApplicationContainer {
   if (!globalContainer.__cliqeroContainer) {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("DATABASE_URL is required");
-    globalContainer.__cliqeroContainer = createContainer(databaseUrl);
+    globalContainer.__cliqeroContainer = createContainer(databaseUrl, options);
   }
   return globalContainer.__cliqeroContainer;
+}
+
+function positiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }

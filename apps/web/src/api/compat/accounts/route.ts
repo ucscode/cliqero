@@ -4,7 +4,7 @@ import { getContainer } from "@/infrastructure/container";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 import { usernameSchema } from "@/modules/identity/username";
 import { verifyCaptchaToken } from "@/security/captcha";
-import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
+import { writeApiDevelopmentDiagnostic } from "@/infrastructure/development-log";
 
 const bodySchema = z.object({
   email: z.email("Enter a valid email address."),
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     if (
       !(await verifyCaptchaToken(input.captchaToken, request.headers.get("x-forwarded-for"), true))
     ) {
-      writeDevelopmentDiagnostic({
+      writeApiDevelopmentDiagnostic({
         level: "warn",
         event: "security.captcha.rejected",
         method: request.method,

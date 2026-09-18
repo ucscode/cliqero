@@ -2,7 +2,7 @@ import { handle } from "hono/vercel";
 import { createApiApp } from "@/api/hono";
 import { getContainer } from "@/infrastructure/container";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
+import { writeApiDevelopmentDiagnostic } from "@/infrastructure/development-log";
 import { honeypotRejectionResponse, requestHoneypotSource } from "@/security/honeypot";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ export const OPTIONS = handle(app);
 async function guarded(request: Request) {
   const honeypotSource = await requestHoneypotSource(request);
   if (honeypotSource) {
-    writeDevelopmentDiagnostic({
+    writeApiDevelopmentDiagnostic({
       level: "warn",
       event: "security.honeypot.rejected",
       method: request.method,

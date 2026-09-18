@@ -640,6 +640,42 @@ describe("provider transaction identity", () => {
     );
   });
 
+  it("schedules unresolved verification for a future worker attempt", async () => {
+    let current: any = existingFunding({
+      state: "verification_pending",
+      providerTransactionId: "provider-123",
+    });
+    const repository = {
+      findById: async () => current,
+      save: async (value: any) => {
+        current = value;
+      },
+    };
+    const verification = new FundingVerificationProcessor(
+      repository as never,
+      new PaymentProviderRegistry().register({
+        ...provider,
+        verify: async () => ({
+          state: "pending" as const,
+          reference: current.providerReference,
+          amount: current.collectionAmount,
+          providerTransactionId: current.providerTransactionId,
+        }),
+      }),
+      { transaction: async (operation) => operation() },
+      undefined,
+      undefined,
+      undefined,
+      5_000,
+    );
+    const now = new Date("2026-09-18T10:00:00.000Z");
+
+    await expect(verification.process(fundingId, { now })).resolves.toMatchObject({
+      state: "verification_pending",
+    });
+    expect(current.nextVerificationAt).toEqual(new Date("2026-09-18T10:00:05.000Z"));
+  });
+
   it("recovers a legacy Paystack pending state by persisting the returned identity", async () => {
     let current: any = existingFunding({
       providerName: "paystack",
@@ -1191,7 +1227,7 @@ describe("foreground funding verification", () => {
   });
 
   it("keeps transient provider errors retryable while persisting customer-safe feedback", async () => {
-    let current = existingFunding({
+    let current: any = existingFunding({
       providerName: "usdt_trc20",
       state: "verification_pending",
       providerTransactionId: "AbCd".repeat(16),
@@ -1220,6 +1256,7 @@ describe("foreground funding verification", () => {
     expect((current.providerInitialization as any)?.verification).toMatchObject({
       status: "provider_error",
     });
+    expect(current.nextVerificationAt).toBeInstanceOf(Date);
   });
 
   it("bounds repeated ambiguous Paystack verification failures", async () => {

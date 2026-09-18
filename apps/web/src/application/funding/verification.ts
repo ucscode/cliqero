@@ -20,6 +20,7 @@ export class FundingVerificationProcessor {
     private operations?: FundingOperations,
     private diagnostics?: LifecycleDiagnosticWriter,
     private recoveryPolicy?: FundingVerificationRecoveryPolicy,
+    private verificationPollMilliseconds = 10_000,
   ) {}
 
   async process(
@@ -116,6 +117,10 @@ export class FundingVerificationProcessor {
           },
           now,
         );
+        locked.nextVerificationAt =
+          locked.state === "verification_pending"
+            ? new Date(now.getTime() + this.verificationPollMilliseconds)
+            : null;
         await this.funding.save(locked);
         return locked;
       });
@@ -154,6 +159,7 @@ export class FundingVerificationProcessor {
         },
         now,
       );
+      funding.nextVerificationAt = null;
       await this.funding.save(funding);
       return funding;
     });
@@ -216,6 +222,10 @@ export class FundingVerificationProcessor {
           pendingObservation,
           now,
         );
+        locked.nextVerificationAt =
+          locked.state === "verification_pending"
+            ? new Date(now.getTime() + this.verificationPollMilliseconds)
+            : null;
         await this.funding.save(locked);
         return locked;
       }
@@ -227,6 +237,7 @@ export class FundingVerificationProcessor {
           observation,
           now,
         );
+        locked.nextVerificationAt = null;
         await this.funding.save(locked);
         this.diagnostics?.write({
           level: "warn",
@@ -278,6 +289,7 @@ export class FundingVerificationProcessor {
           observation,
           now,
         );
+        locked.nextVerificationAt = null;
         await this.funding.save(locked);
         this.diagnostics?.write({
           level: "warn",
@@ -304,6 +316,7 @@ export class FundingVerificationProcessor {
         observation,
         now,
       );
+      locked.nextVerificationAt = null;
       await this.funding.save(locked);
       this.diagnostics?.write({
         level: "info",

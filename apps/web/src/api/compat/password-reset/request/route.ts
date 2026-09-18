@@ -3,7 +3,7 @@ import { apiError } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
 import { verifyCaptchaToken } from "@/security/captcha";
 import { PublicApplicationError } from "@/kernel/errors";
-import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
+import { writeApiDevelopmentDiagnostic } from "@/infrastructure/development-log";
 
 const bodySchema = z.object({
   email: z.email("Enter a valid email address."),
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     if (
       !(await verifyCaptchaToken(body.captchaToken, request.headers.get("x-forwarded-for"), true))
     ) {
-      writeDevelopmentDiagnostic({
+      writeApiDevelopmentDiagnostic({
         level: "warn",
         event: "security.captcha.rejected",
         method: request.method,
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     return Response.json(success);
   } catch (error) {
     if (!(error instanceof z.ZodError)) {
-      writeDevelopmentDiagnostic({
+      writeApiDevelopmentDiagnostic({
         level: "error",
         event: "auth.password_reset_request.failed",
         method: request.method,

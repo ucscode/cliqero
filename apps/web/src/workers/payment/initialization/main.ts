@@ -1,5 +1,12 @@
 import { getContainer } from "@/infrastructure/container";
-const container = getContainer();
+import {
+  createDevelopmentDiagnosticWriter,
+  installDevelopmentProcessDiagnostics,
+} from "@/infrastructure/development-log";
+
+const workerDiagnostics = createDevelopmentDiagnosticWriter("worker.log");
+installDevelopmentProcessDiagnostics();
+const container = getContainer({ lifecycleDiagnostics: workerDiagnostics });
 const abort = new AbortController();
 for (const signal of ["SIGTERM", "SIGINT"] as const) process.once(signal, () => abort.abort());
 try {

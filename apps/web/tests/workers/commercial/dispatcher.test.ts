@@ -109,4 +109,64 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
 
     expect(events).not.toContain("verification:bank-manual");
   });
+
+  it("discovers only verification work that is due", async () => {
+    const events: string[] = [];
+    const app = application(events);
+    const findVerificationWork = vi.fn(async (now: Date) => {
+      expect(now.toISOString()).toBe("2026-09-18T10:00:00.000Z");
+      return [{ id: "due-funding", providerName: "test-provider" }] as any;
+    });
+    app.funding.findVerificationWork = findVerificationWork;
+    app.funding.findWork = vi.fn(async () => {
+      throw new Error("state-only verification discovery must not be used");
+    });
+    app.fundingVerification.process = async (id: string) => {
+      events.push(`verification:${id}`);
+      return null;
+    };
+
+    await new CommercialWorkflowDispatcher(
+      app,
+      { error: vi.fn() },
+      undefined,
+      () => new Date("2026-09-18T10:00:00.000Z"),
+    ).runOnce();
+
+    expect(findVerificationWork).toHaveBeenCalledOnce();
+    expect(events).toContain("verification:due-funding");
+  });
+
+  it("does not rediscover a still-pending funding before its next eligibility time", async () => {
+    const events: string[] = [];
+    const app = application(events);
+    const now = new Date("2026-09-18T10:00:00.000Z");
+    let nextVerificationAt: Date | null = null;
+    let providerCalls = 0;
+    app.funding.findVerificationWork = vi.fn(async (at: Date) =>
+      !nextVerificationAt || nextVerificationAt <= at
+        ? ([{ id: "pending-funding", providerName: "test-provider" }] as any)
+        : [],
+    );
+    app.fundingVerification.process = async (id: string) => {
+      providerCalls++;
+      events.push(`verification:${id}`);
+      nextVerificationAt = new Date(now.getTime() + 5_000);
+      return null;
+    };
+    const dispatcher = new CommercialWorkflowDispatcher(
+      app,
+      { error: vi.fn() },
+      undefined,
+      () => now,
+    );
+
+    await dispatcher.runOnce();
+    await dispatcher.runOnce();
+
+    expect(providerCalls).toBe(1);
+    expect(events.filter((event) => event.startsWith("verification:"))).toEqual([
+      "verification:pending-funding",
+    ]);
+  });
 });

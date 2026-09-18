@@ -506,6 +506,7 @@ CREATE TABLE funding_capability.funding_transactions (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     initialization_claimed_at timestamp with time zone,
+    next_verification_at timestamp with time zone,
     id bigint NOT NULL,
     account_id bigint NOT NULL,
     CONSTRAINT funding_amount_positive CHECK (((canonical_amount_minor > 0) AND (collection_amount_minor > 0))),
@@ -564,6 +565,7 @@ COMMENT ON TABLE funding_capability.funding_transactions IS 'Provider-neutral in
 --
 
 COMMENT ON COLUMN funding_capability.funding_transactions.initialization_claimed_at IS 'Lease timestamp for provider initialization. An initializing row is reclaimable only after this timestamp becomes stale.';
+COMMENT ON COLUMN funding_capability.funding_transactions.next_verification_at IS 'Earliest time an unresolved automated funding verification may be retried by the worker.';
 
 
 --
@@ -2800,6 +2802,7 @@ CREATE INDEX funding_initialization_claimable_idx ON funding_capability.funding_
 --
 
 CREATE INDEX funding_work_idx ON funding_capability.funding_transactions USING btree (state, updated_at, id);
+CREATE INDEX funding_verification_work_idx ON funding_capability.funding_transactions USING btree (next_verification_at, updated_at, id) WHERE (state = 'verification_pending'::text);
 
 CREATE INDEX funding_nowpayments_expiry_idx ON funding_capability.funding_transactions USING btree ((provider_initialization ->> 'expiresAt'::text)) WHERE ((provider_name = 'nowpayments'::text) AND (state = 'awaiting_payment'::text) AND ((provider_initialization ->> 'expiresAt'::text) IS NOT NULL));
 

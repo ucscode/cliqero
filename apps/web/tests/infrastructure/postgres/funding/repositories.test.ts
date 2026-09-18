@@ -22,6 +22,7 @@ function fundingRow(id: string, state: string, providerName = "paystack"): any {
     provider_initialization: null,
     confirmed_at: null,
     initialization_claimed_at: null,
+    next_verification_at: null,
     created_at: new Date("2026-09-12T10:00:00Z"),
     updated_at: new Date("2026-09-12T10:00:00Z"),
   };
@@ -74,6 +75,26 @@ describe("Postgres wallet and funding projections", () => {
     expect(query).toHaveBeenCalledWith(expect.stringContaining("expiresAt"), [
       "nowpayments",
       "2026-09-13T10:00:00.000Z",
+      50,
+    ]);
+  });
+
+  it("discovers only due verification work from the persisted retry timestamp", async () => {
+    const query = vi.fn(async (statement: string) =>
+      statement.includes("next_verification_at")
+        ? {
+            rows: [fundingRow("00000000-0000-4000-8000-000000000018", "verification_pending")],
+          }
+        : { rows: [] },
+    );
+    const repository = new PostgresFundingRepository({ query } as never);
+    const now = new Date("2026-09-18T10:00:00.000Z");
+
+    await expect(repository.findVerificationWork(now, 500)).resolves.toMatchObject([
+      { id: "00000000-0000-4000-8000-000000000018", state: "verification_pending" },
+    ]);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("next_verification_at <= $1"), [
+      now,
       50,
     ]);
   });

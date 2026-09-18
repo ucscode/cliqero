@@ -8,14 +8,18 @@ const fsMocks = vi.hoisted(() => ({
 }));
 vi.mock("node:fs/promises", () => fsMocks);
 
-import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
+import {
+  createDevelopmentDiagnosticWriter,
+  writeApiDevelopmentDiagnostic,
+  writeDevelopmentDiagnostic,
+} from "@/infrastructure/development-log";
 
 describe("development diagnostics", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     fsMocks.appendFile.mockClear();
-    fsMocks.mkdir.mockClear();
+    fsMocks.mkdir.mockReset().mockResolvedValue(undefined);
     fsMocks.stat.mockReset().mockResolvedValue({ size: 0 });
     fsMocks.truncate.mockReset().mockResolvedValue(undefined);
   });
@@ -51,7 +55,7 @@ describe("development diagnostics", () => {
 
   it("appends while the development log is under its configured cap", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("DEVELOPMENT_LOG_MAX_BYTES", "100");
+    vi.stubEnv("DEVELOPMENT_LOG_MAX_BYTES", "1000");
     fsMocks.stat.mockResolvedValue({ size: 99 });
 
     writeDevelopmentDiagnostic({ level: "info", event: "under_cap" });
@@ -100,5 +104,64 @@ describe("development diagnostics", () => {
     ).not.toThrow();
     await new Promise((resolve) => setImmediate(resolve));
     expect(fsMocks.appendFile).not.toHaveBeenCalled();
+  });
+
+  it("writes API diagnostics to the API log", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    writeApiDevelopmentDiagnostic({ level: "error", event: "api.failure" });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(fsMocks.appendFile).toHaveBeenCalledWith(
+      expect.stringContaining("api.log"),
+      expect.stringContaining('"event":"api.failure"'),
+      "utf8",
+    );
+  });
+
+  it("supports safe named log writers and rejects path traversal", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const writer = createDevelopmentDiagnosticWriter("worker.log");
+    writer.write({ level: "info", event: "worker.started" });
+    expect(() => createDevelopmentDiagnosticWriter("../outside.log")).toThrow(
+      "Invalid development diagnostic log file",
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(fsMocks.appendFile).toHaveBeenCalledWith(
+      expect.stringContaining("worker.log"),
+      expect.stringContaining('"event":"worker.started"'),
+      "utf8",
+    );
+  });
+
+  it("supports the process log through the same writer implementation", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    createDevelopmentDiagnosticWriter("process.log").write({
+      level: "error",
+      event: "process.failure",
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(fsMocks.appendFile).toHaveBeenCalledWith(
+      expect.stringContaining("process.log"),
+      expect.stringContaining('"event":"process.failure"'),
+      "utf8",
+    );
+  });
+
+  it("considers the incoming record before deciding whether to truncate", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEVELOPMENT_LOG_MAX_BYTES", "1000");
+    fsMocks.stat.mockResolvedValue({ size: 999 });
+    writeDevelopmentDiagnostic({ level: "info", event: "record_would_overshoot" });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(fsMocks.truncate).toHaveBeenCalledOnce();
+  });
+
+  it("truncates an oversized record to the configured cap without reading the file", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEVELOPMENT_LOG_MAX_BYTES", "80");
+    writeDevelopmentDiagnostic({ level: "info", event: "x".repeat(500) });
+    await new Promise((resolve) => setImmediate(resolve));
+    const record = String(fsMocks.appendFile.mock.calls[0]?.[1]);
+    expect(Buffer.byteLength(record, "utf8")).toBeLessThanOrEqual(80);
+    expect(fsMocks.stat).toHaveBeenCalled();
   });
 });

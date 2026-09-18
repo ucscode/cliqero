@@ -88,6 +88,7 @@ export interface FundingTransaction {
   providerInitialization?: PaymentInitializationMetadata;
   confirmedAt?: Date;
   initializationClaimedAt?: Date;
+  nextVerificationAt?: Date | null;
   createdAt?: Date;
 }
 export type FundingHistoryPage = {
@@ -112,6 +113,7 @@ export interface FundingRepository {
     active?: boolean;
   }): Promise<FundingHistoryPage>;
   findWork(state: FundingState, limit?: number): Promise<readonly FundingTransaction[]>;
+  findVerificationWork?(now: Date, limit?: number): Promise<readonly FundingTransaction[]>;
   findExpired?(
     providerName: string,
     now: Date,
