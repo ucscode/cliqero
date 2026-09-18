@@ -70,13 +70,15 @@ export async function applyCheckoutPollResult(
   let wallet = current.wallet;
   let balanceError = current.balanceError;
   let paidWalletRefreshCheckoutId = current.paidWalletRefreshCheckoutId;
-  if (latest.state === "paid" && paidWalletRefreshCheckoutId !== latest.id) {
-    paidWalletRefreshCheckoutId = latest.id;
+  const isAwaitingFunds = latest.state === "awaiting_funds";
+  const isFinalPaidRefresh = latest.state === "paid" && paidWalletRefreshCheckoutId !== latest.id;
+  if (isAwaitingFunds || isFinalPaidRefresh) {
+    if (isFinalPaidRefresh) paidWalletRefreshCheckoutId = latest.id;
     try {
       wallet = await loadWallet();
       balanceError = null;
     } catch {
-      balanceError = PAID_WALLET_REFRESH_ERROR;
+      if (isFinalPaidRefresh) balanceError = PAID_WALLET_REFRESH_ERROR;
     }
   }
   return {

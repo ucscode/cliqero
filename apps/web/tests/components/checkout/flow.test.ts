@@ -35,6 +35,86 @@ describe("checkout status presentation", () => {
     },
   );
 
+  it("refreshes wallet availability while checkout awaits funds", async () => {
+    const firstWallet = {
+      currency: "USD" as const,
+      available_minor: "500",
+      pending_minor: "0",
+      active_fundings: [],
+    };
+    const secondWallet = { ...firstWallet, available_minor: "750" };
+    const loadWallet = vi
+      .fn<() => Promise<typeof firstWallet>>()
+      .mockResolvedValueOnce(firstWallet)
+      .mockResolvedValueOnce(secondWallet);
+    const awaiting = {
+      id: "checkout-1",
+      purchase_id: "purchase-1",
+      state: "awaiting_funds" as const,
+      amount_minor: "1000",
+      currency: "USD",
+    };
+
+    const first = await applyCheckoutPollResult(
+      awaiting,
+      { wallet: null, balanceError: null, paidWalletRefreshCheckoutId: null },
+      loadWallet,
+    );
+    const second = await applyCheckoutPollResult(
+      awaiting,
+      {
+        wallet: first.wallet,
+        balanceError: first.balanceError,
+        paidWalletRefreshCheckoutId: first.paidWalletRefreshCheckoutId,
+      },
+      loadWallet,
+    );
+
+    expect(loadWallet).toHaveBeenCalledTimes(2);
+    expect(first).toMatchObject({
+      checkout: { state: "awaiting_funds" },
+      wallet: firstWallet,
+      shouldContinuePolling: true,
+    });
+    expect(second).toMatchObject({
+      checkout: { state: "awaiting_funds" },
+      wallet: secondWallet,
+      shouldContinuePolling: true,
+    });
+  });
+
+  it("preserves awaiting-funds state and polling when wallet refresh fails", async () => {
+    const wallet = {
+      currency: "USD" as const,
+      available_minor: "500",
+      pending_minor: "0",
+      active_fundings: [],
+    };
+    const loadWallet = vi.fn(async () => {
+      throw new Error("wallet unavailable");
+    });
+    const awaiting = {
+      id: "checkout-1",
+      purchase_id: "purchase-1",
+      state: "awaiting_funds" as const,
+      amount_minor: "1000",
+      currency: "USD",
+    };
+
+    const result = await applyCheckoutPollResult(
+      awaiting,
+      { wallet, balanceError: null, paidWalletRefreshCheckoutId: null },
+      loadWallet,
+    );
+
+    expect(result).toMatchObject({
+      checkout: { state: "awaiting_funds" },
+      wallet,
+      balanceError: null,
+      shouldContinuePolling: true,
+    });
+  });
+
   it("refreshes the wallet once when checkout becomes paid and preserves paid state on failure", async () => {
     const wallet = {
       currency: "USD" as const,
