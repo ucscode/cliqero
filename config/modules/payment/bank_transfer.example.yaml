@@ -12,7 +12,7 @@ filters:
     - US
 config:
   # Named media.yaml instance for transfer evidence; visibility is deployment-owned.
-  media_provider: supabase
+  media_provider: filesystem
   # Optional country-to-fiat preparation mapping. Accounting remains USD.
   currency_mapping:
     enabled: true
