@@ -102,10 +102,47 @@ describe("BankTransferEvidenceService", () => {
       state: "verification_pending",
     });
     await expect(
-      setup.service.submit(accountId, fundingId, { customerNote: "repeat" }),
+      setup.service.submit(accountId, fundingId, {
+        transferReference: "repeat",
+        customerNote: "repeat",
+      }),
     ).resolves.toMatchObject({ id: "existing-evidence" });
     expect(setup.fundingSaves).toHaveLength(0);
     expect(setup.audits).toHaveLength(0);
+  });
+
+  it("accepts a transfer reference without a proof file", async () => {
+    const { service } = makeService();
+    await expect(
+      service.submit(accountId, fundingId, { transferReference: "bank-ref-only" }),
+    ).resolves.toMatchObject({
+      transferReference: "bank-ref-only",
+      customerNote: null,
+      proof: null,
+    });
+  });
+
+  it("accepts an optional note with a transfer reference", async () => {
+    const { service } = makeService();
+    await expect(
+      service.submit(accountId, fundingId, {
+        transferReference: "bank-ref-with-note",
+        customerNote: "Optional reviewer context",
+      }),
+    ).resolves.toMatchObject({
+      transferReference: "bank-ref-with-note",
+      customerNote: "Optional reviewer context",
+    });
+  });
+
+  it("rejects note-only and empty evidence", async () => {
+    const { service } = makeService();
+    await expect(
+      service.submit(accountId, fundingId, { customerNote: "Reviewer context only" }),
+    ).rejects.toThrow("Add a transfer reference or proof file before submitting.");
+    await expect(service.submit(accountId, fundingId, {})).rejects.toThrow(
+      "Add a transfer reference or proof file before submitting.",
+    );
   });
 
   it("accepts configured public storage for proof files", async () => {
@@ -134,6 +171,39 @@ describe("BankTransferEvidenceService", () => {
         },
       }),
     ).resolves.toMatchObject({ fundingId });
+    expect(put).toHaveBeenCalledOnce();
+  });
+
+  it("accepts a proof file with an optional note", async () => {
+    const put = vi.fn(async () => ({
+      provider: "public_media",
+      container: "media",
+      key: "funding-evidence/receipt.png",
+      byteSize: 8,
+      mimeType: "image/png",
+    }));
+    const storage = {
+      get: () => ({
+        name: "public_media",
+        visibility: "public",
+        put,
+        delete: async () => undefined,
+        publicUrl: () => "https://public.example/receipt",
+      }),
+    } as unknown as ObjectStorageRegistry;
+    const { service } = makeService(fundingTransaction(), storage, "public_media");
+    await expect(
+      service.submit(accountId, fundingId, {
+        customerNote: "Optional reviewer context",
+        proofFile: {
+          bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+          mimeType: "image/png",
+        },
+      }),
+    ).resolves.toMatchObject({
+      customerNote: "Optional reviewer context",
+      proof: { mimeType: "image/png" },
+    });
     expect(put).toHaveBeenCalledOnce();
   });
 

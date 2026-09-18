@@ -27,6 +27,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       transfer_reference: form.get("transfer_reference"),
       customer_note: form.get("customer_note"),
     });
+    if (!body.transfer_reference && !(file instanceof File))
+      throw new Error("Add a transfer reference or proof file before submitting.");
     const evidence = await getContainer().bankTransferEvidence.submit(account.id, id, {
       transferReference: body.transfer_reference,
       customerNote: body.customer_note,

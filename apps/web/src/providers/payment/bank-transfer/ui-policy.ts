@@ -11,3 +11,7 @@ export function canSubmitBankTransferEvidence(
       funding.state === "verification_pending")
   );
 }
+
+export function hasBankTransferEvidence(transferReference: string, hasProofFile: boolean) {
+  return Boolean(transferReference.trim()) || hasProofFile;
+}

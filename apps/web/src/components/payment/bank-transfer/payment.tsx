@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { apiFetch, formatMinorAmount, type FundingStatus } from "@/lib/api-client";
-import { canSubmitBankTransferEvidence } from "@/providers/payment/bank-transfer/ui-policy";
+import {
+  canSubmitBankTransferEvidence,
+  hasBankTransferEvidence,
+} from "@/providers/payment/bank-transfer/ui-policy";
 import {
   initializeFundingStatus,
   PaymentComponent,
@@ -72,8 +75,8 @@ export function BankTransferPayment(props: PaymentProviderProps) {
     event.preventDefault();
     const reference = transferReference.trim();
     const note = customerNote.trim();
-    if (!reference && !proofFile && !note) {
-      setError("Add a transfer reference, proof file, or note before submitting.");
+    if (!hasBankTransferEvidence(reference, Boolean(proofFile))) {
+      setError("Add a transfer reference or proof file before submitting.");
       return;
     }
     setSubmitting(true);
@@ -174,8 +177,9 @@ export function BankTransferPayment(props: PaymentProviderProps) {
           <div>
             <h3>Submit transfer evidence</h3>
             <p className="text-sm text-slate-600">
-              Add at least one item. Evidence helps the operator reconcile your transfer; it does
-              not confirm or credit your wallet automatically.
+              Add a transfer reference or proof file. You can include an optional note for the
+              reviewer. Evidence helps the operator reconcile your transfer; it does not confirm or
+              credit your wallet automatically.
             </p>
           </div>
           <div className="grid gap-1">
@@ -202,7 +206,7 @@ export function BankTransferPayment(props: PaymentProviderProps) {
             <p className="text-xs text-slate-500">PNG, JPEG, WEBP, GIF, or PDF up to 10 MB.</p>
           </div>
           <div className="grid gap-1">
-            <Label htmlFor="bank-customer-note">Note</Label>
+            <Label htmlFor="bank-customer-note">Note (optional)</Label>
             <Textarea
               id="bank-customer-note"
               value={customerNote}

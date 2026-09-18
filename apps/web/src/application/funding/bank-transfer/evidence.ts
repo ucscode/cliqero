@@ -72,8 +72,8 @@ export class BankTransferEvidenceService {
     const transferReference = clean(input.transferReference, 200);
     const customerNote = clean(input.customerNote, 2000);
     const proofFile = input.proofFile ? validateProofFile(input.proofFile) : undefined;
-    if (!transferReference && !proofFile && !customerNote)
-      throw new Error("At least one transfer evidence item is required");
+    if (!transferReference && !proofFile)
+      throw new Error("Add a transfer reference or proof file before submitting.");
 
     let stored: StoredObject | undefined;
     try {

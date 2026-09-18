@@ -21,7 +21,10 @@ import {
   walletPanelComposition,
   isCurrentFundingStatusResponse,
 } from "@/components/wallet/panel";
-import { canSubmitBankTransferEvidence } from "@/providers/payment/bank-transfer/ui-policy";
+import {
+  canSubmitBankTransferEvidence,
+  hasBankTransferEvidence,
+} from "@/providers/payment/bank-transfer/ui-policy";
 import {
   shouldPollDirectTrc20Funding,
   shouldShowSubmittedTransactionHash,
@@ -68,6 +71,15 @@ describe("bank-transfer evidence visibility", () => {
         state,
       } as Pick<FundingStatus, "provider" | "state">),
     ).toBe(expected);
+  });
+});
+
+describe("bank-transfer evidence input", () => {
+  it("requires a transfer reference or proof file while treating notes as optional context", () => {
+    expect(hasBankTransferEvidence("", false)).toBe(false);
+    expect(hasBankTransferEvidence("   ", false)).toBe(false);
+    expect(hasBankTransferEvidence("bank-ref", false)).toBe(true);
+    expect(hasBankTransferEvidence("", true)).toBe(true);
   });
 });
 
