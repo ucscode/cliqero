@@ -53,6 +53,7 @@ For a new model or developer, read [Continuity](./continuity/README.md) first, t
 ### Operations
 
 - [Installation and Configuration](./operations/installation-and-configuration.md)
+- [Environment variables](./operations/environment-variables.md)
 - [Local Authentication and Fixtures](./operations/local-auth-and-fixtures.md)
 - [Application Console](./operations/console.md)
 - [Operator Docs](./operations/)

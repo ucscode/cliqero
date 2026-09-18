@@ -69,7 +69,7 @@ just prod
 
 ## Environment file
 
-Copy `.env.example` to `.env` and review every value before non-local deployment. Important bootstrap values include application URL, PostgreSQL credentials/connection values, Better Auth URL/secret, application port, and blog database path.
+Copy `.env.example` to `.env` and review every value before non-local deployment. Important bootstrap values include application URL, PostgreSQL credentials/connection values, the Better Auth secret and authentication configuration, application port, and blog database path. See [Environment variables](./environment-variables.md) for the complete runtime reference, including worker, cache, logging, and testing settings that are intentionally not all placed in `.env.example`.
 
 Do not reuse development secrets in production.
 

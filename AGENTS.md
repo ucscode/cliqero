@@ -761,6 +761,13 @@ architecturally complete.
 
 # Contributor checks
 
+When introducing a new directly-consumed Cliqero runtime environment variable,
+document it in `docs/operations/environment-variables.md` in the same change.
+Add it to `.env.example` only when it is required for normal bootstrap,
+commonly configured, or important for immediate operator visibility. Variables
+already surfaced through tracked module/provider configuration remain
+documented with that configuration rather than being duplicated indiscriminately.
+
 Use the repository formatter and quality checks before considering TypeScript or
 Next.js changes complete:
 
