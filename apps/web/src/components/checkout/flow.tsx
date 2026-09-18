@@ -19,6 +19,17 @@ import { Card } from "../ui/card";
 import { Toast } from "../toast";
 import { Money } from "../money";
 
+export function checkoutStatusPresentation(state: CheckoutStatus["state"]) {
+  switch (state) {
+    case "awaiting_funds":
+      return { label: "Awaiting funds", variant: "warning" as const };
+    case "paid":
+      return { label: "Paid", variant: "default" as const };
+    case "failed":
+      return { label: "Payment failed", variant: "destructive" as const };
+  }
+}
+
 export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checkoutId?: string }) {
   const router = useRouter();
   const [checkout, setCheckout] = useState<CheckoutStatus | null>(null);
@@ -31,6 +42,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
   const [balanceLoading, setBalanceLoading] = useState(true);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
+  const walletRefreshedForPaidCheckout = useRef<string | null>(null);
   const storageKey = `cliqero.checkout.${listing.id}`;
 
   useEffect(() => {
@@ -100,8 +112,15 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
       try {
         const latest = await apiFetch<CheckoutStatus>(`/api/checkout/${checkoutId}`);
         setCheckout(latest);
-        if (latest.state === "awaiting_funds")
-          void apiFetch<WalletSummary>("/api/wallet").then(setWallet);
+        if (latest.state === "paid" && walletRefreshedForPaidCheckout.current !== checkoutId) {
+          walletRefreshedForPaidCheckout.current = checkoutId;
+          try {
+            setWallet(await apiFetch<WalletSummary>("/api/wallet"));
+            setBalanceError(null);
+          } catch {
+            setBalanceError("Payment is complete, but your wallet balance could not be refreshed.");
+          }
+        }
         if (latest.state !== "awaiting_funds") {
           try {
             sessionStorage.removeItem(storageKey);
@@ -171,7 +190,10 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
             Loading available wallet balance…
           </p>
         ) : balanceError ? (
-          <p className="mt-2 text-sm text-red-700" role="alert">
+          <p
+            className={`mt-2 text-sm ${checkout?.state === "paid" ? "text-amber-800" : "text-red-700"}`}
+            role={checkout?.state === "paid" ? "status" : "alert"}
+          >
             {balanceError}
           </p>
         ) : (
@@ -181,7 +203,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         )}
       </Card>
       <Card className="grid gap-4 p-5">
-        <p className="eyebrow">One listing, one checkout</p>
+        <p className="eyebrow">Checkout</p>
         <h2>{listing.title}</h2>
         <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
         {!started ? (
@@ -211,37 +233,62 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
               }
             >
               {busy
-                ? "Creating checkout…"
+                ? "Paying…"
                 : existingCheckoutLoading
                   ? "Loading checkout…"
                   : wallet && shortfallMinor && BigInt(shortfallMinor) > 0n
                     ? "Fund wallet"
-                    : "Continue to wallet checkout"}
+                    : "Pay now"}
             </Button>
           </>
         ) : checkout?.state === "awaiting_funds" ? (
           <>
-            <Badge variant="destructive">Awaiting funds</Badge>
+            <Badge
+              className="justify-self-start"
+              variant={checkoutStatusPresentation(checkout.state).variant}
+            >
+              {checkoutStatusPresentation(checkout.state).label}
+            </Badge>
             <p>
               {shortfallMinor && BigInt(shortfallMinor) > 0n
                 ? `You need ${formatMinorUsd(shortfallMinor)} more in your available wallet.`
                 : "Your checkout is waiting for available wallet funds."}
             </p>
             <p className="text-sm text-slate-500">
-              This checkout is preserved while your funding settles.
+              We&apos;ll keep this checkout open while your wallet funds become available.
             </p>
           </>
         ) : checkout?.state === "paid" ? (
           <>
-            <Badge variant="default">Payment confirmed</Badge>
-            <p>Wallet debit is complete. Your entitlement is being prepared separately.</p>
+            <Badge
+              className="justify-self-start"
+              variant={checkoutStatusPresentation(checkout.state).variant}
+            >
+              {checkoutStatusPresentation(checkout.state).label}
+            </Badge>
+            <p>Payment complete. You can view your purchase and access status in Purchases.</p>
             <Button asChild>
               <Link href="/dashboard?section=purchases">View purchases</Link>
             </Button>
           </>
+        ) : checkout?.state === "failed" ? (
+          <>
+            <Badge
+              className="justify-self-start"
+              variant={checkoutStatusPresentation(checkout.state).variant}
+            >
+              {checkoutStatusPresentation(checkout.state).label}
+            </Badge>
+            <p>{error ?? "This payment could not be completed."}</p>
+            <Button variant="secondary" onClick={() => setStarted(false)}>
+              Try again
+            </Button>
+          </>
         ) : (
           <>
-            <Badge variant="secondary">Checkout unavailable</Badge>
+            <Badge className="justify-self-start" variant="secondary">
+              Checkout unavailable
+            </Badge>
             <p>{error ?? "This checkout could not be completed."}</p>
             <Button variant="secondary" onClick={() => setStarted(false)}>
               Try again

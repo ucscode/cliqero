@@ -56,7 +56,6 @@ export function DashboardShell({
   const buy = params.get("buy");
   const checkoutId = params.get("checkout") ?? undefined;
   const fundingId = params.get("funding") ?? undefined;
-  const selectedPurchase = params.get("purchase") ?? undefined;
   const checkoutContinuation = buy
     ? `/dashboard?buy=${encodeURIComponent(buy)}${
         checkoutId ? `&checkout=${encodeURIComponent(checkoutId)}` : ""
@@ -145,7 +144,7 @@ export function DashboardShell({
       returnTo={returnTo || checkoutContinuation}
     />
   ) : section === "purchases" ? (
-    <PurchasesPanel selectedId={selectedPurchase} />
+    <PurchasesPanel />
   ) : section === "promote" ? (
     <PromotePanel />
   ) : section === "referrals" ? (

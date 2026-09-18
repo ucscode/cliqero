@@ -11,18 +11,18 @@ import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
 import { Money } from "../money";
 
-function purchaseLabel(state: Purchase["state"]): string {
+export function purchaseStatusPresentation(state: Purchase["state"]) {
   switch (state) {
     case "completed":
-      return "Completed";
+      return { label: "Completed", variant: "default" as const };
     case "paid":
-      return "Payment confirmed";
+      return { label: "Paid", variant: "default" as const };
     case "refunded":
-      return "Refunded";
+      return { label: "Refunded", variant: "secondary" as const };
     case "failed":
-      return "Payment failed";
+      return { label: "Payment failed", variant: "destructive" as const };
     default:
-      return "Awaiting funds";
+      return { label: "Awaiting payment", variant: "warning" as const };
   }
 }
 
@@ -39,36 +39,28 @@ function checkoutHref(purchase: Purchase): string {
   return `/dashboard?${params.toString()}`;
 }
 
-export function PurchasesPanel({ selectedId }: { selectedId?: string }) {
+export function PurchasesPanel() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [selected, setSelected] = useState<Purchase | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(
-    async (background = false) => {
-      if (background) setRefreshing(true);
-      else setLoading(true);
-      try {
-        const page = await apiFetch<PurchasePage>("/api/purchases?limit=50");
-        setPurchases(page.items);
-        if (selectedId) {
-          const match = page.items.find((purchase) => purchase.id === selectedId);
-          if (match) setSelected(match);
-        }
-        setError(null);
-      } catch (cause) {
-        setError(
-          cause instanceof ApiClientError ? cause.message : "We couldn't load your purchases.",
-        );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [selectedId],
-  );
+  const load = useCallback(async (background = false) => {
+    if (background) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const page = await apiFetch<PurchasePage>("/api/purchases?limit=50");
+      setPurchases(page.items);
+      setError(null);
+    } catch (cause) {
+      setError(
+        cause instanceof ApiClientError ? cause.message : "We couldn't load your purchases.",
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     // This effect starts the initial network read for the panel.
@@ -126,8 +118,8 @@ export function PurchasesPanel({ selectedId }: { selectedId?: string }) {
                 </div>
                 <div className="grid content-start justify-items-end gap-2 whitespace-nowrap">
                   <Money minor={purchase.amount_minor} currency={purchase.currency} />
-                  <Badge variant={purchase.state === "completed" ? "default" : "destructive"}>
-                    {purchaseLabel(purchase.state)}
+                  <Badge variant={purchaseStatusPresentation(purchase.state).variant}>
+                    {purchaseStatusPresentation(purchase.state).label}
                   </Badge>
                 </div>
               </div>
@@ -149,35 +141,10 @@ export function PurchasesPanel({ selectedId }: { selectedId?: string }) {
                     <Link href={checkoutHref(purchase)}>Continue to checkout</Link>
                   </Button>
                 )}
-                {purchase.state !== "pending" && (
-                  <Button asChild variant="secondary">
-                    <Link href={`/dashboard?section=purchases&purchase=${purchase.id}`}>
-                      Details
-                    </Link>
-                  </Button>
-                )}
               </div>
             </Card>
           ))}
         </div>
-      )}
-      {selected && (
-        <Card className="grid gap-3 p-5" aria-live="polite">
-          <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
-            <span>Purchase detail</span>
-            {refreshing && <span className="text-xs text-slate-500">Updating…</span>}
-          </div>
-          <h3>{selected.title}</h3>
-          <p>
-            {purchaseLabel(selected.state)} · {accessLabel(selected)}
-          </p>
-          <Money minor={selected.amount_minor} currency={selected.currency} />
-          {selected.access_available && (
-            <Button asChild>
-              <a href={`/access/${selected.id}`}>Open access</a>
-            </Button>
-          )}
-        </Card>
       )}
     </section>
   );
