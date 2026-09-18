@@ -26,6 +26,17 @@ export function purchaseStatusPresentation(state: Purchase["state"]) {
   }
 }
 
+export function purchaseActions(
+  purchase: Pick<Purchase, "id" | "listing_id" | "checkout_id" | "state" | "access_available">,
+) {
+  const actions: Array<{ label: string; href: string }> = [];
+  if (purchase.access_available)
+    actions.push({ label: "Open access", href: `/access/${purchase.id}` });
+  if (purchase.state === "pending")
+    actions.push({ label: "Continue to checkout", href: checkoutHref(purchase) });
+  return actions;
+}
+
 function accessLabel(purchase: Purchase): string {
   if (purchase.access_available) return "Ready to access";
   if (purchase.state === "paid" || purchase.state === "completed")
@@ -33,7 +44,7 @@ function accessLabel(purchase: Purchase): string {
   return "Complete payment to access";
 }
 
-function checkoutHref(purchase: Purchase): string {
+function checkoutHref(purchase: Pick<Purchase, "listing_id" | "checkout_id">): string {
   const params = new URLSearchParams({ buy: purchase.listing_id });
   if (purchase.checkout_id) params.set("checkout", purchase.checkout_id);
   return `/dashboard?${params.toString()}`;
@@ -124,10 +135,16 @@ export function PurchasesPanel() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {purchase.access_available ? (
-                  <Button asChild>
-                    <a href={`/access/${purchase.id}`}>Open access</a>
-                  </Button>
+                {purchaseActions(purchase).length > 0 ? (
+                  purchaseActions(purchase).map((action) => (
+                    <Button asChild key={action.label}>
+                      {action.href.startsWith("/access/") ? (
+                        <a href={action.href}>{action.label}</a>
+                      ) : (
+                        <Link href={action.href}>{action.label}</Link>
+                      )}
+                    </Button>
+                  ))
                 ) : (
                   <span
                     className="inline-flex min-h-10 items-center text-sm text-slate-500"
@@ -135,11 +152,6 @@ export function PurchasesPanel() {
                   >
                     {accessLabel(purchase)}
                   </span>
-                )}
-                {purchase.state === "pending" && (
-                  <Button asChild>
-                    <Link href={checkoutHref(purchase)}>Continue to checkout</Link>
-                  </Button>
                 )}
               </div>
             </Card>

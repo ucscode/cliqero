@@ -19,15 +19,73 @@ import { Card } from "../ui/card";
 import { Toast } from "../toast";
 import { Money } from "../money";
 
+const PAID_WALLET_REFRESH_ERROR =
+  "Payment is complete, but your wallet balance could not be refreshed.";
+
+export function checkoutPrimaryAction(input: {
+  busy: boolean;
+  restoring: boolean;
+  walletLoaded: boolean;
+  shortfallMinor: string | null;
+}) {
+  if (input.busy) return "Paying…";
+  if (input.restoring) return "Loading checkout…";
+  if (input.walletLoaded && input.shortfallMinor && BigInt(input.shortfallMinor) > 0n)
+    return "Fund wallet";
+  return "Pay now";
+}
+
 export function checkoutStatusPresentation(state: CheckoutStatus["state"]) {
   switch (state) {
     case "awaiting_funds":
-      return { label: "Awaiting funds", variant: "warning" as const };
+      return {
+        label: "Awaiting funds",
+        variant: "warning" as const,
+        className: "justify-self-start",
+      };
     case "paid":
-      return { label: "Paid", variant: "default" as const };
+      return { label: "Paid", variant: "default" as const, className: "justify-self-start" };
     case "failed":
-      return { label: "Payment failed", variant: "destructive" as const };
+      return {
+        label: "Payment failed",
+        variant: "destructive" as const,
+        className: "justify-self-start",
+      };
   }
+}
+
+export type CheckoutPollProjection = {
+  checkout: CheckoutStatus;
+  wallet: WalletSummary | null;
+  balanceError: string | null;
+  paidWalletRefreshCheckoutId: string | null;
+  shouldContinuePolling: boolean;
+};
+
+export async function applyCheckoutPollResult(
+  latest: CheckoutStatus,
+  current: Pick<CheckoutPollProjection, "wallet" | "balanceError" | "paidWalletRefreshCheckoutId">,
+  loadWallet: () => Promise<WalletSummary>,
+): Promise<CheckoutPollProjection> {
+  let wallet = current.wallet;
+  let balanceError = current.balanceError;
+  let paidWalletRefreshCheckoutId = current.paidWalletRefreshCheckoutId;
+  if (latest.state === "paid" && paidWalletRefreshCheckoutId !== latest.id) {
+    paidWalletRefreshCheckoutId = latest.id;
+    try {
+      wallet = await loadWallet();
+      balanceError = null;
+    } catch {
+      balanceError = PAID_WALLET_REFRESH_ERROR;
+    }
+  }
+  return {
+    checkout: latest,
+    wallet,
+    balanceError,
+    paidWalletRefreshCheckoutId,
+    shouldContinuePolling: latest.state === "awaiting_funds",
+  };
 }
 
 export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checkoutId?: string }) {
@@ -42,6 +100,8 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
   const [balanceLoading, setBalanceLoading] = useState(true);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
+  const walletRef = useRef<WalletSummary | null>(null);
+  const balanceErrorRef = useRef<string | null>(null);
   const walletRefreshedForPaidCheckout = useRef<string | null>(null);
   const storageKey = `cliqero.checkout.${listing.id}`;
 
@@ -58,20 +118,27 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
     // The initial network read intentionally establishes the loading state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBalanceLoading(true);
+    balanceErrorRef.current = null;
     setBalanceError(null);
     void apiFetch<CheckoutQuote>(`/api/checkout?listing_id=${encodeURIComponent(listing.id)}`)
       .then((quote) => {
         if (!active) return;
-        setWallet({
+        const nextWallet = {
           currency: "USD",
           available_minor: quote.available.amount_minor,
           pending_minor: "0",
           active_fundings: [],
-        });
+        } satisfies WalletSummary;
+        walletRef.current = nextWallet;
+        setWallet(nextWallet);
         setShortfallMinor(quote.shortfall.amount_minor);
       })
       .catch(() => {
-        if (active) setBalanceError("We couldn't load your wallet balance right now.");
+        if (active) {
+          const message = "We couldn't load your wallet balance right now.";
+          balanceErrorRef.current = message;
+          setBalanceError(message);
+        }
       })
       .finally(() => {
         if (active) setBalanceLoading(false);
@@ -111,17 +178,22 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
       attempts += 1;
       try {
         const latest = await apiFetch<CheckoutStatus>(`/api/checkout/${checkoutId}`);
-        setCheckout(latest);
-        if (latest.state === "paid" && walletRefreshedForPaidCheckout.current !== checkoutId) {
-          walletRefreshedForPaidCheckout.current = checkoutId;
-          try {
-            setWallet(await apiFetch<WalletSummary>("/api/wallet"));
-            setBalanceError(null);
-          } catch {
-            setBalanceError("Payment is complete, but your wallet balance could not be refreshed.");
-          }
-        }
-        if (latest.state !== "awaiting_funds") {
+        const projection = await applyCheckoutPollResult(
+          latest,
+          {
+            wallet: walletRef.current,
+            balanceError: balanceErrorRef.current,
+            paidWalletRefreshCheckoutId: walletRefreshedForPaidCheckout.current,
+          },
+          () => apiFetch<WalletSummary>("/api/wallet"),
+        );
+        setCheckout(projection.checkout);
+        walletRef.current = projection.wallet;
+        setWallet(projection.wallet);
+        balanceErrorRef.current = projection.balanceError;
+        setBalanceError(projection.balanceError);
+        walletRefreshedForPaidCheckout.current = projection.paidWalletRefreshCheckoutId;
+        if (!projection.shouldContinuePolling) {
           try {
             sessionStorage.removeItem(storageKey);
           } catch {
@@ -163,12 +235,14 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         body: JSON.stringify({ listing_id: listing.id }),
       });
       setCheckout(result);
-      setWallet({
+      const nextWallet = {
         currency: "USD",
         available_minor: result.available.amount_minor,
         pending_minor: "0",
         active_fundings: [],
-      });
+      } satisfies WalletSummary;
+      walletRef.current = nextWallet;
+      setWallet(nextWallet);
       setShortfallMinor(result.shortfall.amount_minor);
       setStarted(true);
       if (BigInt(result.shortfall.amount_minor) > 0n) {
@@ -232,19 +306,18 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
                 (!!checkoutId && !!error)
               }
             >
-              {busy
-                ? "Paying…"
-                : existingCheckoutLoading
-                  ? "Loading checkout…"
-                  : wallet && shortfallMinor && BigInt(shortfallMinor) > 0n
-                    ? "Fund wallet"
-                    : "Pay now"}
+              {checkoutPrimaryAction({
+                busy,
+                restoring: existingCheckoutLoading,
+                walletLoaded: wallet !== null,
+                shortfallMinor,
+              })}
             </Button>
           </>
         ) : checkout?.state === "awaiting_funds" ? (
           <>
             <Badge
-              className="justify-self-start"
+              className={checkoutStatusPresentation(checkout.state).className}
               variant={checkoutStatusPresentation(checkout.state).variant}
             >
               {checkoutStatusPresentation(checkout.state).label}
@@ -261,7 +334,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         ) : checkout?.state === "paid" ? (
           <>
             <Badge
-              className="justify-self-start"
+              className={checkoutStatusPresentation(checkout.state).className}
               variant={checkoutStatusPresentation(checkout.state).variant}
             >
               {checkoutStatusPresentation(checkout.state).label}
@@ -274,7 +347,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         ) : checkout?.state === "failed" ? (
           <>
             <Badge
-              className="justify-self-start"
+              className={checkoutStatusPresentation(checkout.state).className}
               variant={checkoutStatusPresentation(checkout.state).variant}
             >
               {checkoutStatusPresentation(checkout.state).label}
