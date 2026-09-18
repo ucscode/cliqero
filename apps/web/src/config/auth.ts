@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { loadYamlConfiguration } from "./yaml";
+import { YAMLParseError } from "yaml";
+import { loadYamlConfiguration, MissingEnvironmentVariableError } from "./yaml";
 
 const publicConfiguration = (() => {
   try {
@@ -54,7 +55,31 @@ export function loadAuthConfiguration(path = "config/security/auth.yaml"): AuthC
       },
     });
   }
-  const configuration = schema.parse(loadYamlConfiguration(path) ?? {});
+  let raw: unknown;
+  try {
+    raw = loadYamlConfiguration(path);
+  } catch (error) {
+    if (error instanceof YAMLParseError || error instanceof MissingEnvironmentVariableError)
+      throw new AuthProviderConfigurationError(
+        "google",
+        "Google authentication configuration is invalid",
+        error,
+      );
+    throw error;
+  }
+
+  let configuration: AuthConfiguration;
+  try {
+    configuration = schema.parse(raw ?? {});
+  } catch (error) {
+    if (error instanceof z.ZodError)
+      throw new AuthProviderConfigurationError(
+        "google",
+        "Google authentication configuration is invalid",
+        error,
+      );
+    throw error;
+  }
   const google = configuration.social.google;
   if (google.enabled && (!google.client_id.trim() || !google.client_secret.trim())) {
     throw new AuthProviderConfigurationError(
@@ -78,18 +103,18 @@ export function getOptionalSocialProviders(
   path?: string,
   onFailure?: (error: AuthProviderConfigurationError) => void,
 ): EnabledSocialProviders {
+  return getOptionalSocialProvidersFrom(() => getEnabledSocialProviders(path), onFailure);
+}
+
+export function getOptionalSocialProvidersFrom(
+  load: () => EnabledSocialProviders,
+  onFailure?: (error: AuthProviderConfigurationError) => void,
+): EnabledSocialProviders {
   try {
-    return getEnabledSocialProviders(path);
+    return load();
   } catch (error) {
-    const configurationError =
-      error instanceof AuthProviderConfigurationError
-        ? error
-        : new AuthProviderConfigurationError(
-            "google",
-            `Google authentication configuration is invalid: ${error instanceof Error ? error.message : String(error)}`,
-            error,
-          );
-    onFailure?.(configurationError);
+    if (!(error instanceof AuthProviderConfigurationError)) throw error;
+    onFailure?.(error);
     return {};
   }
 }

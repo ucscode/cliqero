@@ -169,21 +169,26 @@ providers:
       "cloudflare-r2",
       "endpoint: https://account.r2.cloudflarestorage.com\n      bucket: media\n      access_key_id: id\n      secret_access_key: secret",
     ],
-  ])("rejects a %s instance without a public URL", async (_label, provider, providerConfig) => {
-    const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
-    try {
-      const config = join(root, "config.yaml");
-      await writeFile(
-        config,
-        `default_provider: media\nproviders:\n  media:\n    provider: ${provider}\n    visibility: public\n    config:\n      ${providerConfig}\n`,
-      );
-      expect(() => loadMediaStorage(config, environment).default()).toThrow(
-        "Public storage instances must define public_base_url",
-      );
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+  ])(
+    "defers a %s public URL failure until the URL is requested",
+    async (_label, provider, providerConfig) => {
+      const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
+      try {
+        const config = join(root, "config.yaml");
+        await writeFile(
+          config,
+          `default_provider: media\nproviders:\n  media:\n    provider: ${provider}\n    visibility: public\n    config:\n      ${providerConfig}\n`,
+        );
+        const registry = loadMediaStorage(config, environment);
+        expect(registry.default().visibility).toBe("public");
+        expect(() =>
+          registry.publicUrl({ provider: "media", container: "media", key: "x" }),
+        ).toThrow("not publicly addressable");
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("allows private filesystem and R2 instances without public URLs", async () => {
     const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));

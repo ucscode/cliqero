@@ -89,7 +89,6 @@ function loadStorageProviderConfig(
 ): z.infer<typeof storageConfig> {
   try {
     return parseStorageConfig(
-      name,
       resolveEnvironmentPlaceholders(value, environment, `${path}.providers.${name}`),
     );
   } catch (error) {
@@ -102,17 +101,8 @@ function loadStorageProviderConfig(
   }
 }
 
-function parseStorageConfig(name: string, value: unknown): z.infer<typeof storageConfig> {
-  const provider = storageConfig.parse(value);
-  if (provider.visibility === "public") {
-    const hasPublicUrl =
-      provider.provider === "supabase" || Boolean(provider.config.public_base_url);
-    if (!hasPublicUrl)
-      throw new Error(
-        `config.providers.${name}.config.public_base_url: Public storage instances must define public_base_url`,
-      );
-  }
-  return provider;
+function parseStorageConfig(value: unknown): z.infer<typeof storageConfig> {
+  return storageConfig.parse(value);
 }
 
 function createProvider(

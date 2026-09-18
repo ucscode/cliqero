@@ -1,5 +1,15 @@
 import { parse } from "yaml";
 
+export class MissingEnvironmentVariableError extends Error {
+  constructor(
+    readonly variable: string,
+    readonly sourcePath: string,
+  ) {
+    super(`Missing environment variable "${variable}" while resolving ${sourcePath}`);
+    this.name = "MissingEnvironmentVariableError";
+  }
+}
+
 type RuntimeModules = {
   fs: { existsSync(path: string): boolean; readFileSync(path: string, encoding: "utf8"): string };
   path: { dirname(path: string): string; resolve(...paths: string[]): string };
@@ -53,8 +63,7 @@ export function resolveEnvironmentPlaceholders(
         if (escaped) return `%env(${escaped})%`;
         if (name === undefined) return _match;
         const resolved = environment[name];
-        if (resolved === undefined)
-          throw new Error(`Missing environment variable "${name}" while resolving ${sourcePath}`);
+        if (resolved === undefined) throw new MissingEnvironmentVariableError(name, sourcePath);
         return resolved;
       },
     );
