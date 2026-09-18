@@ -71,4 +71,37 @@ describe("application container feature isolation", () => {
     await bankContainer.authentication.betterAuth.close();
     await bankContainer.database.close();
   });
+
+  it("keeps the configured Direct TRC20 registry identity aligned with the provider", async () => {
+    const container = createContainer("postgresql://localhost/cliqero-test");
+    loaders.directTrc20.mockImplementationOnce(
+      () =>
+        ({
+          provider: {
+            displayName: "Direct USDT TRC20",
+            imageUrl: "/images/payment/usdt-trc20.svg",
+            description: "Send USDT on the TRON TRC20 network directly.",
+            walletAddress: "TVX22re4mJPQt9wWM48jF7bfRSzmJWcBAV",
+            confirmationsRequired: 1,
+            maxTransactionAgeSeconds: 3600,
+            tokenContract: "TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs",
+            verification: {
+              provider: "trongrid",
+              apiBaseUrl: "https://api.shasta.trongrid.io",
+            },
+          },
+          filters: { countries: null },
+        }) as never,
+    );
+
+    try {
+      const methods = container.providers.availableMethodsFor({ country: "NG" });
+
+      expect(methods.map(({ provider }) => provider.name)).toContain("usdt_trc20");
+      expect(container.providers.get("usdt_trc20").name).toBe("usdt_trc20");
+    } finally {
+      await container.authentication.betterAuth.close();
+      await container.database.close();
+    }
+  });
 });
