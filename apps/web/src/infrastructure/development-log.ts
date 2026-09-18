@@ -1,5 +1,7 @@
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, stat, truncate } from "node:fs/promises";
 import path from "node:path";
+
+const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 
 type DiagnosticValue =
   string | number | boolean | null | DiagnosticValue[] | { [key: string]: DiagnosticValue };
@@ -60,6 +62,24 @@ function projectRoot(): string {
     : cwd;
 }
 
+function maximumLogBytes(): number {
+  const configured = Number(process.env.DEVELOPMENT_LOG_MAX_BYTES);
+  return Number.isSafeInteger(configured) && configured > 0 ? configured : DEFAULT_MAX_BYTES;
+}
+
+async function appendDiagnostic(filePath: string, record: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const limit = maximumLogBytes();
+  let size = 0;
+  try {
+    size = (await stat(filePath)).size;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (size >= limit) await truncate(filePath, 0);
+  await appendFile(filePath, record, "utf8");
+}
+
 /**
  * Append a development-only diagnostic without ever making the request depend
  * on the log file being writable. Production services continue to use their
@@ -79,11 +99,9 @@ export function writeDevelopmentDiagnostic(entry: DevelopmentDiagnostic): void {
       ...(entry.metadata ? { metadata: safeValue(entry.metadata) } : {}),
     };
     const filePath = path.resolve(projectRoot(), "var", "log", "development.log");
-    void mkdir(path.dirname(filePath), { recursive: true })
-      .then(() => appendFile(filePath, `${JSON.stringify(record)}\n`, "utf8"))
-      .catch(() => {
-        // Diagnostics are best effort and must never break an application request.
-      });
+    void appendDiagnostic(filePath, `${JSON.stringify(record)}\n`).catch(() => {
+      // Diagnostics are best effort and must never break an application request.
+    });
   } catch {
     // Diagnostics are best effort and must never break an application request.
   }

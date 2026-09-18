@@ -354,8 +354,8 @@ export function createContainer(databaseUrl: string) {
     registry.registerLazy("nowpayments", () => nowPaymentsDefinition(), {
       onFailure: (error) => recordConfigurationFailure("payment", "nowpayments", error),
     });
-    registry.registerLazy("direct_trc20", () => directTrc20Definition(), {
-      onFailure: (error) => recordConfigurationFailure("payment", "direct_trc20", error),
+    registry.registerLazy("usdt_trc20", () => directTrc20Definition(), {
+      onFailure: (error) => recordConfigurationFailure("payment", "usdt_trc20", error),
     });
     registry.registerLazy("bank_transfer", () => bankTransferDefinition(), {
       onFailure: (error) => recordConfigurationFailure("payment", "bank_transfer", error),
