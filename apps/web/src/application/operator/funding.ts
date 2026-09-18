@@ -82,11 +82,7 @@ export type OperatorFundingDetail = OperatorFundingSummary & {
   evidence: {
     id: string;
     transferReference: string | null;
-    proofImageUrl: string | null;
     proof: {
-      provider: string;
-      container: string;
-      key: string;
       originalFilename: string | null;
       mimeType: string;
       byteSize: string;

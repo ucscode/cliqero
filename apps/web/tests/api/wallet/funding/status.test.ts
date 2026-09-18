@@ -162,6 +162,47 @@ describe("wallet funding status projection", () => {
     });
   });
 
+  it("projects all persisted bank-transfer evidence fields", async () => {
+    configure(account.id, "verification_pending", "bank_transfer");
+    fixtures.container.bankTransferEvidence = {
+      findForFunding: vi.fn(async () => ({
+        id: "00000000-0000-4000-8000-000000000011",
+        fundingId,
+        transferReference: "bank-ref-123",
+        customerNote: "optional context",
+        proofImageUrl: null,
+        proof: {
+          provider: "private_media",
+          container: "evidence",
+          key: "private/receipt.png",
+          originalFilename: "receipt.png",
+          mimeType: "image/png",
+          byteSize: "8",
+        },
+        createdAt: "2026-09-13T06:00:00.000Z",
+        state: "verification_pending" as const,
+      })),
+    };
+
+    const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
+      params: Promise.resolve({ id: fundingId }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      evidence: {
+        transfer_reference: "bank-ref-123",
+        customer_note: "optional context",
+        proof: {
+          original_filename: "receipt.png",
+          mime_type: "image/png",
+          byte_size: "8",
+        },
+        created_at: "2026-09-13T06:00:00.000Z",
+      },
+    });
+  });
+
   it("does not disclose another account's funding", async () => {
     configure("00000000-0000-4000-8000-000000000002");
     const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {

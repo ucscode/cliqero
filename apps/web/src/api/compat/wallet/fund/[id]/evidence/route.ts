@@ -46,6 +46,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         id: evidence.id,
         funding_id: evidence.fundingId,
         state: evidence.state,
+        transfer_reference: evidence.transferReference,
+        customer_note: evidence.customerNote,
         created_at: evidence.createdAt,
         proof: evidence.proof
           ? {

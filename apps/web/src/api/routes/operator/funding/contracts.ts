@@ -85,12 +85,8 @@ export const operatorFundingDetailSchema = operatorFundingSummarySchema.extend({
     .object({
       id: z.string().uuid(),
       transferReference: z.string().nullable(),
-      proofImageUrl: z.string().nullable(),
       proof: z
         .object({
-          provider: z.string(),
-          container: z.string(),
-          key: z.string(),
           originalFilename: z.string().nullable(),
           mimeType: z.string(),
           byteSize: z.string(),

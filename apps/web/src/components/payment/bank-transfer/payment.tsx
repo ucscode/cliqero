@@ -20,6 +20,28 @@ import { Money } from "../../money";
 import { CopyValue } from "../../copy-value";
 
 type BankStatusField = { key: string; label: string; value: string; copyable?: boolean };
+export type BankTransferEvidenceRow = { label: string; value: string };
+
+export function bankTransferEvidenceRows(
+  evidence: FundingStatus["evidence"],
+): BankTransferEvidenceRow[] {
+  if (!evidence) return [];
+  return [
+    ...(evidence.transfer_reference
+      ? [{ label: "Transfer reference", value: evidence.transfer_reference }]
+      : []),
+    ...(evidence.proof
+      ? [
+          {
+            label: "Proof file",
+            value: evidence.proof.original_filename ?? "Uploaded file",
+          },
+        ]
+      : []),
+    ...(evidence.customer_note ? [{ label: "Note", value: evidence.customer_note }] : []),
+  ];
+}
+
 export function snapshotFields(value: unknown): BankStatusField[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
   const fields = (value as { fields?: unknown }).fields;
@@ -165,11 +187,14 @@ export function BankTransferPayment(props: PaymentProviderProps) {
           <span className="text-slate-600">
             Your bank transfer is awaiting manual verification.
           </span>
-          {props.funding.evidence.proof && (
-            <span className="text-slate-600">
-              Proof file: {props.funding.evidence.proof.original_filename ?? "Uploaded file"}
-            </span>
-          )}
+          <dl className="grid gap-2">
+            {bankTransferEvidenceRows(props.funding.evidence).map((row) => (
+              <div className="grid gap-1" key={row.label}>
+                <dt className="text-slate-600">{row.label}</dt>
+                <dd className="break-all whitespace-pre-line font-medium">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       )}
       {evidenceAllowed && (

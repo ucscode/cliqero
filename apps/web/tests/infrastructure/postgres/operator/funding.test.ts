@@ -98,6 +98,46 @@ describe("PostgresOperatorFundingReader", () => {
     expect(detail.operations[0].providerCode).toBe("verification_amount_mismatch");
   });
 
+  it("projects complete bank-transfer evidence without storage internals", async () => {
+    const reader = new PostgresOperatorFundingReader({
+      query: async <T extends object>(sql: string) => {
+        if (sql.includes("from funding_capability.funding_transactions f"))
+          return result<T>([baseRow] as T[]);
+        if (sql.includes("funding_capability.funding_evidence"))
+          return result<T>([
+            {
+              id: "00000000-0000-4000-8000-000000000030",
+              transfer_reference: "bank-ref-123",
+              customer_note: "optional context",
+              proof_storage_provider: "private_media",
+              proof_storage_container: "evidence",
+              proof_object_key: "private/receipt.png",
+              proof_original_filename: "receipt.png",
+              proof_mime_type: "image/png",
+              proof_byte_size: "8",
+              created_at: "2026-01-01T00:03:00.000Z",
+            },
+          ] as T[]);
+        return result<T>([]) as QueryResult<T>;
+      },
+    });
+
+    const detail = await reader.get(baseRow.id);
+    expect(detail.evidence).toEqual({
+      id: "00000000-0000-4000-8000-000000000030",
+      transferReference: "bank-ref-123",
+      customerNote: "optional context",
+      proof: {
+        originalFilename: "receipt.png",
+        mimeType: "image/png",
+        byteSize: "8",
+      },
+      createdAt: "2026-01-01T00:03:00.000Z",
+    });
+    expect(JSON.stringify(detail)).not.toContain("private/receipt.png");
+    expect(JSON.stringify(detail)).not.toContain("private_media");
+  });
+
   it("rejects malformed opaque cursors", async () => {
     const reader = new PostgresOperatorFundingReader({ query: async () => result([]) });
     await expect(reader.list({ limit: 25, cursor: "not-a-cursor" })).rejects.toThrow(

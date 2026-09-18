@@ -51,6 +51,28 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Funding data is temporarily unavailable.";
 }
 
+export type OperatorBankTransferEvidenceRow = { label: string; value: string };
+
+export function operatorBankTransferEvidenceRows(
+  evidence: FundingDetail["evidence"],
+): OperatorBankTransferEvidenceRow[] {
+  if (!evidence) return [];
+  return [
+    ...(evidence.transferReference
+      ? [{ label: "Transfer reference", value: evidence.transferReference }]
+      : []),
+    ...(evidence.customerNote ? [{ label: "Customer note", value: evidence.customerNote }] : []),
+    ...(evidence.proof
+      ? [
+          { label: "Proof file", value: evidence.proof.originalFilename ?? "Uploaded file" },
+          { label: "Proof type", value: evidence.proof.mimeType },
+          { label: "Proof size", value: `${evidence.proof.byteSize} bytes` },
+        ]
+      : []),
+    { label: "Submitted", value: formatDate(evidence.createdAt) },
+  ];
+}
+
 export function OperatorFundingList() {
   const [page, setPage] = useState<OperatorFundingPage | null>(null);
   const [search, setSearch] = useState("");
@@ -385,6 +407,23 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
               <dd>{formatDate(funding.conversionSnapshot.observedAt)}</dd>
             </div>
           </dl>
+        </Card>
+      )}
+      {funding.evidence && (
+        <Card>
+          <h3>Bank-transfer evidence</h3>
+          <dl className="detail-list">
+            {operatorBankTransferEvidenceRows(funding.evidence).map((row) => (
+              <div key={row.label}>
+                <dt>{row.label}</dt>
+                <dd className="break-value whitespace-pre-line">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="panel-intro">
+            Proof viewing is not available from this operator screen; review the recorded metadata
+            or use the configured secure retrieval mechanism when one is provided.
+          </p>
         </Card>
       )}
       <Card>

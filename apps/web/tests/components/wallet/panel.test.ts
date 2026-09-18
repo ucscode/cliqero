@@ -45,6 +45,7 @@ import {
   type FundingStatus,
 } from "@/lib/api-client";
 import { copyValueActionLabel } from "@/components/copy-value";
+import { bankTransferEvidenceRows } from "@/components/payment/bank-transfer/payment";
 import {
   initialFundingOptionId,
   initialPaymentCurrency,
@@ -80,6 +81,37 @@ describe("bank-transfer evidence input", () => {
     expect(hasBankTransferEvidence("   ", false)).toBe(false);
     expect(hasBankTransferEvidence("bank-ref", false)).toBe(true);
     expect(hasBankTransferEvidence("", true)).toBe(true);
+  });
+});
+
+describe("bank-transfer evidence presentation", () => {
+  it("renders each submitted customer field without fabricating absent fields", () => {
+    expect(
+      bankTransferEvidenceRows({
+        id: "00000000-0000-4000-8000-000000000011",
+        transfer_reference: "bank-ref-123",
+        customer_note: "optional context",
+        proof: {
+          original_filename: "receipt.png",
+          mime_type: "image/png",
+          byte_size: "8",
+        },
+        created_at: "2026-09-13T06:00:00.000Z",
+      }),
+    ).toEqual([
+      { label: "Transfer reference", value: "bank-ref-123" },
+      { label: "Proof file", value: "receipt.png" },
+      { label: "Note", value: "optional context" },
+    ]);
+    expect(
+      bankTransferEvidenceRows({
+        id: "00000000-0000-4000-8000-000000000011",
+        transfer_reference: null,
+        customer_note: null,
+        proof: null,
+        created_at: "2026-09-13T06:00:00.000Z",
+      }),
+    ).toEqual([]);
   });
 });
 

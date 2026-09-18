@@ -213,15 +213,11 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
         ? {
             id: evidence.id,
             transferReference: evidence.transfer_reference ?? null,
-            proofImageUrl: evidence.proof_image_url ?? null,
             proof:
               evidence.proof_storage_provider &&
               evidence.proof_storage_container &&
               evidence.proof_object_key
                 ? {
-                    provider: evidence.proof_storage_provider,
-                    container: evidence.proof_storage_container,
-                    key: evidence.proof_object_key,
                     originalFilename: evidence.proof_original_filename ?? null,
                     mimeType: evidence.proof_mime_type,
                     byteSize: String(evidence.proof_byte_size),

@@ -71,4 +71,15 @@ export type OperatorFundingDetail = OperatorFunding & {
     outboxState: string | null;
     outboxLastError: string | null;
   }>;
+  evidence: {
+    id: string;
+    transferReference: string | null;
+    proof: {
+      originalFilename: string | null;
+      mimeType: string;
+      byteSize: string;
+    } | null;
+    customerNote: string | null;
+    createdAt: string;
+  } | null;
 };
