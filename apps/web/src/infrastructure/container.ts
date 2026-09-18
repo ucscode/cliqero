@@ -238,7 +238,9 @@ export function createContainer(databaseUrl: string) {
   );
 
   const paystackPayoutDefinition = lazy(() => {
-    const configuration = loadPaystackPayoutConfiguration();
+    const configuration = loadConfiguredProvider("payout", "paystack", () =>
+      loadPaystackPayoutConfiguration(),
+    );
     return configuration
       ? new PaystackPayoutProvider(configuration, new PostgresPaystackRecipientStore(database))
       : null;
@@ -297,7 +299,9 @@ export function createContainer(databaseUrl: string) {
   });
 
   const paystackDefinition = lazy(() => {
-    const configuration = loadPaystackConfiguration();
+    const configuration = loadConfiguredProvider("payment", "paystack", () =>
+      loadPaystackConfiguration(),
+    );
     return configuration
       ? {
           provider: new PaystackProvider(configuration.provider, fetch, undefined, exchangeRates()),
@@ -306,7 +310,9 @@ export function createContainer(databaseUrl: string) {
       : null;
   });
   const nowPaymentsDefinition = lazy(() => {
-    const configuration = loadNowPaymentsConfiguration("config/modules/payment/nowpayments.yaml");
+    const configuration = loadConfiguredProvider("payment", "nowpayments", () =>
+      loadNowPaymentsConfiguration("config/modules/payment/nowpayments.yaml"),
+    );
     return configuration
       ? {
           provider: new NowPaymentsProvider(configuration.provider),
@@ -315,7 +321,9 @@ export function createContainer(databaseUrl: string) {
       : null;
   });
   const directTrc20Definition = lazy(() => {
-    const configuration = loadDirectTrc20Configuration("config/modules/payment/usdt_trc20.yaml");
+    const configuration = loadConfiguredProvider("payment", "direct_trc20", () =>
+      loadDirectTrc20Configuration("config/modules/payment/usdt_trc20.yaml"),
+    );
     if (!configuration) return null;
     const verifier = new HttpDirectTrc20Verifier({
       ...configuration.provider.verification,
@@ -327,7 +335,9 @@ export function createContainer(databaseUrl: string) {
     };
   });
   const bankTransferDefinition = lazy(() => {
-    const configuration = loadBankTransferConfiguration();
+    const configuration = loadConfiguredProvider("payment", "bank_transfer", () =>
+      loadBankTransferConfiguration(),
+    );
     return configuration
       ? {
           provider: new BankTransferProvider(configuration.provider),
@@ -880,6 +890,19 @@ function recordConfigurationFailure(feature: string, provider: string, error: un
       error: error instanceof Error ? error.message : "Unknown configuration error",
     },
   });
+}
+
+function loadConfiguredProvider<T>(feature: string, provider: string, load: () => T): T {
+  try {
+    return load();
+  } catch (error) {
+    if (error instanceof ProviderConfigurationError) throw error;
+    throw new ProviderConfigurationError(
+      provider,
+      `${feature[0].toUpperCase()}${feature.slice(1)} provider configuration is invalid: ${provider}: ${error instanceof Error ? error.message : String(error)}`,
+      error,
+    );
+  }
 }
 
 function resolveOptionalPaymentProvider<T extends PaymentProvider>(

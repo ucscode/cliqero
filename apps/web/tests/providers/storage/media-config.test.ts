@@ -77,6 +77,70 @@ providers:
     }
   });
 
+  it("keeps a healthy named instance usable when the default is broken", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
+    try {
+      const config = join(root, "config.yaml");
+      await writeFile(
+        config,
+        `default_provider: broken_supabase
+providers:
+  broken_supabase:
+    provider: supabase
+    visibility: private
+    config:
+      endpoint: not-a-url
+      bucket: evidence
+      service_key: broken
+  healthy_files:
+    provider: filesystem
+    visibility: private
+    config:
+      root: /tmp/cliqero-media
+`,
+      );
+      const registry = loadMediaStorage(config, environment);
+
+      expect(registry.get("healthy_files").name).toBe("healthy_files");
+      expect(() => registry.default()).toThrow("Storage configuration is invalid: broken_supabase");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves environment placeholders only for the selected instance", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
+    try {
+      const config = join(root, "config.yaml");
+      await writeFile(
+        config,
+        `default_provider: filesystem
+providers:
+  filesystem:
+    provider: filesystem
+    visibility: private
+    config:
+      root: /tmp/cliqero-media
+  unused_supabase:
+    provider: supabase
+    visibility: private
+    config:
+      endpoint: https://project.supabase.co
+      bucket: evidence
+      service_key: "%env(MISSING_SUPABASE_KEY)%"
+`,
+      );
+      const registry = loadMediaStorage(config, environment);
+
+      expect(registry.get("filesystem").name).toBe("filesystem");
+      expect(() => registry.get("unused_supabase")).toThrow(
+        'Missing environment variable "MISSING_SUPABASE_KEY"',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("uses the filesystem instance name as container identity when container is omitted", async () => {
     const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
     try {
@@ -113,7 +177,7 @@ providers:
         config,
         `default_provider: media\nproviders:\n  media:\n    provider: ${provider}\n    visibility: public\n    config:\n      ${providerConfig}\n`,
       );
-      expect(() => loadMediaStorage(config, environment)).toThrow(
+      expect(() => loadMediaStorage(config, environment).default()).toThrow(
         "Public storage instances must define public_base_url",
       );
     } finally {

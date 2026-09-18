@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   getEnabledSocialProviders,
+  getOptionalSocialProviders,
   hasGoogleAuthentication,
   loadAuthConfiguration,
 } from "@/config/auth";
@@ -40,5 +41,16 @@ describe("YAML Better Auth providers", () => {
   it("rejects incomplete enabled provider credentials", () => {
     const file = configuration("social:\n  google:\n    enabled: true\n    client_id: client\n");
     expect(() => loadAuthConfiguration(file)).toThrow("requires client_id and client_secret");
+  });
+
+  it("keeps invalid Google optional while reporting a typed configuration failure", () => {
+    const file = configuration("social:\n  google:\n    enabled: true\n    client_id: client\n");
+    const failures: Error[] = [];
+
+    expect(getOptionalSocialProviders(file, (error) => failures.push(error))).toEqual({});
+    expect(hasGoogleAuthentication(file)).toBe(false);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].name).toBe("AuthProviderConfigurationError");
+    expect(failures[0].message).toContain("Google authentication configuration");
   });
 });

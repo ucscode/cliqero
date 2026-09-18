@@ -22,6 +22,12 @@ export class ProviderUnavailableError extends Error {
   }
 }
 
+export function isExpectedProviderFailure(
+  error: unknown,
+): error is ProviderConfigurationError | ProviderUnavailableError {
+  return error instanceof ProviderConfigurationError || error instanceof ProviderUnavailableError;
+}
+
 export function isProviderConfigurationFailure(
   error: unknown,
 ): error is ProviderConfigurationError | ProviderUnavailableError {

@@ -201,4 +201,12 @@ describe("object storage providers used by listing media", () => {
       r2.publicUrl({ provider: "r2_private", container: "media", key: "private.png" }),
     ).toThrow("not publicly addressable");
   });
+
+  it("does not convert unexpected storage implementation errors into unavailability", () => {
+    const registry = new ObjectStorageRegistry("buggy").registerLazy("buggy", () => {
+      throw new TypeError("storage implementation bug");
+    });
+
+    expect(() => registry.get("buggy")).toThrow("storage implementation bug");
+  });
 });

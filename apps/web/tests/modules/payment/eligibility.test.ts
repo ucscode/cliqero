@@ -9,6 +9,7 @@ import { PaystackProvider } from "@/providers/payment/paystack/provider";
 import { NowPaymentsProvider } from "@/providers/payment/nowpayments/provider";
 import { BankTransferProvider } from "@/providers/payment/bank-transfer/provider";
 import { DirectTrc20Provider } from "@/providers/payment/direct-trc20/provider";
+import { ProviderConfigurationError } from "@/kernel/provider-error";
 import type { DirectTrc20Verifier } from "@/providers/payment/direct-trc20/verifier";
 const context = (country: string | null) => ({ country });
 describe("payment provider eligibility", () => {
@@ -66,7 +67,10 @@ describe("payment provider eligibility", () => {
       payCurrencies: ["usdttrc20"],
     });
     const brokenFactory = vi.fn(() => {
-      throw new Error("invalid bank-transfer configuration");
+      throw new ProviderConfigurationError(
+        "bank_transfer",
+        "Payment provider configuration is invalid: bank_transfer",
+      );
     });
     const registry = new PaymentProviderRegistry()
       .registerLazy("bank_transfer", brokenFactory)
@@ -79,6 +83,14 @@ describe("payment provider eligibility", () => {
     expect(() => registry.get("bank_transfer")).toThrow(
       "Payment provider configuration is invalid",
     );
+  });
+
+  it("does not swallow unexpected provider implementation errors", () => {
+    const registry = new PaymentProviderRegistry().registerLazy("buggy", () => {
+      throw new TypeError("provider implementation bug");
+    });
+
+    expect(() => registry.availableFor(context("NG"))).toThrow("provider implementation bug");
   });
   it("keeps Paystack collection currency separate from country eligibility", () => {
     const registry = new PaymentProviderRegistry().register(

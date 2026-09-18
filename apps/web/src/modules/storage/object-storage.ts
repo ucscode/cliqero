@@ -100,18 +100,11 @@ export class ObjectStorageRegistry {
           );
         return provider;
       } catch (error) {
-        const configurationError =
-          error instanceof StorageConfigurationError
-            ? error
-            : new StorageConfigurationError(
-                instanceName,
-                `Storage configuration is invalid: ${instanceName}: ${error instanceof Error ? error.message : "Storage configuration is invalid"}`,
-                error,
-              );
+        if (!(error instanceof StorageConfigurationError)) throw error;
         this.factories.delete(instanceName);
-        this.failures.set(instanceName, configurationError);
-        options?.onFailure?.(configurationError);
-        throw configurationError;
+        this.failures.set(instanceName, error);
+        options?.onFailure?.(error);
+        throw error;
       }
     });
     return this;

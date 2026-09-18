@@ -6,7 +6,8 @@ import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type { AuthenticationGateway, AuthSession } from "@/application/identity/contracts";
 import { sendAuthEmail, type AuthEmail } from "@/lib/email";
 import { siteConfig } from "@/config/site";
-import { getEnabledSocialProviders } from "@/config/auth";
+import { getOptionalSocialProviders } from "@/config/auth";
+import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 
 const developmentSecret = "cliqero-development-better-auth-secret-change-me-32";
@@ -38,6 +39,7 @@ export class BetterAuthBoundary implements AuthenticationGateway {
   constructor(
     private readonly sql: QueryExecutor,
     databaseUrl: string,
+    authConfigurationPath = "config/security/auth.yaml",
   ) {
     // Keep Better Auth's tables separate from Cliqero's domain schemas. The
     // explicit search_path also prevents accidental unqualified reads from
@@ -53,6 +55,18 @@ export class BetterAuthBoundary implements AuthenticationGateway {
     // Better Auth owns a separate pool; prevent an idle connection error from
     // becoming an uncaught process-level event during a database restart.
     this.pool.on("error", () => undefined);
+    const socialProviders = getOptionalSocialProviders(authConfigurationPath, (error) =>
+      writeDevelopmentDiagnostic({
+        level: "error",
+        event: "configuration.feature_failed",
+        error,
+        metadata: {
+          feature: "auth",
+          provider: "google",
+          code: "auth.google.configuration",
+        },
+      }),
+    );
     this.auth = betterAuth({
       appName: siteConfig.name,
       baseURL: siteConfig.url,
@@ -82,14 +96,14 @@ export class BetterAuthBoundary implements AuthenticationGateway {
       account: {
         accountLinking: {
           enabled: true,
-          trustedProviders: Object.keys(getEnabledSocialProviders()),
+          trustedProviders: Object.keys(socialProviders),
           // A local password account must prove ownership of its email before
           // an OAuth identity can be implicitly linked to it.
           requireLocalEmailVerified: true,
           allowDifferentEmails: false,
         },
       },
-      socialProviders: getEnabledSocialProviders(),
+      socialProviders,
       plugins: [bearer(), nextCookies()],
       databaseHooks: {
         user: {

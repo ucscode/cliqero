@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { loadYamlConfiguration } from "@/config/yaml";
+import { parseYamlConfiguration, resolveEnvironmentPlaceholders } from "@/config/yaml";
 import {
   ObjectStorageRegistry,
   StorageConfigurationError,
@@ -66,18 +66,40 @@ export function loadMediaStorage(
   },
   options: { onFailure?: (error: StorageConfigurationError) => void } = {},
 ) {
-  const config = rootSchema.parse(loadYamlConfiguration(path, environment, { required: true }));
+  const raw = parseYamlConfiguration(path);
+  if (raw === null) throw new Error(`Required configuration file is missing: ${path}`);
+  const config = rootSchema.parse(raw);
   if (!(config.default_provider in config.providers))
     throw new Error("default_provider must reference a configured storage instance");
   const registry = new ObjectStorageRegistry(config.default_provider);
   for (const [name, instance] of Object.entries(config.providers))
     registry.registerLazy(
       name,
-      () => createProvider(name, parseStorageConfig(name, instance)),
+      () => createProvider(name, loadStorageProviderConfig(name, instance, environment, path)),
       options,
     );
-  registry.default();
   return registry;
+}
+
+function loadStorageProviderConfig(
+  name: string,
+  value: unknown,
+  environment: Record<string, string | undefined>,
+  path: string,
+): z.infer<typeof storageConfig> {
+  try {
+    return parseStorageConfig(
+      name,
+      resolveEnvironmentPlaceholders(value, environment, `${path}.providers.${name}`),
+    );
+  } catch (error) {
+    if (error instanceof StorageConfigurationError) throw error;
+    throw new StorageConfigurationError(
+      name,
+      `Storage configuration is invalid: ${name}: ${error instanceof Error ? error.message : String(error)}`,
+      error,
+    );
+  }
 }
 
 function parseStorageConfig(name: string, value: unknown): z.infer<typeof storageConfig> {

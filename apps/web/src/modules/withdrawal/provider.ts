@@ -61,18 +61,11 @@ export class PayoutProviderRegistry {
           throw new Error(`Provider name does not match lazy registration: ${name}`);
         return provider;
       } catch (error) {
-        const configurationError =
-          error instanceof ProviderConfigurationError
-            ? error
-            : new ProviderConfigurationError(
-                name,
-                `Payout provider configuration is invalid: ${name}: ${error instanceof Error ? error.message : "Provider configuration is invalid"}`,
-                error,
-              );
+        if (!(error instanceof ProviderConfigurationError)) throw error;
         this.factories.delete(name);
-        this.failures.set(name, configurationError);
-        options?.onFailure?.(configurationError);
-        throw configurationError;
+        this.failures.set(name, error);
+        options?.onFailure?.(error);
+        throw error;
       }
     });
     return this;
