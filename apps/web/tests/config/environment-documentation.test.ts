@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, it } from "vitest";
 
@@ -28,6 +28,7 @@ function contentsOf(files: string[]): string {
 
 it("keeps directly consumed runtime environment variables discoverable", () => {
   const runtimeFiles = [
+    path.join(repositoryRoot, "apps/web/next.config.ts"),
     ...filesUnder(
       path.join(repositoryRoot, "apps/web/src"),
       (file) => /\.(?:js|mjs|cjs|ts|tsx)$/.test(file) && !/\.test\./.test(file),
@@ -40,9 +41,12 @@ it("keeps directly consumed runtime environment variables discoverable", () => {
   const composeFiles = filesUnder(path.join(repositoryRoot, "services"), (file) =>
     /compose(?:\.override)?\.(?:yaml|yml)$/.test(file),
   );
+  const rootComposeFiles = ["compose.yaml", "compose.override.yaml"]
+    .map((file) => path.join(repositoryRoot, file))
+    .filter(existsSync);
   const justfile = path.join(repositoryRoot, "justfile");
   const source = contentsOf(runtimeFiles);
-  const composeInputs = contentsOf([...composeFiles, justfile]);
+  const composeInputs = contentsOf([...composeFiles, ...rootComposeFiles, justfile]);
   const directlyRead = namesMatching(
     source,
     /process\.env\.([A-Z][A-Z0-9_]*)|process\.env\[\s*["']([A-Z][A-Z0-9_]*)["']\s*\]/g,
