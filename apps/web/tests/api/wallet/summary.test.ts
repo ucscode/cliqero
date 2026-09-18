@@ -49,31 +49,27 @@ describe("wallet summary API contract", () => {
     const response = await GET(new Request("http://localhost/api/wallet"));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
+    const body = await response.json();
+    expect(body).not.toHaveProperty("active_funding");
+    expect(body).toMatchObject({
       currency: "USD",
       available_minor: "205000",
       pending_minor: "0",
-      active_funding: {
-        id: activeFunding.id,
-        amount_minor: "1000",
-        currency: "USD",
-        authorization_url: "https://paystack.example/continue",
-      },
       active_fundings: [
         expect.objectContaining({ id: activeFunding.id, state: "awaiting_payment" }),
       ],
     });
   });
 
-  it("safely handles a legacy single funding result and malformed records", async () => {
+  it("normalizes a single repository result and filters malformed records", async () => {
     configure([activeFunding, { id: "malformed" }, null]);
     const response = await GET(new Request("http://localhost/api/wallet"));
     expect(response.status).toBe(200);
     expect((await response.json()).active_fundings).toHaveLength(1);
 
     configure(activeFunding);
-    const legacyResponse = await GET(new Request("http://localhost/api/wallet"));
-    expect(legacyResponse.status).toBe(200);
-    expect((await legacyResponse.json()).active_fundings).toHaveLength(1);
+    const singleResultResponse = await GET(new Request("http://localhost/api/wallet"));
+    expect(singleResultResponse.status).toBe(200);
+    expect((await singleResultResponse.json()).active_fundings).toHaveLength(1);
   });
 });

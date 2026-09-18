@@ -32,8 +32,11 @@ import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import {
   FundingProviderPreparation,
+  initialFundingOptionId,
   initialPaymentCurrency,
+  providerPreparationControls,
   providerPreparationReady,
+  shouldPrepareFunding,
 } from "../payment/shared/preparation";
 import { LoaderCircle } from "lucide-react";
 import { PaymentProviderComponent } from "../payment/provider";
@@ -248,7 +251,12 @@ export function WalletPanel({
     ? fundingMethods.filter((method) => method.id === provider)
     : fundingMethods;
   const preparationLoading = Boolean(
-    providerPreparation && fixedAmountMinor && selectedMethod && !preparation && !preparationError,
+    providerPreparation &&
+    fixedAmountMinor &&
+    selectedMethod &&
+    shouldPrepareFunding(selectedMethod, paymentCurrency) &&
+    !preparation &&
+    !preparationError,
   );
 
   useEffect(() => {
@@ -273,7 +281,14 @@ export function WalletPanel({
   }, [fundOpen, fundingPage, fundingProvider]);
 
   useEffect(() => {
-    if (!providerPreparation || !fundingProvider || !fixedAmountMinor || !selectedMethod) return;
+    if (
+      !providerPreparation ||
+      !fundingProvider ||
+      !fixedAmountMinor ||
+      !selectedMethod ||
+      !shouldPrepareFunding(selectedMethod, paymentCurrency)
+    )
+      return;
     let active = true;
     const query = new URLSearchParams({
       amount_minor: fixedAmountMinor,
@@ -286,6 +301,14 @@ export function WalletPanel({
         if (active) {
           setPreparation(result);
           setFundingOptions(result.funding_options);
+          if (providerPreparationControls(selectedMethod).receivingAccount) {
+            const automaticOptionId = initialFundingOptionId(result.funding_options);
+            if (automaticOptionId && !fundingOptionId) {
+              setPreparation(null);
+              setPreparationError(null);
+              setFundingOptionId(automaticOptionId);
+            }
+          }
         }
       })
       .catch((cause) => {
@@ -312,8 +335,7 @@ export function WalletPanel({
     document.getElementById("wallet-funding")?.scrollIntoView({ block: "start" });
   }, [fundingPage, summaryLoading]);
 
-  const activeFundings =
-    summary?.active_fundings ?? (summary?.active_funding ? [summary.active_funding] : []);
+  const activeFundings = summary?.active_fundings ?? [];
 
   async function submitFunding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -71,7 +71,6 @@ export async function GET(request: Request) {
     currency: "USD",
     available_minor: s.available.minorAmount.toString(),
     pending_minor: s.pending.minorAmount.toString(),
-    active_funding: projectedActiveFundings[0] ?? null,
     active_fundings: projectedActiveFundings,
   });
 }

@@ -9,6 +9,16 @@ import {
 } from "../shared/status";
 import { Button } from "../../ui/button";
 
+export function applyDevelopmentVerificationResult(
+  funding: FundingStatus,
+  result: Pick<FundingStatus, "state">,
+  onFundingChange: (funding: FundingStatus) => void,
+  onConfirmed: () => void,
+) {
+  onFundingChange({ ...funding, state: result.state });
+  if (result.state === "confirmed") onConfirmed();
+}
+
 export function DevelopmentPayment(props: PaymentProviderProps) {
   const [currentTime] = useState(() => Date.now());
   const [submitting, setSubmitting] = useState(false);
@@ -44,7 +54,12 @@ export function DevelopmentPayment(props: PaymentProviderProps) {
           body: JSON.stringify({ funding_id: props.funding.id }),
         },
       );
-      props.onFundingChange({ ...props.funding, state: result.state });
+      applyDevelopmentVerificationResult(
+        props.funding,
+        result,
+        props.onFundingChange,
+        props.onConfirmed,
+      );
     } catch (cause) {
       props.onError(cause instanceof Error ? cause.message : "Development verification failed.");
     } finally {

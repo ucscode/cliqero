@@ -2,8 +2,7 @@ export type WalletSummary = {
   currency: "USD";
   available_minor: string;
   pending_minor: string;
-  active_funding?: ActiveFunding | null;
-  active_fundings?: ActiveFunding[];
+  active_fundings: ActiveFunding[];
 };
 
 export type ActiveFunding = {

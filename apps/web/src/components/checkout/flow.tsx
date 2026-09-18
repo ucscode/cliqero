@@ -54,6 +54,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
           currency: "USD",
           available_minor: quote.available.amount_minor,
           pending_minor: "0",
+          active_fundings: [],
         });
         setShortfallMinor(quote.shortfall.amount_minor);
       })
@@ -147,6 +148,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         currency: "USD",
         available_minor: result.available.amount_minor,
         pending_minor: "0",
+        active_fundings: [],
       });
       setShortfallMinor(result.shortfall.amount_minor);
       setStarted(true);

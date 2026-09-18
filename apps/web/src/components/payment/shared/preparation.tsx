@@ -14,6 +14,19 @@ export function initialPaymentCurrency(method: Pick<FundingMethod, "payment_curr
   return method.payment_currencies.length === 1 ? method.payment_currencies[0].code : "";
 }
 
+export function shouldPrepareFunding(
+  method: Pick<FundingMethod, "payment_currencies">,
+  paymentCurrency: string,
+) {
+  return method.payment_currencies.length === 0 || Boolean(paymentCurrency);
+}
+
+export function initialFundingOptionId(
+  options: ReadonlyArray<Pick<FundingPreparationOption, "id">>,
+) {
+  return options.length === 1 ? options[0].id : "";
+}
+
 export function providerPreparationReady(
   method: Pick<FundingMethod, "id" | "payment_currencies">,
   fundingOptionId: string,

@@ -43,8 +43,10 @@ import {
 } from "@/lib/api-client";
 import { copyValueActionLabel } from "@/components/copy-value";
 import {
+  initialFundingOptionId,
   initialPaymentCurrency,
   providerPreparationControls,
+  shouldPrepareFunding,
 } from "@/components/payment/shared/preparation";
 
 describe("bank-transfer evidence visibility", () => {
@@ -166,6 +168,25 @@ describe("provider preparation context", () => {
     expect(initialPaymentCurrency({ payment_currencies: [{ code: "btc" }, { code: "eth" }] })).toBe(
       "",
     );
+  });
+
+  it("waits for a payment currency when the provider offers multiple choices", () => {
+    const method = {
+      id: "nowpayments",
+      payment_currencies: [{ code: "btc" }, { code: "eth" }],
+    };
+    expect(shouldPrepareFunding(method, "")).toBe(false);
+    expect(shouldPrepareFunding(method, "eth")).toBe(true);
+  });
+
+  it("prepares providers with no currency selector immediately", () => {
+    expect(shouldPrepareFunding({ payment_currencies: [] }, "")).toBe(true);
+  });
+
+  it("auto-selects only a sole receiving bank", () => {
+    expect(initialFundingOptionId([{ id: "bank-1" }])).toBe("bank-1");
+    expect(initialFundingOptionId([{ id: "bank-1" }, { id: "bank-2" }])).toBe("");
+    expect(initialFundingOptionId([])).toBe("");
   });
 });
 
