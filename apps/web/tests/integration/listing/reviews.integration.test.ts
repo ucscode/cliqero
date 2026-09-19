@@ -47,7 +47,8 @@ suite("listing review visibility", () => {
     });
     const listing = await app.listingService.createPublished(owner, {
       title: "Reviewable listing",
-      description: "A published listing.",
+      shortDescription: "A reviewable listing",
+      longDescription: "A published listing.",
       priceMinor: "100",
       currency: "USD",
       destination: "https://example.com/access",
@@ -112,7 +113,8 @@ suite("listing review visibility", () => {
     });
     const listing = await app.listingService.createPublished(owner, {
       title: "Aggregate listing",
-      description: "A published listing.",
+      shortDescription: "A listing with aggregate reviews",
+      longDescription: "A published listing.",
       priceMinor: "100",
       currency: "USD",
       destination: "https://example.com/access",

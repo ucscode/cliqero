@@ -11,7 +11,8 @@ interface ListingRow {
   id: string;
   seller_id: string;
   title: string;
-  description: string;
+  short_description: string;
+  long_description: string;
   price_minor: string;
   price_currency: string;
   destination_url: string;
@@ -26,7 +27,7 @@ export class PostgresListingRepository implements ListingRepository {
   async findById(id: string): Promise<Listing | null> {
     const row = (
       await this.sql.query<ListingRow>(
-        `select l.uuid as id, seller.uuid as seller_id, l.title, l.description, l.price_minor, l.price_currency, l.destination_url, l.metadata, l.state, l.external_key, l.featured_position
+        `select l.uuid as id, seller.uuid as seller_id, l.title, l.short_description, l.long_description, l.price_minor, l.price_currency, l.destination_url, l.metadata, l.state, l.external_key, l.featured_position
        from listing_capability.listings l join identity_capability.accounts seller on seller.id=l.seller_id where l.uuid = $1`,
         [id],
       )
@@ -36,7 +37,8 @@ export class PostgresListingRepository implements ListingRepository {
           id: row.id,
           sellerId: row.seller_id,
           title: row.title,
-          description: row.description,
+          shortDescription: row.short_description,
+          longDescription: row.long_description,
           price: Money.of(BigInt(row.price_minor), row.price_currency),
           destination: row.destination_url,
           metadata: row.metadata,
@@ -48,7 +50,7 @@ export class PostgresListingRepository implements ListingRepository {
   async findByExternalKey(sellerId: string, key: string) {
     const row = (
       await this.sql.query<ListingRow>(
-        `select l.uuid as id,seller.uuid as seller_id,l.title,l.description,l.price_minor,l.price_currency,l.destination_url,l.metadata,l.state,l.external_key,l.featured_position from listing_capability.listings l join identity_capability.accounts seller on seller.id=l.seller_id where l.seller_id=(select id from identity_capability.accounts where uuid=$1) and l.external_key=$2`,
+        `select l.uuid as id,seller.uuid as seller_id,l.title,l.short_description,l.long_description,l.price_minor,l.price_currency,l.destination_url,l.metadata,l.state,l.external_key,l.featured_position from listing_capability.listings l join identity_capability.accounts seller on seller.id=l.seller_id where l.seller_id=(select id from identity_capability.accounts where uuid=$1) and l.external_key=$2`,
         [sellerId, key],
       )
     ).rows[0];
@@ -57,7 +59,7 @@ export class PostgresListingRepository implements ListingRepository {
   async findAnyByExternalKey(key: string) {
     const row = (
       await this.sql.query<ListingRow>(
-        `select l.uuid as id,seller.uuid as seller_id,l.title,l.description,l.price_minor,l.price_currency,l.destination_url,l.metadata,l.state,l.external_key,l.featured_position from listing_capability.listings l join identity_capability.accounts seller on seller.id=l.seller_id where l.external_key=$1`,
+        `select l.uuid as id,seller.uuid as seller_id,l.title,l.short_description,l.long_description,l.price_minor,l.price_currency,l.destination_url,l.metadata,l.state,l.external_key,l.featured_position from listing_capability.listings l join identity_capability.accounts seller on seller.id=l.seller_id where l.external_key=$1`,
         [key],
       )
     ).rows[0];
@@ -87,7 +89,7 @@ export class PostgresListingRepository implements ListingRepository {
     else if (input.state) where.push(`state=${add(input.state)}`);
     if (input.search)
       where.push(
-        `to_tsvector('simple',title||' '||description) @@ plainto_tsquery('simple',${add(input.search)})`,
+        `to_tsvector('simple',title||' '||short_description||' '||long_description) @@ plainto_tsquery('simple',${add(input.search)})`,
       );
     if (input.featuredOnly) where.push("featured_position is not null");
     const sort = input.featuredOnly ? "featured" : (input.sort ?? "newest");
@@ -128,7 +130,7 @@ export class PostgresListingRepository implements ListingRepository {
     values.push(input.limit + 1);
     const rows = (
       await this.sql.query<ListingRow>(
-        `select l.uuid as id,seller.uuid as seller_id,l.title,l.description,l.price_minor,l.price_currency,l.destination_url,l.metadata,l.state,l.external_key,l.featured_position from listing_capability.listings l join identity_capability.accounts seller on seller.id=l.seller_id ${where.length ? `where ${where.join(" and ")}` : ""} order by ${order.order} limit $${values.length}`,
+        `select l.uuid as id,seller.uuid as seller_id,l.title,l.short_description,l.long_description,l.price_minor,l.price_currency,l.destination_url,l.metadata,l.state,l.external_key,l.featured_position from listing_capability.listings l join identity_capability.accounts seller on seller.id=l.seller_id ${where.length ? `where ${where.join(" and ")}` : ""} order by ${order.order} limit $${values.length}`,
         values,
       )
     ).rows;
@@ -141,16 +143,17 @@ export class PostgresListingRepository implements ListingRepository {
   async save(listing: Listing): Promise<void> {
     await this.sql.query(
       `insert into listing_capability.listings
-        (uuid, seller_id, title, description, price_minor, price_currency, destination_url, metadata, state, external_key, featured_position)
-       values ($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)
-       on conflict (uuid) do update set title=excluded.title, description=excluded.description,
+        (uuid, seller_id, title, short_description, long_description, price_minor, price_currency, destination_url, metadata, state, external_key, featured_position)
+       values ($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12)
+       on conflict (uuid) do update set title=excluded.title, short_description=excluded.short_description, long_description=excluded.long_description,
          price_minor=excluded.price_minor, price_currency=excluded.price_currency,
          destination_url=excluded.destination_url, metadata=excluded.metadata, state=excluded.state, external_key=excluded.external_key, featured_position=excluded.featured_position, updated_at=now()`,
       [
         listing.id,
         listing.sellerId,
         listing.title,
-        listing.description,
+        listing.shortDescription,
+        listing.longDescription,
         listing.price.minorAmount.toString(),
         listing.price.currency,
         listing.destination,
@@ -166,7 +169,8 @@ export class PostgresListingRepository implements ListingRepository {
       id: row.id,
       sellerId: row.seller_id,
       title: row.title,
-      description: row.description,
+      shortDescription: row.short_description,
+      longDescription: row.long_description,
       price: Money.of(BigInt(row.price_minor), row.price_currency),
       destination: row.destination_url,
       metadata: row.metadata,

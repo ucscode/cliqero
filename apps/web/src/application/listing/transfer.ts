@@ -26,7 +26,8 @@ const recordSchema = z
       .optional(),
     external_key: z.string().max(128).optional(),
     title: z.string().min(1),
-    description: z.string().default(""),
+    short_description: z.string().max(200).default(""),
+    long_description: z.string().default(""),
     price_minor: z.string().regex(/^[0-9]+$/),
     currency: z.string().regex(/^[A-Z]{3}$/),
     destination: z.url(),
@@ -67,7 +68,8 @@ export class ListingTransferService {
           id: listing.id,
           external_key: listing.externalKey ?? undefined,
           title: listing.title,
-          description: listing.description,
+          short_description: listing.shortDescription,
+          long_description: listing.longDescription,
           price_minor: listing.price.minorAmount.toString(),
           currency: listing.price.currency,
           destination: listing.destination,
@@ -149,7 +151,8 @@ export class ListingTransferService {
           listing = catalogue
             ? await this.listings.updateCatalogue(owner, existing.id, {
                 title: record.title,
-                description: record.description,
+                shortDescription: record.short_description,
+                longDescription: record.long_description,
                 priceMinor: record.price_minor,
                 currency: record.currency,
                 destination: record.destination,
@@ -157,7 +160,8 @@ export class ListingTransferService {
               })
             : await this.listings.update(owner, existing.id, {
                 title: record.title,
-                description: record.description,
+                shortDescription: record.short_description,
+                longDescription: record.long_description,
                 priceMinor: record.price_minor,
                 currency: record.currency,
                 destination: record.destination,
@@ -167,7 +171,8 @@ export class ListingTransferService {
           listing = catalogue
             ? await this.listings.createCatalogue(owner, {
                 title: record.title,
-                description: record.description,
+                shortDescription: record.short_description,
+                longDescription: record.long_description,
                 priceMinor: record.price_minor,
                 currency: record.currency,
                 destination: record.destination,
@@ -176,7 +181,8 @@ export class ListingTransferService {
               })
             : await this.listings.create(owner, {
                 title: record.title,
-                description: record.description,
+                shortDescription: record.short_description,
+                longDescription: record.long_description,
                 priceMinor: record.price_minor,
                 currency: record.currency,
                 destination: record.destination,
@@ -358,7 +364,8 @@ const columns = [
   "retry_identity",
   "external_key",
   "title",
-  "description",
+  "short_description",
+  "long_description",
   "price_minor",
   "currency",
   "destination",

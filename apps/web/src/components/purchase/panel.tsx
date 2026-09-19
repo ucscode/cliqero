@@ -37,6 +37,10 @@ export function purchaseActions(
   return actions;
 }
 
+export function purchaseCardDescription(purchase: Pick<Purchase, "short_description">) {
+  return purchase.short_description;
+}
+
 function accessLabel(purchase: Purchase): string {
   if (purchase.access_available) return "Ready to access";
   if (purchase.state === "paid" || purchase.state === "completed")
@@ -125,6 +129,7 @@ export function PurchasesPanel() {
                 <div>
                   <p className="eyebrow">{new Date(purchase.created_at).toLocaleDateString()}</p>
                   <h3>{purchase.title}</h3>
+                  <p className="m-0 text-sm text-slate-600">{purchaseCardDescription(purchase)}</p>
                   <p className="m-0 text-sm text-slate-500">{accessLabel(purchase)}</p>
                 </div>
                 <div className="grid content-start justify-items-end gap-2 whitespace-nowrap">

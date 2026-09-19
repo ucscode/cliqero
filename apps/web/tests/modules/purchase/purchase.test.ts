@@ -7,6 +7,8 @@ describe("Purchase", () => {
       listingId: "listing-1",
       sellerId: "seller-1",
       title: "Original title",
+      shortDescription: "Original short description",
+      longDescription: "Original long description",
       price: { minorAmount: "2000", currency: "NGN" },
       canonicalPrice: { minorAmount: "125", currency: "USD" as const },
       referralAttributionId: null,
@@ -17,6 +19,8 @@ describe("Purchase", () => {
       (terms.price as { minorAmount: string }).minorAmount = "1";
     }).toThrow();
     expect(purchase.terms.price.minorAmount).toBe("2000");
+    expect(purchase.terms.shortDescription).toBe("Original short description");
+    expect(purchase.terms.longDescription).toBe("Original long description");
   });
 
   it("rejects invalid lifecycle transitions", () => {
@@ -28,6 +32,8 @@ describe("Purchase", () => {
         listingId: "listing-1",
         sellerId: "seller-1",
         title: "Listing",
+        shortDescription: "Listing summary",
+        longDescription: "Listing details",
         price: { minorAmount: "100", currency: "USD" },
         canonicalPrice: { minorAmount: "100", currency: "USD" },
         referralAttributionId: null,

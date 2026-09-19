@@ -40,7 +40,8 @@ suite("purchase financial distribution", () => {
       buyer = await account(`buyer${newId().slice(0, 5)}`);
     const listing = await app.listingService.createPublished(seller, {
       title: "Auditable",
-      description: "",
+      shortDescription: "Auditable purchase",
+      longDescription: "Detailed auditable listing.",
       priceMinor: "101",
       currency: "USD",
       destination: "https://example.test/access",
@@ -115,7 +116,8 @@ suite("purchase financial distribution", () => {
       buyer = await account(`buy${newId().slice(0, 5)}`);
     const listing = await app.listingService.createPublished(seller, {
       title: "Referral",
-      description: "",
+      shortDescription: "Referral purchase",
+      longDescription: "Detailed referral listing.",
       priceMinor: "10000",
       currency: "USD",
       destination: "https://example.test",

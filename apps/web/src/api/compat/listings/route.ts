@@ -9,7 +9,8 @@ const sorts = ["newest", "oldest", "price_asc", "price_desc", "title_asc"] as co
 const listingSchema = z
   .object({
     title: z.string().min(1),
-    description: z.string().default(""),
+    short_description: z.string().max(200).default(""),
+    long_description: z.string().default(""),
     price_minor: z.string().regex(/^\d+$/),
     currency: z.string().length(3),
     destination: z.url(),
@@ -27,7 +28,8 @@ export async function POST(request: Request) {
     const body = listingSchema.parse(await request.json());
     const listing = await getContainer().listingService.create(account, {
       title: body.title,
-      description: body.description,
+      shortDescription: body.short_description,
+      longDescription: body.long_description,
       priceMinor: body.price_minor,
       currency: body.currency,
       destination: body.destination,

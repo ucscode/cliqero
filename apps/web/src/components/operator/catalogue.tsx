@@ -35,6 +35,25 @@ function errorMessage(error: unknown) {
     : "The catalogue service is temporarily unavailable.";
 }
 
+export function operatorListingDescriptionForm(
+  listing: Pick<OperatorListing, "short_description" | "long_description">,
+) {
+  return {
+    shortDescription: listing.short_description,
+    longDescription: listing.long_description,
+  };
+}
+
+export function operatorListingDescriptionPayload(form: {
+  shortDescription: string;
+  longDescription: string;
+}) {
+  return {
+    short_description: form.shortDescription,
+    long_description: form.longDescription,
+  };
+}
+
 export function OperatorCatalogueList() {
   const [page, setPage] = useState<OperatorListingPage | null>(null);
   const [search, setSearch] = useState("");
@@ -277,7 +296,7 @@ function CatalogueCard({
           </Badge>
         </div>
         <p className="catalogue-card-description">
-          {listing.description || "No description provided."}
+          {listing.short_description || "No short description provided."}
         </p>
         <strong className="catalogue-card-price">
           {formatMinorUsd(listing.price.minor_amount)}
@@ -316,7 +335,8 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   const [listing, setListing] = useState<OperatorListing | null>(null);
   const [form, setForm] = useState({
     title: "",
-    description: "",
+    shortDescription: "",
+    longDescription: "",
     price: "",
     destination: "",
     externalKey: "",
@@ -334,7 +354,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         setListing(value);
         setForm({
           title: value.title,
-          description: value.description,
+          ...operatorListingDescriptionForm(value),
           price: minorToUsdInput(value.price.minor_amount),
           destination: value.destination,
           externalKey: value.external_key ?? "",
@@ -362,7 +382,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           headers: { ...honeypotHeaders, "content-type": "application/json" },
           body: JSON.stringify({
             title: form.title.trim(),
-            description: form.description,
+            ...operatorListingDescriptionPayload(form),
             price_minor: priceMinor,
             currency: "USD",
             destination: form.destination.trim(),
@@ -377,7 +397,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           headers: { ...honeypotHeaders, "content-type": "application/json" },
           body: JSON.stringify({
             title: form.title.trim(),
-            description: form.description,
+            ...operatorListingDescriptionPayload(form),
             price_minor: priceMinor,
             currency: "USD",
             destination: form.destination.trim(),
@@ -427,12 +447,23 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             />
           </label>
           <label>
-            Description
+            Short description
             <Textarea
-              rows={6}
-              value={form.description}
-              onChange={(event) => setForm({ ...form, description: event.target.value })}
+              rows={3}
+              maxLength={200}
+              value={form.shortDescription}
+              onChange={(event) => setForm({ ...form, shortDescription: event.target.value })}
             />
+            <span className="field-help">Plain-text customer summary, up to 200 characters.</span>
+          </label>
+          <label>
+            Long description
+            <Textarea
+              rows={8}
+              value={form.longDescription}
+              onChange={(event) => setForm({ ...form, longDescription: event.target.value })}
+            />
+            <span className="field-help">Detailed listing content; Markdown is supported.</span>
           </label>
           <div className="catalogue-form-grid">
             <label>

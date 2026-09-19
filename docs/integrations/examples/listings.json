@@ -2,7 +2,8 @@
   {
     "external_key": "course-intro",
     "title": "Introduction course",
-    "description": "A productless listing example.",
+    "short_description": "A compact product example for discovery.",
+    "long_description": "A productless listing example.",
     "price_minor": "1000",
     "currency": "USD",
     "destination": "https://content.example/course",

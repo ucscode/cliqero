@@ -35,7 +35,8 @@ suite("withdrawal lifecycle", () => {
     });
     const listing = await app.listingService.createPublished(seller, {
       title: "Withdrawable",
-      description: "",
+      shortDescription: "Fund a withdrawal flow",
+      longDescription: "Detailed withdrawal listing.",
       priceMinor: "10000",
       currency: "USD",
       destination: "https://example.test",

@@ -11,7 +11,8 @@ export type ListingMedia = {
 export type Listing = {
   id: string;
   title: string;
-  description: string;
+  short_description: string;
+  long_description: string;
   test_only: "development" | "test" | null;
   price: { minor_amount: string; currency: string };
   metadata: Record<string, unknown>;

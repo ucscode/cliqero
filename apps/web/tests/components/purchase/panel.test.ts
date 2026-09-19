@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { purchaseActions, purchaseStatusPresentation } from "@/components/purchase/panel";
+import {
+  purchaseActions,
+  purchaseCardDescription,
+  purchaseStatusPresentation,
+} from "@/components/purchase/panel";
 
 describe("purchase status presentation", () => {
   it.each([
@@ -45,5 +49,13 @@ describe("purchase status presentation", () => {
         access_available: false,
       }),
     ).toEqual([]);
+  });
+
+  it("uses the immutable short-description projection for purchase cards", () => {
+    expect(
+      purchaseCardDescription({
+        short_description: "Original purchased summary",
+      }),
+    ).toBe("Original purchased summary");
   });
 });

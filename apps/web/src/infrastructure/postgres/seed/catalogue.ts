@@ -10,6 +10,37 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 const pool = new Pool({ connectionString: databaseUrl });
 const ownerId = "00000000-0000-4000-8000-000000000001";
+const shortDescriptions: Record<string, string> = {
+  "toolkit-01": "Plan a calmer week with a focused digital workspace.",
+  "toolkit-02": "Wrap a long title cleanly in a responsive catalogue card.",
+  "toolkit-03": "Design dependable APIs with practical patterns and examples.",
+  "toolkit-04": "Reusable templates for briefs, launches, and retrospectives.",
+  "toolkit-05": "Run better distributed workshops with ready-to-use exercises.",
+  "toolkit-06": "Build clearer technical writing habits at your own pace.",
+  "toolkit-07": "A focused collection of interface assets for creators.",
+  "toolkit-08": "Join a private learning community with monthly sessions.",
+  "toolkit-09": "Thoughtful field notes for permission-based growth.",
+  "toolkit-10": "Printable prompts for practical product discovery.",
+  "toolkit-11": "Learn calm, practical foundations for reliable services.",
+  "toolkit-12": "A short checklist for a confident product launch.",
+  "toolkit-13": "A long-form operating handbook for small product teams.",
+  "toolkit-14": "Questions and synthesis prompts for better research interviews.",
+  "toolkit-15": "Exercises for telling clearer product stories.",
+  "toolkit-16": "An example listing demonstrating archived catalogue state.",
+  "toolkit-17": "Turn customer interviews into useful product decisions.",
+  "toolkit-18": "Proposal, discovery, and handover resources for consultants.",
+  "toolkit-19": "Prompts for productive team retrospectives.",
+  "toolkit-20": "Ask better questions before opening an analytics dashboard.",
+  "toolkit-21": "Connect customer context to product and launch communication.",
+  "toolkit-22": "Review everyday interface decisions with a clear checklist.",
+  "toolkit-23": "Build an intentional operating rhythm for a small team.",
+  "toolkit-24": "Understand a service from end to end with practical maps.",
+  "toolkit-25": "Plan, review, and publish content with reusable templates.",
+  "toolkit-26": "A lightweight support playbook for early product teams.",
+  "toolkit-27": "Make growing-team decisions easier to understand.",
+  "toolkit-28": "Prepare and facilitate shorter, more useful meetings.",
+  "toolkit-29": "Make an API easier to adopt with onboarding examples.",
+};
 const records = [
   [
     "toolkit-01",
@@ -168,18 +199,19 @@ try {
     `insert into identity_capability.accounts(uuid,username) values($1,$2) on conflict (uuid) do nothing`,
     [ownerId, "fixture_catalogue"],
   );
-  for (const [key, title, description, price] of records) {
+  for (const [key, title, longDescription, price] of records) {
     const state = key === "toolkit-16" ? "archived" : key === "toolkit-15" ? "draft" : "published";
     const numericKey = Number(key.slice(-2));
     const featuredPosition = [1, 2, 3, 6, 11, 18].indexOf(numericKey) + 1 || null;
     const createdAt = new Date(Date.UTC(2025, 0, 1 + numericKey)).toISOString();
     await pool.query(
-      `insert into listing_capability.listings(uuid,seller_id,title,description,price_minor,price_currency,destination_url,state,metadata,external_key,featured_position,created_at,updated_at) values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,'USD',$6,$7,$8::jsonb,$9,$10,$11,$11) on conflict (seller_id,external_key) do update set title=excluded.title,description=excluded.description,price_minor=excluded.price_minor,state=excluded.state,metadata=excluded.metadata,featured_position=excluded.featured_position,created_at=excluded.created_at,updated_at=excluded.updated_at`,
+      `insert into listing_capability.listings(uuid,seller_id,title,short_description,long_description,price_minor,price_currency,destination_url,state,metadata,external_key,featured_position,created_at,updated_at) values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,'USD',$7,$8,$9::jsonb,$10,$11,$12,$12) on conflict (seller_id,external_key) do update set title=excluded.title,short_description=excluded.short_description,long_description=excluded.long_description,price_minor=excluded.price_minor,state=excluded.state,metadata=excluded.metadata,featured_position=excluded.featured_position,created_at=excluded.created_at,updated_at=excluded.updated_at`,
       [
         newId(),
         ownerId,
         title,
-        description,
+        shortDescriptions[key],
+        longDescription,
         price,
         `https://example.test/catalogue/${key}`,
         state,

@@ -84,12 +84,12 @@ this change.
 
 `POST /api/listings/import?format=json|csv|yaml&mode=create|upsert` and `GET /api/listings/export?format=json|csv|yaml` operate only on the authenticated owner's listings. Import accepts at most 1,000 records and 5 MiB per document. Results use HTTP 207 and contain totals plus per-record status, index, safe code, and message.
 
-All formats represent: `id`, `retry_identity`, `external_key`, title, description, exact `price_minor`, ISO currency, destination, scalar metadata, lifecycle state, and ordered media `{media_id, transfer_identity, url, alt_text, position}`. Create mode generates new IDs. `external_key` is the preferred owner-scoped repeatable identity. When it is absent, every durable result returns `retry_identity: listing:<uuid>`; resubmitting it converges on that listing. Omitting every stable identity intentionally requests a new listing. Upsert requires an owner-scoped external key, retry identity, or owned ID; titles are never identity and cross-owner identities are rejected.
+All formats represent: `id`, `retry_identity`, `external_key`, title, `short_description`, `long_description`, exact `price_minor`, ISO currency, destination, scalar metadata, lifecycle state, and ordered media `{media_id, transfer_identity, url, alt_text, position}`. Create mode generates new IDs. `short_description` is plain text and limited to 200 characters; `long_description` contains the full Markdown-capable listing content. `external_key` is the preferred owner-scoped repeatable identity. When it is absent, every durable result returns `retry_identity: listing:<uuid>`; resubmitting it converges on that listing. Omitting every stable identity intentionally requests a new listing. Upsert requires an owner-scoped external key, retry identity, or owned ID; titles are never identity and cross-owner identities are rejected.
 
 CSV columns are fixed in this order:
 
 ```text
-id,retry_identity,external_key,title,description,price_minor,currency,destination,metadata,state,media
+id,retry_identity,external_key,title,short_description,long_description,price_minor,currency,destination,metadata,state,media
 ```
 
 `metadata` and `media` are JSON encoded inside RFC-style quoted CSV cells. Export prefixes spreadsheet-formula-leading scalar cells (`=`, `+`, `-`, `@`) with an apostrophe, and Cliqero removes that protection when importing its own CSV.

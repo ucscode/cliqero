@@ -31,7 +31,7 @@ export class AccountProjectionService {
     const cursor = decodeCursor(input.cursor);
     const rows = (
         await this.sql.query<any>(
-          `select p.uuid as id,c.uuid as checkout_id,l.uuid as listing_id,p.listing_title_snapshot,p.canonical_minor_snapshot,p.canonical_currency_snapshot,p.state,p.created_at,e.state entitlement_state,e.expires_at entitlement_expires_at,(e.state='active' and (e.expires_at is null or e.expires_at>now())) access_available
+          `select p.uuid as id,c.uuid as checkout_id,l.uuid as listing_id,p.listing_title_snapshot,p.listing_short_description_snapshot,p.listing_long_description_snapshot,p.canonical_minor_snapshot,p.canonical_currency_snapshot,p.state,p.created_at,e.state entitlement_state,e.expires_at entitlement_expires_at,(e.state='active' and (e.expires_at is null or e.expires_at>now())) access_available
              from purchase_capability.purchases p left join checkout_capability.checkouts c on c.id=p.checkout_id join listing_capability.listings l on l.id=p.listing_id left join entitlement_capability.entitlements e on e.purchase_id=p.id
             where p.buyer_id=(select id from identity_capability.accounts where uuid=$1) and ($2::timestamptz is null or (p.created_at,p.id)<($2::timestamptz,(select id from purchase_capability.purchases where uuid=$3))) order by p.created_at desc,p.id desc limit $4`,
           [accountId, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
@@ -44,6 +44,8 @@ export class AccountProjectionService {
         checkout_id: row.checkout_id,
         listing_id: row.listing_id,
         title: row.listing_title_snapshot,
+        short_description: row.listing_short_description_snapshot,
+        long_description: row.listing_long_description_snapshot,
         amount_minor: row.canonical_minor_snapshot,
         currency: row.canonical_currency_snapshot,
         state: row.state,
@@ -61,7 +63,7 @@ export class AccountProjectionService {
   async purchase(accountId: string, id: string) {
     const row = (
       await this.sql.query<any>(
-        `select p.uuid as id,c.uuid as checkout_id,l.uuid as listing_id,p.listing_title_snapshot,p.canonical_minor_snapshot,p.canonical_currency_snapshot,p.state,p.created_at,e.state entitlement_state,e.expires_at entitlement_expires_at,(e.state='active' and (e.expires_at is null or e.expires_at>now())) access_available
+        `select p.uuid as id,c.uuid as checkout_id,l.uuid as listing_id,p.listing_title_snapshot,p.listing_short_description_snapshot,p.listing_long_description_snapshot,p.canonical_minor_snapshot,p.canonical_currency_snapshot,p.state,p.created_at,e.state entitlement_state,e.expires_at entitlement_expires_at,(e.state='active' and (e.expires_at is null or e.expires_at>now())) access_available
            from purchase_capability.purchases p left join checkout_capability.checkouts c on c.id=p.checkout_id join listing_capability.listings l on l.id=p.listing_id left join entitlement_capability.entitlements e on e.purchase_id=p.id
           where p.buyer_id=(select id from identity_capability.accounts where uuid=$1) and p.uuid=$2`,
         [accountId, id],
@@ -73,6 +75,8 @@ export class AccountProjectionService {
       checkout_id: row.checkout_id,
       listing_id: row.listing_id,
       title: row.listing_title_snapshot,
+      short_description: row.listing_short_description_snapshot,
+      long_description: row.listing_long_description_snapshot,
       amount_minor: row.canonical_minor_snapshot,
       currency: row.canonical_currency_snapshot,
       state: row.state,

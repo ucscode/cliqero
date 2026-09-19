@@ -5,13 +5,15 @@ import { Money } from "@/modules/money/money";
 export type ListingState = "draft" | "published" | "archived";
 export type ListingSort = "newest" | "oldest" | "price_asc" | "price_desc" | "title_asc";
 export type ListingMetadata = Readonly<Record<string, string | number | boolean | null>>;
+export const LISTING_SHORT_DESCRIPTION_MAX_LENGTH = 200;
 
 export class Listing {
   private constructor(
     readonly id: Id,
     readonly sellerId: Id,
     private titleValue: string,
-    private descriptionValue: string,
+    private shortDescriptionValue: string,
+    private longDescriptionValue: string,
     private priceValue: Money,
     private destinationValue: URL,
     private metadataValue: ListingMetadata,
@@ -24,7 +26,8 @@ export class Listing {
     id: Id;
     sellerId: Id;
     title: string;
-    description: string;
+    shortDescription: string;
+    longDescription: string;
     price: Money;
     destination: string;
     metadata?: ListingMetadata;
@@ -40,7 +43,8 @@ export class Listing {
       input.id,
       input.sellerId,
       title,
-      input.description.trim(),
+      normalizeShortDescription(input.shortDescription),
+      input.longDescription.trim(),
       input.price,
       destination,
       input.metadata ?? {},
@@ -54,7 +58,8 @@ export class Listing {
     id: Id;
     sellerId: Id;
     title: string;
-    description: string;
+    shortDescription: string;
+    longDescription: string;
     price: Money;
     destination: string;
     metadata: ListingMetadata;
@@ -66,7 +71,8 @@ export class Listing {
       input.id,
       input.sellerId,
       input.title,
-      input.description,
+      normalizeShortDescription(input.shortDescription),
+      input.longDescription,
       input.price,
       new URL(input.destination),
       input.metadata,
@@ -79,6 +85,8 @@ export class Listing {
   publish(): void {
     if (this.stateValue !== "draft")
       throw new DomainInvariantError("Only a draft listing can be published");
+    if (!this.shortDescriptionValue)
+      throw new DomainInvariantError("Published listing short description is required");
     this.stateValue = "published";
   }
 
@@ -94,7 +102,8 @@ export class Listing {
 
   update(input: {
     title: string;
-    description: string;
+    shortDescription: string;
+    longDescription: string;
     price: Money;
     destination: string;
     metadata: ListingMetadata;
@@ -106,7 +115,8 @@ export class Listing {
     if (!["http:", "https:"].includes(destination.protocol))
       throw new DomainInvariantError("Listing destination must use HTTP or HTTPS");
     this.titleValue = title;
-    this.descriptionValue = input.description.trim();
+    this.shortDescriptionValue = normalizeShortDescription(input.shortDescription);
+    this.longDescriptionValue = input.longDescription.trim();
     this.priceValue = input.price;
     this.destinationValue = destination;
     this.metadataValue = input.metadata;
@@ -122,8 +132,11 @@ export class Listing {
   get title() {
     return this.titleValue;
   }
-  get description() {
-    return this.descriptionValue;
+  get shortDescription() {
+    return this.shortDescriptionValue;
+  }
+  get longDescription() {
+    return this.longDescriptionValue;
   }
   get price() {
     return this.priceValue;
@@ -143,8 +156,19 @@ export class Listing {
       sellerId: this.sellerId,
       title: this.titleValue,
       price: this.priceValue.snapshot(),
+      shortDescription: this.shortDescriptionValue,
+      longDescription: this.longDescriptionValue,
     });
   }
+}
+
+function normalizeShortDescription(value: string) {
+  const normalized = value.trim();
+  if (normalized.length > LISTING_SHORT_DESCRIPTION_MAX_LENGTH)
+    throw new DomainInvariantError(
+      `Listing short description must be ${LISTING_SHORT_DESCRIPTION_MAX_LENGTH} characters or fewer`,
+    );
+  return normalized;
 }
 
 export interface ListingRepository {

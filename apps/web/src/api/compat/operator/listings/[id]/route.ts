@@ -5,7 +5,8 @@ import { ownerListingView, listingWithMediaView } from "@/application/listing/se
 const schema = z
   .object({
     title: z.string().min(1),
-    description: z.string(),
+    short_description: z.string().max(200),
+    long_description: z.string(),
     price_minor: z.string().regex(/^\d+$/),
     currency: z.string().length(3),
     destination: z.url(),
@@ -43,7 +44,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const b = schema.parse(await request.json()),
       l = await c.listingService.updateCatalogue(a, (await params).id, {
         title: b.title,
-        description: b.description,
+        shortDescription: b.short_description,
+        longDescription: b.long_description,
         priceMinor: b.price_minor,
         currency: b.currency,
         destination: b.destination,

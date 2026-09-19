@@ -6,7 +6,8 @@ import { listingWithMediaView, ownerListingView } from "@/application/listing/se
 const schema = z
   .object({
     title: z.string().min(1),
-    description: z.string().default(""),
+    short_description: z.string().max(200).default(""),
+    long_description: z.string().default(""),
     price_minor: z.string().regex(/^\d+$/),
     currency: z.string().length(3),
     destination: z.url(),
@@ -26,7 +27,8 @@ export async function POST(request: Request) {
     const b = schema.parse(await request.json());
     const l = await c.listingService.createCatalogue(account, {
       title: b.title,
-      description: b.description,
+      shortDescription: b.short_description,
+      longDescription: b.long_description,
       priceMinor: b.price_minor,
       currency: b.currency,
       destination: b.destination,

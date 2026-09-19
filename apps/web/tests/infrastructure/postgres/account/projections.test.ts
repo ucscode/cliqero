@@ -18,6 +18,8 @@ describe("account projection pagination", () => {
             checkout_id: null,
             listing_id: "listing",
             listing_title_snapshot: "First",
+            listing_short_description_snapshot: "First summary",
+            listing_long_description_snapshot: "First details",
             canonical_minor_snapshot: "100",
             canonical_currency_snapshot: "USD",
             state: "paid",
@@ -31,6 +33,8 @@ describe("account projection pagination", () => {
             checkout_id: null,
             listing_id: "listing",
             listing_title_snapshot: "Second",
+            listing_short_description_snapshot: "Second summary",
+            listing_long_description_snapshot: "Second details",
             canonical_minor_snapshot: "100",
             canonical_currency_snapshot: "USD",
             state: "paid",
@@ -45,6 +49,10 @@ describe("account projection pagination", () => {
     const service = new AccountProjectionService(sql);
     const first = await service.purchases("account", { limit: 1 });
     expect(first.items).toHaveLength(1);
+    expect(first.items[0]).toMatchObject({
+      short_description: "First summary",
+      long_description: "First details",
+    });
     expect(first.nextCursor).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(calls[0].sql).toContain("p.created_at,p.id");
     const second = await service.purchases("account", { limit: 1, cursor: first.nextCursor! });

@@ -12,7 +12,8 @@ const listing = {
   id: "00000000-0000-4000-8000-000000000001",
   sellerId: "00000000-0000-4000-8000-000000000002",
   title: "Public item",
-  description: "Description",
+  shortDescription: "Quick summary",
+  longDescription: "Detailed description",
   price: { minorAmount: 100n, currency: "USD" },
   metadata: {},
   state: "published",
@@ -43,7 +44,12 @@ describe("public listing detail compatibility route", () => {
     configure(null);
     const response = await GET(new Request(`http://localhost/api/listings/${listing.id}`), context);
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ id: listing.id, title: listing.title });
+    expect(await response.json()).toMatchObject({
+      id: listing.id,
+      title: listing.title,
+      short_description: "Quick summary",
+      long_description: "Detailed description",
+    });
   });
 
   it("does not require catalogue:read from an API key for public detail", async () => {

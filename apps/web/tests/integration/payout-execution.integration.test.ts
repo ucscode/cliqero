@@ -35,7 +35,8 @@ suite("provider-neutral payout execution", () => {
     });
     const listing = await app.listingService.createPublished(seller, {
       title: "Payout",
-      description: "",
+      shortDescription: "Prepare a payout",
+      longDescription: "Detailed payout listing.",
       priceMinor: "10000",
       currency: "USD",
       destination: "https://example.test",

@@ -102,7 +102,8 @@ suite("Paystack webhook to commerce consequence", () => {
     });
     const listing = await app.listingService.createPublished(seller, {
       title: "Paystack listing",
-      description: "",
+      shortDescription: "Pay with a reliable provider",
+      longDescription: "Detailed Paystack listing.",
       priceMinor: "2500",
       currency: "USD",
       destination: "https://destination.example",

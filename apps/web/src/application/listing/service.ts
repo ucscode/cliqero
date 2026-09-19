@@ -20,7 +20,8 @@ export class ListingService {
     seller: Account,
     input: {
       title: string;
-      description: string;
+      shortDescription: string;
+      longDescription: string;
       priceMinor: string;
       currency: string;
       destination: string;
@@ -35,7 +36,8 @@ export class ListingService {
       id: newId(),
       sellerId: seller.id,
       title: input.title,
-      description: input.description,
+      shortDescription: input.shortDescription,
+      longDescription: input.longDescription,
       price: Money.of(BigInt(input.priceMinor), input.currency),
       destination: input.destination,
       metadata: input.metadata,
@@ -49,7 +51,8 @@ export class ListingService {
     seller: Account,
     input: {
       title: string;
-      description: string;
+      shortDescription: string;
+      longDescription: string;
       priceMinor: string;
       currency: string;
       destination: string;
@@ -79,7 +82,8 @@ export class ListingService {
     id: Id,
     input: {
       title?: string;
-      description?: string;
+      shortDescription?: string;
+      longDescription?: string;
       priceMinor?: string;
       currency?: string;
       destination?: string;
@@ -94,7 +98,8 @@ export class ListingService {
       throw new Error("Listings must use the canonical USD currency");
     listing.update({
       title: input.title ?? listing.title,
-      description: input.description ?? listing.description,
+      shortDescription: input.shortDescription ?? listing.shortDescription,
+      longDescription: input.longDescription ?? listing.longDescription,
       price: Money.of(
         BigInt(input.priceMinor ?? listing.price.minorAmount.toString()),
         input.currency ?? listing.price.currency,
@@ -120,7 +125,8 @@ export class ListingService {
       };
       listing.update({
         title: input.title ?? listing.title,
-        description: input.description ?? listing.description,
+        shortDescription: input.shortDescription ?? listing.shortDescription,
+        longDescription: input.longDescription ?? listing.longDescription,
         price: Money.of(
           BigInt(input.priceMinor ?? listing.price.minorAmount.toString()),
           input.currency ?? listing.price.currency,
@@ -280,7 +286,8 @@ export function listingView(listing: Listing) {
     id: listing.id,
     managed_by: listing.sellerId,
     title: listing.title,
-    description: listing.description,
+    short_description: listing.shortDescription,
+    long_description: listing.longDescription,
     price: { minor_amount: listing.price.minorAmount.toString(), currency: listing.price.currency },
     metadata: listing.metadata,
     state: listing.state,

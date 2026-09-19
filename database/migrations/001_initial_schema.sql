@@ -1053,7 +1053,8 @@ ALTER TABLE ledger_capability.withdrawal_reservations ALTER COLUMN id ADD GENERA
 CREATE TABLE listing_capability.listings (
     uuid uuid DEFAULT gen_random_uuid() NOT NULL,
     title text NOT NULL,
-    description text DEFAULT ''::text NOT NULL,
+    short_description text DEFAULT ''::text NOT NULL,
+    long_description text DEFAULT ''::text NOT NULL,
     price_minor bigint NOT NULL,
     price_currency text NOT NULL,
     destination_url text NOT NULL,
@@ -1069,6 +1070,7 @@ CREATE TABLE listing_capability.listings (
     CONSTRAINT listings_external_key_format CHECK (((external_key IS NULL) OR (external_key ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'::text))),
     CONSTRAINT listings_featured_position_positive CHECK (((featured_position IS NULL) OR (featured_position > 0))),
     CONSTRAINT listings_price_nonnegative CHECK ((price_minor >= 0)),
+    CONSTRAINT listings_short_description_length CHECK ((length(short_description) <= 200)),
     CONSTRAINT listings_state_valid CHECK ((state = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text]))),
     CONSTRAINT listings_title_nonempty CHECK ((length(TRIM(BOTH FROM title)) > 0))
 );
@@ -1507,6 +1509,8 @@ CREATE TABLE purchase_capability.purchases (
     uuid uuid DEFAULT gen_random_uuid() NOT NULL,
     idempotency_key text NOT NULL,
     listing_title_snapshot text NOT NULL,
+    listing_short_description_snapshot text DEFAULT ''::text NOT NULL,
+    listing_long_description_snapshot text DEFAULT ''::text NOT NULL,
     price_minor_snapshot bigint NOT NULL,
     price_currency_snapshot text NOT NULL,
     canonical_minor_snapshot bigint NOT NULL,
@@ -3007,7 +3011,7 @@ CREATE INDEX listings_public_query_idx ON listing_capability.listings USING btre
 -- Name: listings_search_idx; Type: INDEX; Schema: listing_capability; Owner: -
 --
 
-CREATE INDEX listings_search_idx ON listing_capability.listings USING gin (to_tsvector('simple'::regconfig, ((title || ' '::text) || description)));
+CREATE INDEX listings_search_idx ON listing_capability.listings USING gin (to_tsvector('simple'::regconfig, (((title || ' '::text) || short_description) || ' '::text) || long_description));
 
 
 --

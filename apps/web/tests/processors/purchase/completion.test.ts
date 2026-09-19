@@ -43,6 +43,8 @@ describe("PurchaseCompletionProcessor", () => {
           listingId: "listing-1",
           sellerId: "seller-1",
           title: "Listing",
+          shortDescription: "Listing summary",
+          longDescription: "Listing details",
           price: { minorAmount: "100", currency: "USD" },
           canonicalPrice: { minorAmount: "100", currency: "USD" },
           referralAttributionId: null,

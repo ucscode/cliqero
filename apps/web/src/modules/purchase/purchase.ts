@@ -6,6 +6,8 @@ export interface PurchaseTerms {
   readonly listingId: Id;
   readonly sellerId: Id;
   readonly title: string;
+  readonly shortDescription: string;
+  readonly longDescription: string;
   readonly price: { readonly minorAmount: string; readonly currency: string };
   readonly canonicalPrice: { readonly minorAmount: string; readonly currency: "USD" };
   readonly referralAttributionId: Id | null;

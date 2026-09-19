@@ -78,7 +78,8 @@ suite("referral graph and trusted purchase attribution", () => {
       other = await account("other");
     const listing = await app.listingService.create(promoter, {
       title: "Promotable catalogue item",
-      description: "A listing for deterministic referral projection",
+      shortDescription: "Share this listing with your network",
+      longDescription: "A listing for deterministic referral projection",
       priceMinor: "1000",
       currency: "USD",
       destination: "https://example.com/promotable",
@@ -86,7 +87,8 @@ suite("referral graph and trusted purchase attribution", () => {
     await app.listingService.publish(promoter, listing.id);
     const otherListing = await app.listingService.create(other, {
       title: "Another catalogue item",
-      description: "Not visible to the first promoter",
+      shortDescription: "A separate catalogue item",
+      longDescription: "Not visible to the first promoter",
       priceMinor: "1200",
       currency: "USD",
       destination: "https://example.com/other",
@@ -326,7 +328,8 @@ suite("referral graph and trusted purchase attribution", () => {
       referrer = await account("promoter");
     const listing = await app.listingService.createPublished(seller, {
       title: "Referral listing",
-      description: "",
+      shortDescription: "Shareable referral listing",
+      longDescription: "Detailed referral listing.",
       priceMinor: "1001",
       currency: "USD",
       destination: "https://destination.example",
@@ -387,7 +390,8 @@ suite("referral graph and trusted purchase attribution", () => {
     expect(purchase?.terms.referralReferrerAccountId).not.toBe(accountParent.id);
     await app.listingService.update(seller, listing.id, {
       title: "Changed",
-      description: "",
+      shortDescription: "Changed referral summary",
+      longDescription: "",
       priceMinor: "9999",
       currency: "USD",
       destination: "https://changed.example",

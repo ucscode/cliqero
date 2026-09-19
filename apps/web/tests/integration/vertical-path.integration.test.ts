@@ -31,7 +31,8 @@ suite("persisted commerce and access vertical path", () => {
     });
     const listing = await app.listingService.createPublished(seller, {
       title: "Private destination",
-      description: "Access elsewhere",
+      shortDescription: "Access the private destination",
+      longDescription: "Access elsewhere",
       priceMinor: "2500",
       currency: "USD",
       destination: "https://destination.example/open?existing=yes",
@@ -53,7 +54,8 @@ suite("persisted commerce and access vertical path", () => {
     });
     await app.listingService.update(seller, listing.id, {
       title: "Changed title",
-      description: "Changed",
+      shortDescription: "Changed summary",
+      longDescription: "Changed",
       priceMinor: "9999",
       currency: "USD",
       destination: "https://destination.example/new",
@@ -62,6 +64,8 @@ suite("persisted commerce and access vertical path", () => {
     const purchase = await app.purchases.findById(checkout.purchaseId!);
     expect(purchase?.terms).toMatchObject({
       title: "Private destination",
+      shortDescription: "Access the private destination",
+      longDescription: "Access elsewhere",
       price: { minorAmount: "2500", currency: "USD" },
     });
   });
@@ -177,7 +181,8 @@ suite("persisted commerce and access vertical path", () => {
 
     const otherListing = await app.listingService.createPublished(seller, {
       title: "Other",
-      description: "",
+      shortDescription: "Another catalogue item",
+      longDescription: "Detailed other listing.",
       priceMinor: "100",
       currency: "USD",
       destination: "https://other.example",

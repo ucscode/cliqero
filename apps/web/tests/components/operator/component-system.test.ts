@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  operatorListingDescriptionForm,
+  operatorListingDescriptionPayload,
+} from "@/components/operator/catalogue";
 
 const operatorFiles = [
   "shell.tsx",
@@ -42,5 +46,20 @@ describe("operator component-system migration", () => {
     for (const selector of [".button {", ".input {", ".card {", ".skeleton {"]) {
       expect(css).not.toContain(selector);
     }
+  });
+
+  it("loads and submits short and long descriptions independently", () => {
+    const form = operatorListingDescriptionForm({
+      short_description: "Quick summary",
+      long_description: "Full Markdown details",
+    });
+    expect(form).toEqual({
+      shortDescription: "Quick summary",
+      longDescription: "Full Markdown details",
+    });
+    expect(operatorListingDescriptionPayload(form)).toEqual({
+      short_description: "Quick summary",
+      long_description: "Full Markdown details",
+    });
   });
 });

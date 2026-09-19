@@ -25,6 +25,10 @@ export function shouldRenderListingReviews(reviewsVisible: boolean, rating: List
   return reviewsVisible && (rating?.count ?? 0) > 0;
 }
 
+export function listingDetailDescription(listing: Pick<Listing, "long_description">) {
+  return listing.long_description;
+}
+
 export function ListingReviewSection({
   reviewsVisible,
   rating,
@@ -216,7 +220,7 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
           </div>
         </aside>
       </section>
-      {currentListing.description.trim() && (
+      {listingDetailDescription(currentListing).trim() && (
         <section
           className="mx-auto mt-16 max-w-3xl border-t border-slate-200 pt-10"
           aria-labelledby="about-listing"
@@ -224,7 +228,7 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
           <h2 id="about-listing" className="!mb-6 !text-3xl !leading-tight">
             About this listing
           </h2>
-          <ListingMarkdown content={currentListing.description} />
+          <ListingMarkdown content={listingDetailDescription(currentListing)} />
           <Button className="mt-8" onClick={buy}>
             Buy now
           </Button>

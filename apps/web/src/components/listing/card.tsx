@@ -60,7 +60,7 @@ export function ListingCard({
         )}
         <ListingDescription
           className="min-h-[4.35rem] text-sm leading-relaxed text-slate-500"
-          description={listing.description}
+          description={listing.short_description}
         />
         <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
           <Money minor={listing.price.minor_amount} currency={listing.price.currency} />

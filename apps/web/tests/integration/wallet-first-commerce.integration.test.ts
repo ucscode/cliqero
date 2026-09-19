@@ -32,7 +32,8 @@ suite("wallet-first durable commerce", () => {
     });
     const listing = await app.listingService.createPublished(seller, {
       title: "Wallet item",
-      description: "",
+      shortDescription: "A wallet-funded item",
+      longDescription: "Detailed wallet item.",
       priceMinor: "1000",
       currency: "USD",
       destination: "https://destination.example/item",
@@ -165,7 +166,8 @@ suite("wallet-first durable commerce", () => {
     await app.referralGraphService.establish(promoter.id, parent.id);
     const listing = await app.listingService.createPublished(seller, {
       title: "Policy item",
-      description: "",
+      shortDescription: "A policy item",
+      longDescription: "Detailed policy item.",
       priceMinor: "10000",
       currency: "USD",
       destination: "https://destination.example/policy",

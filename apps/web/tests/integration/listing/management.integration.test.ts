@@ -54,21 +54,24 @@ suite("listing management and media", () => {
     const { owner, other } = await accounts();
     const draft = await app.listingService.create(owner, {
         title: "Secret searchable draft",
-        description: "needle",
+        shortDescription: "needle",
+        longDescription: "Detailed needle listing.",
         priceMinor: "100",
         currency: "USD",
         destination: "https://private.example/draft",
       }),
       published = await app.listingService.create(owner, {
         title: "Public searchable listing",
-        description: "needle",
+        shortDescription: "needle",
+        longDescription: "Detailed needle listing.",
         priceMinor: "200",
         currency: "USD",
         destination: "https://private.example/public",
       }),
       archived = await app.listingService.create(owner, {
         title: "Archived searchable listing",
-        description: "needle",
+        shortDescription: "needle",
+        longDescription: "Detailed needle listing.",
         priceMinor: "300",
         currency: "USD",
         destination: "https://private.example/archive",
@@ -107,7 +110,8 @@ suite("listing management and media", () => {
       const key = `transition-${source}-${target}`,
         listing = await app.listingService.create(owner, {
           title: key,
-          description: "",
+          shortDescription: "Transition summary",
+          longDescription: "Transition details",
           priceMinor: "100",
           currency: "USD",
           destination: "https://example.com/transition",
@@ -122,7 +126,8 @@ suite("listing management and media", () => {
         {
           external_key: key,
           title: key,
-          description: "",
+          short_description: "Transition summary",
+          long_description: "Transition details",
           price_minor: "100",
           currency: "USD",
           destination: "https://example.com/transition",
@@ -152,7 +157,8 @@ suite("listing management and media", () => {
     const { owner } = await accounts();
     const listing = await app.listingService.create(owner, {
       title: "Media",
-      description: "",
+      shortDescription: "Media listing",
+      longDescription: "Media details",
       priceMinor: "100",
       currency: "USD",
       destination: "https://private.example/media",
@@ -254,7 +260,8 @@ suite("listing management and media", () => {
     const { owner, other } = await accounts("integration");
     const listing = await app.listingService.create(owner, {
       title: "Managed destination",
-      description: "",
+      shortDescription: "Managed destination",
+      longDescription: "Destination details",
       priceMinor: "100",
       currency: "USD",
       destination: "https://private.example/destination",
@@ -321,7 +328,8 @@ suite("listing management and media", () => {
     );
     const listing = await app.listingService.createCatalogue(managerA, {
       title: "Platform listing",
-      description: "",
+      shortDescription: "Platform listing",
+      longDescription: "Platform listing details",
       priceMinor: "100",
       currency: "USD",
       destination: "https://private.example/platform",
@@ -395,7 +403,8 @@ suite("listing management and media", () => {
     const record = {
       external_key: "durable-import",
       title: "Durable",
-      description: "",
+      short_description: "Durable imported listing",
+      long_description: "Durable import details",
       price_minor: "100",
       currency: "USD",
       destination: "https://example.com/item",
@@ -465,7 +474,8 @@ suite("listing management and media", () => {
         target = (await accounts(`${format}target`)).owner;
       const listing = await app.listingService.create(owner, {
         title: `${format} listing`,
-        description: "Round trip",
+        shortDescription: "Round-trip listing",
+        longDescription: "Round trip",
         priceMinor: "425",
         currency: "USD",
         destination: "https://destination.example/item",
@@ -496,7 +506,8 @@ suite("listing management and media", () => {
       const copy = (await app.listingService.findByExternalKey(target, `roundtrip-${format}`))!;
       expect(copy).toMatchObject({
         title: `${format} listing`,
-        description: "Round trip",
+        short_description: "Round-trip listing",
+        long_description: "Round trip",
         state: "published",
         metadata: { format, featured: true },
       });
@@ -545,7 +556,8 @@ suite("listing management and media", () => {
       {
         external_key: "catalog-one",
         title: "Imported",
-        description: "",
+        short_description: "Imported listing",
+        long_description: "Imported listing details",
         price_minor: "100",
         currency: "USD",
         destination: "https://example.com/imported",

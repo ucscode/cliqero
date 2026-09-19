@@ -3,6 +3,8 @@ export type Purchase = {
   checkout_id: string | null;
   listing_id: string;
   title: string;
+  short_description: string;
+  long_description: string;
   amount_minor: string;
   currency: string;
   state: "pending" | "paid" | "completed" | "failed" | "refunded";
