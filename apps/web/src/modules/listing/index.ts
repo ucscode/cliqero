@@ -85,8 +85,7 @@ export class Listing {
   publish(): void {
     if (this.stateValue !== "draft")
       throw new DomainInvariantError("Only a draft listing can be published");
-    if (!this.shortDescriptionValue)
-      throw new DomainInvariantError("Published listing short description is required");
+    ensurePublishedShortDescription(this.shortDescriptionValue);
     this.stateValue = "published";
   }
 
@@ -114,8 +113,10 @@ export class Listing {
     const destination = new URL(input.destination);
     if (!["http:", "https:"].includes(destination.protocol))
       throw new DomainInvariantError("Listing destination must use HTTP or HTTPS");
+    const shortDescription = normalizeShortDescription(input.shortDescription);
+    if (this.stateValue === "published") ensurePublishedShortDescription(shortDescription);
     this.titleValue = title;
-    this.shortDescriptionValue = normalizeShortDescription(input.shortDescription);
+    this.shortDescriptionValue = shortDescription;
     this.longDescriptionValue = input.longDescription.trim();
     this.priceValue = input.price;
     this.destinationValue = destination;
@@ -169,6 +170,10 @@ function normalizeShortDescription(value: string) {
       `Listing short description must be ${LISTING_SHORT_DESCRIPTION_MAX_LENGTH} characters or fewer`,
     );
   return normalized;
+}
+
+function ensurePublishedShortDescription(value: string) {
+  if (!value) throw new DomainInvariantError("Published listing short description is required");
 }
 
 export interface ListingRepository {

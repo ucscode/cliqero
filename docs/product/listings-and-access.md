@@ -156,11 +156,12 @@ Authenticated management belongs on the main application surface:
 - wallet/ledger views where applicable;
 - withdrawals;
 - administration.
-  Listings have two separate descriptions. The short description is a plain-text,
-  200-character maximum summary of the immediate customer benefit. It appears in
-  catalogue cards and purchased-item summaries. The long description is the full,
-  Markdown-capable selling copy shown on the single listing page and in listing
-  management/import surfaces.
+
+Listings have two separate descriptions. The short description is a plain-text,
+200-character maximum summary of the immediate customer benefit. It appears in
+catalogue cards and purchased-item summaries. The long description is the full,
+Markdown-capable selling copy shown on the single listing page and in listing
+management/import surfaces.
 
 Purchases snapshot both descriptions in their commercial terms. Editing a
 listing later therefore cannot rewrite the descriptions associated with an

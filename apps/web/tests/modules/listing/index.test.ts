@@ -28,6 +28,66 @@ describe("Listing lifecycle", () => {
     expect(() => listing.publish()).toThrow();
   });
 
+  it("requires a short description when publishing and preserves that invariant on update", () => {
+    const draft = Listing.create({
+      id: "listing-empty",
+      sellerId: "seller-1",
+      title: "Draft",
+      shortDescription: "   ",
+      longDescription: "Details",
+      price: Money.of(100n, "USD"),
+      destination: "https://example.com",
+    });
+    expect(draft.shortDescription).toBe("");
+    expect(() => draft.publish()).toThrow("Published listing short description is required");
+
+    const published = create();
+    published.publish();
+    expect(() =>
+      published.update({
+        title: published.title,
+        shortDescription: "   ",
+        longDescription: published.longDescription,
+        price: published.price,
+        destination: published.destination,
+        metadata: published.metadata,
+      }),
+    ).toThrow("Published listing short description is required");
+    expect(published.shortDescription).toBe("Quick summary");
+    published.update({
+      title: published.title,
+      shortDescription: "Updated summary",
+      longDescription: published.longDescription,
+      price: published.price,
+      destination: published.destination,
+      metadata: published.metadata,
+    });
+    expect(published.shortDescription).toBe("Updated summary");
+  });
+
+  it("allows empty summaries on draft and archived listings", () => {
+    const draft = create();
+    draft.update({
+      title: draft.title,
+      shortDescription: "",
+      longDescription: draft.longDescription,
+      price: draft.price,
+      destination: draft.destination,
+      metadata: draft.metadata,
+    });
+    expect(draft.shortDescription).toBe("");
+    draft.archive();
+    draft.update({
+      title: draft.title,
+      shortDescription: " ",
+      longDescription: draft.longDescription,
+      price: draft.price,
+      destination: draft.destination,
+      metadata: draft.metadata,
+    });
+    expect(draft.shortDescription).toBe("");
+  });
+
   it("stores independent trimmed descriptions and enforces the short limit", () => {
     const listing = Listing.create({
       id: "listing-2",

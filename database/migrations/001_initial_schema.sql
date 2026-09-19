@@ -1070,6 +1070,7 @@ CREATE TABLE listing_capability.listings (
     CONSTRAINT listings_external_key_format CHECK (((external_key IS NULL) OR (external_key ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'::text))),
     CONSTRAINT listings_featured_position_positive CHECK (((featured_position IS NULL) OR (featured_position > 0))),
     CONSTRAINT listings_price_nonnegative CHECK ((price_minor >= 0)),
+    CONSTRAINT listings_published_short_description_required CHECK (((state <> 'published'::text) OR (length(TRIM(BOTH FROM short_description)) > 0))),
     CONSTRAINT listings_short_description_length CHECK ((length(short_description) <= 200)),
     CONSTRAINT listings_state_valid CHECK ((state = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text]))),
     CONSTRAINT listings_title_nonempty CHECK ((length(TRIM(BOTH FROM title)) > 0))
