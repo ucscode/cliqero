@@ -22,8 +22,6 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
       walletCredit: { process: processing("wallet-credit") },
       walletRepository: { findPendingCredits: async () => items("credit") },
       walletAvailability: { process: processing("wallet-availability") },
-      checkoutRepository: { findAwaitingFunds: async () => items("checkout") },
-      checkoutPayment: { process: processing("checkout") },
       purchases: {
         findCompletedWithoutEntitlement: async () => items("entitlement"),
         findCompletedWithoutDistribution: async () => items("distribution"),
@@ -43,13 +41,12 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
   it("continues past poison items and across every processor family", async () => {
     const events: string[] = [],
       logger = { error: vi.fn() };
-    expect(await new CommercialWorkflowDispatcher(application(events), logger).runOnce()).toBe(9);
+    expect(await new CommercialWorkflowDispatcher(application(events), logger).runOnce()).toBe(8);
     for (const family of [
       "expiry",
       "verification",
       "wallet-credit",
       "wallet-availability",
-      "checkout",
       "entitlement",
       "distribution",
       "media",
@@ -58,7 +55,7 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
       expect(events).toContain(
         `${family}:${family === "wallet-credit" ? "funding" : family === "wallet-availability" ? "credit" : family}-healthy`,
       );
-    expect(logger.error).toHaveBeenCalledTimes(9);
+    expect(logger.error).toHaveBeenCalledTimes(8);
   });
   it("continues to unrelated families when discovery fails", async () => {
     const events: string[] = [],

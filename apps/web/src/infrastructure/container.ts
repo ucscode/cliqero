@@ -86,11 +86,10 @@ import { FundingInitializationProcessor } from "@/application/funding/initializa
 import { FundingVerificationProcessor } from "@/application/funding/verification";
 import { PaystackVerificationRecoveryPolicy } from "@/application/payment/paystack/recovery";
 import { WalletService } from "@/application/wallet/service";
-import { WalletCheckoutService } from "@/application/checkout/wallet";
+import { WalletCheckoutPaymentService, WalletCheckoutService } from "@/application/checkout/wallet";
 import {
   WalletCreditProcessor,
   WalletAvailabilityProcessor,
-  CheckoutPaymentProcessor,
   EntitlementIssuanceProcessor,
 } from "@/processors/wallet/commerce";
 import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing/media";
@@ -490,10 +489,6 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const walletAvailability = lazy(
     () => new WalletAvailabilityProcessor(walletRepository(), database, lifecycleDiagnostics),
   );
-  const checkoutPayment = lazy(
-    () =>
-      new CheckoutPaymentProcessor(checkoutRepository(), walletRepository(), purchases(), database),
-  );
   const entitlementIssuance = lazy(
     () => new EntitlementIssuanceProcessor(purchases(), entitlements(), database),
   );
@@ -564,6 +559,15 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         checkoutRepository(),
         purchases(),
         referralAttribution(),
+        database,
+      ),
+  );
+  const walletCheckoutPayment = lazy(
+    () =>
+      new WalletCheckoutPaymentService(
+        checkoutRepository(),
+        walletRepository(),
+        purchases(),
         database,
       ),
   );
@@ -731,8 +735,8 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     get walletAvailability() {
       return walletAvailability();
     },
-    get checkoutPayment() {
-      return checkoutPayment();
+    get walletCheckoutPayment() {
+      return walletCheckoutPayment();
     },
     get entitlementIssuance() {
       return entitlementIssuance();

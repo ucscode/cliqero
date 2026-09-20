@@ -23,7 +23,7 @@ initiation and safely preserves a checkout return path.
 The buyer flow is deliberately stateful:
 
 ```text
-browse → checkout → awaiting_funds → fund wallet → confirmed funding
+browse → checkout → pending → fund wallet → confirmed funding → customer Pay now
        → available wallet credit → same checkout paid → purchase → entitlement → access
 ```
 

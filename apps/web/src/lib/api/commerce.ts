@@ -19,7 +19,7 @@ export type PurchasePage = { items: Purchase[]; nextCursor: string | null };
 export type CheckoutStatus = {
   id: string;
   purchase_id: string;
-  state: "awaiting_funds" | "paid" | "failed";
+  state: "pending" | "paid" | "failed";
   amount_minor: string;
   currency: string;
 };

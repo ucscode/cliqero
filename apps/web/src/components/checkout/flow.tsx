@@ -22,6 +22,12 @@ import { Money } from "../money";
 const PAID_WALLET_REFRESH_ERROR =
   "Payment is complete, but your wallet balance could not be refreshed.";
 
+type CheckoutPaymentResponse = CheckoutStatus & {
+  available: { amount_minor: string; currency: string };
+  pending: { amount_minor: string; currency: string };
+  shortfall: { amount_minor: string; currency: string };
+};
+
 export function checkoutPrimaryAction(input: {
   busy: boolean;
   restoring: boolean;
@@ -37,9 +43,9 @@ export function checkoutPrimaryAction(input: {
 
 export function checkoutStatusPresentation(state: CheckoutStatus["state"]) {
   switch (state) {
-    case "awaiting_funds":
+    case "pending":
       return {
-        label: "Awaiting funds",
+        label: "Ready to pay",
         variant: "warning" as const,
         className: "justify-self-start",
       };
@@ -70,9 +76,9 @@ export async function applyCheckoutPollResult(
   let wallet = current.wallet;
   let balanceError = current.balanceError;
   let paidWalletRefreshCheckoutId = current.paidWalletRefreshCheckoutId;
-  const isAwaitingFunds = latest.state === "awaiting_funds";
+  const isPending = latest.state === "pending";
   const isFinalPaidRefresh = latest.state === "paid" && paidWalletRefreshCheckoutId !== latest.id;
-  if (isAwaitingFunds || isFinalPaidRefresh) {
+  if (isPending || isFinalPaidRefresh) {
     if (isFinalPaidRefresh) paidWalletRefreshCheckoutId = latest.id;
     try {
       wallet = await loadWallet();
@@ -86,7 +92,7 @@ export async function applyCheckoutPollResult(
     wallet,
     balanceError,
     paidWalletRefreshCheckoutId,
-    shouldContinuePolling: latest.state === "awaiting_funds",
+    shouldContinuePolling: latest.state === "pending",
   };
 }
 
@@ -192,6 +198,13 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         setCheckout(projection.checkout);
         walletRef.current = projection.wallet;
         setWallet(projection.wallet);
+        if (projection.wallet) {
+          const shortfall =
+            projection.checkout.amount_minor > projection.wallet.available_minor
+              ? BigInt(projection.checkout.amount_minor) - BigInt(projection.wallet.available_minor)
+              : 0n;
+          setShortfallMinor(shortfall.toString());
+        }
         balanceErrorRef.current = projection.balanceError;
         setBalanceError(projection.balanceError);
         walletRefreshedForPaidCheckout.current = projection.paidWalletRefreshCheckoutId;
@@ -214,42 +227,59 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
     return () => window.clearTimeout(timer);
   }, [checkout?.id, storageKey]);
 
-  async function startCheckout() {
+  function fundWallet() {
+    if (busy) return;
+    router.push(walletFundingUrlForCheckout(listing.id, checkout?.id));
+  }
+
+  function clearStoredCheckout() {
+    try {
+      sessionStorage.removeItem(storageKey);
+    } catch {
+      // A storage failure does not change backend checkout semantics.
+    }
+    idempotencyKey.current = null;
+  }
+
+  async function payNow() {
     if (busy) return;
     setBusy(true);
     setError(null);
-    const key = idempotencyKey.current ?? `ui-checkout-${listing.id}-${crypto.randomUUID()}`;
-    idempotencyKey.current = key;
     try {
-      sessionStorage.setItem(storageKey, key);
-    } catch {
-      // The backend idempotency key remains authoritative if storage is unavailable.
-    }
-    try {
-      const result = await apiFetch<
-        CheckoutStatus & {
-          available: { amount_minor: string; currency: string };
-          shortfall: { amount_minor: string; currency: string };
+      let current = checkout;
+      if (!current) {
+        const key = idempotencyKey.current ?? `ui-checkout-${listing.id}-${crypto.randomUUID()}`;
+        idempotencyKey.current = key;
+        try {
+          sessionStorage.setItem(storageKey, key);
+        } catch {
+          // The backend idempotency key remains authoritative if storage is unavailable.
         }
-      >("/api/checkout", {
+        current = await apiFetch<CheckoutPaymentResponse>("/api/checkout", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key },
+          body: JSON.stringify({ listing_id: listing.id }),
+        });
+        setCheckout(current);
+        setStarted(true);
+      }
+      const result = await apiFetch<CheckoutPaymentResponse>(`/api/checkout/${current.id}/pay`, {
         method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": key },
-        body: JSON.stringify({ listing_id: listing.id }),
       });
       setCheckout(result);
       const nextWallet = {
         currency: "USD",
         available_minor: result.available.amount_minor,
-        pending_minor: "0",
+        pending_minor: result.pending.amount_minor,
         active_fundings: [],
       } satisfies WalletSummary;
       walletRef.current = nextWallet;
       setWallet(nextWallet);
       setShortfallMinor(result.shortfall.amount_minor);
       setStarted(true);
-      if (BigInt(result.shortfall.amount_minor) > 0n) {
+      if (result.state === "paid") clearStoredCheckout();
+      else if (BigInt(result.shortfall.amount_minor) > 0n)
         router.push(walletFundingUrlForCheckout(listing.id, result.id));
-      }
     } catch (cause) {
       setError(cause instanceof ApiClientError ? cause.message : "Checkout could not be created.");
     } finally {
@@ -299,7 +329,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
                 ))}
             </div>
             <Button
-              onClick={startCheckout}
+              onClick={BigInt(shortfallMinor ?? "0") > 0n ? fundWallet : payNow}
               disabled={
                 busy ||
                 balanceLoading ||
@@ -316,7 +346,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
               })}
             </Button>
           </>
-        ) : checkout?.state === "awaiting_funds" ? (
+        ) : checkout?.state === "pending" ? (
           <>
             <Badge
               className={checkoutStatusPresentation(checkout.state).className}
@@ -330,8 +360,11 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
                 : "Your checkout is waiting for available wallet funds."}
             </p>
             <p className="text-sm text-slate-500">
-              We&apos;ll keep this checkout open while your wallet funds become available.
+              Once funds are available, choose Pay now to complete this purchase.
             </p>
+            <Button onClick={shortfallMinor && BigInt(shortfallMinor) > 0n ? fundWallet : payNow}>
+              {shortfallMinor && BigInt(shortfallMinor) > 0n ? "Fund wallet" : "Pay now"}
+            </Button>
           </>
         ) : checkout?.state === "paid" ? (
           <>

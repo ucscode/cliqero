@@ -424,7 +424,7 @@ CREATE TABLE checkout_capability.checkouts (
     uuid uuid NOT NULL,
     amount_minor bigint NOT NULL,
     currency text DEFAULT 'USD'::text NOT NULL,
-    state text DEFAULT 'awaiting_funds'::text NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
     idempotency_key text NOT NULL,
     paid_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -434,7 +434,7 @@ CREATE TABLE checkout_capability.checkouts (
     listing_id bigint NOT NULL,
     purchase_id bigint NOT NULL,
     CONSTRAINT checkout_amount_positive CHECK ((amount_minor > 0)),
-    CONSTRAINT checkout_state_valid CHECK ((state = ANY (ARRAY['awaiting_funds'::text, 'paid'::text, 'failed'::text]))),
+    CONSTRAINT checkout_state_valid CHECK ((state = ANY (ARRAY['pending'::text, 'paid'::text, 'failed'::text]))),
     CONSTRAINT checkout_usd CHECK ((currency = 'USD'::text))
 );
 

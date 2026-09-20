@@ -7,7 +7,7 @@ import {
 
 describe("checkout status presentation", () => {
   it.each([
-    ["awaiting_funds", "Awaiting funds", "warning", "justify-self-start"],
+    ["pending", "Ready to pay", "warning", "justify-self-start"],
     ["paid", "Paid", "default", "justify-self-start"],
     ["failed", "Payment failed", "destructive", "justify-self-start"],
   ] as const)(
@@ -35,7 +35,7 @@ describe("checkout status presentation", () => {
     },
   );
 
-  it("refreshes wallet availability while checkout awaits funds", async () => {
+  it("refreshes wallet availability while checkout is pending", async () => {
     const firstWallet = {
       currency: "USD" as const,
       available_minor: "500",
@@ -47,21 +47,21 @@ describe("checkout status presentation", () => {
       .fn<() => Promise<typeof firstWallet>>()
       .mockResolvedValueOnce(firstWallet)
       .mockResolvedValueOnce(secondWallet);
-    const awaiting = {
+    const pending = {
       id: "checkout-1",
       purchase_id: "purchase-1",
-      state: "awaiting_funds" as const,
+      state: "pending" as const,
       amount_minor: "1000",
       currency: "USD",
     };
 
     const first = await applyCheckoutPollResult(
-      awaiting,
+      pending,
       { wallet: null, balanceError: null, paidWalletRefreshCheckoutId: null },
       loadWallet,
     );
     const second = await applyCheckoutPollResult(
-      awaiting,
+      pending,
       {
         wallet: first.wallet,
         balanceError: first.balanceError,
@@ -72,18 +72,18 @@ describe("checkout status presentation", () => {
 
     expect(loadWallet).toHaveBeenCalledTimes(2);
     expect(first).toMatchObject({
-      checkout: { state: "awaiting_funds" },
+      checkout: { state: "pending" },
       wallet: firstWallet,
       shouldContinuePolling: true,
     });
     expect(second).toMatchObject({
-      checkout: { state: "awaiting_funds" },
+      checkout: { state: "pending" },
       wallet: secondWallet,
       shouldContinuePolling: true,
     });
   });
 
-  it("preserves awaiting-funds state and polling when wallet refresh fails", async () => {
+  it("preserves pending state and polling when wallet refresh fails", async () => {
     const wallet = {
       currency: "USD" as const,
       available_minor: "500",
@@ -93,22 +93,22 @@ describe("checkout status presentation", () => {
     const loadWallet = vi.fn(async () => {
       throw new Error("wallet unavailable");
     });
-    const awaiting = {
+    const pending = {
       id: "checkout-1",
       purchase_id: "purchase-1",
-      state: "awaiting_funds" as const,
+      state: "pending" as const,
       amount_minor: "1000",
       currency: "USD",
     };
 
     const result = await applyCheckoutPollResult(
-      awaiting,
+      pending,
       { wallet, balanceError: null, paidWalletRefreshCheckoutId: null },
       loadWallet,
     );
 
     expect(result).toMatchObject({
-      checkout: { state: "awaiting_funds" },
+      checkout: { state: "pending" },
       wallet,
       balanceError: null,
       shouldContinuePolling: true,

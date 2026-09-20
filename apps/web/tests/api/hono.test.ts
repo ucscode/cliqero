@@ -799,6 +799,10 @@ describe("Hono API foundation", () => {
       scope: "catalogue:manage",
       capability: "catalogue.manage",
     });
+    expect(getLegacyRouteAccess("/api/checkout/id/pay", "POST")).toEqual({
+      mode: "account",
+      scope: "checkout:create",
+    });
     expect(
       getLegacyRouteAccess(
         "/api/operator/listings/00000000-0000-4000-8000-000000000001/integrations",

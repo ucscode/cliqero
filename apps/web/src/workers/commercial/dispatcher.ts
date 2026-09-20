@@ -56,11 +56,6 @@ export class CommercialWorkflowDispatcher {
       (item) => this.app.walletAvailability.process(item.id),
     );
     processed += await this.family(
-      "checkout-payment",
-      () => this.app.checkoutRepository.findAwaitingFunds(),
-      (item) => this.app.checkoutPayment.process(item.id),
-    );
-    processed += await this.family(
       "entitlement",
       async () => (await this.app.purchases.findCompletedWithoutEntitlement?.()) ?? [],
       (item) => this.app.entitlementIssuance.process(item.id),

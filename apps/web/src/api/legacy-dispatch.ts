@@ -82,6 +82,7 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern === "/api/wallet/fund/:id/verify") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/wallet/fund") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/checkout") return { mode: "account", scope: "checkout:create" };
+  if (pattern === "/api/checkout/:id/pay") return { mode: "account", scope: "checkout:create" };
   if (pattern === "/api/checkout/:id" || pattern.startsWith("/api/purchases"))
     return { mode: "account", scope: "purchases:read" };
   if (pattern.startsWith("/api/referrals/"))

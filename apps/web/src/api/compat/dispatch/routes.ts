@@ -2,6 +2,7 @@ import * as accessVerify from "@/api/compat/access/verify/route";
 import * as accounts from "@/api/compat/accounts/route";
 import * as checkout from "@/api/compat/checkout/route";
 import * as checkoutById from "@/api/compat/checkout/[id]/route";
+import * as checkoutPay from "@/api/compat/checkout/[id]/pay/route";
 import * as earnings from "@/api/compat/earnings/route";
 import * as earningsEntries from "@/api/compat/earnings/entries/route";
 import * as developmentFundingVerify from "@/api/compat/funding/development/verify/route";
@@ -81,6 +82,7 @@ export type LegacyRoute = {
 export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/access/verify", module: accessVerify },
   { pattern: "/api/accounts", module: accounts },
+  { pattern: "/api/checkout/:id/pay", module: checkoutPay },
   { pattern: "/api/checkout/:id", module: checkoutById },
   { pattern: "/api/checkout", module: checkout },
   { pattern: "/api/earnings/entries", module: earningsEntries },

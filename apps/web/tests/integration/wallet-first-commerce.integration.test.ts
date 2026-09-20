@@ -7,6 +7,7 @@ import { FundingInitializationProcessor } from "@/application/funding/initializa
 import { Entitlement } from "@/modules/entitlement/entitlement";
 import { PurchaseDistributionProcessor } from "@/processors/purchase/distribution";
 import { CommissionPolicy } from "@/modules/referral/commission";
+import { CommercialWorkflowDispatcher } from "@/workers/commercial/dispatcher";
 const url = process.env.TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
 suite("wallet-first durable commerce", () => {
@@ -34,7 +35,7 @@ suite("wallet-first durable commerce", () => {
       title: "Wallet item",
       shortDescription: "A wallet-funded item",
       longDescription: "Detailed wallet item.",
-      priceMinor: "1000",
+      priceMinor: "1400",
       currency: "USD",
       destination: "https://destination.example/item",
     });
@@ -47,7 +48,7 @@ suite("wallet-first durable commerce", () => {
       listingId: listing.id,
       idempotencyKey: "buy-1",
     });
-    expect(checkout.state).toBe("awaiting_funds");
+    expect(checkout.state).toBe("pending");
     const checkoutRetryBeforeFunding = await app.walletCheckout.initiate({
       buyerId: buyer.id,
       listingId: listing.id,
@@ -57,7 +58,7 @@ suite("wallet-first durable commerce", () => {
     expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
     const funding = await app.fundingService.create({
       accountId: buyer.id,
-      amountMinor: 1000n,
+      amountMinor: 2500n,
       providerName: "development",
       idempotencyKey: "fund-1",
     });
@@ -67,20 +68,29 @@ suite("wallet-first durable commerce", () => {
     expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
     expect(await app.entitlements.findByPurchaseId(checkout.purchaseId)).toBeNull();
     await app.walletCredit.process(funding.id);
-    expect((await app.wallet.summary(buyer.id)).pending.minorAmount).toBe(1000n);
+    expect((await app.wallet.summary(buyer.id)).pending.minorAmount).toBe(2500n);
     expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
     await app.walletAvailability.runBatch();
-    expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(1000n);
+    expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(2500n);
     const checkoutRetryAfterFunding = await app.walletCheckout.initiate({
       buyerId: buyer.id,
       listingId: listing.id,
       idempotencyKey: "buy-1",
     });
     expect(checkoutRetryAfterFunding.id).toBe(checkout.id);
-    expect((await app.checkoutRepository.findById(checkout.id))?.state).toBe("awaiting_funds");
-    await app.checkoutPayment.process(checkout.id);
+    await new CommercialWorkflowDispatcher(app, { error: () => {} }).runOnce();
+    expect((await app.checkoutRepository.findById(checkout.id))?.state).toBe("pending");
+    expect(
+      (
+        await app.database.query(
+          `select 1 from wallet_capability.debits where checkout_id=(select id from checkout_capability.checkouts where uuid=$1)`,
+          [checkout.id],
+        )
+      ).rowCount,
+    ).toBe(0);
+    await app.walletCheckoutPayment.pay({ buyerId: buyer.id, checkoutId: checkout.id });
     expect((await app.checkoutRepository.findById(checkout.id))?.state).toBe("paid");
-    expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
+    expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(1100n);
     expect((await app.purchases.findById(checkout.purchaseId))?.state).toBe("paid");
     expect(await app.entitlements.findByPurchaseId(checkout.purchaseId)).toBeNull();
     expect(
@@ -127,8 +137,8 @@ suite("wallet-first durable commerce", () => {
       (await app.ledger.findDistributionByPurchaseId(checkout.purchaseId))?.gross.currency,
     ).toBe("USD");
     await Promise.all([
-      app.checkoutPayment.process(checkout.id),
-      app.checkoutPayment.process(checkout.id),
+      app.walletCheckoutPayment.pay({ buyerId: buyer.id, checkoutId: checkout.id }),
+      app.walletCheckoutPayment.pay({ buyerId: buyer.id, checkoutId: checkout.id }),
       app.entitlementIssuance.process(checkout.purchaseId),
       app.entitlementIssuance.process(checkout.purchaseId),
     ]);
@@ -189,7 +199,7 @@ suite("wallet-first durable commerce", () => {
     await app.fundingVerification.process(funding.id);
     await app.walletCredit.process(funding.id);
     await app.walletAvailability.runBatch();
-    await app.checkoutPayment.process(checkout.id);
+    await app.walletCheckoutPayment.pay({ buyerId: buyer.id, checkoutId: checkout.id });
     const yamlPolicy = { getActive: async () => new CommissionPolicy([20, 10, 5], "percentage") };
     const processor = new PurchaseDistributionProcessor(
       app.purchases,

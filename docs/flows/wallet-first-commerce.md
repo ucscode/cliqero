@@ -7,7 +7,8 @@ The database is the workflow: each processor discovers authoritative persisted s
 ```text
 external funding -> confirmed funding -> pending wallet credit -> available wallet
                                                            |
-listing -> checkout awaiting funds -> wallet debit -> paid purchase
+listing -> pending checkout --customer Pay now--> wallet debit -> paid purchase
+                                      |-> insufficient -> customer Fund wallet
                                                    |-> entitlement -> access
                                                    `-> seller/referral/platform distribution
 ```
@@ -20,7 +21,7 @@ Funding confirmation is an application-level invariant, not an assertion delegat
 
 Buyer wallet accounting is append-only, canonical USD, and distinct from earnings accounting. Available wallet credits minus checkout debits determine spendable balance. Seller/referral/platform earnings retain their own pending, settlement, reservation, withdrawal, and reversal rules; wallet deposits are not made withdrawable by this model.
 
-`POST /api/checkout` accepts one listing and creates a durable checkout/purchase snapshot. Insufficient funds produce `awaiting_funds`; no provider is invoked. The checkout processor uses an account-scoped PostgreSQL advisory transaction lock plus a unique debit per checkout to prevent double spending.
+`POST /api/checkout` accepts one listing and creates a durable checkout/purchase snapshot in `pending` state. It never debits the wallet. When the customer explicitly chooses Pay now, `POST /api/checkout/:id/pay` checks ownership, locks the account, and either reports the current shortfall or creates exactly one wallet debit and marks the checkout and purchase paid. The account-scoped PostgreSQL advisory transaction lock plus unique debit per checkout prevent double spending. Funding the wallet alone never pays a pending checkout; the customer returns to the checkout and chooses Pay now.
 
 Entitlement and distribution are independent consequences of a completed wallet-paid purchase. Entitlements may be non-expiring (`expires_at = null`) or expire at a timestamp. Access checks the timestamp directly, so correctness does not depend on an expiry worker.
 

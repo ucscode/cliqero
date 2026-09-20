@@ -2,7 +2,6 @@ import { newId } from "@/kernel/ids";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { FundingRepository } from "@/modules/funding/funding";
 import type { WalletRepository } from "@/modules/wallet/wallet";
-import type { CheckoutRepository } from "@/modules/checkout/checkout";
 import type { PurchaseRepository } from "@/modules/purchase/purchase";
 import { Entitlement, type EntitlementRepository } from "@/modules/entitlement/entitlement";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
@@ -63,48 +62,6 @@ export class WalletAvailabilityProcessor {
   }
   async runBatch() {
     for (const c of await this.wallet.findPendingCredits()) await this.process(c.id);
-  }
-}
-export class CheckoutPaymentProcessor {
-  constructor(
-    private checkouts: CheckoutRepository,
-    private wallet: WalletRepository,
-    private purchases: PurchaseRepository,
-    private uow: UnitOfWork,
-  ) {}
-  async process(id: string) {
-    return this.uow.transaction(async () => {
-      const c = await this.checkouts.findById(id, { forUpdate: true });
-      if (!c || c.state !== "awaiting_funds") return c;
-      await this.wallet.lockAccount(c.buyerId);
-      if (await this.wallet.findDebitByCheckout(c.id)) {
-        c.state = "paid";
-        c.paidAt ??= new Date();
-        await this.checkouts.save(c);
-        return c;
-      }
-      const balance = await this.wallet.summary(c.buyerId);
-      if (balance.available.minorAmount < c.amount.minorAmount) return c;
-      await this.wallet.createDebit({
-        id: newId(),
-        accountId: c.buyerId,
-        checkoutId: c.id,
-        amount: c.amount,
-      });
-      c.state = "paid";
-      c.paidAt = new Date();
-      await this.checkouts.save(c);
-      const p = await this.purchases.findById(c.purchaseId, { forUpdate: true });
-      if (!p) throw new Error("Purchase not found");
-      if (p.state === "pending") {
-        p.markPaid();
-        await this.purchases.save(p);
-      }
-      return c;
-    });
-  }
-  async runBatch() {
-    for (const c of await this.checkouts.findAwaitingFunds()) await this.process(c.id);
   }
 }
 export class EntitlementIssuanceProcessor {
