@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   fetchHierarchyTree,
   hierarchyTreePath,
@@ -8,6 +10,11 @@ import {
   referralRootFromUrl,
   runHierarchyRebase,
 } from "@/components/referral/navigation";
+
+const source = readFileSync(
+  resolve(process.cwd(), "src/components/referral/navigation.ts"),
+  "utf8",
+);
 
 describe("referral hierarchy navigation", () => {
   it("builds only the hierarchy request for a visual root", async () => {
@@ -44,6 +51,7 @@ describe("referral hierarchy navigation", () => {
       { pushState },
       "http://localhost:3000/dashboard?section=referrals",
     );
+    expect(pushState).toHaveBeenCalledOnce();
     expect(pushState).toHaveBeenCalledWith(
       null,
       "",
@@ -58,7 +66,15 @@ describe("referral hierarchy navigation", () => {
       { replaceState },
       "http://localhost:3000/dashboard?section=referrals&root=failed",
     );
+    expect(replaceState).toHaveBeenCalledOnce();
     expect(replaceState).toHaveBeenCalledWith(null, "", "/dashboard?section=referrals");
+  });
+
+  it("uses the supplied Next-compatible history methods directly", () => {
+    expect(source).toContain('history.pushState(null, "", referralHistoryUrl(href, rootId))');
+    expect(source).toContain('history.replaceState(null, "", referralHistoryUrl(href, rootId))');
+    expect(source).not.toContain("Object.getPrototypeOf");
+    expect(source).not.toContain("History.prototype");
   });
 
   it("replaces the tree only after a successful hierarchy load", async () => {

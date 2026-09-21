@@ -55,9 +55,7 @@ export function pushReferralHistory(
   history: Pick<History, "pushState">,
   href: string,
 ): void {
-  const prototype = Object.getPrototypeOf(history) as { pushState?: History["pushState"] } | null;
-  const pushState = prototype?.pushState ?? history.pushState;
-  pushState.call(history, null, "", referralHistoryUrl(href, rootId));
+  history.pushState(null, "", referralHistoryUrl(href, rootId));
 }
 
 export function replaceReferralHistory(
@@ -65,9 +63,5 @@ export function replaceReferralHistory(
   history: Pick<History, "replaceState">,
   href: string,
 ): void {
-  const prototype = Object.getPrototypeOf(history) as {
-    replaceState?: History["replaceState"];
-  } | null;
-  const replaceState = prototype?.replaceState ?? history.replaceState;
-  replaceState.call(history, null, "", referralHistoryUrl(href, rootId));
+  history.replaceState(null, "", referralHistoryUrl(href, rootId));
 }
