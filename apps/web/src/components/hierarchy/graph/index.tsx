@@ -14,11 +14,16 @@ import {
 } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 import type { HierarchyTree } from "@/lib/api-client";
-import { hierarchyGraphFromTree, type HierarchyGraphNode } from "./model";
+import {
+  hierarchyGraphFromTree,
+  hierarchyNodeNavigationTarget,
+  type HierarchyGraphNode,
+} from "./model";
 import { layoutHierarchyGraph } from "./layout";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
+import { cn } from "@/lib/utils";
 
 type HierarchyNodeData = HierarchyGraphNode & {
   onViewBranch: (id: string) => void;
@@ -33,82 +38,110 @@ type FlowNode = Node<HierarchyNodeData, "cliqero">;
 const nodeTypes = { cliqero: CliqeroHierarchyNode };
 
 function CliqeroHierarchyNode({ data }: NodeProps<FlowNode>) {
+  const navigationTarget = hierarchyNodeNavigationTarget(data);
+  const showUsername = data.displayName !== null && data.displayName !== data.username;
+  const surface = (
+    <>
+      <span
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800"
+        aria-hidden="true"
+      >
+        {data.label.slice(0, 1).toUpperCase()}
+      </span>
+      <span className="grid min-w-0 gap-0.5">
+        <strong className="truncate text-sm text-slate-900" title={data.label}>
+          {data.label}
+        </strong>
+        {showUsername && <span className="truncate text-xs text-slate-500">@{data.username}</span>}
+      </span>
+    </>
+  );
+
   return (
     <div
-      className={`hierarchy-node${data.isRoot ? " hierarchy-node-root" : ""}${data.isSelf ? " hierarchy-node-self" : ""}`}
+      className={cn(
+        "relative w-[220px] rounded-xl border bg-white p-3 text-left shadow-sm transition",
+        data.isRoot && "border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-100",
+        data.role === "context-parent" && "border-slate-300 bg-slate-50/90 opacity-80",
+        navigationTarget &&
+          "cursor-pointer hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md",
+      )}
       aria-label={`${data.label}, generation ${data.depth}`}
+      aria-disabled={data.role === "context-parent" && !data.canNavigate ? true : undefined}
     >
-      <Handle type="target" position={Position.Top} className="hierarchy-handle" />
-      <div className="hierarchy-node-heading">
-        <span className="hierarchy-node-avatar" aria-hidden="true">
-          {data.label.slice(0, 1).toUpperCase()}
-        </span>
-        <div className="hierarchy-node-copy">
-          <strong title={data.label}>{data.label}</strong>
-          <span>@{data.username}</span>
-        </div>
-      </div>
-      <div className="hierarchy-node-meta">
-        <span>Generation {data.depth}</span>
-        {data.isRoot && <Badge variant="destructive">Current root</Badge>}
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!h-2 !w-2 !border-2 !border-emerald-700 !bg-white"
+      />
+      {navigationTarget ? (
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+          onClick={() => data.onViewBranch(navigationTarget)}
+          aria-label={`Explore ${data.label}'s referral branch`}
+        >
+          {surface}
+        </button>
+      ) : (
+        <div className="flex w-full items-center gap-3">{surface}</div>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        {data.role === "context-parent" && (
+          <span className="font-semibold uppercase tracking-wide text-slate-500">Parent</span>
+        )}
+        {data.isRoot && <Badge variant="default">Current root</Badge>}
         {data.isSelf && !data.isRoot && <Badge variant="default">You</Badge>}
+        {data.role !== "context-parent" && <span>{data.directChildCount} children</span>}
+        {data.hasMoreChildren && <span>More available</span>}
       </div>
-      <div className="hierarchy-node-footer">
-        <span>{data.directChildCount} direct children</span>
-        {data.hasMoreChildren && <span className="hierarchy-more">More available</span>}
-      </div>
-      <div className="hierarchy-node-actions">
-        {!data.isRoot && (
-          <button
-            type="button"
-            className="hierarchy-node-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              data.onViewBranch(data.id);
-            }}
-          >
-            View branch
-          </button>
-        )}
-        {data.hasMoreChildren && data.canLoadMoreChildren && (
-          <button
-            type="button"
-            className="hierarchy-node-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              data.onLoadChildren(data.id);
-            }}
-            disabled={data.loadingChildren}
-          >
-            {data.loadingChildren ? "Loading…" : "Load more"}
-          </button>
-        )}
-        {data.operatorMode && data.onViewUser && (
-          <button
-            type="button"
-            className="hierarchy-node-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              data.onViewUser?.(data.id);
-            }}
-          >
-            View user
-          </button>
-        )}
-        {data.operatorMode && data.onReassignParent && !data.isRoot && (
-          <button
-            type="button"
-            className="hierarchy-node-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              data.onReassignParent?.(data.id);
-            }}
-          >
-            Reassign parent
-          </button>
-        )}
-      </div>
-      <Handle type="source" position={Position.Bottom} className="hierarchy-handle" />
+      {(data.hasMoreChildren ||
+        (data.operatorMode && (data.onViewUser || data.onReassignParent))) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {data.hasMoreChildren && data.canLoadMoreChildren && (
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:border-emerald-400 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onLoadChildren(data.id);
+              }}
+              disabled={data.loadingChildren}
+            >
+              {data.loadingChildren ? "Loading…" : "Load more"}
+            </button>
+          )}
+          {data.operatorMode && data.onViewUser && (
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:border-emerald-400 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onViewUser?.(data.id);
+              }}
+            >
+              View user
+            </button>
+          )}
+          {data.operatorMode && data.onReassignParent && !data.isRoot && (
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:border-emerald-400 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onReassignParent?.(data.id);
+              }}
+            >
+              Reassign parent
+            </button>
+          )}
+        </div>
+      )}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!h-2 !w-2 !border-2 !border-emerald-700 !bg-white"
+      />
     </div>
   );
 }
@@ -119,7 +152,6 @@ export function HierarchyGraph({
   onViewBranch,
   onLoadChildren,
   loadingChildren,
-  onNavigateParent,
   onResetRoot,
   operatorMode = false,
   onViewUser,
@@ -130,7 +162,6 @@ export function HierarchyGraph({
   onViewBranch: (id: string) => void;
   onLoadChildren: (id: string) => void;
   loadingChildren: string | null;
-  onNavigateParent: () => void;
   onResetRoot: () => void;
   operatorMode?: boolean;
   onViewUser?: (id: string) => void;
@@ -201,31 +232,8 @@ export function HierarchyGraph({
               My network
             </Button>
           )}
-          {tree.parent && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onNavigateParent}
-              disabled={!tree.parent.canNavigate}
-              title={
-                tree.parent.canNavigate ? "View parent branch" : "Outside your network boundary"
-              }
-            >
-              {tree.parent.canNavigate ? "Up one level" : "Upline context"}
-            </Button>
-          )}
         </div>
       </div>
-      {tree.parent && (
-        <div
-          className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-500"
-          role="status"
-        >
-          <span>Parent context</span>
-          <strong>{tree.parent.displayName || tree.parent.username}</strong>
-          {!tree.parent.canNavigate && <small>Navigation stops at your account.</small>}
-        </div>
-      )}
       <div
         className="h-[min(640px,68vh)] min-h-[440px] overflow-hidden rounded-xl border border-slate-200 bg-[#f8fbf7]"
         aria-label="Referral hierarchy graph"
@@ -241,7 +249,7 @@ export function HierarchyGraph({
           minZoom={0.3}
           maxZoom={1.5}
           nodesConnectable={false}
-          nodesDraggable
+          nodesDraggable={operatorMode}
           elementsSelectable
           proOptions={{ hideAttribution: true }}
           aria-label="Referral network"
@@ -250,10 +258,6 @@ export function HierarchyGraph({
           <Controls showInteractive={false} position="bottom-right" />
         </ReactFlow>
       </div>
-      <p className="mt-3 text-xs text-slate-500">
-        Dragging is visual only. Referral relationships change only through authorized account
-        operations.
-      </p>
     </Card>
   );
 }

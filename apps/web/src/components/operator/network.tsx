@@ -176,9 +176,6 @@ export function OperatorNetwork() {
         onViewBranch={openRoot}
         onLoadChildren={(id) => void loadMore(id)}
         loadingChildren={loadingChildren}
-        onNavigateParent={() => {
-          if (tree.parent) openRoot(tree.parent.id);
-        }}
         onResetRoot={() => router.push("/operator/network")}
         onViewUser={(id) => router.push(`/operator/users/${id}`)}
         onReassignParent={(id) => router.push(`/operator/users/${id}`)}

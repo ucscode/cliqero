@@ -173,9 +173,6 @@ export function ReferralsPanel() {
             onViewBranch={openRoot}
             onLoadChildren={(id) => void loadMoreChildren(id)}
             loadingChildren={loadingChildren}
-            onNavigateParent={() => {
-              if (tree.parent?.canNavigate) openRoot(tree.parent.id);
-            }}
             onResetRoot={resetRoot}
           />
           <div className="grid gap-4 md:grid-cols-2">
@@ -268,7 +265,7 @@ export function ReferralsPanel() {
               </div>
               <p className="text-sm leading-relaxed text-slate-500">
                 The graph is bounded to {tree.windowDepth} generations and {tree.childLimit}{" "}
-                children per branch at a time. Use View branch to explore deeper generations.
+                children per branch at a time. Select a member node to explore deeper generations.
               </p>
               {generations.length ? (
                 <div className="grid gap-4 md:grid-cols-2">

@@ -11,7 +11,7 @@ export type HierarchyLayout = {
 };
 
 const NODE_WIDTH = 220;
-const NODE_HEIGHT = 112;
+const NODE_HEIGHT = 152;
 
 export function layoutHierarchyGraph(graph: HierarchyGraph): HierarchyLayout {
   const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));

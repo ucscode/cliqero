@@ -5,8 +5,26 @@ import type { HierarchyGraph } from "@/components/hierarchy/graph/model";
 const graph: HierarchyGraph = {
   nodes: [
     {
-      id: "root",
+      id: "outside",
       parentId: null,
+      role: "context-parent",
+      depth: -1,
+      label: "Outside",
+      username: "outside",
+      displayName: null,
+      isSelf: false,
+      isRoot: false,
+      directChildCount: 1,
+      hasChildren: true,
+      hasMoreChildren: false,
+      nextChildCursor: null,
+      canLoadMoreChildren: false,
+      canNavigate: false,
+    },
+    {
+      id: "root",
+      parentId: "outside",
+      role: "root",
       depth: 0,
       label: "Root",
       username: "root",
@@ -23,6 +41,7 @@ const graph: HierarchyGraph = {
     {
       id: "b",
       parentId: "root",
+      role: "member",
       depth: 1,
       label: "B",
       username: "b",
@@ -39,6 +58,7 @@ const graph: HierarchyGraph = {
     {
       id: "a",
       parentId: "root",
+      role: "member",
       depth: 1,
       label: "A",
       username: "a",
@@ -54,6 +74,7 @@ const graph: HierarchyGraph = {
     },
   ],
   edges: [
+    { id: "outside:root", source: "outside", target: "root" },
     { id: "root:b", source: "root", target: "b" },
     { id: "root:a", source: "root", target: "a" },
   ],
@@ -67,6 +88,8 @@ describe("hierarchy graph layout", () => {
       second.nodes.map((node) => [node.id, node.position]),
     );
     const root = first.nodes.find((node) => node.id === "root")!;
+    const parent = first.nodes.find((node) => node.id === "outside")!;
+    expect(parent.position.y).toBeLessThan(root.position.y);
     for (const child of first.nodes.filter((node) => node.parentId === "root")) {
       expect(root.position.y).toBeLessThan(child.position.y);
     }

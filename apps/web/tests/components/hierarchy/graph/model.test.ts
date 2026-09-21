@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { hierarchyGraphFromTree, mergeHierarchyChildren } from "@/components/hierarchy/graph/model";
+import {
+  hierarchyGraphFromTree,
+  hierarchyNodeNavigationTarget,
+  mergeHierarchyChildren,
+} from "@/components/hierarchy/graph/model";
 import type { HierarchyTree } from "@/lib/api-client";
 
 const tree: HierarchyTree = {
@@ -33,14 +37,49 @@ const tree: HierarchyTree = {
 };
 
 describe("hierarchy graph view model", () => {
-  it("marks the current root and authenticated account without changing edges", () => {
+  it("adds a non-persisted context parent and keeps the source tree unchanged", () => {
+    const original = structuredClone(tree);
     const graph = hierarchyGraphFromTree(tree, "root");
+    expect(graph.nodes).toHaveLength(3);
+    expect(graph.nodes.find((node) => node.id === "outside")).toMatchObject({
+      role: "context-parent",
+      parentId: null,
+      depth: -1,
+      canNavigate: false,
+    });
     expect(graph.nodes.find((node) => node.id === "root")).toMatchObject({
+      role: "root",
       isRoot: true,
       isSelf: true,
       label: "root",
+      parentId: "outside",
     });
-    expect(graph.edges).toEqual([{ id: "root:child", source: "root", target: "child" }]);
+    expect(graph.edges).toEqual([
+      { id: "outside:root", source: "outside", target: "root" },
+      { id: "root:child", source: "root", target: "child" },
+    ]);
+    expect(tree).toEqual(original);
+  });
+
+  it("allows navigation only for navigable members and context parents", () => {
+    const graph = hierarchyGraphFromTree(tree, "root");
+    expect(hierarchyNodeNavigationTarget(graph.nodes.find((node) => node.id === "outside")!)).toBe(
+      null,
+    );
+    expect(hierarchyNodeNavigationTarget(graph.nodes.find((node) => node.id === "root")!)).toBe(
+      null,
+    );
+    expect(hierarchyNodeNavigationTarget(graph.nodes.find((node) => node.id === "child")!)).toBe(
+      "child",
+    );
+
+    const navigableParent = hierarchyGraphFromTree(
+      { ...tree, parent: { ...tree.parent!, canNavigate: true } },
+      "root",
+    );
+    expect(
+      hierarchyNodeNavigationTarget(navigableParent.nodes.find((node) => node.id === "outside")!),
+    ).toBe("outside");
   });
 
   it("merges child batches idempotently and advances depth", () => {

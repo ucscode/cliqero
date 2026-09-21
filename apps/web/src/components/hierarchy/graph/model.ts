@@ -3,6 +3,7 @@ import type { HierarchyChildren, HierarchyNode, HierarchyTree } from "@/lib/api-
 export type HierarchyGraphNode = {
   id: string;
   parentId: string | null;
+  role: "context-parent" | "root" | "member";
   depth: number;
   label: string;
   username: string;
@@ -40,7 +41,9 @@ function toGraphNode(
 ): HierarchyGraphNode {
   return {
     id: node.id,
-    parentId: parentMap.get(node.id) ?? null,
+    parentId:
+      node.id === tree.root && tree.parent ? tree.parent.id : (parentMap.get(node.id) ?? null),
+    role: node.id === tree.root ? "root" : "member",
     depth: node.depth,
     label: node.displayName || node.username,
     username: node.username,
@@ -61,6 +64,25 @@ export function hierarchyGraphFromTree(tree: HierarchyTree, selfAccountId: strin
   const nodes = [...tree.nodes]
     .sort((left, right) => left.depth - right.depth || left.id.localeCompare(right.id))
     .map((node) => toGraphNode(node, tree, selfAccountId, parentMap));
+  if (tree.parent) {
+    nodes.unshift({
+      id: tree.parent.id,
+      parentId: null,
+      role: "context-parent",
+      depth: -1,
+      label: tree.parent.displayName || tree.parent.username,
+      username: tree.parent.username,
+      displayName: tree.parent.displayName,
+      isSelf: false,
+      isRoot: false,
+      directChildCount: 1,
+      hasChildren: true,
+      hasMoreChildren: false,
+      nextChildCursor: null,
+      canLoadMoreChildren: false,
+      canNavigate: tree.parent.canNavigate,
+    });
+  }
   const edges = [...tree.edges]
     .sort(
       (left, right) =>
@@ -71,7 +93,18 @@ export function hierarchyGraphFromTree(tree: HierarchyTree, selfAccountId: strin
       source: edge.parent,
       target: edge.child,
     }));
+  if (tree.parent) {
+    edges.unshift({
+      id: `${tree.parent.id}:${tree.root}`,
+      source: tree.parent.id,
+      target: tree.root,
+    });
+  }
   return { nodes, edges };
+}
+
+export function hierarchyNodeNavigationTarget(node: HierarchyGraphNode): string | null {
+  return node.canNavigate && !node.isRoot ? node.id : null;
 }
 
 export function mergeHierarchyChildren(
