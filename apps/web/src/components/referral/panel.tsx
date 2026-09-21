@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiClientError,
   apiFetch,
@@ -19,11 +19,17 @@ import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
 import { HierarchyGraph } from "../hierarchy/graph";
 import { mergeHierarchyChildren } from "../hierarchy/graph/model";
+import {
+  fetchHierarchyTree,
+  pushReferralHistory,
+  replaceReferralHistory,
+  referralRootFromUrl,
+  runHierarchyRebase,
+} from "./navigation";
 
 export function ReferralsPanel() {
-  const router = useRouter();
   const params = useSearchParams();
-  const rootParam = params.get("root");
+  const [initialRootParam] = useState(() => params.get("root"));
   const [selfAccountId, setSelfAccountId] = useState<string | null>(null);
   const [direct, setDirect] = useState<ReferralPage | null>(null);
   const [tree, setTree] = useState<HierarchyTree | null>(null);
@@ -31,25 +37,27 @@ export function ReferralsPanel() {
   const [loading, setLoading] = useState(true);
   const [loadingMoreDirect, setLoadingMoreDirect] = useState(false);
   const [loadingChildren, setLoadingChildren] = useState<string | null>(null);
+  const [hierarchyLoading, setHierarchyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hierarchyLoadingRef = useRef(false);
+  const retryRootRef = useRef<string | null | undefined>(undefined);
+  const lastSuccessfulUrlRef = useRef<string | null>(null);
 
-  const load = useCallback(async () => {
+  const loadPanel = useCallback(async (rootId: string | null) => {
     setLoading(true);
     setError(null);
     try {
-      const treePath = rootParam
-        ? `/api/hierarchy/tree?root=${encodeURIComponent(rootParam)}`
-        : "/api/hierarchy/tree";
       const [profile, directPage, hierarchy, uplinePage] = await Promise.all([
         apiFetch<{ id: string }>("/api/me/profile"),
         apiFetch<ReferralPage>("/api/referrals/direct?limit=50"),
-        apiFetch<HierarchyTree>(treePath),
+        fetchHierarchyTree(rootId, apiFetch),
         apiFetch<UplinePage>("/api/referrals/uplines?max_depth=10"),
       ]);
       setSelfAccountId(profile.id);
       setDirect(directPage);
       setTree(hierarchy);
       setUplines(uplinePage);
+      lastSuccessfulUrlRef.current = window.location.href;
     } catch (cause) {
       setError(
         cause instanceof ApiClientError ? cause.message : "We couldn’t load your referral network.",
@@ -57,13 +65,55 @@ export function ReferralsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [rootParam]);
+  }, []);
 
   useEffect(() => {
     // Initial data loading synchronizes this client panel with the remote API.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+    void loadPanel(initialRootParam);
+  }, [initialRootParam, loadPanel]);
+
+  const refreshPanel = useCallback(() => {
+    void loadPanel(referralRootFromUrl(window.location.href));
+  }, [loadPanel]);
+
+  const rebaseHierarchy = useCallback(async (rootId: string | null, updateHistory: boolean) => {
+    if (hierarchyLoadingRef.current) return;
+    const previousUrl = lastSuccessfulUrlRef.current ?? window.location.href;
+    hierarchyLoadingRef.current = true;
+    retryRootRef.current = rootId;
+    setError(null);
+    await runHierarchyRebase(() => fetchHierarchyTree(rootId, apiFetch), {
+      setTree,
+      setLoading: setHierarchyLoading,
+      onSuccess: () => {
+        if (updateHistory) {
+          pushReferralHistory(rootId, window.history, window.location.href);
+        }
+        lastSuccessfulUrlRef.current = window.location.href;
+        retryRootRef.current = undefined;
+      },
+      onError: (cause) => {
+        if (!updateHistory && previousUrl !== window.location.href) {
+          replaceReferralHistory(referralRootFromUrl(previousUrl), window.history, previousUrl);
+        }
+        setError(
+          cause instanceof ApiClientError
+            ? cause.message
+            : "We couldn’t load that referral branch.",
+        );
+      },
+    });
+    hierarchyLoadingRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    function handlePopState() {
+      void rebaseHierarchy(referralRootFromUrl(window.location.href), false);
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [rebaseHierarchy]);
 
   const loadMoreDirect = useCallback(async () => {
     if (!direct?.nextCursor || loadingMoreDirect) return;
@@ -114,13 +164,20 @@ export function ReferralsPanel() {
 
   const openRoot = useCallback(
     (id: string) => {
-      router.push(`/dashboard?section=referrals&root=${encodeURIComponent(id)}`);
+      void rebaseHierarchy(id, true);
     },
-    [router],
+    [rebaseHierarchy],
   );
   const resetRoot = useCallback(() => {
-    router.push("/dashboard?section=referrals");
-  }, [router]);
+    void rebaseHierarchy(null, true);
+  }, [rebaseHierarchy]);
+  const retry = useCallback(() => {
+    if (retryRootRef.current !== undefined) {
+      void rebaseHierarchy(retryRootRef.current, true);
+      return;
+    }
+    refreshPanel();
+  }, [refreshPanel, rebaseHierarchy]);
 
   const nodesById = useMemo(
     () => new Map((tree?.nodes ?? []).map((node) => [node.id, node])),
@@ -148,14 +205,19 @@ export function ReferralsPanel() {
             never shown here.
           </p>
         </div>
-        <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={refreshPanel}
+          disabled={loading || hierarchyLoading}
+        >
           {loading ? "Refreshing…" : "Refresh"}
         </Button>
       </div>
       {error && (
         <Toast>
           <span>{error}</span>
-          <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
+          <Button type="button" variant="outline" size="sm" onClick={retry}>
             Try again
           </Button>
         </Toast>
@@ -175,6 +237,11 @@ export function ReferralsPanel() {
             loadingChildren={loadingChildren}
             onResetRoot={resetRoot}
           />
+          {hierarchyLoading && (
+            <p className="text-sm text-slate-500" role="status" aria-live="polite">
+              Loading branch…
+            </p>
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             <Card className="p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
