@@ -3,7 +3,20 @@ import {
   applyCheckoutPollResult,
   checkoutPrimaryAction,
   checkoutStatusPresentation,
+  walletShortfallMinor,
 } from "@/components/checkout/flow";
+
+describe("wallet shortfall calculation", () => {
+  it.each([
+    ["1400", "2500", "0"],
+    ["1400", "1100", "300"],
+    ["900", "1000", "0"],
+    ["10000", "9000", "1000"],
+    ["1000", "1000", "0"],
+  ])("calculates %s required against %s available as %s", (required, available, expected) => {
+    expect(walletShortfallMinor(required, available)).toBe(expected);
+  });
+});
 
 describe("checkout status presentation", () => {
   it.each([

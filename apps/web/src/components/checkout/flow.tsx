@@ -28,6 +28,12 @@ type CheckoutPaymentResponse = CheckoutStatus & {
   shortfall: { amount_minor: string; currency: string };
 };
 
+export function walletShortfallMinor(requiredMinor: string, availableMinor: string): string {
+  const required = BigInt(requiredMinor);
+  const available = BigInt(availableMinor);
+  return (required > available ? required - available : 0n).toString();
+}
+
 export function checkoutPrimaryAction(input: {
   busy: boolean;
   restoring: boolean;
@@ -199,11 +205,12 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         walletRef.current = projection.wallet;
         setWallet(projection.wallet);
         if (projection.wallet) {
-          const shortfall =
-            projection.checkout.amount_minor > projection.wallet.available_minor
-              ? BigInt(projection.checkout.amount_minor) - BigInt(projection.wallet.available_minor)
-              : 0n;
-          setShortfallMinor(shortfall.toString());
+          setShortfallMinor(
+            walletShortfallMinor(
+              projection.checkout.amount_minor,
+              projection.wallet.available_minor,
+            ),
+          );
         }
         balanceErrorRef.current = projection.balanceError;
         setBalanceError(projection.balanceError);
