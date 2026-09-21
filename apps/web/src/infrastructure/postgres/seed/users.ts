@@ -67,6 +67,13 @@ export const DEVELOPMENT_USER_FIXTURES: readonly DevelopmentUserFixture[] = [
     parentUsername: "central_left",
   },
   {
+    username: "central_left_3",
+    email: "central_left_3@cliqero.test",
+    password: SECONDARY_PASSWORD,
+    country: "NG",
+    parentUsername: "central_left",
+  },
+  {
     username: "central_right",
     email: "central_right@cliqero.test",
     password: SECONDARY_PASSWORD,
@@ -86,6 +93,13 @@ export const DEVELOPMENT_USER_FIXTURES: readonly DevelopmentUserFixture[] = [
     password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "central_right",
+  },
+  {
+    username: "central_leaf",
+    email: "central_leaf@cliqero.test",
+    password: SECONDARY_PASSWORD,
+    country: "NG",
+    parentUsername: "central_user",
   },
   {
     username: "alpha_peer",
@@ -201,13 +215,35 @@ export function validateDevelopmentUserFixtures(
   if (!central) throw new Error("central_user fixture is required");
   if (depths.get(central.username) !== 3)
     throw new Error("central_user must be exactly depth 3 below tree_root");
-  const centralChildren = fixtures.filter((fixture) => fixture.parentUsername === central.username);
-  if (centralChildren.length !== 2)
-    throw new Error("central_user must have exactly two direct children");
-  const grandchildren = fixtures.filter((fixture) =>
-    centralChildren.some((child) => fixture.parentUsername === child.username),
-  );
-  if (grandchildren.length !== 4)
+  const childrenOf = (parentUsername: string) =>
+    fixtures
+      .filter((fixture) => fixture.parentUsername === parentUsername)
+      .map((fixture) => fixture.username)
+      .sort();
+  const expectChildren = (parentUsername: string, expected: readonly string[]) => {
+    const actual = childrenOf(parentUsername);
+    const expectedSorted = [...expected].sort();
+    if (
+      actual.length !== expectedSorted.length ||
+      actual.some((username, index) => username !== expectedSorted[index])
+    )
+      throw new Error(
+        `${parentUsername} must have exactly these direct children: ${[...expected].sort().join(", ")}`,
+      );
+  };
+  expectChildren("central_user", ["central_left", "central_right", "central_leaf"]);
+  expectChildren("central_left", ["central_left_1", "central_left_2", "central_left_3"]);
+  expectChildren("central_right", ["central_right_1", "central_right_2"]);
+  expectChildren("central_leaf", []);
+
+  const centralDepth = depths.get(central.username)!;
+  const centralDescendantDepths = fixtures
+    .filter((fixture) => depths.get(fixture.username)! > centralDepth)
+    .map((fixture) => depths.get(fixture.username)! - centralDepth);
+  if (
+    centralDescendantDepths.length !== 8 ||
+    centralDescendantDepths.some((relativeDepth) => relativeDepth < 1 || relativeDepth > 2)
+  )
     throw new Error("central_user must have exactly two seeded downline generations");
 
   return { root, central, depths };

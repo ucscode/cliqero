@@ -8,12 +8,12 @@ import {
 describe("development referral user fixture", () => {
   it("defines one connected tree with unique users and emails", () => {
     const validation = validateDevelopmentUserFixtures();
-    expect(DEVELOPMENT_USER_FIXTURES).toHaveLength(17);
+    expect(DEVELOPMENT_USER_FIXTURES).toHaveLength(19);
     expect(validation.root.username).toBe("tree_root");
     expect(validation.central.username).toBe("central_user");
     expect(validation.depths.get("central_user")).toBe(3);
-    expect(new Set(DEVELOPMENT_USER_FIXTURES.map((fixture) => fixture.username)).size).toBe(17);
-    expect(new Set(DEVELOPMENT_USER_FIXTURES.map((fixture) => fixture.email)).size).toBe(17);
+    expect(new Set(DEVELOPMENT_USER_FIXTURES.map((fixture) => fixture.username)).size).toBe(19);
+    expect(new Set(DEVELOPMENT_USER_FIXTURES.map((fixture) => fixture.email)).size).toBe(19);
   });
 
   it("keeps the two central downline generations explicit", () => {
@@ -23,10 +23,28 @@ describe("development referral user fixture", () => {
     const grandchildren = DEVELOPMENT_USER_FIXTURES.filter((fixture) =>
       children.some((child) => fixture.parentUsername === child.username),
     );
-    expect(children.map((fixture) => fixture.username)).toEqual(["central_left", "central_right"]);
-    expect(grandchildren.map((fixture) => fixture.username)).toEqual([
+    expect(children.map((fixture) => fixture.username).sort()).toEqual([
+      "central_leaf",
+      "central_left",
+      "central_right",
+    ]);
+    expect(
+      DEVELOPMENT_USER_FIXTURES.filter((fixture) => fixture.parentUsername === "central_left")
+        .map((fixture) => fixture.username)
+        .sort(),
+    ).toEqual(["central_left_1", "central_left_2", "central_left_3"]);
+    expect(
+      DEVELOPMENT_USER_FIXTURES.filter((fixture) => fixture.parentUsername === "central_right")
+        .map((fixture) => fixture.username)
+        .sort(),
+    ).toEqual(["central_right_1", "central_right_2"]);
+    expect(
+      DEVELOPMENT_USER_FIXTURES.filter((fixture) => fixture.parentUsername === "central_leaf"),
+    ).toHaveLength(0);
+    expect(grandchildren.map((fixture) => fixture.username).sort()).toEqual([
       "central_left_1",
       "central_left_2",
+      "central_left_3",
       "central_right_1",
       "central_right_2",
     ]);

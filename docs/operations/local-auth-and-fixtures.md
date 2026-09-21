@@ -63,10 +63,12 @@ tree_root
 │   │   ├── central_user
 │   │   │   ├── central_left
 │   │   │   │   ├── central_left_1
-│   │   │   │   └── central_left_2
-│   │   │   └── central_right
-│   │   │       ├── central_right_1
-│   │   │       └── central_right_2
+│   │   │   │   ├── central_left_2
+│   │   │   │   └── central_left_3
+│   │   │   ├── central_right
+│   │   │   │   ├── central_right_1
+│   │   │   │   └── central_right_2
+│   │   │   └── central_leaf
 │   │   └── alpha_peer
 │   └── alpha_two
 ├── beta

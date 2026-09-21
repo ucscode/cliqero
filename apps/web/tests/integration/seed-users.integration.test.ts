@@ -44,7 +44,7 @@ suite("development referral user seed", () => {
         DEVELOPMENT_USER_FIXTURES.map((fixture) => fixture.username),
       ],
     );
-    expect(counts.rows[0]).toEqual({ users: "17", links: "17", edges: "16" });
+    expect(counts.rows[0]).toEqual({ users: "19", links: "19", edges: "18" });
 
     const root = (
       await app.database.query<{ id: string }>(
@@ -69,15 +69,41 @@ suite("development referral user seed", () => {
       await expect(app.hierarchy.isDescendantOrSelf(root, accountId)).resolves.toBe(true);
     }
     const centralTree = await app.hierarchy.tree(central, central, false);
-    expect(centralTree.nodes.map((node) => node.username)).toEqual([
-      "central_user",
-      "central_left",
-      "central_right",
-      "central_left_1",
-      "central_left_2",
-      "central_right_1",
-      "central_right_2",
-    ]);
+    expect(centralTree.nodes).toHaveLength(9);
+    expect(new Set(centralTree.nodes.map((node) => node.username))).toEqual(
+      new Set([
+        "central_user",
+        "central_left",
+        "central_right",
+        "central_leaf",
+        "central_left_1",
+        "central_left_2",
+        "central_left_3",
+        "central_right_1",
+        "central_right_2",
+      ]),
+    );
+    expect(centralTree.edges).toHaveLength(8);
+    const childCounts = await app.database.query<{ username: string; child_count: string }>(
+      `select parent.username,
+              count(child.id)::text as child_count
+         from identity_capability.accounts parent
+         left join referral_capability.account_referrals relationship
+           on relationship.parent_account_id=parent.id
+         left join identity_capability.accounts child
+           on child.id=relationship.child_account_id
+        where parent.username = any($1::text[])
+        group by parent.username`,
+      [["central_user", "central_left", "central_right", "central_leaf"]],
+    );
+    expect(new Map(childCounts.rows.map((row) => [row.username, row.child_count]))).toEqual(
+      new Map([
+        ["central_user", "3"],
+        ["central_left", "3"],
+        ["central_right", "2"],
+        ["central_leaf", "0"],
+      ]),
+    );
     expect(
       (
         await app.database.query<{ capability: string }>(
