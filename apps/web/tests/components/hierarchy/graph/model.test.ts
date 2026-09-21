@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hierarchyGraphFromTree,
+  hierarchyNodeAccessibleLabel,
   hierarchyNodeNavigationTarget,
   mergeHierarchyChildren,
 } from "@/components/hierarchy/graph/model";
@@ -80,6 +81,18 @@ describe("hierarchy graph view model", () => {
     expect(
       hierarchyNodeNavigationTarget(navigableParent.nodes.find((node) => node.id === "outside")!),
     ).toBe("outside");
+  });
+
+  it("uses role-aware accessible labels without exposing a negative generation", () => {
+    const graph = hierarchyGraphFromTree(tree, "root");
+    const parent = graph.nodes.find((node) => node.id === "outside")!;
+    const root = graph.nodes.find((node) => node.id === "root")!;
+    const child = graph.nodes.find((node) => node.id === "child")!;
+
+    expect(hierarchyNodeAccessibleLabel(parent)).toBe("outside, parent context");
+    expect(hierarchyNodeAccessibleLabel(parent)).not.toContain("generation -1");
+    expect(hierarchyNodeAccessibleLabel(root)).toBe("root, current root");
+    expect(hierarchyNodeAccessibleLabel(child)).toBe("Child, generation 1");
   });
 
   it("merges child batches idempotently and advances depth", () => {

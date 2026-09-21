@@ -107,6 +107,12 @@ export function hierarchyNodeNavigationTarget(node: HierarchyGraphNode): string 
   return node.canNavigate && !node.isRoot ? node.id : null;
 }
 
+export function hierarchyNodeAccessibleLabel(node: HierarchyGraphNode): string {
+  if (node.role === "context-parent") return `${node.label}, parent context`;
+  if (node.isRoot) return `${node.label}, current root`;
+  return `${node.label}, generation ${node.depth}`;
+}
+
 export function mergeHierarchyChildren(
   tree: HierarchyTree,
   page: HierarchyChildren,

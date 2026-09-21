@@ -11,6 +11,8 @@ describe("hierarchy graph interaction contract", () => {
   it("uses accessible node surfaces and keeps secondary actions separate", () => {
     expect(source).toContain('type="button"');
     expect(source).toContain("data.onViewBranch(navigationTarget)");
+    expect(source).toContain("primaryContent");
+    expect(source).toContain("aria-label={`Explore ${accessibleLabel}`}");
     expect(source).toContain("event.stopPropagation()");
     expect(source).not.toContain("View branch");
   });

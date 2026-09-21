@@ -16,11 +16,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { HierarchyTree } from "@/lib/api-client";
 import {
   hierarchyGraphFromTree,
+  hierarchyNodeAccessibleLabel,
   hierarchyNodeNavigationTarget,
   type HierarchyGraphNode,
 } from "./model";
 import { layoutHierarchyGraph } from "./layout";
-import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
 import { cn } from "@/lib/utils";
@@ -39,20 +39,42 @@ const nodeTypes = { cliqero: CliqeroHierarchyNode };
 
 function CliqeroHierarchyNode({ data }: NodeProps<FlowNode>) {
   const navigationTarget = hierarchyNodeNavigationTarget(data);
+  const accessibleLabel = hierarchyNodeAccessibleLabel(data);
   const showUsername = data.displayName !== null && data.displayName !== data.username;
-  const surface = (
+  const primaryContent = (
     <>
-      <span
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800"
-        aria-hidden="true"
-      >
-        {data.label.slice(0, 1).toUpperCase()}
+      <span className="flex items-center gap-3">
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800"
+          aria-hidden="true"
+        >
+          {data.label.slice(0, 1).toUpperCase()}
+        </span>
+        <span className="grid min-w-0 gap-0.5">
+          <strong className="truncate text-sm text-slate-900" title={data.label}>
+            {data.label}
+          </strong>
+          {showUsername && (
+            <span className="truncate text-xs text-slate-500">@{data.username}</span>
+          )}
+        </span>
       </span>
-      <span className="grid min-w-0 gap-0.5">
-        <strong className="truncate text-sm text-slate-900" title={data.label}>
-          {data.label}
-        </strong>
-        {showUsername && <span className="truncate text-xs text-slate-500">@{data.username}</span>}
+      <span className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        {data.role === "context-parent" && (
+          <span className="font-semibold uppercase tracking-wide text-slate-500">Parent</span>
+        )}
+        {data.isRoot && (
+          <span className="rounded-full bg-emerald-700 px-2.5 py-0.5 font-semibold text-white">
+            Current root
+          </span>
+        )}
+        {data.isSelf && !data.isRoot && (
+          <span className="rounded-full bg-emerald-700 px-2.5 py-0.5 font-semibold text-white">
+            You
+          </span>
+        )}
+        {data.role !== "context-parent" && <span>{data.directChildCount} children</span>}
+        {data.hasMoreChildren && <span>More available</span>}
       </span>
     </>
   );
@@ -60,13 +82,13 @@ function CliqeroHierarchyNode({ data }: NodeProps<FlowNode>) {
   return (
     <div
       className={cn(
-        "relative w-[220px] rounded-xl border bg-white p-3 text-left shadow-sm transition",
+        "relative w-[220px] rounded-xl border bg-white text-left shadow-sm transition",
         data.isRoot && "border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-100",
         data.role === "context-parent" && "border-slate-300 bg-slate-50/90 opacity-80",
         navigationTarget &&
           "cursor-pointer hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md",
       )}
-      aria-label={`${data.label}, generation ${data.depth}`}
+      aria-label={accessibleLabel}
       aria-disabled={data.role === "context-parent" && !data.canNavigate ? true : undefined}
     >
       <Handle
@@ -77,24 +99,15 @@ function CliqeroHierarchyNode({ data }: NodeProps<FlowNode>) {
       {navigationTarget ? (
         <button
           type="button"
-          className="flex w-full items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+          className="grid w-full gap-3 rounded-xl p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset"
           onClick={() => data.onViewBranch(navigationTarget)}
-          aria-label={`Explore ${data.label}'s referral branch`}
+          aria-label={`Explore ${accessibleLabel}`}
         >
-          {surface}
+          {primaryContent}
         </button>
       ) : (
-        <div className="flex w-full items-center gap-3">{surface}</div>
+        <div className="grid w-full gap-3 p-3">{primaryContent}</div>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-        {data.role === "context-parent" && (
-          <span className="font-semibold uppercase tracking-wide text-slate-500">Parent</span>
-        )}
-        {data.isRoot && <Badge variant="default">Current root</Badge>}
-        {data.isSelf && !data.isRoot && <Badge variant="default">You</Badge>}
-        {data.role !== "context-parent" && <span>{data.directChildCount} children</span>}
-        {data.hasMoreChildren && <span>More available</span>}
-      </div>
       {(data.hasMoreChildren ||
         (data.operatorMode && (data.onViewUser || data.onReassignParent))) && (
         <div className="mt-3 flex flex-wrap gap-2">
