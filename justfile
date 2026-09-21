@@ -133,12 +133,16 @@ cli *args:
 seed-catalogue:
 	docker compose exec -T main sh -lc 'NODE_ENV=development npm run seed:catalogue --workspace @cliqero/web'
 
+# Seed development-only authenticatable referral users (never run in production)
+seed-users:
+	docker compose exec -T main sh -lc 'NODE_ENV=development npm run seed:users --workspace @cliqero/web'
+
 # Seed development-only SQLite blog fixtures (never run in production)
 seed-blog:
 	docker compose exec -T main sh -lc 'NODE_ENV=development npm run seed:blog --workspace @cliqero/web'
 
 # Seed all development fixtures
-seed: seed-catalogue seed-blog
+seed: seed-users seed-catalogue seed-blog
 
 # Validate the development Compose configuration
 compose-dev-config:

@@ -45,3 +45,59 @@ just cli --help
 just cli user:create --email operator@example.test --username operator --country NG
 just cli user:capability operator@example.test system.root
 ```
+
+## Development referral user tree
+
+`just seed-users` creates a deterministic, real Better Auth user hierarchy for
+local referral, promotion, hierarchy, earnings, withdrawal, and operator-flow
+testing. It is separate from catalogue and blog fixtures, and it creates no
+financial records. `just seed` includes this user fixture before the catalogue
+and blog seeds.
+
+The fixture tree is:
+
+```text
+tree_root
+├── alpha
+│   ├── alpha_one
+│   │   ├── central_user
+│   │   │   ├── central_left
+│   │   │   │   ├── central_left_1
+│   │   │   │   └── central_left_2
+│   │   │   └── central_right
+│   │   │       ├── central_right_1
+│   │   │       └── central_right_2
+│   │   └── alpha_peer
+│   └── alpha_two
+├── beta
+│   ├── beta_one
+│   └── beta_two
+└── gamma
+    └── gamma_one
+```
+
+These credentials are **DEVELOPMENT ONLY** and are disposable local fixture
+credentials. Cliqero login uses email and password.
+
+ROOT
+
+```text
+username: tree_root
+email: tree_root@cliqero.test
+password: CliqeroRoot!2026
+```
+
+`tree_root` is the development system-root/operator account for inspecting the
+whole seeded hierarchy.
+
+CENTRAL
+
+```text
+username: central_user
+email: central_user@cliqero.test
+password: CliqeroCentral!2026
+```
+
+`central_user` is a normal customer/promoter account at depth 3 below
+`tree_root`, with two seeded downline generations. Never use these fixture
+credentials outside local or development environments.
