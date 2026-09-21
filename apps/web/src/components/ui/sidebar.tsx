@@ -33,13 +33,13 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 
 export function Sidebar({ children, className }: React.HTMLAttributes<HTMLElement>) {
   const { setMobileOpen } = useSidebar();
-  const content = <div className="flex min-h-full flex-col gap-8">{children}</div>;
+  const content = <div className="flex h-full min-h-0 flex-col gap-8">{children}</div>;
   return (
     <>
       <aside
         data-sidebar="sidebar"
         className={cn(
-          "hidden min-h-screen w-64 shrink-0 border-r border-slate-200 bg-[#f1f4ef] lg:block",
+          "sticky top-0 hidden h-dvh w-64 shrink-0 self-start overflow-hidden border-r border-slate-200 bg-[#f1f4ef] lg:block",
           className,
         )}
       >
@@ -47,7 +47,10 @@ export function Sidebar({ children, className }: React.HTMLAttributes<HTMLElemen
       </aside>
       <SheetContent
         side="left"
-        className={cn("w-[min(82vw,280px)] bg-[#f1f4ef] p-6", className)}
+        className={cn(
+          "h-dvh min-h-0 w-[min(82vw,280px)] overflow-hidden bg-[#f1f4ef] p-6",
+          className,
+        )}
         onCloseAutoFocus={() => setMobileOpen(false)}
       >
         <SheetTitle className="sr-only">Dashboard navigation</SheetTitle>
@@ -58,15 +61,15 @@ export function Sidebar({ children, className }: React.HTMLAttributes<HTMLElemen
 }
 
 export function SidebarHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-6 pb-0", className)} {...props} />;
+  return <div className={cn("shrink-0 p-6 pb-0", className)} {...props} />;
 }
 
 export function SidebarContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex-1 overflow-y-auto px-4", className)} {...props} />;
+  return <div className={cn("min-h-0 flex-1 overflow-y-auto px-4", className)} {...props} />;
 }
 
 export function SidebarFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-6 pt-0", className)} {...props} />;
+  return <div className={cn("shrink-0 p-6 pt-0", className)} {...props} />;
 }
 
 export function SidebarGroup({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
