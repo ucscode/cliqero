@@ -238,7 +238,7 @@ export function validateDevelopmentUserFixtures(
 
   const centralDepth = depths.get(central.username)!;
   const centralDescendantDepths = fixtures
-    .filter((fixture) => depths.get(fixture.username)! > centralDepth)
+    .filter((fixture) => isDescendantOf(fixture.username, central.username, byUsername))
     .map((fixture) => depths.get(fixture.username)! - centralDepth);
   if (
     centralDescendantDepths.length !== 8 ||
@@ -247,6 +247,22 @@ export function validateDevelopmentUserFixtures(
     throw new Error("central_user must have exactly two seeded downline generations");
 
   return { root, central, depths };
+}
+
+function isDescendantOf(
+  username: string,
+  ancestorUsername: string,
+  byUsername: ReadonlyMap<string, DevelopmentUserFixture>,
+) {
+  const visited = new Set<string>();
+  let current = byUsername.get(username)?.parentUsername ?? null;
+  while (current !== null) {
+    if (current === ancestorUsername) return true;
+    if (visited.has(current)) return false;
+    visited.add(current);
+    current = byUsername.get(current)?.parentUsername ?? null;
+  }
+  return false;
 }
 
 type ExistingIdentity = { authUserId: string; accountId: string };

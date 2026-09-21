@@ -50,6 +50,41 @@ describe("development referral user fixture", () => {
     ]);
   });
 
+  it("scopes central validation to structural descendants", () => {
+    const deeperUnrelatedBranch = [
+      ...DEVELOPMENT_USER_FIXTURES,
+      {
+        username: "beta_deep_1",
+        email: "beta_deep_1@cliqero.test",
+        password: DEVELOPMENT_USER_FIXTURES[0].password,
+        country: "NG",
+        parentUsername: "beta_one",
+      },
+      {
+        username: "beta_deep_2",
+        email: "beta_deep_2@cliqero.test",
+        password: DEVELOPMENT_USER_FIXTURES[0].password,
+        country: "NG",
+        parentUsername: "beta_deep_1",
+      },
+    ];
+    expect(() => validateDevelopmentUserFixtures(deeperUnrelatedBranch)).not.toThrow();
+
+    const deeperCentralBranch = [
+      ...DEVELOPMENT_USER_FIXTURES,
+      {
+        username: "central_left_1_deep",
+        email: "central_left_1_deep@cliqero.test",
+        password: DEVELOPMENT_USER_FIXTURES[0].password,
+        country: "NG",
+        parentUsername: "central_left_1",
+      },
+    ];
+    expect(() => validateDevelopmentUserFixtures(deeperCentralBranch)).toThrow(
+      "two seeded downline generations",
+    );
+  });
+
   it("rejects duplicate, disconnected, cyclic, and invalid root definitions", () => {
     const duplicate = [...DEVELOPMENT_USER_FIXTURES, DEVELOPMENT_USER_FIXTURES[1]];
     expect(() => validateDevelopmentUserFixtures(duplicate)).toThrow("Duplicate");
