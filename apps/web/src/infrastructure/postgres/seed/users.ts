@@ -12,144 +12,118 @@ export type DevelopmentUserFixture = {
   parentUsername: string | null;
 };
 
-const ROOT_PASSWORD = "CliqeroRoot!2026";
-const CENTRAL_PASSWORD = "CliqeroCentral!2026";
-const SECONDARY_PASSWORD = "CliqeroTree!2026";
+export const DEVELOPMENT_USER_PASSWORD = "CliqeroTest!2026";
+
+export function developmentUserEmail(username: string): string {
+  return `${username}@example.test`;
+}
+
+type DevelopmentUserDefinition = Omit<DevelopmentUserFixture, "email" | "password">;
+
+function developmentUser(definition: DevelopmentUserDefinition): DevelopmentUserFixture {
+  return {
+    ...definition,
+    email: developmentUserEmail(definition.username),
+    password: DEVELOPMENT_USER_PASSWORD,
+  };
+}
 
 export const DEVELOPMENT_USER_FIXTURES: readonly DevelopmentUserFixture[] = [
-  {
+  developmentUser({
     username: "tree_root",
-    email: "tree_root@cliqero.test",
-    password: ROOT_PASSWORD,
     country: "NG",
     parentUsername: null,
-  },
-  {
+  }),
+  developmentUser({
     username: "alpha",
-    email: "alpha@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "tree_root",
-  },
-  {
+  }),
+  developmentUser({
     username: "alpha_one",
-    email: "alpha_one@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "alpha",
-  },
-  {
+  }),
+  developmentUser({
     username: "central_user",
-    email: "central_user@cliqero.test",
-    password: CENTRAL_PASSWORD,
     country: "NG",
     parentUsername: "alpha_one",
-  },
-  {
+  }),
+  developmentUser({
     username: "central_left",
-    email: "central_left@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "central_user",
-  },
-  {
+  }),
+  developmentUser({
     username: "central_left_1",
-    email: "central_left_1@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "central_left",
-  },
-  {
+  }),
+  developmentUser({
     username: "central_left_2",
-    email: "central_left_2@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "central_left",
-  },
-  {
+  }),
+  developmentUser({
     username: "central_left_3",
-    email: "central_left_3@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "central_left",
-  },
-  {
+  }),
+  developmentUser({
     username: "central_right",
-    email: "central_right@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "central_user",
-  },
-  {
+  }),
+  developmentUser({
     username: "central_right_1",
-    email: "central_right_1@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "central_right",
-  },
-  {
+  }),
+  developmentUser({
     username: "central_right_2",
-    email: "central_right_2@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "central_right",
-  },
-  {
+  }),
+  developmentUser({
     username: "central_leaf",
-    email: "central_leaf@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "central_user",
-  },
-  {
+  }),
+  developmentUser({
     username: "alpha_peer",
-    email: "alpha_peer@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "alpha_one",
-  },
-  {
+  }),
+  developmentUser({
     username: "alpha_two",
-    email: "alpha_two@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "alpha",
-  },
-  {
+  }),
+  developmentUser({
     username: "beta",
-    email: "beta@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "tree_root",
-  },
-  {
+  }),
+  developmentUser({
     username: "beta_one",
-    email: "beta_one@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "beta",
-  },
-  {
+  }),
+  developmentUser({
     username: "beta_two",
-    email: "beta_two@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "beta",
-  },
-  {
+  }),
+  developmentUser({
     username: "gamma",
-    email: "gamma@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "tree_root",
-  },
-  {
+  }),
+  developmentUser({
     username: "gamma_one",
-    email: "gamma_one@cliqero.test",
-    password: SECONDARY_PASSWORD,
     country: "NG",
     parentUsername: "gamma",
-  },
+  }),
 ] as const;
 
 export type DevelopmentUserFixtureValidation = {
@@ -173,6 +147,10 @@ export function validateDevelopmentUserFixtures(
       throw new Error(`Duplicate development fixture email: ${fixture.email}`);
     if (!/^[a-z0-9][a-z0-9_-]{2,31}$/.test(fixture.username))
       throw new Error(`Invalid development fixture username: ${fixture.username}`);
+    if (fixture.email !== developmentUserEmail(fixture.username))
+      throw new Error(`Development fixture email must match its username: ${fixture.username}`);
+    if (fixture.password !== DEVELOPMENT_USER_PASSWORD)
+      throw new Error(`Development fixtures must share one password: ${fixture.username}`);
     usernames.add(fixture.username);
     emails.add(fixture.email);
     byUsername.set(fixture.username, fixture);
@@ -278,7 +256,7 @@ export async function seedDevelopmentUsers(
   try {
     const accounts = new Map<string, Account>();
     for (const fixture of DEVELOPMENT_USER_FIXTURES) {
-      const existing = await existingIdentity(container.database, fixture.email);
+      const existing = await existingIdentity(container.database, fixture);
       const account = existing
         ? await reconcileExistingAccount(container, fixture, existing)
         : await container.authentication.register(fixture);
@@ -296,18 +274,15 @@ export async function seedDevelopmentUsers(
       await container.referralGraphService.reassignParent(child.id, parent.id, root.id);
     }
     await assertRootHasNoParent(container.database, root.id);
-    await verifyDevelopmentLogins(container, root, central);
+    await verifyDevelopmentLogins(container, accounts);
 
     console.log(`Seeded ${DEVELOPMENT_USER_FIXTURES.length} development users.`);
     console.log("Seeded referral tree through depth 5.");
-    console.log("\nRoot:");
-    console.log(`  username: ${validation.root.username}`);
-    console.log(`  email: ${validation.root.email}`);
-    console.log(`  password: ${validation.root.password}`);
-    console.log("\nCentral:");
-    console.log(`  username: ${validation.central.username}`);
-    console.log(`  email: ${validation.central.email}`);
-    console.log(`  password: ${validation.central.password}`);
+    console.log("\nDevelopment fixture login:");
+    console.log("  email: <username>@example.test");
+    console.log(`  password: ${DEVELOPMENT_USER_PASSWORD}`);
+    console.log(`  root username: ${validation.root.username}`);
+    console.log(`  central username: ${validation.central.username}`);
 
     return { count: DEVELOPMENT_USER_FIXTURES.length, root: root.id, central: central.id };
   } finally {
@@ -318,16 +293,18 @@ export async function seedDevelopmentUsers(
 
 async function existingIdentity(
   database: ReturnType<typeof createContainer>["database"],
-  email: string,
+  fixture: DevelopmentUserFixture,
 ): Promise<ExistingIdentity | null> {
   const result = await database.query<ExistingIdentity>(
     `select l.auth_user_id as "authUserId",a.uuid as "accountId"
        from better_auth."user" u
        join identity_capability.auth_account_links l on l.auth_user_id=u.id
        join identity_capability.accounts a on a.id=l.account_id
-      where lower(u.email)=lower($1) and l.onboarding_state='complete'`,
-    [email],
+      where a.username=$1 and l.onboarding_state='complete'`,
+    [fixture.username],
   );
+  if (result.rows.length > 1)
+    throw new Error(`Multiple linked identities found for fixture: ${fixture.username}`);
   return result.rows[0] ?? null;
 }
 
@@ -336,6 +313,18 @@ async function reconcileExistingAccount(
   fixture: DevelopmentUserFixture,
   existing: ExistingIdentity,
 ) {
+  const conflictingEmail = await container.database.query<{ id: string }>(
+    `select id
+       from better_auth."user"
+      where lower(email)=lower($1) and id<>$2`,
+    [fixture.email, existing.authUserId],
+  );
+  if (conflictingEmail.rowCount)
+    throw new Error(`Development fixture email is already linked: ${fixture.email}`);
+  await container.database.query(
+    `update better_auth."user" set email=$2,"updatedAt"=now() where id=$1`,
+    [existing.authUserId, fixture.email],
+  );
   const account = await container.profiles.update(existing.accountId, {
     username: fixture.username,
     country: fixture.country,
@@ -383,20 +372,14 @@ async function assertRootHasNoParent(
 
 async function verifyDevelopmentLogins(
   container: ReturnType<typeof createContainer>,
-  root: Account,
-  central: Account,
+  accounts: ReadonlyMap<string, Account>,
 ) {
-  const rootLogin = await container.authentication.login("tree_root@cliqero.test", ROOT_PASSWORD);
-  if (rootLogin.account.id !== root.id)
-    throw new Error("Root fixture login resolved the wrong account");
-  await signOut(container, rootLogin.token);
-  const centralLogin = await container.authentication.login(
-    "central_user@cliqero.test",
-    CENTRAL_PASSWORD,
-  );
-  if (centralLogin.account.id !== central.id)
-    throw new Error("Central fixture login resolved the wrong account");
-  await signOut(container, centralLogin.token);
+  for (const fixture of DEVELOPMENT_USER_FIXTURES) {
+    const login = await container.authentication.login(fixture.email, DEVELOPMENT_USER_PASSWORD);
+    if (login.account.id !== accounts.get(fixture.username)?.id)
+      throw new Error(`Fixture login resolved the wrong account: ${fixture.username}`);
+    await signOut(container, login.token);
+  }
 }
 
 async function signOut(container: ReturnType<typeof createContainer>, token: string) {

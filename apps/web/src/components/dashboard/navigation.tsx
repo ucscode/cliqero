@@ -19,6 +19,7 @@ const navigation = [
   { label: "Wallet", href: "/dashboard?section=wallet", section: "wallet" },
   { label: "Purchases", href: "/dashboard?section=purchases", section: "purchases" },
   { label: "Promote", href: "/dashboard?section=promote", section: "promote" },
+  { label: "Hierarchy", href: "/dashboard?section=hierarchy", section: "hierarchy" },
   { label: "Referrals", href: "/dashboard?section=referrals", section: "referrals" },
   { label: "Earnings", href: "/dashboard?section=earnings", section: "earnings" },
   { label: "Withdrawals", href: "/dashboard?section=withdrawals", section: "withdrawals" },
@@ -32,7 +33,7 @@ const moneyNavigation = navigation.filter((item) =>
   ["wallet", "earnings", "withdrawals"].includes(item.section),
 );
 const referralNavigation = navigation.filter((item) =>
-  ["promote", "referrals"].includes(item.section),
+  ["promote", "hierarchy", "referrals"].includes(item.section),
 );
 
 export function dashboardSectionTitle(section: string) {

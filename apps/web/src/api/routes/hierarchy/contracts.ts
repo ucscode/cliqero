@@ -29,6 +29,25 @@ export const childrenSchema = z.object({
   items: z.array(nodeSchema),
   nextCursor: z.string().nullable(),
 });
+export const levelsSchema = z.object({ levels: z.array(z.number().int()) });
+export const descendantSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  displayName: z.string().nullable(),
+  level: z.number(),
+  upline: z
+    .object({
+      id: z.string(),
+      username: z.string(),
+      displayName: z.string().nullable(),
+    })
+    .nullable(),
+  directChildCount: z.number(),
+});
+export const descendantsSchema = z.object({
+  items: z.array(descendantSchema),
+  nextCursor: z.string().nullable(),
+});
 export const reassignmentSchema = z.object({
   childAccountId: z.string(),
   parentAccountId: z.string(),

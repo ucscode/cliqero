@@ -9,8 +9,18 @@ import {
 } from "../../shared/context";
 import { domainError } from "../../shared/error";
 import { errorSchema } from "../../shared/schemas";
-import { childrenSchema, reassignmentSchema, treeSchema } from "./contracts";
+import {
+  childrenSchema,
+  descendantsSchema,
+  levelsSchema,
+  reassignmentSchema,
+  treeSchema,
+} from "./contracts";
 import { operatorOverviewSchema } from "./overview-contract";
+import {
+  HIERARCHY_DESCENDANT_MAX_LEVEL,
+  HIERARCHY_DESCENDANT_MAX_PAGE_SIZE,
+} from "@/application/hierarchy";
 
 export function registerHierarchyRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
   app.openapi(
@@ -74,6 +84,102 @@ export function registerHierarchyRoutes(app: OpenAPIHono<Env>, container: Applic
         (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
       try {
         return c.json(await container.hierarchy.tree(p.accountId, root, admin), 200);
+      } catch (error) {
+        return c.json(
+          { error: error instanceof Error ? error.message : "Request failed", code: "forbidden" },
+          403,
+        );
+      }
+    },
+  );
+  const hierarchyRootQuery = z.object({ root: z.string().uuid().optional() });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/hierarchy/levels",
+      request: { query: hierarchyRootQuery },
+      responses: {
+        200: {
+          description: "Available hierarchy descendant levels",
+          content: { "application/json": { schema: levelsSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Not permitted",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = hierarchyReadOrAdmin(c, p);
+      if (denied) return denied;
+      const root = c.req.valid("query").root ?? p.accountId;
+      const admin =
+        hasCapability(p.capabilities, "hierarchy.manage") &&
+        (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
+      try {
+        return c.json(await container.hierarchy.availableLevels(p.accountId, root, admin), 200);
+      } catch (error) {
+        return c.json(
+          { error: error instanceof Error ? error.message : "Request failed", code: "forbidden" },
+          403,
+        );
+      }
+    },
+  );
+  const descendantsQuery = z.object({
+    root: z.string().uuid().optional(),
+    level: z.coerce.number().int().min(1).max(HIERARCHY_DESCENDANT_MAX_LEVEL),
+    limit: z.coerce.number().int().min(1).max(HIERARCHY_DESCENDANT_MAX_PAGE_SIZE).default(25),
+    cursor: z.string().uuid().optional(),
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/hierarchy/descendants",
+      request: { query: descendantsQuery },
+      responses: {
+        200: {
+          description: "Paginated hierarchy descendants",
+          content: { "application/json": { schema: descendantsSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Not permitted",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = hierarchyReadOrAdmin(c, p);
+      if (denied) return denied;
+      const query = c.req.valid("query");
+      const root = query.root ?? p.accountId;
+      const admin =
+        hasCapability(p.capabilities, "hierarchy.manage") &&
+        (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
+      try {
+        return c.json(
+          await container.hierarchy.descendants(
+            p.accountId,
+            root,
+            query.level,
+            admin,
+            query.cursor,
+            query.limit,
+          ),
+          200,
+        );
       } catch (error) {
         return c.json(
           { error: error instanceof Error ? error.message : "Request failed", code: "forbidden" },

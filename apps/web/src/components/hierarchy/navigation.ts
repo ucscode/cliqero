@@ -38,30 +38,30 @@ export async function runHierarchyRebase<T>(
   }
 }
 
-export function referralRootFromUrl(href: string): string | null {
+export function hierarchyRootFromUrl(href: string): string | null {
   return new URL(href).searchParams.get("root");
 }
 
-export function referralHistoryUrl(href: string, rootId: string | null): string {
+export function hierarchyHistoryUrl(href: string, rootId: string | null): string {
   const url = new URL(href);
-  url.searchParams.set("section", "referrals");
+  url.searchParams.set("section", "hierarchy");
   if (rootId) url.searchParams.set("root", rootId);
   else url.searchParams.delete("root");
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-export function pushReferralHistory(
+export function pushHierarchyHistory(
   rootId: string | null,
   history: Pick<History, "pushState">,
   href: string,
 ): void {
-  history.pushState(null, "", referralHistoryUrl(href, rootId));
+  history.pushState(null, "", hierarchyHistoryUrl(href, rootId));
 }
 
-export function replaceReferralHistory(
+export function replaceHierarchyHistory(
   rootId: string | null,
   history: Pick<History, "replaceState">,
   href: string,
 ): void {
-  history.replaceState(null, "", referralHistoryUrl(href, rootId));
+  history.replaceState(null, "", hierarchyHistoryUrl(href, rootId));
 }

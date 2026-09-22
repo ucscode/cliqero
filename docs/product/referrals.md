@@ -63,6 +63,13 @@ The graph should be able to answer:
 - what level is account A relative to account B?
 - which configured recipients apply to a sale distribution?
 
+Customer referral views are split by purpose. **Hierarchy** is the bounded
+graphical exploration of an authorized account tree. **Referrals** is the
+paginated descendant listing, with selectable existing level and each
+account's immediate upline and direct-child count. The listing uses a complete
+server-side recursive traversal and is not derived from the graph's
+per-branch visualization limit.
+
 ## Affiliate/referral capability responsibilities
 
 The affiliate/referral module owns relationship and distribution facts.

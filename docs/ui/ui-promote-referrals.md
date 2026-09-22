@@ -1,22 +1,26 @@
 # Promote, referrals, and earnings UI
 
-The authenticated dashboard now exposes three account-owned views:
+The authenticated dashboard now exposes three account-owned views under the
+Referrals sidebar group:
 
 - **Promote** is available on an authenticated published listing. The server
   returns a deterministic `/r/{account-uuid}/{listing-uuid}` URL; no referral
   link row, generated code, rotation, or revocation lifecycle is required.
   Visits still create an opaque, hashed attribution token in the database for
   the existing 30-day purchase attribution window.
-- **Referrals** combines an accessible network summary with the graphical
-  React Flow/Dagre explorer. The hierarchy API remains the authorization
-  boundary; the browser does not fetch a global graph or infer relationships.
-  Visualization depth is a bounded window, not a traversal limit: users can
-  rebase onto authorized descendants to explore deeper generations. Each node
-  may load another deterministic child batch using the server-provided cursor.
-  At the user's own root, an external upline can be shown as context but is
-  never navigable. A rebased descendant exposes its permitted parent for
-  upward navigation. Dragging nodes is cosmetic and never changes referral
-  relationships.
+- **Hierarchy** is the graphical React Flow/Dagre explorer. The hierarchy API
+  remains the authorization boundary; the browser does not fetch a global graph
+  or infer relationships. Visualization depth is a bounded window, not a
+  traversal limit: users can rebase onto authorized descendants to explore
+  deeper generations. Each node may load another deterministic child batch
+  using the server-provided cursor. At the user's own root, an external upline
+  can be shown as context but is never navigable. A rebased descendant exposes
+  its permitted parent for upward navigation. Dragging nodes is cosmetic and
+  never changes referral relationships.
+- **Referrals** is the complete, table-oriented descendant view. It requests
+  `/api/hierarchy/descendants` with a selected exact level and opaque cursor, and
+  renders each account's level, name, immediate upline, and direct downline
+  count. It is separate from the visualization's per-branch child limit.
 - **Earnings** shows the earnings projection and immutable ledger entries from
   `GET /api/earnings` and `GET /api/earnings/entries`. Pending and available
   states are displayed as returned by the ledger; visits do not imply a

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEVELOPMENT_USER_PASSWORD,
   DEVELOPMENT_USER_FIXTURES,
+  developmentUserEmail,
   seedDevelopmentUsers,
   validateDevelopmentUserFixtures,
 } from "@/infrastructure/postgres/seed/users";
@@ -14,6 +16,10 @@ describe("development referral user fixture", () => {
     expect(validation.depths.get("central_user")).toBe(3);
     expect(new Set(DEVELOPMENT_USER_FIXTURES.map((fixture) => fixture.username)).size).toBe(19);
     expect(new Set(DEVELOPMENT_USER_FIXTURES.map((fixture) => fixture.email)).size).toBe(19);
+    for (const fixture of DEVELOPMENT_USER_FIXTURES) {
+      expect(fixture.email).toBe(developmentUserEmail(fixture.username));
+      expect(fixture.password).toBe(DEVELOPMENT_USER_PASSWORD);
+    }
   });
 
   it("keeps the two central downline generations explicit", () => {
@@ -55,15 +61,15 @@ describe("development referral user fixture", () => {
       ...DEVELOPMENT_USER_FIXTURES,
       {
         username: "beta_deep_1",
-        email: "beta_deep_1@cliqero.test",
-        password: DEVELOPMENT_USER_FIXTURES[0].password,
+        email: developmentUserEmail("beta_deep_1"),
+        password: DEVELOPMENT_USER_PASSWORD,
         country: "NG",
         parentUsername: "beta_one",
       },
       {
         username: "beta_deep_2",
-        email: "beta_deep_2@cliqero.test",
-        password: DEVELOPMENT_USER_FIXTURES[0].password,
+        email: developmentUserEmail("beta_deep_2"),
+        password: DEVELOPMENT_USER_PASSWORD,
         country: "NG",
         parentUsername: "beta_deep_1",
       },
@@ -74,8 +80,8 @@ describe("development referral user fixture", () => {
       ...DEVELOPMENT_USER_FIXTURES,
       {
         username: "central_left_1_deep",
-        email: "central_left_1_deep@cliqero.test",
-        password: DEVELOPMENT_USER_FIXTURES[0].password,
+        email: developmentUserEmail("central_left_1_deep"),
+        password: DEVELOPMENT_USER_PASSWORD,
         country: "NG",
         parentUsername: "central_left_1",
       },

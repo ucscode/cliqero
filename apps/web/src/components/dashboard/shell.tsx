@@ -14,6 +14,7 @@ import { PurchasesPanel } from "../purchase/panel";
 import { WalletPanel } from "../wallet/panel";
 import { FundingHistoryPanel } from "../funding/history";
 import { PromotePanel } from "../promote-panel";
+import { HierarchyPanel } from "../hierarchy/panel";
 import { ReferralsPanel } from "../referral/panel";
 import { EarningsPanel } from "../earnings-panel";
 import { WithdrawalsPanel } from "../withdrawal/panel";
@@ -147,6 +148,8 @@ export function DashboardShell({
     <PurchasesPanel />
   ) : section === "promote" ? (
     <PromotePanel />
+  ) : section === "hierarchy" ? (
+    <HierarchyPanel />
   ) : section === "referrals" ? (
     <ReferralsPanel />
   ) : section === "earnings" ? (

@@ -31,6 +31,8 @@ function appWith(
           nodes: [],
           edges: [],
         }),
+        descendants: async () => ({ items: [], nextCursor: null }),
+        availableLevels: async () => ({ levels: [] }),
         search: async () => [],
       },
       apiKeys: { create: async () => ({}), list: async () => [], revoke: async () => {} },
@@ -264,6 +266,8 @@ describe("Hono API foundation", () => {
     expect(response.status).toBe(200);
     const paths = (await response.json()).paths;
     expect(paths["/api/hierarchy/tree"]).toBeDefined();
+    expect(paths["/api/hierarchy/levels"]).toBeDefined();
+    expect(paths["/api/hierarchy/descendants"]).toBeDefined();
     expect(paths["/api/hierarchy/children/{parentId}"]).toBeDefined();
     expect(paths["/api/listings"]).toBeDefined();
     expect(paths["/api/wallet"]).toBeDefined();
@@ -385,6 +389,12 @@ describe("Hono API foundation", () => {
   it("returns standardized auth errors and validates requests", async () => {
     const app = appWith();
     expect((await app.fetch(new Request("http://localhost/api/hierarchy/tree"))).status).toBe(401);
+    expect(
+      (await app.fetch(new Request("http://localhost/api/hierarchy/descendants?level=1"))).status,
+    ).toBe(401);
+    expect((await app.fetch(new Request("http://localhost/api/hierarchy/levels"))).status).toBe(
+      401,
+    );
     const principal = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: {},
@@ -396,6 +406,13 @@ describe("Hono API foundation", () => {
       (
         await appWith(principal).fetch(
           new Request("http://localhost/api/hierarchy/tree?root=not-a-uuid"),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await appWith(principal).fetch(
+          new Request("http://localhost/api/hierarchy/descendants?level=11"),
         )
       ).status,
     ).toBe(400);

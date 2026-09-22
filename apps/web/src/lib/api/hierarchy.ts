@@ -42,3 +42,25 @@ export type HierarchyChildren = {
   items: HierarchyNode[];
   nextCursor: string | null;
 };
+
+export type HierarchyDescendant = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  level: number;
+  upline: {
+    id: string;
+    username: string;
+    displayName: string | null;
+  } | null;
+  directChildCount: number;
+};
+
+export type HierarchyDescendantPage = {
+  items: HierarchyDescendant[];
+  nextCursor: string | null;
+};
+
+export type HierarchyLevels = {
+  levels: number[];
+};

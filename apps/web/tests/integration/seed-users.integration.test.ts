@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import {
+  DEVELOPMENT_USER_PASSWORD,
   DEVELOPMENT_USER_FIXTURES,
   seedDevelopmentUsers,
 } from "@/infrastructure/postgres/seed/users";
@@ -24,6 +25,14 @@ suite("development referral user seed", () => {
     let second: Awaited<ReturnType<typeof seedDevelopmentUsers>>;
     try {
       first = await seedDevelopmentUsers(databaseUrl);
+      await app.database.query(
+        `update better_auth."user" set email=$1,"updatedAt"=now()
+           where id=(select links.auth_user_id
+                       from identity_capability.auth_account_links links
+                       join identity_capability.accounts account on account.id=links.account_id
+                      where account.username=$2)`,
+        ["central_user@cliqero.test", "central_user"],
+      );
       second = await seedDevelopmentUsers(databaseUrl);
     } finally {
       if (previousNodeEnvironment === undefined) Reflect.deleteProperty(environment, "NODE_ENV");
@@ -45,6 +54,13 @@ suite("development referral user seed", () => {
       ],
     );
     expect(counts.rows[0]).toEqual({ users: "19", links: "19", edges: "18" });
+    expect(
+      (
+        await app.database.query(
+          `select count(*)::text as count from better_auth."user" where email='central_user@cliqero.test'`,
+        )
+      ).rows[0].count,
+    ).toBe("0");
 
     const root = (
       await app.database.query<{ id: string }>(
@@ -123,13 +139,20 @@ suite("development referral user seed", () => {
       ).rowCount,
     ).toBe(0);
 
-    await expect(
-      app.authentication.login("tree_root@cliqero.test", "CliqeroRoot!2026"),
-    ).resolves.toMatchObject({
-      account: { id: root },
-    });
-    await expect(
-      app.authentication.login("central_user@cliqero.test", "CliqeroCentral!2026"),
-    ).resolves.toMatchObject({ account: { id: central } });
-  });
+    for (const fixture of DEVELOPMENT_USER_FIXTURES) {
+      const accountId = (
+        await app.database.query<{ id: string }>(
+          `select uuid as id from identity_capability.accounts where username=$1`,
+          [fixture.username],
+        )
+      ).rows[0].id;
+      const login = await app.authentication.login(fixture.email, DEVELOPMENT_USER_PASSWORD);
+      expect(login.account.id).toBe(accountId);
+      await app.authentication.auth.api.signOut({
+        headers: new Headers({ authorization: `Bearer ${login.token}` }),
+      });
+    }
+    expect(root).toBeDefined();
+    expect(central).toBeDefined();
+  }, 30_000);
 });

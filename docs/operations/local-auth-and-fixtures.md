@@ -81,25 +81,17 @@ tree_root
 These credentials are **DEVELOPMENT ONLY** and are disposable local fixture
 credentials. Cliqero login uses email and password.
 
-ROOT
+Every seeded development user uses the same predictable credentials:
 
-```text
-username: tree_root
-email: tree_root@cliqero.test
-password: CliqeroRoot!2026
+```yaml
+Email: <username>@example.test
+Password: CliqeroTest!2026
 ```
+
+For example, `tree_root` logs in as `tree_root@example.test` and
+`central_user` logs in as `central_user@example.test`. These credentials are
+development-only; never use them outside local or development environments.
 
 `tree_root` is the development system-root/operator account for inspecting the
-whole seeded hierarchy.
-
-CENTRAL
-
-```text
-username: central_user
-email: central_user@cliqero.test
-password: CliqeroCentral!2026
-```
-
-`central_user` is a normal customer/promoter account at depth 3 below
-`tree_root`, with two seeded downline generations. Never use these fixture
-credentials outside local or development environments.
+whole seeded hierarchy. `central_user` is a normal customer/promoter account
+at depth 3 below `tree_root`, with two seeded downline generations.

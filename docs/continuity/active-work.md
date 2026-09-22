@@ -48,6 +48,12 @@ Payment providers are modular funding modules. The generic funding entry at `/da
 
 Internal integrity audit result: funding `a3290266-b85d-42cb-b2d9-15c59a94ef53` explains the reported `$2,000.00` increase as a real prior NOWPayments acceptance record with one normal credit/availability chain; no accounting defect or Development-provider involvement was found. The `1915 USD` message was a minor-unit formatting leak and now displays `$19.15`. The current NOWPayments IPN route still lacks funding provider-event persistence, and external NOWPayments IPN/confirmation plus genuine Paystack webhook delivery remain unproven.
 
+Referral UI now separates graphical hierarchy exploration from descendant data:
+`/dashboard?section=hierarchy` owns the bounded React Flow/Dagre view, while
+`/dashboard?section=referrals` owns the exact-level, cursor-paginated table
+backed by `GET /api/hierarchy/descendants`. Do not derive the table from the
+visualization tree, because the graph intentionally limits children per branch.
+
 ## Verification ledger
 
 The 2026-09-10 documentation audit/reorganization changed documentation only. It did not re-run the application test suite because no product code changed. A prior implementation report stated focused payment tests, the non-integration suite, typecheck, lint, formatting, and diff checks passed, but future work must re-run checks relevant to its current code rather than treating historical counts as current evidence.

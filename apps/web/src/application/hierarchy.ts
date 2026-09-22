@@ -48,6 +48,31 @@ export interface HierarchyChildren {
   nextCursor: string | null;
 }
 
+export interface HierarchyDescendant {
+  id: string;
+  username: string;
+  displayName: string | null;
+  level: number;
+  upline: {
+    id: string;
+    username: string;
+    displayName: string | null;
+  } | null;
+  directChildCount: number;
+}
+
+export interface HierarchyDescendantPage {
+  items: HierarchyDescendant[];
+  nextCursor: string | null;
+}
+
+export interface HierarchyLevels {
+  levels: number[];
+}
+
+export const HIERARCHY_DESCENDANT_MAX_LEVEL = 10;
+export const HIERARCHY_DESCENDANT_MAX_PAGE_SIZE = 100;
+
 export interface HierarchyReader {
   exists(accountId: string): Promise<boolean>;
   isDescendantOrSelf(ancestor: string, candidate: string): Promise<boolean>;
@@ -61,6 +86,13 @@ export interface HierarchyReader {
   }>;
   parent(root: string): Promise<Omit<HierarchyParent, "canNavigate"> | null>;
   children(parentId: string, cursor: string | undefined, limit: number): Promise<HierarchyChildren>;
+  availableLevels(root: string): Promise<number[]>;
+  descendants(
+    root: string,
+    level: number,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<HierarchyDescendantPage>;
   search(
     query: string,
     scopeRoot: string | null,
@@ -124,6 +156,31 @@ export class HierarchyService {
   ): Promise<HierarchyChildren> {
     await this.assertRoot(requester, parentId, admin);
     return this.reader.children(parentId, cursor, this.config.childLimit);
+  }
+
+  async descendants(
+    requester: string,
+    root: string,
+    level: number,
+    admin: boolean,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<HierarchyDescendantPage> {
+    await this.assertRoot(requester, root, admin);
+    if (!Number.isInteger(level) || level < 1 || level > HIERARCHY_DESCENDANT_MAX_LEVEL)
+      throw new Error(
+        `Hierarchy descendant level must be between 1 and ${HIERARCHY_DESCENDANT_MAX_LEVEL}`,
+      );
+    if (!Number.isInteger(limit) || limit < 1 || limit > HIERARCHY_DESCENDANT_MAX_PAGE_SIZE)
+      throw new Error(
+        `Hierarchy descendant page size must be between 1 and ${HIERARCHY_DESCENDANT_MAX_PAGE_SIZE}`,
+      );
+    return this.reader.descendants(root, level, cursor, limit);
+  }
+
+  async availableLevels(requester: string, root: string, admin: boolean): Promise<HierarchyLevels> {
+    await this.assertRoot(requester, root, admin);
+    return { levels: await this.reader.availableLevels(root) };
   }
 
   search(requester: string, q: string, admin: boolean, limit: number) {

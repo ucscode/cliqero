@@ -271,6 +271,50 @@ suite("referral graph and trusted purchase attribution", () => {
     });
     expect(second.accounts).toHaveLength(1);
     expect(new Set([...first.accounts, ...second.accounts])).toEqual(new Set([c.id, d.id]));
+    const levelOne = await app.hierarchy.descendants(root.id, root.id, 1, false, undefined, 20);
+    expect(levelOne.items.map((item) => item.id)).toEqual(expect.arrayContaining([a.id, b.id]));
+    expect(levelOne.items.every((item) => item.level === 1)).toBe(true);
+    expect(levelOne.items.find((item) => item.id === a.id)).toMatchObject({
+      directChildCount: 2,
+      upline: { id: root.id },
+    });
+
+    const levelTwo = await app.hierarchy.descendants(root.id, root.id, 2, false, undefined, 20);
+    expect(levelTwo.items.map((item) => item.id)).toEqual(expect.arrayContaining([c.id, d.id]));
+    expect(levelTwo.items.every((item) => item.level === 2)).toBe(true);
+    expect(levelTwo.items.map((item) => item.id)).not.toContain(a.id);
+    expect(levelTwo.items.find((item) => item.id === c.id)).toMatchObject({
+      directChildCount: 1,
+      upline: { id: a.id },
+    });
+
+    const levelThree = await app.hierarchy.descendants(root.id, root.id, 3, false, undefined, 20);
+    expect(levelThree.items.map((item) => item.id)).toEqual([e.id]);
+    expect(levelThree.items[0]).toMatchObject({
+      level: 3,
+      directChildCount: 0,
+      upline: { id: c.id },
+    });
+    expect(await app.hierarchy.availableLevels(root.id, root.id, false)).toEqual({
+      levels: [1, 2, 3],
+    });
+  });
+  it("reports only relationship levels that exist", async () => {
+    const root = await account("levels_root");
+    const levelOne = await account("levels_one");
+    const levelTwo = await account("levels_two");
+    await app.referralGraphService.establish(levelOne.id, root.id);
+    await app.referralGraphService.establish(levelTwo.id, levelOne.id);
+
+    expect(await app.hierarchy.availableLevels(root.id, root.id, false)).toEqual({
+      levels: [1, 2],
+    });
+
+    const levelThree = await account("levels_three");
+    await app.referralGraphService.establish(levelThree.id, levelTwo.id);
+    expect(await app.hierarchy.availableLevels(root.id, root.id, false)).toEqual({
+      levels: [1, 2, 3],
+    });
   });
   it("uses one bounded query for a high-cardinality exact-depth traversal", async () => {
     const root = newId();
@@ -321,6 +365,30 @@ suite("referral graph and trusted purchase attribution", () => {
     const direct = await graph.getDirectReferrals(root, { limit: 100 });
     expect(direct.accounts).toHaveLength(100);
     expect(executor.count).toBe(2);
+    const hierarchyPage = await app.hierarchy.descendants(root, root, 1, false, undefined, 100);
+    expect(hierarchyPage.items).toHaveLength(100);
+    expect(hierarchyPage.items.every((item) => item.level === 1)).toBe(true);
+    expect(hierarchyPage.items.every((item) => item.upline?.id === root)).toBe(true);
+    const childrenWithGrandchildren = new Set(children.slice(0, grandchildren.length));
+    expect(
+      hierarchyPage.items.every(
+        (item) => item.directChildCount === (childrenWithGrandchildren.has(item.id) ? 1 : 0),
+      ),
+    ).toBe(true);
+    expect(hierarchyPage.nextCursor).not.toBeNull();
+    const hierarchySecondPage = await app.hierarchy.descendants(
+      root,
+      root,
+      1,
+      false,
+      hierarchyPage.nextCursor ?? undefined,
+      100,
+    );
+    expect(hierarchySecondPage.items).toHaveLength(100);
+    const firstPageIds = hierarchyPage.items.map((item) => item.id);
+    const secondPageIds = hierarchySecondPage.items.map((item) => item.id);
+    expect(secondPageIds.filter((id) => firstPageIds.includes(id))).toHaveLength(0);
+    expect([...firstPageIds, ...secondPageIds]).toEqual([...children].sort().slice(0, 200));
   });
   async function commerce() {
     const seller = await account("seller"),

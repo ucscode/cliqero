@@ -1,6 +1,7 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type {
   HierarchyChildren,
+  HierarchyDescendantPage,
   HierarchyNode,
   HierarchyParent,
   HierarchyReader,
@@ -120,6 +121,81 @@ export class PostgresHierarchyReader implements HierarchyReader {
         hasChildren: Boolean(row.has_children),
         hasMoreChildren: Boolean(row.has_more_children),
         nextChildCursor: row.next_child_cursor ?? null,
+      })),
+      nextCursor: rows.rows.length > limit ? (visible.at(-1)?.id ?? null) : null,
+    };
+  }
+
+  async availableLevels(root: string) {
+    const rows = await this.sql.query<{ level: number }>(
+      `with recursive descendants(account_id,level,path) as (
+        select relationship.child_account_id,1,
+               array[(select id from identity_capability.accounts where uuid=$1),relationship.child_account_id]
+          from referral_capability.account_referrals relationship
+         where relationship.parent_account_id=(select id from identity_capability.accounts where uuid=$1)
+        union all
+        select relationship.child_account_id,descendants.level+1,
+               descendants.path||relationship.child_account_id
+          from descendants
+          join referral_capability.account_referrals relationship
+            on relationship.parent_account_id=descendants.account_id
+         where not relationship.child_account_id=any(descendants.path)
+      )
+      select distinct level
+        from descendants
+       order by level`,
+      [root],
+    );
+    return rows.rows.map((row) => Number(row.level));
+  }
+
+  async descendants(
+    root: string,
+    level: number,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<HierarchyDescendantPage> {
+    const rows = await this.sql.query<any>(
+      `with recursive descendants(account_id,parent_account_id,level,path) as (
+        select relationship.child_account_id,relationship.parent_account_id,1,
+               array[(select id from identity_capability.accounts where uuid=$1),relationship.child_account_id]
+          from referral_capability.account_referrals relationship
+         where relationship.parent_account_id=(select id from identity_capability.accounts where uuid=$1)
+        union all
+        select relationship.child_account_id,relationship.parent_account_id,descendants.level+1,
+               descendants.path||relationship.child_account_id
+          from descendants
+          join referral_capability.account_referrals relationship
+            on relationship.parent_account_id=descendants.account_id
+         where descendants.level<$2
+           and not relationship.child_account_id=any(descendants.path)
+      )
+      select child.uuid id,child.username,child.display_name,descendants.level,
+             upline.uuid upline_id,upline.username upline_username,upline.display_name upline_display_name,
+             (select count(*)::int from referral_capability.account_referrals direct
+               where direct.parent_account_id=child.id) direct_child_count
+        from descendants
+        join identity_capability.account_profiles child on child.id=descendants.account_id
+        join identity_capability.account_profiles upline on upline.id=descendants.parent_account_id
+       where descendants.level=$2
+         and ($3::uuid is null or child.uuid>$3::uuid)
+       order by child.uuid
+       limit $4`,
+      [root, level, cursor ?? null, limit + 1],
+    );
+    const visible = rows.rows.slice(0, limit);
+    return {
+      items: visible.map((row) => ({
+        id: row.id,
+        username: row.username,
+        displayName: row.display_name ?? null,
+        level: Number(row.level),
+        upline: {
+          id: row.upline_id,
+          username: row.upline_username,
+          displayName: row.upline_display_name ?? null,
+        },
+        directChildCount: Number(row.direct_child_count),
       })),
       nextCursor: rows.rows.length > limit ? (visible.at(-1)?.id ?? null) : null,
     };
