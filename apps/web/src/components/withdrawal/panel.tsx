@@ -32,15 +32,15 @@ function stateLabel(state: Withdrawal["state"]): string {
     case "requested":
       return "Request received";
     case "approved":
-      return "Approved · payout pending";
+      return "Approved · payment required";
     case "completed":
-      return "Payout completed";
+      return "Payment completed";
     case "rejected":
       return "Withdrawal rejected";
     case "cancelled":
       return "Withdrawal cancelled";
     case "failed":
-      return "Payout failed";
+      return "Payment failed";
   }
 }
 
@@ -165,7 +165,7 @@ export function WithdrawalsPanel() {
       return;
     }
     if (!destination.trim()) {
-      setError("Enter a payout destination reference.");
+      setError("Enter a withdrawal destination reference.");
       return;
     }
     const signature = `${amountMinor}|${destination.trim()}`;
@@ -189,7 +189,7 @@ export function WithdrawalsPanel() {
           destination_reference: destination.trim(),
         }),
       });
-      setSuccess("Withdrawal request received. Payout processing is asynchronous.");
+      setSuccess("Withdrawal request received. Payment follows operator review.");
       await load(true);
     } catch (cause) {
       setError(
@@ -224,7 +224,7 @@ export function WithdrawalsPanel() {
           <p className="eyebrow">Withdrawals</p>
           <h2 id="withdrawals-heading">Move available earnings</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-            Request a payout from settled referral earnings. Your buyer wallet remains separate.
+            Request a withdrawal from settled referral earnings. Your buyer wallet remains separate.
           </p>
         </div>
         <Button

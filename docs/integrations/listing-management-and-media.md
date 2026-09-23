@@ -15,7 +15,7 @@ durable `deletion_pending -> deleted` workflow. Legacy owner-scoped routes remai
 for compatibility, but the operator catalogue routes are the authoritative
 management surface for new platform listings.
 
-Wallet transactions, funding, purchases, checkouts, distributions, ledger entries, settlement, provider operations, payout history, referral attribution, and reversals are immutable or state-machine resources. Their APIs expose projections and explicit commands only—never generic financial `PATCH` or `DELETE`.
+Wallet transactions, funding, purchases, checkouts, distributions, ledger entries, settlement, provider operations, withdrawal history, referral attribution, and reversals are immutable or state-machine resources. Their APIs expose projections and explicit commands only—never generic financial `PATCH` or `DELETE`.
 
 ## Listing APIs and projections
 

@@ -25,21 +25,4 @@ describe("PostgresWithdrawalPersistence", () => {
     expect(statements).toHaveLength(1);
     expect(statements[0]).toContain("pg_advisory_xact_lock");
   });
-
-  it("maps payout execution state into an application result", async () => {
-    const sql: QueryExecutor = {
-      query: async <TRow extends object>() => ({
-        rows: [{ state: "pending", attempt_state: "submitted" }] as TRow[],
-        rowCount: 1,
-      }),
-    };
-    const persistence = new PostgresWithdrawalPersistence(
-      { transaction: async (operation) => operation() },
-      sql,
-    );
-    await expect(persistence.findPayoutState("withdrawal-1")).resolves.toEqual({
-      state: "pending",
-      attemptState: "submitted",
-    });
-  });
 });

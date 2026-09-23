@@ -44,46 +44,18 @@ export type OperatorWithdrawal = {
     currency: string;
     state: "reserved" | "released" | "completed";
   } | null;
-  payout: {
-    provider: string;
-    state: "ready" | "submitted" | "succeeded" | "failed" | "unknown";
-    attemptCount: number;
-    nextAttemptAt: string | null;
-    lastError: string | null;
-    providerReference: string | null;
-  } | null;
-  attention: "review" | "payout" | "reconciliation" | "retry" | "retry_wait" | "none";
+  externalReference: string | null;
+  completionNote: string | null;
+  completedBy: string | null;
+  completedAt: string | null;
+  attention: "review" | "action_required" | "none";
 };
 
-export type OperatorWithdrawalDetail = OperatorWithdrawal & {
-  attempts: Array<{
-    id: string;
-    number: number;
-    provider: string;
-    state: string;
-    providerReference: string | null;
-    failureCategory: string | null;
-    failureReason: string | null;
-    createdAt: string;
-    completedAt: string | null;
-  }>;
-};
+export type OperatorWithdrawalDetail = OperatorWithdrawal;
 
 function map(row: any): OperatorWithdrawal {
-  const payoutState = row.payout_state ?? null;
-  const attemptState = row.attempt_state ?? null;
   const attention =
-    row.state === "requested"
-      ? "review"
-      : row.state === "approved" && !payoutState
-        ? "payout"
-        : payoutState === "unknown" || attemptState === "unknown" || attemptState === "pending"
-          ? "reconciliation"
-          : payoutState === "failed"
-            ? row.next_attempt_at && new Date(row.next_attempt_at) > new Date()
-              ? "retry_wait"
-              : "retry"
-            : "none";
+    row.state === "requested" ? "review" : row.state === "approved" ? "action_required" : "none";
   return {
     id: row.id,
     account: { id: row.account_id, username: row.username, email: row.email },
@@ -92,6 +64,10 @@ function map(row: any): OperatorWithdrawal {
     destination: { type: row.destination_type, summary: mask(row.destination_reference) },
     state: row.state,
     reason: row.reason ?? null,
+    externalReference: row.external_reference ?? null,
+    completionNote: row.completion_note ?? null,
+    completedBy: row.completed_by ?? null,
+    completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     reservation: row.reservation_id
@@ -101,31 +77,18 @@ function map(row: any): OperatorWithdrawal {
           state: row.reservation_state,
         }
       : null,
-    payout: row.payout_id
-      ? {
-          provider: row.provider_name,
-          state: payoutState,
-          attemptCount: Number(row.attempt_count ?? 0),
-          nextAttemptAt: row.next_attempt_at ?? null,
-          lastError: row.last_error ?? null,
-          providerReference: row.provider_reference ?? null,
-        }
-      : null,
     attention,
   };
 }
 
 const projection = `
-  select w.uuid as id,a.uuid as account_id,a.username,a.email,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.reason,w.created_at,w.updated_at,
+  select w.uuid as id,a.uuid as account_id,a.username,a.email,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) completed_by,w.completed_at,w.created_at,w.updated_at,
     r.uuid reservation_id,r.amount_minor reservation_amount_minor,r.currency reservation_currency,
-    (select e.kind from ledger_capability.withdrawal_reservation_events e where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) reservation_state,
-    p.uuid payout_id,p.provider_name,p.state payout_state,p.attempt_count,p.next_attempt_at,p.last_error,
-    (select a.state from payout_capability.attempts a where a.execution_id=p.id order by a.attempt_number desc limit 1) attempt_state,
-    (select a.provider_reference from payout_capability.attempts a where a.execution_id=p.id order by a.attempt_number desc limit 1) provider_reference
+    (select e.kind from ledger_capability.withdrawal_reservation_events e where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) reservation_state
    from withdrawal_capability.withdrawals w
    join identity_capability.account_profiles a on a.id=w.account_id
    left join ledger_capability.withdrawal_reservations r on r.withdrawal_id=w.id
-   left join payout_capability.executions p on p.withdrawal_id=w.id`;
+`;
 
 export class OperatorWithdrawalService {
   constructor(private readonly sql: QueryExecutor) {}
@@ -150,9 +113,9 @@ export class OperatorWithdrawalService {
     const rows = (
       await this.sql.query<any>(
         `select * from (${projection}) q
-          where ($1::text is null or q.id::text=$1 or q.destination_reference ilike '%'||$1||'%' escape '\\' or q.provider_reference ilike '%'||$1||'%' escape '\\' or q.username ilike '%'||$1||'%' escape '\\' or q.email ilike '%'||$1||'%' escape '\\')
+          where ($1::text is null or q.id::text=$1 or q.destination_reference ilike '%'||$1||'%' escape '\\' or q.external_reference ilike '%'||$1||'%' escape '\\' or q.username ilike '%'||$1||'%' escape '\\' or q.email ilike '%'||$1||'%' escape '\\')
             and ($2::text is null or q.state=$2)
-            and ($3::text is null or case when q.state='requested' then 'review' when q.state='approved' and q.payout_state is null then 'payout' when q.payout_state='unknown' or q.attempt_state in ('unknown','pending') then 'reconciliation' when q.payout_state='failed' and q.next_attempt_at > now() then 'retry_wait' when q.payout_state='failed' then 'retry' else 'none' end=$3::text)
+            and ($3::text is null or case when q.state='requested' then 'review' when q.state='approved' then 'action_required' else 'none' end=$3::text)
             and ($4::timestamptz is null or (q.created_at,(select id from withdrawal_capability.withdrawals where uuid=q.id))<($4::timestamptz,(select id from withdrawal_capability.withdrawals where uuid=$5)))
           order by q.created_at desc,q.id desc limit $6`,
         values,
@@ -173,28 +136,6 @@ export class OperatorWithdrawalService {
   async get(id: string): Promise<OperatorWithdrawalDetail> {
     const row = (await this.sql.query<any>(`${projection} where w.uuid=$1`, [id])).rows[0];
     if (!row) throw new Error("Withdrawal not found");
-    const attempts = (
-      await this.sql.query<any>(
-        `select a.uuid as id,a.attempt_number,a.provider_name,a.state,a.provider_reference,a.failure_category,a.failure_reason,a.created_at,a.completed_at
-           from payout_capability.attempts a
-          where a.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
-          order by a.attempt_number desc limit 100`,
-        [id],
-      )
-    ).rows;
-    return {
-      ...map(row),
-      attempts: attempts.map((a) => ({
-        id: a.id,
-        number: a.attempt_number,
-        provider: a.provider_name,
-        state: a.state,
-        providerReference: a.provider_reference ?? null,
-        failureCategory: a.failure_category ?? null,
-        failureReason: a.failure_reason ?? null,
-        createdAt: a.created_at,
-        completedAt: a.completed_at ?? null,
-      })),
-    };
+    return map(row);
   }
 }

@@ -18,6 +18,10 @@ interface Row {
   idempotency_key: string;
   correlation_id: string;
   reason: string | null;
+  external_reference: string | null;
+  completion_note: string | null;
+  completed_by: string | null;
+  completed_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -69,10 +73,27 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
     );
     if (result.rowCount !== 1) throw new Error(`Invalid withdrawal transition from ${from}`);
   }
+  async complete(
+    id: string,
+    actorId: string,
+    externalReference: string | null,
+    note: string | null,
+  ) {
+    const result = await this.sql.query<{ completed_at: Date }>(
+      `update withdrawal_capability.withdrawals
+          set state='completed',external_reference=$2,completion_note=$3,
+              completed_by=(select id from identity_capability.accounts where uuid=$4),
+              completed_at=now(),updated_at=now()
+        where uuid=$1 and state='approved' returning completed_at`,
+      [id, externalReference, note, actorId],
+    );
+    if (result.rowCount !== 1) throw new Error("Invalid withdrawal transition from approved");
+    return result.rows[0].completed_at;
+  }
   private async find(where: string, values: readonly unknown[], lock = false) {
     const row = (
       await this.sql.query<Row>(
-        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.idempotency_key,w.correlation_id,w.reason,w.created_at,w.updated_at from withdrawal_capability.withdrawals w where ${where}${lock ? " for update" : ""}`,
+        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.idempotency_key,w.correlation_id,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) as completed_by,w.completed_at,w.created_at,w.updated_at from withdrawal_capability.withdrawals w where ${where}${lock ? " for update" : ""}`,
         values,
       )
     ).rows[0];
@@ -81,7 +102,7 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
   private async list(where: string, values: readonly unknown[], limit = 100) {
     const rows = (
       await this.sql.query<Row>(
-        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.idempotency_key,w.correlation_id,w.reason,w.created_at,w.updated_at from withdrawal_capability.withdrawals w where ${where} order by w.created_at desc,w.id desc limit $${values.length + 1}`,
+        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.idempotency_key,w.correlation_id,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) as completed_by,w.completed_at,w.created_at,w.updated_at from withdrawal_capability.withdrawals w where ${where} order by w.created_at desc,w.id desc limit $${values.length + 1}`,
         [...values, limit],
       )
     ).rows;
@@ -98,6 +119,10 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
       idempotencyKey: row.idempotency_key,
       correlationId: row.correlation_id,
       reason: row.reason,
+      externalReference: row.external_reference,
+      completionNote: row.completion_note,
+      completedBy: row.completed_by,
+      completedAt: row.completed_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

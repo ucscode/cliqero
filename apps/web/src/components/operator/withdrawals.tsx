@@ -69,10 +69,10 @@ export function OperatorWithdrawalList() {
     <div className="operator-withdrawals-page">
       <div className="operator-heading">
         <div>
-          <p className="eyebrow">Payout operations</p>
+          <p className="eyebrow">Withdrawal operations</p>
           <h2>Withdrawal requests</h2>
           <p className="panel-intro">
-            Review reservations and observe payout execution. Financial facts remain immutable.
+            Review reserved earnings, then record when an external payment has been sent.
           </p>
         </div>
       </div>
@@ -111,10 +111,7 @@ export function OperatorWithdrawalList() {
             <Select value={attention} onChange={(e) => setAttention(e.target.value)}>
               <option value="">All attention</option>
               <option value="review">Needs review</option>
-              <option value="payout">Needs payout</option>
-              <option value="reconciliation">Reconciliation</option>
-              <option value="retry">Retry eligible</option>
-              <option value="retry_wait">Retry waiting</option>
+              <option value="action_required">Payment/action required</option>
             </Select>
           </label>
           <Button type="submit" variant="secondary" disabled={loading}>
@@ -176,8 +173,7 @@ function WithdrawalRow({ item }: { item: OperatorWithdrawal }) {
           {states.find(([value]) => value === item.state)?.[1] ?? item.state}
         </Badge>
         <span>Reservation: {item.reservation?.state ?? "missing"}</span>
-        <span>Payout: {item.payout?.state ?? "not started"}</span>
-        <span>{item.attention === "none" ? "No action" : item.attention.replace("_", " ")}</span>
+        <span>{item.attention === "none" ? "No action" : item.attention.replaceAll("_", " ")}</span>
         <Button asChild variant="ghost">
           <Link href={`/operator/withdrawals/${item.id}`}>Inspect</Link>
         </Button>
@@ -192,6 +188,8 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
+  const [externalReference, setExternalReference] = useState("");
+  const [completionNote, setCompletionNote] = useState("");
   async function load() {
     setLoading(true);
     setError(null);
@@ -208,26 +206,17 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [withdrawalId]);
-  async function act(
-    action: "approve" | "reject" | "complete" | "payout" | "payout/reconcile",
-    body?: Record<string, unknown>,
-  ) {
+  async function act(action: "approve" | "reject" | "complete", body?: Record<string, unknown>) {
     setBusy(true);
     setError(null);
     try {
       const status =
         action === "approve" ? "approved" : action === "reject" ? "rejected" : "completed";
-      const statePatch = action === "approve" || action === "reject" || action === "complete";
-      await apiFetch(
-        statePatch
-          ? `/api/operator/withdrawals/${withdrawalId}`
-          : `/api/operator/withdrawals/${withdrawalId}/${action}`,
-        {
-          method: statePatch ? "PATCH" : "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(statePatch ? { status, ...body } : (body ?? {})),
-        },
-      );
+      await apiFetch(`/api/operator/withdrawals/${withdrawalId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status, ...body }),
+      });
       await load();
     } catch (cause) {
       setError(message(cause));
@@ -286,25 +275,18 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
               : "No reservation record"}
           </p>
         </Card>
-        <Card>
-          <h3>Payout execution</h3>
-          <p>{item.payout ? `${item.payout.provider} · ${item.payout.state}` : "Not started"}</p>
-          {item.payout && (
-            <p>
-              Attempts: {item.payout.attemptCount}
-              <br />
-              Provider reference: {item.payout.providerReference ?? "—"}
-              <br />
-              Next retry:{" "}
-              {item.payout.nextAttemptAt
-                ? new Date(item.payout.nextAttemptAt).toLocaleString()
-                : "—"}
-              <br />
-              Last error: {item.payout.lastError ?? "—"}
-            </p>
-          )}
-        </Card>
       </div>
+      {item.state === "completed" && (
+        <Card>
+          <h3>Completion record</h3>
+          <p>External reference: {item.externalReference ?? "Not provided"}</p>
+          <p>Note: {item.completionNote ?? "Not provided"}</p>
+          <p>Recorded by: {item.completedBy ?? "Unknown"}</p>
+          <p>
+            Completed at: {item.completedAt ? new Date(item.completedAt).toLocaleString() : "—"}
+          </p>
+        </Card>
+      )}
       <Card>
         <h3>Actions</h3>
         <div className="operator-action-row">
@@ -313,7 +295,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
               Approve
             </Button>
           )}
-          {(item.state === "requested" || item.state === "approved") && !item.payout ? (
+          {item.state === "requested" || item.state === "approved" ? (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -331,58 +313,39 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
               </Button>
             </form>
           ) : null}
-          {item.state === "approved" &&
-            (!item.payout || item.payout.state === "ready" || item.payout.state === "failed") && (
-              <Button
-                disabled={
-                  busy ||
-                  (item.payout?.nextAttemptAt
-                    ? new Date(item.payout.nextAttemptAt) > new Date()
-                    : false)
-                }
-                onClick={() => void act("payout")}
-              >
-                {item.payout?.state === "failed" ? "Retry payout" : "Execute payout"}
-              </Button>
-            )}
-          {item.state === "approved" && !item.payout && (
-            <Button variant="secondary" disabled={busy} onClick={() => void act("complete")}>
-              Confirm manual payout completed
-            </Button>
-          )}
-          {item.payout?.state === "unknown" && (
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void act("payout/reconcile")}
+          {item.state === "approved" && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void act("complete", {
+                  external_reference: externalReference.trim() || undefined,
+                  note: completionNote.trim() || undefined,
+                });
+              }}
+              className="operator-action-row"
             >
-              Reconcile payout
-            </Button>
+              <p className="panel-intro">
+                Send the payment outside Cliqero first. This action only records a payment that has
+                already been sent.
+              </p>
+              <Input
+                aria-label="External payment reference"
+                value={externalReference}
+                onChange={(event) => setExternalReference(event.target.value)}
+                placeholder="External reference (optional)"
+                maxLength={200}
+              />
+              <Input
+                aria-label="Completion note"
+                value={completionNote}
+                onChange={(event) => setCompletionNote(event.target.value)}
+                placeholder="Note (optional)"
+                maxLength={500}
+              />
+              <Button disabled={busy}>Mark as paid</Button>
+            </form>
           )}
         </div>
-        <p className="panel-intro">
-          Unknown or pending provider results remain reserved and require reconciliation; they are
-          never resubmitted.
-        </p>
-      </Card>
-      <Card>
-        <h3>Attempt history</h3>
-        {item.attempts.length ? (
-          <div className="operator-attempt-list">
-            {item.attempts.map((attempt) => (
-              <div key={attempt.id}>
-                <strong>Attempt {attempt.number}</strong>
-                <span>
-                  {attempt.provider} · {attempt.state} · {attempt.failureCategory ?? "—"}
-                </span>
-                <span>{attempt.providerReference ?? "No provider reference"}</span>
-                <span>{attempt.failureReason ?? ""}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p>No payout attempts yet.</p>
-        )}
       </Card>
     </div>
   );

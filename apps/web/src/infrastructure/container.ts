@@ -63,14 +63,6 @@ import {
   PostgresWithdrawalRepository,
 } from "@/infrastructure/postgres/withdrawal/withdrawals";
 import { WithdrawalService } from "@/application/withdrawal/service";
-import { PayoutProviderRegistry, DevelopmentPayoutProvider } from "@/modules/withdrawal/provider";
-import { PostgresPayoutRepository } from "@/infrastructure/postgres/payout/payouts";
-import { PayoutExecutionProcessor } from "@/processors/payout/execution";
-import { PaystackPayoutProvider } from "@/providers/payout/paystack/provider";
-import { loadPaystackPayoutConfiguration } from "@/providers/payout/paystack/config";
-import { PostgresPaystackRecipientStore } from "@/infrastructure/postgres/payout/paystack/recipients";
-import { PostgresPaystackPayoutEventRepository } from "@/infrastructure/postgres/payout/paystack/payout-events";
-import { PaystackPayoutWebhookIngress } from "@/application/payout/paystack/webhook";
 import { PostgresPaystackOperationsRepository } from "@/infrastructure/postgres/payment/paystack/operations";
 import { ExchangeRateService } from "@/modules/money/exchange-service";
 import { FrankfurterProvider } from "@/providers/money/frankfurter/provider";
@@ -249,67 +241,6 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         withdrawalPersistence(),
       ),
   );
-
-  const paystackPayoutDefinition = lazy(() => {
-    const configuration = loadConfiguredProvider("payout", "paystack", () =>
-      loadPaystackPayoutConfiguration(),
-    );
-    return configuration
-      ? new PaystackPayoutProvider(configuration, new PostgresPaystackRecipientStore(database))
-      : null;
-  });
-  const payoutProviders = lazy(() => {
-    const registry = new PayoutProviderRegistry().register(new DevelopmentPayoutProvider());
-    registry.registerLazy("paystack", () => paystackPayoutDefinition(), {
-      onFailure: (error) => recordConfigurationFailure("payout", "paystack", error),
-    });
-    return registry;
-  });
-  const payoutRepository = lazy(() => new PostgresPayoutRepository(database));
-  const payoutDefaultProvider = lazy(() => {
-    try {
-      payoutProviders().get("paystack");
-      return "paystack";
-    } catch (error) {
-      if (error instanceof ProviderUnavailableError) return "development";
-      if (error instanceof ProviderConfigurationError) return "paystack";
-      throw error;
-    }
-  });
-  const paystackPayout = lazy(() => {
-    try {
-      return payoutProviders().get("paystack") as PaystackPayoutProvider;
-    } catch (error) {
-      if (error instanceof ProviderConfigurationError || error instanceof ProviderUnavailableError)
-        return null;
-      throw error;
-    }
-  });
-  const paystackPayoutEvents = lazy(() => new PostgresPaystackPayoutEventRepository(database));
-  const payoutExecution = lazy(
-    () =>
-      new PayoutExecutionProcessor(
-        withdrawalRepository(),
-        payoutRepository(),
-        payoutProviders(),
-        fundsReservation(),
-        outbox(),
-        database,
-        payoutDefaultProvider(),
-      ),
-  );
-  const paystackPayoutWebhook = lazy(() => {
-    const provider = paystackPayout();
-    return provider
-      ? new PaystackPayoutWebhookIngress(
-          provider,
-          paystackPayoutEvents(),
-          payoutRepository(),
-          payoutExecution(),
-          database,
-        )
-      : null;
-  });
 
   const paystackDefinition = lazy(() => {
     const configuration = loadConfiguredProvider("payment", "paystack", () =>
@@ -794,9 +725,6 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     get nowPaymentsIpn() {
       return nowPaymentsIpn();
     },
-    get paystackPayoutWebhook() {
-      return paystackPayoutWebhook();
-    },
     get operators() {
       return operators();
     },
@@ -841,18 +769,6 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get withdrawals() {
       return withdrawals();
-    },
-    get payoutProviders() {
-      return payoutProviders();
-    },
-    get payoutRepository() {
-      return payoutRepository();
-    },
-    get payoutExecution() {
-      return payoutExecution();
-    },
-    get paystackPayout() {
-      return paystackPayout();
     },
     get exchangeRates() {
       return exchangeRates();

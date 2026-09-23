@@ -39,7 +39,7 @@ Important domains may be expressed as capabilities, for example:
 - attribution;
 - affiliate/referral;
 - payment;
-- payout;
+- withdrawals;
 - wallet/ledger;
 - currency;
 - fraud/risk;
@@ -72,7 +72,7 @@ Examples:
 
 Payment capability may have Paystack, USDT TRC-20, and future providers.
 
-Payout capability may begin with a manual provider and later gain automated bank/crypto providers.
+Withdrawal completion is recorded by Cliqero after an operator or external automation has sent the money. Cliqero does not run outbound transfer providers.
 
 Currency capability may have one or more exchange-rate providers.
 

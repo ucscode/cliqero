@@ -77,8 +77,7 @@ to the documented default in the worker.
 
 Payment credentials and provider-specific settings are intentionally owned by
 the relevant tracked configuration examples under
-`config/modules/payment/`, `config/modules/payout/`, and
-`config/storage/`. Copy the applicable example to its ignored runtime YAML and
+`config/modules/payment/` and `config/storage/`. Copy the applicable example to its ignored runtime YAML and
 follow its comments. Do not add provider secrets to this file or to
 `.env.example`. `APP_URL`, `TUNNEL_URL`, and `MEDIA_ROOT` are listed above
 because they also affect application/Compose runtime behavior.

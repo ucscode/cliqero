@@ -211,6 +211,7 @@ function appWith(
         approve: async () => ({}),
         reject: async () => ({}),
         cancel: async () => ({}),
+        complete: async (_actorId: string, id: string, input: unknown) => ({ id, input }),
       },
       listingReviews: {
         visible: async () => ({ items: [], nextCursor: null }),
@@ -218,11 +219,6 @@ function appWith(
         submit: async () => ({}),
         operatorQueue: async () => ({ items: [], nextCursor: null }),
         moderate: async () => ({}),
-      },
-      payoutExecution: {
-        execute: async () => ({}),
-        reconcile: async () => ({}),
-        manualComplete: async () => ({}),
       },
       blog: {
         list: () => ({ items: [], nextCursor: null, limit: 25 }),
@@ -332,6 +328,8 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/withdrawals/{withdrawalId}/approve"]).toBeUndefined();
     expect(paths["/api/operator/withdrawals/{withdrawalId}/reject"]).toBeUndefined();
     expect(paths["/api/operator/withdrawals/{withdrawalId}/complete"]).toBeUndefined();
+    expect(paths["/api/operator/withdrawals/{withdrawalId}/payout"]).toBeUndefined();
+    expect(paths["/api/operator/withdrawals/{withdrawalId}/payout/reconcile"]).toBeUndefined();
     expect(paths["/api/operator/treasury"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:read",
@@ -679,7 +677,7 @@ describe("Hono API foundation", () => {
     ).toBe(405);
 
     const operator = { ...owner, capabilities: ["system.root"] };
-    for (const action of ["approve", "reject", "complete"]) {
+    for (const action of ["approve", "reject", "complete", "payout", "payout/reconcile"]) {
       expect(
         (
           await appWith(operator).fetch(
@@ -691,6 +689,50 @@ describe("Hono API foundation", () => {
         ).status,
       ).toBe(404);
     }
+  });
+  it("records manual completion only through the withdrawals manage PATCH scope", async () => {
+    const ordinary = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      capabilities: [],
+      scopes: new Set<string>(),
+    };
+    const request = () =>
+      new Request(
+        "http://localhost/api/operator/withdrawals/00000000-0000-4000-8000-000000000010",
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            status: "completed",
+            external_reference: "transfer-1",
+            note: "Sent outside Cliqero",
+          }),
+        },
+      );
+
+    expect((await appWith(ordinary).fetch(request())).status).toBe(403);
+    expect(
+      (
+        await appWith({
+          ...ordinary,
+          kind: "api_key" as const,
+          capabilities: ["system.root"],
+          scopes: new Set<string>(),
+        }).fetch(request())
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await appWith({
+          ...ordinary,
+          kind: "api_key" as const,
+          capabilities: ["system.root"],
+          scopes: new Set(["withdrawals:manage"]),
+        }).fetch(request())
+      ).status,
+    ).toBe(200);
   });
   it("protects distribution and earnings inspection with the capability and scope intersection", async () => {
     const ordinary = {

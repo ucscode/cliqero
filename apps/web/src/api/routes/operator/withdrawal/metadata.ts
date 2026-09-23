@@ -19,16 +19,4 @@ export const operatorWithdrawalOpenApiMetadata: readonly OpenApiMetadataEntry[] 
     mode: "account",
     scope: "withdrawals:manage",
   },
-  {
-    path: "/api/operator/withdrawals/{withdrawalId}/payout",
-    method: "post",
-    mode: "account",
-    scope: "withdrawals:manage",
-  },
-  {
-    path: "/api/operator/withdrawals/{withdrawalId}/payout/reconcile",
-    method: "post",
-    mode: "account",
-    scope: "withdrawals:manage",
-  },
 ];

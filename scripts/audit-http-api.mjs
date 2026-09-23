@@ -237,9 +237,6 @@ for (const [method, path] of [
   ["GET", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099"],
   ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/approve"],
   ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/complete"],
-  ["GET", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/payout"],
-  ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/payout"],
-  ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/payout/reconcile"],
   ["POST", "/api/operator/withdrawals/00000000-0000-4000-8000-000000000099/reject"],
 ])
   await call(method, path, { token: buyer, body: method === "POST" ? {} : undefined });

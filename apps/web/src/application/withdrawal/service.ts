@@ -116,14 +116,6 @@ export class WithdrawalService {
       if (!withdrawal) throw new Error("Withdrawal not found");
       if (withdrawal.state !== "requested" && withdrawal.state !== "approved")
         throw new Error(`Invalid withdrawal transition from ${withdrawal.state}`);
-      const payout = await this.persistence.findPayoutState(id);
-      if (
-        payout &&
-        (["submitted", "unknown", "succeeded"].includes(payout.state) ||
-          (payout.attemptState &&
-            ["submitted", "pending", "unknown", "succeeded"].includes(payout.attemptState)))
-      )
-        throw new Error("Withdrawal cannot be rejected after payout execution started");
       await this.withdrawals.transition(id, withdrawal.state, "rejected", reason);
       await this.funds.releaseOrComplete({
         withdrawalId: id,
@@ -171,17 +163,54 @@ export class WithdrawalService {
       return { ...withdrawal, state: "cancelled" as const };
     });
   }
-  async complete(actorId: string, id: string) {
-    return this.operatorTransition(
-      actorId,
-      id,
-      "approved",
-      "completed",
-      "withdrawal.completed",
-      undefined,
-      false,
-      "completed",
-    );
+  async complete(
+    actorId: string,
+    id: string,
+    input: { externalReference?: string; note?: string } = {},
+  ) {
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
+    const externalReference = input.externalReference?.trim() || null;
+    const note = input.note?.trim() || null;
+    if (externalReference && externalReference.length > 200)
+      throw new Error("External reference must be 200 characters or fewer");
+    if (note && note.length > 500)
+      throw new Error("Completion note must be 500 characters or fewer");
+    return this.uow.transaction(async () => {
+      const withdrawal = await this.withdrawals.findByIdForUpdate(id);
+      if (!withdrawal) throw new Error("Withdrawal not found");
+      if (withdrawal.state !== "approved")
+        throw new Error(`Invalid withdrawal transition from ${withdrawal.state}`);
+      const completedAt = await this.withdrawals.complete(id, actorId, externalReference, note);
+      await this.funds.releaseOrComplete({
+        withdrawalId: id,
+        accountId: withdrawal.accountId,
+        kind: "completed",
+        correlationId: withdrawal.correlationId,
+      });
+      await this.outbox.append([
+        {
+          id: newId(),
+          name: "withdrawal.completed",
+          aggregateId: id,
+          correlationId: withdrawal.correlationId,
+          occurredAt: completedAt,
+          payload: {
+            withdrawalId: id,
+            completedBy: actorId,
+            externalReference,
+          },
+        },
+      ]);
+      return {
+        ...withdrawal,
+        state: "completed" as const,
+        externalReference,
+        completionNote: note,
+        completedBy: actorId,
+        completedAt,
+        updatedAt: completedAt,
+      };
+    });
   }
   private async operatorTransition(
     actorId: string,
@@ -191,7 +220,6 @@ export class WithdrawalService {
     event: string,
     reason?: string,
     release = false,
-    completion?: "completed",
   ) {
     await this.operators.requireCapability(actorId, "withdrawals.manage");
     return this.uow.transaction(async () => {
@@ -200,11 +228,11 @@ export class WithdrawalService {
       if (withdrawal.state !== from)
         throw new Error(`Invalid withdrawal transition from ${withdrawal.state}`);
       await this.withdrawals.transition(id, from, to, reason);
-      if (release || completion)
+      if (release)
         await this.funds.releaseOrComplete({
           withdrawalId: id,
           accountId: withdrawal.accountId,
-          kind: release ? "released" : "completed",
+          kind: "released",
           correlationId: withdrawal.correlationId,
         });
       await this.outbox.append([

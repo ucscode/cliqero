@@ -8,14 +8,7 @@ export const operatorWithdrawalStateSchema = z.enum([
   "completed",
   "failed",
 ]);
-export const operatorWithdrawalAttentionSchema = z.enum([
-  "review",
-  "payout",
-  "reconciliation",
-  "retry",
-  "retry_wait",
-  "none",
-]);
+export const operatorWithdrawalAttentionSchema = z.enum(["review", "action_required", "none"]);
 export const operatorWithdrawalPatchSchema = z.union([
   z.object({ status: z.literal("approved") }).strict(),
   z.object({ status: z.literal("rejected"), reason: z.string().min(3).max(500) }).strict(),
@@ -44,30 +37,10 @@ export const operatorWithdrawalSchema = z.object({
       state: z.enum(["reserved", "released", "completed"]),
     })
     .nullable(),
-  payout: z
-    .object({
-      provider: z.string(),
-      state: z.enum(["ready", "submitted", "succeeded", "failed", "unknown"]),
-      attemptCount: z.number().int(),
-      nextAttemptAt: z.string().nullable(),
-      lastError: z.string().nullable(),
-      providerReference: z.string().nullable(),
-    })
-    .nullable(),
+  externalReference: z.string().nullable(),
+  completionNote: z.string().nullable(),
+  completedBy: z.string().uuid().nullable(),
+  completedAt: z.string().nullable(),
   attention: operatorWithdrawalAttentionSchema,
 });
-export const operatorWithdrawalDetailSchema = operatorWithdrawalSchema.extend({
-  attempts: z.array(
-    z.object({
-      id: z.string().uuid(),
-      number: z.number().int(),
-      provider: z.string(),
-      state: z.string(),
-      providerReference: z.string().nullable(),
-      failureCategory: z.string().nullable(),
-      failureReason: z.string().nullable(),
-      createdAt: z.string(),
-      completedAt: z.string().nullable(),
-    }),
-  ),
-});
+export const operatorWithdrawalDetailSchema = operatorWithdrawalSchema;

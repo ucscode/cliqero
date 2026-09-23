@@ -47,7 +47,7 @@ export const CAPABILITY_METADATA = {
   },
   "withdrawals.manage": {
     label: "Withdrawal operations",
-    description: "Review withdrawals and manage payout execution workflows.",
+    description: "Review withdrawals and record externally completed payments.",
   },
   "treasury.manage": {
     label: "Treasury management",

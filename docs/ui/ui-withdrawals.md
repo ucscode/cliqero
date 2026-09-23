@@ -1,21 +1,21 @@
 # Withdrawals UI
 
-The dashboard Withdrawals panel requests payouts from the user's available
-earnings ledger. Buyer-wallet funds and company treasury are separate domains.
+The dashboard Withdrawals panel requests settled earnings from the account's
+withdrawable balance. Buyer-wallet funds and company treasury remain separate.
 
 The panel reads the withdrawal policy and owner-scoped withdrawal projection
 from `/api/withdrawals/policy` and `/api/withdrawals`, then submits
-`POST /api/withdrawals` with exact USD minor units and an idempotency key.
-The server reserves available earnings atomically. Completed reservations remain
+`POST /api/withdrawals` with exact USD minor units and an idempotency key. The
+server reserves available earnings atomically. Completed reservations remain
 consumed by the withdrawable projection; released reservations become available
-again. User cancellation is offered only while a request is still `requested`.
-Cancellation uses the resource mutation `PATCH /api/withdrawals/:id` with
-`{ "status": "cancelled" }`; the record is retained for audit rather than
-deleted.
+again. User cancellation is offered only while a request is still `requested`
+and uses `PATCH /api/withdrawals/:id` with `{ "status": "cancelled" }`.
 
-Payout execution is asynchronous and remains the responsibility of the existing
-operator/worker/provider flow. The UI observes persisted states (`requested`,
-`approved`, `completed`, `rejected`, `cancelled`, and `failed`) and never calls a
-payout provider directly. The current user-facing destination is the existing
-provider-neutral manual destination reference; no provider credentials are
-shown.
+An approved withdrawal is paid manually outside Cliqero. The operator then
+records the already-sent payment, optional external reference, and note through
+`PATCH /api/operator/withdrawals/:id`. This updates the withdrawal and completes
+its reservation in one transaction. External automation can use the same API;
+Cliqero itself does not call an outbound payout provider.
+
+The current user-facing destination remains the provider-neutral manual
+destination reference. Saved structured withdrawal destinations are deferred.

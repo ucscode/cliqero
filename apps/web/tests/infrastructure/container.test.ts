@@ -7,7 +7,6 @@ const loaders = vi.hoisted(() => ({
   nowPayments: vi.fn(() => null),
   directTrc20: vi.fn(() => null),
   paystack: vi.fn(() => null),
-  paystackPayout: vi.fn(() => null),
 }));
 
 vi.mock("@/providers/payment/bank-transfer/config", () => ({
@@ -22,9 +21,6 @@ vi.mock("@/providers/payment/direct-trc20/config", () => ({
 vi.mock("@/providers/payment/paystack/config", () => ({
   loadPaystackConfiguration: loaders.paystack,
 }));
-vi.mock("@/providers/payout/paystack/config", () => ({
-  loadPaystackPayoutConfiguration: loaders.paystackPayout,
-}));
 
 import { createContainer } from "@/infrastructure/container";
 
@@ -33,16 +29,16 @@ describe("application container feature isolation", () => {
 
   it("does not load optional provider configuration for authentication", async () => {
     const container = createContainer("postgresql://localhost/cliqero-test");
+    expect("payoutExecution" in container).toBe(false);
+    expect("payoutProviders" in container).toBe(false);
 
     expect(loaders.bankTransfer).not.toHaveBeenCalled();
     expect(loaders.nowPayments).not.toHaveBeenCalled();
     expect(loaders.directTrc20).not.toHaveBeenCalled();
     expect(loaders.paystack).not.toHaveBeenCalled();
-    expect(loaders.paystackPayout).not.toHaveBeenCalled();
 
     expect(container.authentication).toBe(container.authentication);
     expect(loaders.bankTransfer).not.toHaveBeenCalled();
-    expect(loaders.paystackPayout).not.toHaveBeenCalled();
 
     await container.authentication.betterAuth.close();
     await container.database.close();

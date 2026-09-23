@@ -206,9 +206,20 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await app.withdrawals.approve(seller.id, completed.id);
-    await app.withdrawals.complete(seller.id, completed.id);
-    await app.withdrawals.complete(seller.id, completed.id).catch(() => undefined);
-    expect((await app.withdrawalRepository.findById(completed.id))?.state).toBe("completed");
+    await app.withdrawals.complete(seller.id, completed.id, {
+      externalReference: "manual-transfer-001",
+      note: "Paid after manual bank review",
+    });
+    await expect(app.withdrawals.complete(seller.id, completed.id)).rejects.toThrow(
+      "Invalid withdrawal transition from completed",
+    );
+    expect(await app.withdrawalRepository.findById(completed.id)).toMatchObject({
+      state: "completed",
+      externalReference: "manual-transfer-001",
+      completionNote: "Paid after manual bank review",
+      completedBy: seller.id,
+      completedAt: expect.any(Date),
+    });
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(0n);
     expect((await app.fundsReservation.summarize(seller.id))[0].completedMinor).toBe(5000n);
     await expect(
@@ -222,6 +233,34 @@ suite("withdrawal lifecycle", () => {
         correlationId: newId(),
       }),
     ).rejects.toThrow("Insufficient available funds");
+  });
+  it("cancels a requested withdrawal and releases its reservation", async () => {
+    const { seller } = await setup();
+    const withdrawal = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationType: "manual",
+      destinationReference: "cancelled-request",
+      idempotencyKey: "cancel-request",
+      correlationId: newId(),
+    });
+
+    await expect(app.withdrawals.cancel(seller.id, withdrawal.id)).resolves.toMatchObject({
+      state: "cancelled",
+    });
+    expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(0n);
+    const events = await app.database.query<{ kind: string }>(
+      `select kind
+         from ledger_capability.withdrawal_reservation_events
+        where reservation_id=(
+          select id from ledger_capability.withdrawal_reservations
+           where withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
+        )
+        order by created_at desc,id desc`,
+      [withdrawal.id],
+    );
+    expect(events.rows[0]?.kind).toBe("released");
   });
   it("does not allow cancellation after approval and keeps ownership immutable", async () => {
     const { seller } = await setup();

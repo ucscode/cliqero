@@ -95,13 +95,6 @@ CREATE SCHEMA payment_capability;
 
 
 --
--- Name: payout_capability; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA payout_capability;
-
-
---
 -- Name: purchase_capability; Type: SCHEMA; Schema: -; Owner: -
 --
 
@@ -1373,136 +1366,6 @@ ALTER TABLE payment_capability.reconciliation_attempts ALTER COLUMN id ADD GENER
 
 
 --
--- Name: attempts; Type: TABLE; Schema: payout_capability; Owner: -
---
-
-CREATE TABLE payout_capability.attempts (
-    uuid uuid NOT NULL,
-    provider_name text NOT NULL,
-    provider_request_key text NOT NULL,
-    provider_reference text,
-    amount_minor bigint NOT NULL,
-    currency text NOT NULL,
-    state text NOT NULL,
-    failure_category text,
-    failure_reason text,
-    provider_metadata jsonb,
-    correlation_id uuid NOT NULL,
-    attempt_number integer NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    submitted_at timestamp with time zone,
-    completed_at timestamp with time zone,
-    id bigint NOT NULL,
-    execution_id bigint NOT NULL,
-    withdrawal_id bigint NOT NULL,
-    CONSTRAINT payout_attempts_amount_positive CHECK ((amount_minor > 0)),
-    CONSTRAINT payout_attempts_currency_format CHECK ((currency ~ '^[A-Z]{3}$'::text)),
-    CONSTRAINT payout_attempts_failure_category_valid CHECK (((failure_category IS NULL) OR (failure_category = ANY (ARRAY['retryable_technical'::text, 'permanent_validation'::text, 'provider_rejection'::text, 'unknown'::text, 'authenticated_provider_failure'::text])))),
-    CONSTRAINT payout_attempts_number_positive CHECK ((attempt_number > 0)),
-    CONSTRAINT payout_attempts_state_valid CHECK ((state = ANY (ARRAY['created'::text, 'submitted'::text, 'succeeded'::text, 'failed'::text, 'unknown'::text, 'pending'::text])))
-);
-
-
---
--- Name: attempts_id_seq; Type: SEQUENCE; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE payout_capability.attempts ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME payout_capability.attempts_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
--- Name: executions; Type: TABLE; Schema: payout_capability; Owner: -
---
-
-CREATE TABLE payout_capability.executions (
-    uuid uuid NOT NULL,
-    provider_name text NOT NULL,
-    idempotency_key text NOT NULL,
-    state text DEFAULT 'ready'::text NOT NULL,
-    attempt_count integer DEFAULT 0 NOT NULL,
-    next_attempt_at timestamp with time zone,
-    last_error text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    id bigint NOT NULL,
-    withdrawal_id bigint NOT NULL,
-    CONSTRAINT payout_executions_attempt_nonnegative CHECK ((attempt_count >= 0)),
-    CONSTRAINT payout_executions_state_valid CHECK ((state = ANY (ARRAY['ready'::text, 'submitted'::text, 'succeeded'::text, 'failed'::text, 'unknown'::text])))
-);
-
-
---
--- Name: executions_id_seq; Type: SEQUENCE; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE payout_capability.executions ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME payout_capability.executions_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
--- Name: paystack_events; Type: TABLE; Schema: payout_capability; Owner: -
---
-
-CREATE TABLE payout_capability.paystack_events (
-    id uuid NOT NULL,
-    event_key text NOT NULL,
-    event_type text NOT NULL,
-    provider_reference text NOT NULL,
-    amount_minor text NOT NULL,
-    currency text NOT NULL,
-    payload jsonb NOT NULL,
-    ignored_reason text,
-    received_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: paystack_recipients; Type: TABLE; Schema: payout_capability; Owner: -
---
-
-CREATE TABLE payout_capability.paystack_recipients (
-    uuid uuid DEFAULT gen_random_uuid() NOT NULL,
-    destination_fingerprint text NOT NULL,
-    recipient_code text NOT NULL,
-    bank_code text NOT NULL,
-    account_last4 text NOT NULL,
-    account_name text NOT NULL,
-    active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    id bigint NOT NULL,
-    account_id bigint NOT NULL
-);
-
-
---
--- Name: paystack_recipients_id_seq; Type: SEQUENCE; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE payout_capability.paystack_recipients ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME payout_capability.paystack_recipients_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
 -- Name: purchases; Type: TABLE; Schema: purchase_capability; Owner: -
 --
 
@@ -1808,6 +1671,9 @@ CREATE TABLE withdrawal_capability.withdrawals (
     idempotency_key text NOT NULL,
     correlation_id uuid NOT NULL,
     reason text,
+    external_reference text,
+    completion_note text,
+    completed_by bigint,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     approved_at timestamp with time zone,
@@ -2492,102 +2358,6 @@ ALTER TABLE ONLY payment_capability.reconciliation_attempts
 
 
 --
--- Name: attempts attempts_pkey; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.attempts
-    ADD CONSTRAINT attempts_pkey PRIMARY KEY (id);
-
-
---
--- Name: attempts attempts_uuid_unique; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.attempts
-    ADD CONSTRAINT attempts_uuid_unique UNIQUE (uuid);
-
-
---
--- Name: executions executions_idempotency_key_key; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.executions
-    ADD CONSTRAINT executions_idempotency_key_key UNIQUE (idempotency_key);
-
-
---
--- Name: executions executions_pkey; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.executions
-    ADD CONSTRAINT executions_pkey PRIMARY KEY (id);
-
-
---
--- Name: executions executions_uuid_unique; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.executions
-    ADD CONSTRAINT executions_uuid_unique UNIQUE (uuid);
-
-
---
--- Name: attempts payout_attempts_request_unique_numeric; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.attempts
-    ADD CONSTRAINT payout_attempts_request_unique_numeric UNIQUE (execution_id, attempt_number);
-
-
---
--- Name: executions payout_executions_withdrawal_unique_numeric; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.executions
-    ADD CONSTRAINT payout_executions_withdrawal_unique_numeric UNIQUE (withdrawal_id);
-
-
---
--- Name: paystack_events paystack_events_event_key_key; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.paystack_events
-    ADD CONSTRAINT paystack_events_event_key_key UNIQUE (event_key);
-
-
---
--- Name: paystack_events paystack_events_pkey; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.paystack_events
-    ADD CONSTRAINT paystack_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: paystack_recipients paystack_recipients_pkey; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.paystack_recipients
-    ADD CONSTRAINT paystack_recipients_pkey PRIMARY KEY (id);
-
-
---
--- Name: paystack_recipients paystack_recipients_recipient_code_key; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.paystack_recipients
-    ADD CONSTRAINT paystack_recipients_recipient_code_key UNIQUE (recipient_code);
-
-
---
--- Name: paystack_recipients paystack_recipients_uuid_unique; Type: CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.paystack_recipients
-    ADD CONSTRAINT paystack_recipients_uuid_unique UNIQUE (uuid);
-
-
---
 -- Name: purchases purchases_checkout_unique_numeric; Type: CONSTRAINT; Schema: purchase_capability; Owner: -
 --
 
@@ -3142,41 +2912,6 @@ CREATE INDEX reconciliation_attempts_payment_idx ON payment_capability.reconcili
 
 
 --
--- Name: payout_attempts_reference_idx; Type: INDEX; Schema: payout_capability; Owner: -
---
-
-CREATE INDEX payout_attempts_reference_idx ON payout_capability.attempts USING btree (provider_name, provider_reference) WHERE (provider_reference IS NOT NULL);
-
-
---
--- Name: payout_attempts_withdrawal_idx; Type: INDEX; Schema: payout_capability; Owner: -
---
-
-CREATE INDEX payout_attempts_withdrawal_idx ON payout_capability.attempts USING btree (withdrawal_id, created_at DESC);
-
-
---
--- Name: payout_executions_retry_idx; Type: INDEX; Schema: payout_capability; Owner: -
---
-
-CREATE INDEX payout_executions_retry_idx ON payout_capability.executions USING btree (state, next_attempt_at) WHERE (state = ANY (ARRAY['failed'::text, 'unknown'::text]));
-
-
---
--- Name: paystack_events_reference_idx; Type: INDEX; Schema: payout_capability; Owner: -
---
-
-CREATE INDEX paystack_events_reference_idx ON payout_capability.paystack_events USING btree (provider_reference);
-
-
---
--- Name: paystack_recipients_account_idx; Type: INDEX; Schema: payout_capability; Owner: -
---
-
-CREATE INDEX paystack_recipients_account_idx ON payout_capability.paystack_recipients USING btree (account_id);
-
-
---
 -- Name: purchases_buyer_idx; Type: INDEX; Schema: purchase_capability; Owner: -
 --
 
@@ -3686,38 +3421,6 @@ ALTER TABLE ONLY payment_capability.reconciliation_attempts
 
 
 --
--- Name: attempts payout_attempts_execution_fk; Type: FK CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.attempts
-    ADD CONSTRAINT payout_attempts_execution_fk FOREIGN KEY (execution_id) REFERENCES payout_capability.executions(id);
-
-
---
--- Name: attempts payout_attempts_withdrawal_fk; Type: FK CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.attempts
-    ADD CONSTRAINT payout_attempts_withdrawal_fk FOREIGN KEY (withdrawal_id) REFERENCES withdrawal_capability.withdrawals(id);
-
-
---
--- Name: executions payout_executions_withdrawal_fk; Type: FK CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.executions
-    ADD CONSTRAINT payout_executions_withdrawal_fk FOREIGN KEY (withdrawal_id) REFERENCES withdrawal_capability.withdrawals(id);
-
-
---
--- Name: paystack_recipients paystack_recipients_account_fk; Type: FK CONSTRAINT; Schema: payout_capability; Owner: -
---
-
-ALTER TABLE ONLY payout_capability.paystack_recipients
-    ADD CONSTRAINT paystack_recipients_account_fk FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id);
-
-
---
 -- Name: purchases purchases_buyer_fk; Type: FK CONSTRAINT; Schema: purchase_capability; Owner: -
 --
 
@@ -3867,6 +3570,14 @@ ALTER TABLE ONLY wallet_capability.debits
 
 ALTER TABLE ONLY withdrawal_capability.withdrawals
     ADD CONSTRAINT withdrawals_account_fk FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id);
+
+
+--
+-- Name: withdrawals withdrawals_completed_by_fk; Type: FK CONSTRAINT; Schema: withdrawal_capability; Owner: -
+--
+
+ALTER TABLE ONLY withdrawal_capability.withdrawals
+    ADD CONSTRAINT withdrawals_completed_by_fk FOREIGN KEY (completed_by) REFERENCES identity_capability.accounts(id);
 
 
 --

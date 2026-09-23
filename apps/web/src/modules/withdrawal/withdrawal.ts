@@ -12,6 +12,10 @@ export interface Withdrawal {
   idempotencyKey: string;
   correlationId: string;
   reason?: string | null;
+  externalReference?: string | null;
+  completionNote?: string | null;
+  completedBy?: string | null;
+  completedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -39,4 +43,10 @@ export interface WithdrawalRepository {
     to: WithdrawalState,
     reason?: string,
   ): Promise<void>;
+  complete(
+    id: string,
+    actorId: string,
+    externalReference: string | null,
+    note: string | null,
+  ): Promise<Date>;
 }

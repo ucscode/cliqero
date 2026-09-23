@@ -320,8 +320,6 @@ providers/
   payment/
     paystack/
     nowpayments/
-  payout/
-    paystack/
   money/
     fawaz/
     frankfurter/

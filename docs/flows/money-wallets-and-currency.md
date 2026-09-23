@@ -152,13 +152,15 @@ Automatic external refunds do not need to be part of V1 unless required.
 
 ## Withdrawals
 
-Payouts may be manual in the initial production release.
+Withdrawals are handled manually outside Cliqero in the initial production release.
 
-A user can request withdrawal of eligible available earnings. An operator reviews the request, sends the money manually, records the transfer/reference, and updates the withdrawal state.
+A user can request withdrawal of eligible available earnings. Cliqero reserves the funds; an operator reviews the request, sends the money externally, and records the transfer/reference and completion on the withdrawal resource. External automation may perform the sending step and use the same API to record completion.
 
-Suggested lifecycle:
+Lifecycle:
 
-`requested -> under_review -> approved -> sent -> completed`
+`requested -> approved -> completed`
+
+Requests may instead be rejected or cancelled while still requested. Cliqero does not execute outbound transfers or verify payout providers.
 
 with rejection/failure states as required.
 

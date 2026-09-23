@@ -1,6 +1,5 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import { newId } from "@/kernel/ids";
 import { requireCapabilityScope, requirePrincipal, type Env } from "../../../shared/context";
 import { domainError } from "../../../shared/error";
 import { errorSchema } from "../../../shared/schemas";
@@ -141,7 +140,7 @@ export function registerOperatorWithdrawalRoutes(
             ? await container.withdrawals.approve(p.accountId, id)
             : body.status === "rejected"
               ? await container.withdrawals.reject(p.accountId, id, body.reason)
-              : await container.payoutExecution.manualComplete(id, p.accountId, newId(), {
+              : await container.withdrawals.complete(p.accountId, id, {
                   externalReference: body.external_reference,
                   note: body.note,
                 });
@@ -151,46 +150,4 @@ export function registerOperatorWithdrawalRoutes(
       }
     },
   );
-  for (const [path, operation] of [
-    ["/api/operator/withdrawals/{withdrawalId}/payout", "payout"],
-    ["/api/operator/withdrawals/{withdrawalId}/payout/reconcile", "reconcile"],
-  ] as const) {
-    app.openapi(
-      createRoute({
-        method: "post",
-        path,
-        request: withdrawalParam,
-        responses: {
-          200: {
-            description: "Withdrawal operation",
-            content: { "application/json": { schema: z.any() } },
-          },
-          401: {
-            description: "Authentication required",
-            content: { "application/json": { schema: errorSchema } },
-          },
-          403: {
-            description: "Operator access required",
-            content: { "application/json": { schema: errorSchema } },
-          },
-        },
-      }),
-      async (c) => {
-        const p = requirePrincipal(c);
-        if (!(p instanceof Object) || !("accountId" in p)) return p;
-        const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
-        if (denied) return denied;
-        try {
-          const id = c.req.valid("param").withdrawalId;
-          const result =
-            operation === "payout"
-              ? await container.payoutExecution.execute(id, newId())
-              : await container.payoutExecution.reconcile(id, newId());
-          return c.json(jsonSafe(result), 200);
-        } catch (error) {
-          return domainError(c, error);
-        }
-      },
-    );
-  }
 }

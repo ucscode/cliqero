@@ -31,27 +31,28 @@ The development audit is reproducible with `node scripts/audit-http-api.mjs`. It
 | GET                       | `/api/withdrawals`                | account                             | withdrawal                 | none                                                        |              200 | none                                                          | withdrawal                                 | n/a                   | 200                                                         |
 | GET                       | `/api/withdrawals/:id`            | owner                               | withdrawal                 | path id                                                     |              200 | none                                                          | withdrawal                                 | n/a                   | missing 404                                                 |
 | PATCH                     | `/api/withdrawals/:id`            | owner                               | withdrawal                 | `{ status: "cancelled" }`                                   |              200 | cancellation/release                                          | withdrawal/reservation                     | transition-idempotent | missing 404                                                 |
+| GET                       | `/api/operator/withdrawals`       | `withdrawals.manage`                | withdrawal operations      | state/search/cursor?                                        |              200 | none                                                          | withdrawal projection                      | n/a                   | non-operator rejected                                       |
+| GET                       | `/api/operator/withdrawals/:id`   | `withdrawals.manage`                | withdrawal operations      | path id                                                     |              200 | none                                                          | withdrawal projection                      | n/a                   | non-operator rejected                                       |
+| PATCH                     | `/api/operator/withdrawals/:id`   | `withdrawals.manage`                | withdrawal operations      | status, reason, external reference, note                    |              200 | approval, rejection, or manual completion/reservation update  | withdrawal + earnings reservation          | state transition      | capability and API-key scope enforced                       |
 | POST                      | `/api/webhooks/paystack`          | provider signature                  | integration ingress        | raw provider event                                          |              200 | provider event + verification work                            | Paystack signature, event store            | event identity        | invalid signature 401                                       |
 
 ## Operator/internal surface
 
 These routes were exercised with an authenticated non-operator and rejected (403), proving the public authorization boundary. Their valid domain behavior is covered by PostgreSQL integration tests rather than granting operator authority in the public audit fixture.
 
-| Method | Path                                             | Capability                     | Input               | Success | Persisted fact                            | Idem.            | HTTP auth result      |
-| ------ | ------------------------------------------------ | ------------------------------ | ------------------- | ------: | ----------------------------------------- | ---------------- | --------------------- |
-| GET    | `/api/operator/paystack/events`                  | provider audit                 | limit               |     200 | none                                      | n/a              | 403                   |
-| GET    | `/api/operator/paystack/reconcile`               | legacy provider reconciliation | age/limit           |     200 | none                                      | n/a              | 403                   |
-| POST   | `/api/operator/paystack/reconcile`               | legacy provider reconciliation | payment id          |     200 | reconciliation attempt                    | required         | non-operator rejected |
-| POST   | `/api/operator/purchases/reverse`                | reversal                       | purchase id, reason |     200 | compensating entries/reversal             | required         | 403                   |
-| POST   | `/api/operator/settlement`                       | earnings settlement            | batch size          |     200 | settlements                               | entry uniqueness | 403                   |
-| GET    | `/api/operator/withdrawals`                      | withdrawal operations          | state?              |     200 | none                                      | n/a              | 403                   |
-| GET    | `/api/operator/withdrawals/:id`                  | withdrawal operations          | path id             |     200 | none                                      | n/a              | 403                   |
-| PATCH  | `/api/operator/withdrawals/:id`                  | withdrawal operations          | status/reason/note  |     200 | approval, rejection, or manual completion | state transition | 403                   |
-| GET    | `/api/operator/withdrawals/:id/payout`           | payout audit                   | path id             |     200 | none                                      | n/a              | 403                   |
-| POST   | `/api/operator/withdrawals/:id/payout`           | payout execution               | path id             |     200 | payout attempt                            | stable execution | 403                   |
-| POST   | `/api/operator/withdrawals/:id/payout/reconcile` | payout reconciliation          | path id             |     200 | reconciliation result                     | repeat-safe      | 403                   |
+| Method | Path                               | Capability                     | Input               | Success | Persisted fact                            | Idem.            | HTTP auth result      |
+| ------ | ---------------------------------- | ------------------------------ | ------------------- | ------: | ----------------------------------------- | ---------------- | --------------------- |
+| GET    | `/api/operator/paystack/events`    | provider audit                 | limit               |     200 | none                                      | n/a              | 403                   |
+| GET    | `/api/operator/paystack/reconcile` | legacy provider reconciliation | age/limit           |     200 | none                                      | n/a              | 403                   |
+| POST   | `/api/operator/paystack/reconcile` | legacy provider reconciliation | payment id          |     200 | reconciliation attempt                    | required         | non-operator rejected |
+| POST   | `/api/operator/purchases/reverse`  | reversal                       | purchase id, reason |     200 | compensating entries/reversal             | required         | 403                   |
+| POST   | `/api/operator/settlement`         | earnings settlement            | batch size          |     200 | settlements                               | entry uniqueness | 403                   |
+| GET    | `/api/operator/withdrawals`        | withdrawal operations          | state?              |     200 | none                                      | n/a              | 403                   |
+| GET    | `/api/operator/withdrawals/:id`    | withdrawal operations          | path id             |     200 | none                                      | n/a              | 403                   |
+| PATCH  | `/api/operator/withdrawals/:id`    | withdrawal operations          | status/reason/note  |     200 | approval, rejection, or manual completion | state transition | 403                   |
 
-The audit intentionally does not call a live payment or payout provider.
+The audit intentionally does not call a live payment provider. Withdrawal
+execution happens outside Cliqero; the PATCH above records the completed action.
 
 # Listing and dashboard additions
 

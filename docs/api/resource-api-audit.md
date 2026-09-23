@@ -7,8 +7,8 @@ after route matching.
 
 ## Scope and counts
 
-The audit inspected 69 compatibility path patterns and 38 Hono path patterns;
-three patterns are shared by both surfaces, giving 104 unique application API
+The audit inspected 69 compatibility path patterns and 36 Hono path patterns;
+three patterns are shared by both surfaces, giving 102 unique application API
 path patterns. Better Auth, media/navigation routes, and provider callbacks
 were inspected separately as protocol or framework boundaries.
 
@@ -21,10 +21,9 @@ The withdrawal normalization completed in this change has these decisions:
 | `POST /api/operator/withdrawals/{id}/reject`   | `PATCH /api/operator/withdrawals/{id}` with `{ status: "rejected", reason }`                      | REMOVE/REPLACE                             |
 | `POST /api/operator/withdrawals/{id}/complete` | `PATCH /api/operator/withdrawals/{id}` with `{ status: "completed", external_reference?, note? }` | REMOVE/REPLACE                             |
 
-The old operator state routes are no longer registered or represented in
-OpenAPI. Payout execution remains a noun subresource because it creates or
-reconciles a separate payout-attempt resource; it is not a second withdrawal
-state-mutation API.
+The old operator state routes and automatic payout execution/reconciliation
+routes are no longer registered or represented in OpenAPI. Withdrawal
+completion records a payment already sent outside Cliqero.
 
 ## Access model
 
@@ -151,7 +150,6 @@ are part of the current migration boundary.
 | POST               | `/api/operator/treasury/entries`                                                                                                            | manual treasury fact creation; KEEP                                                             |
 | GET, PATCH         | `/api/operator/withdrawals/{withdrawalId}`                                                                                                  | operator withdrawal resource; PATCH is the canonical state mutation                             |
 | GET                | `/api/operator/withdrawals`                                                                                                                 | operator withdrawal collection; KEEP                                                            |
-| POST               | `/api/operator/withdrawals/{withdrawalId}/payout`, `/api/operator/withdrawals/{withdrawalId}/payout/reconcile`                              | payout-attempt subresources; KEEP as separate provider/process resources                        |
 
 ## State PATCH contracts
 
@@ -178,23 +176,15 @@ Neither route accepts arbitrary fields or an arbitrary target account.
 The audit found command-shaped or process-shaped paths outside the withdrawal
 correction: listing publish/restore, blog publish/unpublish, integration
 rotation, checkout payment, funding process operations, API-key revoke,
-operator settlement/reversal, and provider reconciliation. They remain
+operator settlement/reversal, and payment-provider reconciliation. They remain
 explicitly recorded above rather than being mechanically rewritten: each needs
 its own typed resource/process contract and browser/test migration. Provider
-callbacks, Better Auth, access redirects, evidence, media, payout attempts, and
-transaction identities are legitimate protocol or noun subresources.
+callbacks, Better Auth, access redirects, evidence, media, and transaction
+identities are legitimate protocol or noun subresources.
 
-## Payout direction
+## Manual withdrawal direction
 
-The existing automatic payout components remain in place and were not expanded:
-
-- `PayoutExecutionProcessor` prepares idempotent attempts, submits through the
-  configured `PayoutProviderRegistry`, and reconciles unknown outcomes.
-- `DevelopmentPayoutProvider` supplies local deterministic behavior.
-- configured payout providers under `src/providers/payout/` implement provider
-  protocol calls.
-
-This is potentially inconsistent with the current manual-withdrawal product
-direction, but removing it would be a separate lifecycle/provider project. The
-canonical withdrawal API now also supports an operator recording a manual
-completion through PATCH without requiring provider execution.
+Cliqero reserves earnings, supports operator review, and records completion
+after money has been sent externally. The API is available to external
+automation clients, but Cliqero does not execute transfers internally. Both the
+operator UI and an automation update the same withdrawal resource with PATCH.

@@ -119,7 +119,7 @@ Resolution is recursive. Missing referenced variables fail with configuration co
 
 External payment providers are incoming-funding adapters. They add verified funds to the buyer's internal account value; they do not purchase listings or create entitlements directly.
 
-Provider implementations and configuration are optional/removable. Payment-provider configuration is independent from payout-provider configuration even when the same external company supports both capabilities.
+Inbound payment-provider implementations and configuration are optional/removable. Outbound withdrawal payments are sent outside Cliqero and require no provider configuration.
 
 Use YAML block-style sequences and mappings. Avoid flow-style collections in maintained configuration files.
 

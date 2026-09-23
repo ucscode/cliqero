@@ -40,7 +40,7 @@ An account with `catalogue.manage` is not a seller and does not become a payee m
 
 ## Administrator / operator
 
-Operators manage the wider platform: catalogue, users/capabilities, financial operations, provider operations, distributions, withdrawals/payouts, treasury, referral/network inspection, failures/retries, and audit/operational visibility.
+Operators manage the wider platform: catalogue, users/capabilities, financial operations, inbound payment operations, distributions, manual withdrawals, treasury, referral/network inspection, failures/retries, and audit/operational visibility.
 
 Administrative corrections preserve history through explicit auditable facts rather than deleting financial truth.
 

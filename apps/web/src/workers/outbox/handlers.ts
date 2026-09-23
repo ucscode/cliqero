@@ -10,11 +10,6 @@ export class AuditedFactHandler implements OutboxEventHandler {
     "withdrawal.rejected",
     "withdrawal.cancelled",
     "withdrawal.completed",
-    "payout.attempt.created",
-    "payout.submitted",
-    "payout.failed",
-    "payout.succeeded",
-    "payout.reconciliation.required",
   ];
   async handle(_: ClaimedOutboxEvent): Promise<void> {
     // These durable facts currently have no additional asynchronous consequence.

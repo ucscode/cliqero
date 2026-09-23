@@ -33,8 +33,7 @@ export type WithdrawalPage = {
 };
 
 export type OperatorWithdrawalState = WithdrawalState;
-export type OperatorWithdrawalAttention =
-  "review" | "payout" | "reconciliation" | "retry" | "retry_wait" | "none";
+export type OperatorWithdrawalAttention = "review" | "action_required" | "none";
 export type OperatorWithdrawal = {
   id: string;
   account: { id: string; username: string; email: string | null };
@@ -50,27 +49,11 @@ export type OperatorWithdrawal = {
     currency: string;
     state: "reserved" | "released" | "completed";
   } | null;
-  payout: {
-    provider: string;
-    state: "ready" | "submitted" | "succeeded" | "failed" | "unknown";
-    attemptCount: number;
-    nextAttemptAt: string | null;
-    lastError: string | null;
-    providerReference: string | null;
-  } | null;
+  externalReference: string | null;
+  completionNote: string | null;
+  completedBy: string | null;
+  completedAt: string | null;
   attention: OperatorWithdrawalAttention;
 };
 export type OperatorWithdrawalPage = { items: OperatorWithdrawal[]; nextCursor: string | null };
-export type OperatorWithdrawalDetail = OperatorWithdrawal & {
-  attempts: Array<{
-    id: string;
-    number: number;
-    provider: string;
-    state: string;
-    providerReference: string | null;
-    failureCategory: string | null;
-    failureReason: string | null;
-    createdAt: string;
-    completedAt: string | null;
-  }>;
-};
+export type OperatorWithdrawalDetail = OperatorWithdrawal;
