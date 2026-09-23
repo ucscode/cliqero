@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { apiError } from "../../http";
+import { accountReferralSource, apiError } from "../../http";
 import { getContainer } from "@/infrastructure/container";
 import { usernameSchema } from "@/modules/identity/username";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
+import { ACCOUNT_REFERRAL_COOKIE, clearReferralCookieHeader } from "@/modules/referral/cookie";
 
 const bodySchema = z.object({
   username: usernameSchema,
@@ -37,9 +38,10 @@ export async function POST(request: Request) {
       principal.authUserId,
       bodySchema.parse(await request.json()),
       request.headers,
+      accountReferralSource(request),
     );
     const profile = await getContainer().profiles.get(account.id);
-    return Response.json(
+    const response = Response.json(
       {
         id: account.id,
         email: profile.email,
@@ -48,6 +50,8 @@ export async function POST(request: Request) {
       },
       { status: 201 },
     );
+    response.headers.set("Set-Cookie", clearReferralCookieHeader(ACCOUNT_REFERRAL_COOKIE));
+    return response;
   } catch (error) {
     return apiError(error, request);
   }

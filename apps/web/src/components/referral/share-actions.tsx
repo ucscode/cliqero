@@ -18,11 +18,15 @@ import { createCopyFeedbackReset } from "./copy-feedback";
 type ReferralShareActionsProps = {
   url: string;
   compact?: boolean;
+  shareText?: string;
 };
 
-export function referralShareDestinations(url: string) {
+export function referralShareDestinations(
+  url: string,
+  shareText = "Take a look at this catalogue listing",
+) {
   const encodedUrl = encodeURIComponent(url);
-  const encodedText = encodeURIComponent("Take a look at this catalogue listing");
+  const encodedText = encodeURIComponent(shareText);
   return [
     {
       label: "WhatsApp",
@@ -47,7 +51,11 @@ export function referralShareDestinations(url: string) {
   ] as const;
 }
 
-export function ReferralShareActions({ url, compact = false }: ReferralShareActionsProps) {
+export function ReferralShareActions({
+  url,
+  compact = false,
+  shareText,
+}: ReferralShareActionsProps) {
   const [state, setState] = useState<"idle" | "copied" | "shared" | "fallback">("idle");
   const [busy, setBusy] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -94,7 +102,7 @@ export function ReferralShareActions({ url, compact = false }: ReferralShareActi
     LinkedIn: LinkedinLogoIcon,
     Telegram: TelegramLogoIcon,
   } as const;
-  const destinations = referralShareDestinations(url).map((destination) => ({
+  const destinations = referralShareDestinations(url, shareText).map((destination) => ({
     ...destination,
     icon: iconByDestination[destination.label],
   }));

@@ -12,7 +12,7 @@ suite("referral graph and trusted purchase attribution", () => {
   beforeEach(() =>
     app.database.query(`truncate table
     ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.reversals,ledger_capability.purchase_distributions,payment_capability.reconciliation_attempts,
-    referral_capability.listing_attributions,referral_capability.account_referrals,
+    referral_capability.listing_attributions,referral_capability.account_attributions,referral_capability.account_referrals,
     payment_capability.provider_events,access_capability.integration_listings,access_capability.integrations,access_capability.access_grants,
     entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,
     identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records,kernel.audit_records restart identity cascade`),
@@ -104,6 +104,84 @@ suite("referral graph and trusted purchase attribution", () => {
     await expect(
       app.database.query("select 1 from referral_capability.listing_referral_links"),
     ).rejects.toThrow();
+  });
+
+  it("assigns the latest valid account referral only during new-account registration", async () => {
+    const alice = await account("alice"),
+      bob = await account("bob");
+    const aliceVisit = await app.accountReferralAttribution.visit(alice.id);
+    const bobVisit = await app.accountReferralAttribution.visit(bob.id, aliceVisit!.source);
+    expect(await app.accountReferralAttribution.resolve(aliceVisit!.source)).toBeNull();
+    expect(await app.accountReferralAttribution.resolve(bobVisit!.source)).toEqual({
+      referrerAccountId: bob.id,
+    });
+
+    const referred = await app.authentication.register({
+      email: "referred@example.com",
+      username: "referred_account",
+      password: "correct-horse-battery",
+      country: "NG",
+      accountReferralSource: bobVisit!.source,
+    });
+    expect(
+      (
+        await app.database.query<{ parent_account_id: string }>(
+          `select parent.uuid parent_account_id
+             from referral_capability.account_referrals relationship
+             join identity_capability.accounts parent on parent.id=relationship.parent_account_id
+             where relationship.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+          [referred.id],
+        )
+      ).rows[0].parent_account_id,
+    ).toBe(bob.id);
+    expect(await app.accountReferralAttribution.resolve(bobVisit!.source)).toBeNull();
+
+    const expiredVisit = await app.accountReferralAttribution.visit(alice.id);
+    await app.database.query(
+      `update referral_capability.account_attributions
+          set expires_at=now()-interval '1 minute'
+        where state='active'`,
+    );
+    const parentless = await app.authentication.register({
+      email: "parentless@example.com",
+      username: "parentless_account",
+      password: "correct-horse-battery",
+      country: "NG",
+      accountReferralSource: expiredVisit!.source,
+    });
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text count from referral_capability.account_referrals
+            where child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+          [parentless.id],
+        )
+      ).rows[0].count,
+    ).toBe("0");
+  });
+
+  it("keeps account attribution distinct from listing purchase attribution", async () => {
+    const { seller, referrer, listing } = await commerce();
+    const accountVisit = await app.accountReferralAttribution.visit(referrer.id);
+    const listingVisit = await app.referralAttribution.visit(referrer.id, listing.id);
+    expect(accountVisit?.source).toBeTruthy();
+    expect(listingVisit?.source).toBeTruthy();
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text count from referral_capability.account_attributions`,
+        )
+      ).rows[0].count,
+    ).toBe("1");
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text count from referral_capability.listing_attributions where listing_id=(select id from listing_capability.listings where uuid=$1)`,
+          [listing.id],
+        )
+      ).rows[0].count,
+    ).toBe("1");
+    expect(seller.id).not.toBe(referrer.id);
   });
 
   it("rejects indirect cycles inside PostgreSQL", async () => {

@@ -21,6 +21,15 @@ account creation fails. Existing pre-Better-Auth scrypt credentials are not
 silently imported; development/pre-production accounts must register again or
 use an explicit password reset. This avoids keeping two password verifiers.
 
+When registration carries the opaque `cliqero_referrer` cookie, the same
+account-creation transaction claims the active account-referral attribution and
+assigns the new account's parent through the referral application service.
+Missing, malformed, revoked, and expired attribution is treated as the normal
+parentless-registration case. The cookie is cleared after successful account
+establishment. Google-first onboarding uses the same server-side claim when
+`POST /api/me/onboarding` completes the account; ordinary login never consumes
+or changes referral relationships.
+
 Google is enabled when the `social.google` provider is enabled with complete
 credentials in `config/security/auth.yaml`. Better Auth's account-linking policy trusts Google only when its verified
 identity can be safely linked; a local password identity must have a verified

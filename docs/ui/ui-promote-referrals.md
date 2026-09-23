@@ -26,6 +26,14 @@ Referrals sidebar group:
   states are displayed as returned by the ledger; visits do not imply a
   commission.
 
+The dashboard Promote view also shows a direct account invitation URL,
+`/r/{account-uuid}`, with the existing copy/share controls. Opening that URL
+redirects to registration and stores only an opaque HttpOnly account-referrer
+token. A valid product URL refreshes this same account attribution as well as
+its separate listing attribution. The token is consumed only by successful
+email/password registration or OAuth onboarding, then cleared; ordinary login
+and later referral clicks cannot re-parent an established account.
+
 All amounts are rendered from canonical USD minor units. Referral attribution
 continues to use the deterministic `/r/{referrer}/{listing}` URL and the
 existing `cliqero_attribution` cookie, and is resolved by checkout rather than

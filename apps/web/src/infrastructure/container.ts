@@ -39,6 +39,7 @@ import { PaymentCompletionService } from "@/application/checkout/completion";
 import { BuyerAccessService } from "@/application/access";
 import { ReferralGraphService } from "@/application/referrals";
 import { ReferralAttributionService } from "@/application/attributions";
+import { AccountReferralAttributionService } from "@/application/account-referral-attribution";
 import { CommissionDistributionService } from "@/modules/referral/commission";
 import {
   PostgresFinancialDistributionPolicyRepository,
@@ -207,6 +208,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const commissionPolicy = lazy(() => new PostgresCommissionPolicyRepository(database));
   const referralAttributionRepository = lazy(
     () => new PostgresReferralAttributionRepository(database),
+  );
+  const accountReferralAttribution = lazy(
+    () => new AccountReferralAttributionService(referralAttributionRepository(), accounts()),
   );
   const ledger = lazy(() => new PostgresLedgerRepository(database));
   const financialDistributionPolicy = lazy(
@@ -494,10 +498,19 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   );
   const betterAuth = lazy(() => new BetterAuthBoundary(database, databaseUrl));
   const authentication = lazy(() =>
-    Object.assign(new AuthenticationService(accounts(), betterAuth(), database), {
-      auth: betterAuth().auth,
-      betterAuth: betterAuth(),
-    }),
+    Object.assign(
+      new AuthenticationService(
+        accounts(),
+        betterAuth(),
+        database,
+        accountReferralAttribution(),
+        referralGraphService(),
+      ),
+      {
+        auth: betterAuth().auth,
+        betterAuth: betterAuth(),
+      },
+    ),
   );
   const apiKeyRepository = lazy(() => new PostgresApiKeyRepository(database));
   const apiKeys = lazy(() => new ApiKeyService(apiKeyRepository(), database, database));
@@ -668,6 +681,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get referralAttribution() {
       return referralAttribution();
+    },
+    get accountReferralAttribution() {
+      return accountReferralAttribution();
     },
     get authentication() {
       return authentication();

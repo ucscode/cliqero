@@ -318,6 +318,13 @@ suite("Better Auth and Cliqero identity boundary", () => {
   });
 
   it("represents social-first users as authenticated but incomplete until onboarding", async () => {
+    const referrer = await app.authentication.register({
+      email: "social-referrer@example.com",
+      username: "social_referrer",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const attribution = await app.accountReferralAttribution.visit(referrer.id);
     const result = await app.authentication.auth.api.signUpEmail({
       body: { name: "social user", email: "social@example.com", password: "correct-horse-battery" },
     });
@@ -330,15 +337,31 @@ suite("Better Auth and Cliqero identity boundary", () => {
       }),
     );
     expect(principal?.account).toBeNull();
-    const account = await app.authentication.completeOnboarding(result.user.id, {
-      username: "socialuser",
-      country: "NG",
-    });
+    const account = await app.authentication.completeOnboarding(
+      result.user.id,
+      {
+        username: "socialuser",
+        country: "NG",
+      },
+      undefined,
+      attribution!.source,
+    );
     expect((await app.authentication.authenticate(session.token!))?.id).toBe(account.id);
     const repeatedLogin = await app.authentication.auth.api.signInEmail({
       body: { email: result.user.email, password: "correct-horse-battery" },
     });
     expect((await app.authentication.authenticate(repeatedLogin.token!))?.id).toBe(account.id);
+    expect(
+      (
+        await app.database.query<{ parent_account_id: string }>(
+          `select parent.uuid parent_account_id
+             from referral_capability.account_referrals relationship
+             join identity_capability.accounts parent on parent.id=relationship.parent_account_id
+             where relationship.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+          [account.id],
+        )
+      ).rows[0].parent_account_id,
+    ).toBe(referrer.id);
     expect(
       (
         await app.database.query<{ display_name: string }>(

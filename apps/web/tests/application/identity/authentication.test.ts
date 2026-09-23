@@ -32,7 +32,7 @@ function dependencies() {
   const service = new AuthenticationService(identity, gateway, {
     transaction: async (operation) => operation(),
   });
-  return { accounts, removedAuthUsers, service };
+  return { accounts, removedAuthUsers, identity, gateway, service };
 }
 
 describe("AuthenticationService application contracts", () => {
@@ -67,5 +67,40 @@ describe("AuthenticationService application contracts", () => {
         country: "NG",
       }),
     ).rejects.toMatchObject({ code: "username_taken", status: 409 });
+  });
+
+  it("claims a valid account referral inside new-account creation", async () => {
+    const first = dependencies();
+    const calls: string[] = [];
+    const service = new AuthenticationService(
+      first.identity,
+      first.gateway,
+      { transaction: async (operation) => operation() },
+      {
+        resolve: async () => null,
+        claim: async (source, childAccountId) => {
+          calls.push(`${source}:${childAccountId}`);
+          return { referrerAccountId: "550e8400-e29b-41d4-a716-446655440000" };
+        },
+        visit: async () => null,
+        urlFor: async () => "https://example.test/r/referrer",
+      },
+      {
+        establish: async (child, parent) => {
+          calls.push(`${child}->${parent}`);
+        },
+      },
+    );
+
+    const account = await service.register({
+      email: "referred@example.com",
+      username: "referred",
+      password: "correct-horse-battery",
+      country: "NG",
+      accountReferralSource: "opaque-token",
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toBe(`opaque-token:${account.id}`);
+    expect(calls[1]).toBe(`${account.id}->550e8400-e29b-41d4-a716-446655440000`);
   });
 });

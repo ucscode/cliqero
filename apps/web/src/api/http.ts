@@ -20,12 +20,20 @@ export async function authenticatedSessionAccount(request: Request): Promise<Acc
 }
 
 export function referralAttributionSource(request: Request): string | undefined {
+  return cookieSource(request, "cliqero_attribution");
+}
+
+export function accountReferralSource(request: Request): string | undefined {
+  return cookieSource(request, "cliqero_referrer");
+}
+
+function cookieSource(request: Request, name: string): string | undefined {
   return request.headers
     .get("cookie")
     ?.split(";")
     .map((part) => part.trim())
-    .find((part) => part.startsWith("cliqero_attribution="))
-    ?.slice("cliqero_attribution=".length);
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
 }
 
 export function apiError(error: unknown, request?: Request): Response {

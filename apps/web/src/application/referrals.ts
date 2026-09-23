@@ -1,9 +1,9 @@
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { AccountReader } from "@/modules/identity/account";
-import type { ReferralGraphRepository } from "@/modules/referral/referral";
+import type { ReferralGraphRepository, ReferralParentAssigner } from "@/modules/referral/referral";
 import type { AuditRecorder } from "@/application/shared/audit";
 
-export class ReferralGraphService {
+export class ReferralGraphService implements ReferralParentAssigner {
   constructor(
     private readonly accounts: AccountReader,
     private readonly graph: ReferralGraphRepository,

@@ -6,6 +6,8 @@ import { assertPasswordMinimum } from "@/modules/identity/password-policy";
 import { normalizeUsername } from "@/modules/identity/username";
 import type { AuthenticationGateway } from "./contracts";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
+import type { AccountReferralAttributionResolver } from "@/modules/referral/attribution";
+import type { ReferralParentAssigner } from "@/modules/referral/referral";
 
 function normalizeCountry(country: string | null | undefined): string | null {
   if (country === undefined || country === null) return null;
@@ -24,6 +26,8 @@ export class AuthenticationService {
     private readonly identity: IdentityPersistence,
     private readonly gateway: AuthenticationGateway,
     private readonly uow: UnitOfWork,
+    private readonly accountReferral?: AccountReferralAttributionResolver,
+    private readonly referralParentAssigner?: ReferralParentAssigner,
   ) {
     // Authentication remains an application workflow; the gateway and
     // persistence adapter are supplied by the composition root.
@@ -34,6 +38,7 @@ export class AuthenticationService {
     username: string;
     password: string;
     country?: string | null;
+    accountReferralSource?: string;
   }): Promise<Account> {
     assertPasswordMinimum(input.password);
     const email = input.email.trim().toLowerCase();
@@ -60,6 +65,7 @@ export class AuthenticationService {
         await this.identity.createAccount(account);
         if (!(await this.identity.linkCompletedAuthAccount(result.user.id, account.id)))
           throw new Error("Authentication onboarding state is invalid");
+        await this.assignAccountReferral(account, input.accountReferralSource);
       });
       return account;
     } catch (error) {
@@ -143,6 +149,7 @@ export class AuthenticationService {
     authUserId: string,
     input: { username: string; country?: string | null; password?: string },
     headers?: Headers,
+    accountReferralSource?: string,
   ): Promise<Account> {
     const country = requireCountry(input.country);
     const hasPassword = await this.gateway.hasPasswordCredential(authUserId);
@@ -166,6 +173,7 @@ export class AuthenticationService {
         await this.identity.createAccount(account);
         if (!(await this.identity.linkCompletedAuthAccount(authUserId, account.id)))
           throw new Error("Authentication onboarding state is invalid");
+        await this.assignAccountReferral(account, accountReferralSource);
       });
       return account;
     } catch (error) {
@@ -177,6 +185,13 @@ export class AuthenticationService {
         });
       throw error;
     }
+  }
+
+  private async assignAccountReferral(account: Account, source: string | undefined): Promise<void> {
+    if (!source || !this.accountReferral || !this.referralParentAssigner) return;
+    const attribution = await this.accountReferral.claim(source, account.id);
+    if (attribution)
+      await this.referralParentAssigner.establish(account.id, attribution.referrerAccountId);
   }
 }
 

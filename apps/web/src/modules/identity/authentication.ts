@@ -7,6 +7,7 @@ export interface AuthenticationService {
     username: string;
     password: string;
     country?: string | null;
+    accountReferralSource?: string;
   }): Promise<Account>;
   login(email: string, password: string): Promise<{ account: Account; token: string }>;
   authenticate(token: string): Promise<Account | null>;
@@ -20,6 +21,7 @@ export interface AuthenticationService {
     authUserId: string,
     input: { username: string; country?: string | null; password?: string },
     headers?: Headers,
+    accountReferralSource?: string,
   ): Promise<Account>;
 }
 

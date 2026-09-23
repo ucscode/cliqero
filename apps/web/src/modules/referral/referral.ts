@@ -24,6 +24,9 @@ export interface ReferralGraphRepository {
   ): Promise<ReferralPage>;
   getRelationshipDepth(ancestorId: Id, descendantId: Id, maxDepth: number): Promise<number | null>;
 }
+export interface ReferralParentAssigner {
+  establish(childAccountId: Id, parentAccountId: Id): Promise<void>;
+}
 export function assertTraversalDepth(depth: number): void {
   if (!Number.isInteger(depth) || depth < 1)
     throw new DomainInvariantError("Referral traversal depth must be a positive integer");

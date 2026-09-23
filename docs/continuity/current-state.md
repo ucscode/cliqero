@@ -39,6 +39,17 @@ history-based rebasing. `Referrals` uses the authenticated
 descendant table showing level, identity, immediate upline, and direct-child
 count; it is not derived from the visualization's per-branch child limit.
 
+Account referral attribution is separate from listing purchase attribution.
+`/r/{referrer}` and `/r/{referrer}/{listing}` create/refresh a hashed,
+HttpOnly `cliqero_referrer` attribution with a sliding 30-day lifetime; the
+product route additionally refreshes the existing listing-scoped
+`cliqero_attribution`. Email registration and OAuth onboarding claim the
+generic attribution through `AuthenticationService` and the existing referral
+graph transaction, then clear the generic cookie. Missing or expired tokens
+are non-fatal and produce parentless accounts. Once `account_referrals` exists,
+later referral visits and login cannot re-parent the account. Promote exposes
+the direct deterministic account URL without exposing the token.
+
 The UI funding screen should consume `/api/wallet/funding-methods`, which filters enabled providers by authenticated account country; it does not require a user-selected currency for discovery. Every payment module uses top-level `filters.countries` for provider eligibility only; bank transfer then applies separate account-level country filters. Provider preparation resolves collection/payment currencies. Paystack owns its configured collection allowlist and default; the shared country-currency mapping only supplies a preference within that allowlist. Provider-owned action labels drive the preparation CTA, while a centralized funding presentation map translates internal states into customer labels and semantic tones. The development provider is registered through one server-side environment gate only in development/test runtimes, is marked `TEST ONLY` in local UI, and is absent from the production registry/API path; frontend hiding is not its security boundary. Checkout requests a server-calculated quote before checkout creation so the initial screen can show the available wallet balance and shortfall.
 
 Funding preparation now keeps provider contracts explicit at the customer boundary: bank transfer applies a provider-level country filter before account-level filters, exposes only an eligible receiving-account selector and quote during preparation, and reveals the persisted account snapshot only after funding is created. All persisted funding status views identify the provider through `display_name` and expose the stable generic funding reference; bank status includes the explicit narration/reference instruction. Shared PostgreSQL exchange-rate caching uses a 24-hour default TTL (configurable with `EXCHANGE_RATE_CACHE_TTL_MS`) and retains exact conversion precision, while customer-facing rates are rounded to two decimals and omit the internal source name. Paystack hosted continuation is same-tab.

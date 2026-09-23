@@ -1573,6 +1573,45 @@ COMMENT ON TABLE referral_capability.account_referrals IS 'One-parent account re
 
 
 --
+-- Name: account_attributions; Type: TABLE; Schema: referral_capability; Owner: -
+--
+
+CREATE TABLE referral_capability.account_attributions (
+    uuid uuid NOT NULL,
+    token_hash bytea NOT NULL,
+    state text DEFAULT 'active'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone,
+    id bigint NOT NULL,
+    referrer_account_id bigint NOT NULL,
+    consumed_by_account_id bigint,
+    CONSTRAINT account_attributions_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'consumed'::text, 'revoked'::text, 'expired'::text])))
+);
+
+
+--
+-- Name: TABLE account_attributions; Type: COMMENT; Schema: referral_capability; Owner: -
+--
+
+COMMENT ON TABLE referral_capability.account_attributions IS 'Opaque, hashed browser attribution used only to assign a parent during new-account registration; valid clicks replace prior browser attribution and expire after 30 days.';
+
+
+--
+-- Name: account_attributions_id_seq; Type: SEQUENCE; Schema: referral_capability; Owner: -
+--
+
+ALTER TABLE referral_capability.account_attributions ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME referral_capability.account_attributions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: commission_policy; Type: TABLE; Schema: referral_capability; Owner: -
 --
 
@@ -2597,6 +2636,30 @@ ALTER TABLE ONLY referral_capability.account_referrals
 
 
 --
+-- Name: account_attributions account_attributions_pkey; Type: CONSTRAINT; Schema: referral_capability; Owner: -
+--
+
+ALTER TABLE ONLY referral_capability.account_attributions
+    ADD CONSTRAINT account_attributions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: account_attributions account_attributions_token_hash_key; Type: CONSTRAINT; Schema: referral_capability; Owner: -
+--
+
+ALTER TABLE ONLY referral_capability.account_attributions
+    ADD CONSTRAINT account_attributions_token_hash_key UNIQUE (token_hash);
+
+
+--
+-- Name: account_attributions account_attributions_uuid_unique; Type: CONSTRAINT; Schema: referral_capability; Owner: -
+--
+
+ALTER TABLE ONLY referral_capability.account_attributions
+    ADD CONSTRAINT account_attributions_uuid_unique UNIQUE (uuid);
+
+
+--
 -- Name: commission_policy commission_policy_pkey; Type: CONSTRAINT; Schema: referral_capability; Owner: -
 --
 
@@ -3139,6 +3202,13 @@ CREATE INDEX purchases_seller_idx ON purchase_capability.purchases USING btree (
 --
 
 CREATE INDEX account_referrals_parent_child_idx ON referral_capability.account_referrals USING btree (parent_account_id, child_account_id);
+
+
+--
+-- Name: account_attributions_active_expiry_idx; Type: INDEX; Schema: referral_capability; Owner: -
+--
+
+CREATE INDEX account_attributions_active_expiry_idx ON referral_capability.account_attributions USING btree (expires_at) WHERE (state = 'active'::text);
 
 
 --
@@ -3717,6 +3787,22 @@ ALTER TABLE ONLY referral_capability.account_referrals
 
 ALTER TABLE ONLY referral_capability.account_referrals
     ADD CONSTRAINT account_referrals_parent_fk FOREIGN KEY (parent_account_id) REFERENCES identity_capability.accounts(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: account_attributions account_attributions_referrer_fk; Type: FK CONSTRAINT; Schema: referral_capability; Owner: -
+--
+
+ALTER TABLE ONLY referral_capability.account_attributions
+    ADD CONSTRAINT account_attributions_referrer_fk FOREIGN KEY (referrer_account_id) REFERENCES identity_capability.accounts(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: account_attributions account_attributions_consumed_by_fk; Type: FK CONSTRAINT; Schema: referral_capability; Owner: -
+--
+
+ALTER TABLE ONLY referral_capability.account_attributions
+    ADD CONSTRAINT account_attributions_consumed_by_fk FOREIGN KEY (consumed_by_account_id) REFERENCES identity_capability.accounts(id) ON DELETE RESTRICT;
 
 
 --

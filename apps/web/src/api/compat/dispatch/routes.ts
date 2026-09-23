@@ -55,6 +55,7 @@ import * as passwordResetRequest from "@/api/compat/password-reset/request/route
 import * as purchases from "@/api/compat/purchases/route";
 import * as purchaseById from "@/api/compat/purchases/[id]/route";
 import * as referralDirect from "@/api/compat/referrals/direct/route";
+import * as referralAccountUrl from "@/api/compat/referrals/account-url/route";
 import * as referralDownline from "@/api/compat/referrals/downline/route";
 import * as referralParent from "@/api/compat/referrals/parent/route";
 import * as referralUplines from "@/api/compat/referrals/uplines/route";
@@ -146,6 +147,7 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/purchases/:id", module: purchaseById },
   { pattern: "/api/purchases", module: purchases },
   { pattern: "/api/referrals/direct", module: referralDirect },
+  { pattern: "/api/referrals/account-url", module: referralAccountUrl },
   { pattern: "/api/referrals/downline", module: referralDownline },
   { pattern: "/api/referrals/parent", module: referralParent },
   { pattern: "/api/referrals/uplines", module: referralUplines },

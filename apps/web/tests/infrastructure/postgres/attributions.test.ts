@@ -54,4 +54,40 @@ describe("referral attribution persistence", () => {
       referrerAccountId: "account-a",
     });
   });
+
+  it("persists and claims account attribution separately from listings", async () => {
+    const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+    const repository = new PostgresReferralAttributionRepository({
+      query: async <T extends object>(sql: string, values: readonly unknown[] = []) => {
+        calls.push({ sql, values });
+        return result<T>(
+          sql.startsWith("update referral_capability.account_attributions")
+            ? ([{ referrer_account_id: "account-a" }] as T[])
+            : [],
+        );
+      },
+    });
+
+    await repository.createAccountAttribution({
+      id: "account-attribution-a",
+      referrerAccountId: "account-a",
+      tokenHash: Buffer.alloc(32),
+      expiresAt: new Date("2026-01-02T00:00:00.000Z"),
+    });
+    await expect(repository.resolveAccountAttribution(Buffer.alloc(32))).resolves.toEqual(null);
+    await expect(
+      repository.claimAccountAttribution(Buffer.alloc(32), "account-b"),
+    ).resolves.toEqual({ referrerAccountId: "account-a" });
+    await repository.revokeAccountAttribution(Buffer.alloc(32));
+
+    expect(calls[0].sql).toContain("account_attributions");
+    expect(calls[0].sql).not.toContain("listing_id");
+    expect(calls[0].values).toEqual([
+      "account-attribution-a",
+      "account-a",
+      Buffer.alloc(32),
+      new Date("2026-01-02T00:00:00.000Z"),
+    ]);
+    expect(calls.at(-1)?.sql).toContain("state='revoked'");
+  });
 });

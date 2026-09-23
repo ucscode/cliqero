@@ -1,5 +1,14 @@
 # Active Work and Proof Gaps
 
+The account-referral attribution correction is implemented in the current
+working tree. Direct `/r/{referrer}` and product `/r/{referrer}/{listing}`
+visits use a separate hashed-token `account_attributions` model with a sliding
+30-day lifetime. Registration and OAuth onboarding claim the token inside the
+account-creation transaction and establish the existing referral graph edge;
+expired/missing attribution creates a parentless account, and existing parents
+are never mutated. The Promote dashboard exposes the deterministic direct
+account URL separately from listing promotion.
+
 ## Next continuation point
 
 Repairs #1–#3 and the internal funding-integrity pass are implemented in the current working tree: direct TRC20 confirmation handling, bank-transfer customer evidence, canonical funding navigation, currency semantics, precision, idempotency, bounded polling messaging, minimum-unit formatting, active-funding coexistence, funding history, cancellation, and development-provider isolation. Provider acceptance is intentionally paused; do not create a funding or payment record until this pause is lifted. Preserve provider eligibility in the backend.

@@ -23,6 +23,14 @@ immutable referrer-account UUID and listing UUID (`/r/{referrer}/{listing}`).
 The URL is derived at request time; it has no generated code or persisted link
 record and remains valid when a username changes.
 
+Account invitations use a separate deterministic URL, `/r/{referrer}`. A valid
+account or product referral click creates a short-lived, opaque account-referrer
+attribution for the browser; only a completed new-account registration may
+consume it into `account_referrals`. The attribution is replaced and its
+30-day lifetime restarts on every valid referral click. Registration after
+expiry is parentless, and an existing account's parent is never changed by a
+later referral click.
+
 ## Attribution
 
 Referral/promotion attribution should be owned by a dedicated capability.
@@ -62,6 +70,11 @@ The graph should be able to answer:
 - list uplines/downlines by supported level;
 - what level is account A relative to account B?
 - which configured recipients apply to a sale distribution?
+
+Account referral attribution and listing purchase attribution are separate
+facts. A product referral refreshes both: the generic account attribution is
+used only during registration, while the listing attribution remains scoped to
+that listing and is resolved later by purchase processing.
 
 Customer referral views are split by purpose. **Hierarchy** is the bounded
 graphical exploration of an authorized account tree. **Referrals** is the
