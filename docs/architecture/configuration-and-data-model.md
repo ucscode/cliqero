@@ -31,7 +31,7 @@ Provider credentials belong to provider configuration rather than becoming an ev
 
 ## Referral commission policy
 
-Referral commission policy is fixed/readymade YAML, not editable database configuration. `config/hierarchy/distribution.yaml` defines contiguous percentage levels. Explicit `levels: null` or `levels: {}` represents no referral commissions. Missing configured uplines are not redistributed; their share remains with the platform.
+Referral commission policy is fixed/readymade YAML, not editable database configuration. `config/hierarchy/distribution.yaml` defines an explicit platform percentage and sparse positive hierarchy levels, where Level N is the buyer's Nth upline. Explicit `levels: null` or `levels: {}` represents no referral allocations. Missing configured uplines are allocated to the platform; the seller receives the remaining share.
 
 Applied policy is immutably snapshotted when distribution is created.
 
@@ -65,7 +65,7 @@ There is no authoritative mutable buyer-wallet, earnings, or company-treasury ba
 
 A purchase preserves the terms that applied at checkout, including listing, buyer, canonical amount, referral attribution where present, and enough immutable context to explain later entitlement/distribution consequences. Later catalogue edits must not rewrite purchase history.
 
-New wallet commerce does not snapshot an ordinary-user seller/payee because ordinary users do not own commercial inventory.
+New wallet commerce preserves the listing seller snapshot and distribution creates the configured seller proceeds entry. The catalogue manager/audit identity is not thereby granted a new marketplace role.
 
 ## Entitlement
 

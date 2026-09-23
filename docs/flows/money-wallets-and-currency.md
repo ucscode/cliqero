@@ -130,7 +130,7 @@ A commission/sale processor coordinates the consequence through the ledger capab
 
 ## Catalogue and distribution accounting
 
-New wallet-paid catalogue purchases create referral earnings and a platform allocation according to the configured distribution policy. They do not create ordinary-user seller earnings. Buyer wallet value, referral earnings, and platform treasury are separate accounting domains.
+New wallet-paid catalogue purchases create seller proceeds, actual hierarchy referral earnings, and a platform allocation according to the configured distribution policy. Buyer wallet value, seller/referral earnings, and platform treasury are separate accounting domains.
 
 ## Referral earnings
 

@@ -150,6 +150,8 @@ Conceptually:
 
 ```yaml
 distribution:
+  platform:
+    percentage: 10
   commission:
     levels:
       1: 50
@@ -157,7 +159,7 @@ distribution:
       3: 10
 ```
 
-Percentages are integer percentages, not basis points. Levels are contiguous from 1 and their total must not exceed 100. `levels: null` and `levels: {}` deliberately mean no referral commissions.
+Percentages are integer percentages, not basis points. The platform percentage plus all configured level percentages must not exceed 100. Level keys are positive integers and may be sparse; YAML ordering has no economic meaning. `levels: null` and `levels: {}` deliberately mean no referral allocations, and the seller receives the remaining configured share. A configured level without an actual upline is allocated to the platform.
 
 ## Persistence
 

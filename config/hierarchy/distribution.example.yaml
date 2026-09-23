@@ -1,5 +1,11 @@
-# Whole-number referral percentages for the platform catalogue.
+# Whole-number sale-distribution percentages. The buyer is Level 0 and never
+# receives commission. Level N is the buyer's Nth upline; keys must be positive
+# integers, may be sparse, and their YAML order has no economic meaning.
+# Unconfigured levels receive 0%. A configured level without a recipient goes
+# to the platform. The seller receives the remaining configured share.
 distribution:
+  platform:
+    percentage: 10
   commission:
     levels:
       1: 50

@@ -39,6 +39,14 @@ history-based rebasing. `Referrals` uses the authenticated
 descendant table showing level, identity, immediate upline, and direct-child
 count; it is not derived from the visualization's per-branch child limit.
 
+Purchase distribution semantics are hierarchy-based: the buyer is Level 0,
+configured Level N is the buyer's Nth upline, and listing promotion attribution
+does not redefine those levels. Distribution YAML requires an explicit platform
+percentage and permits sparse positive level keys. Missing configured uplines
+are allocated to the platform; actual upline entries receive referral earnings
+and the configured listing seller receives the remaining proceeds. Seller,
+referral, and platform facts conserve the purchase gross.
+
 Account referral attribution is separate from listing purchase attribution.
 `/r/{referrer}` and `/r/{referrer}/{listing}` create/refresh a hashed,
 HttpOnly `cliqero_referrer` attribution with a sliding 30-day lifetime; the

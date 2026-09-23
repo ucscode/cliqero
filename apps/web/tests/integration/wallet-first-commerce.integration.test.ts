@@ -161,6 +161,12 @@ suite("wallet-first durable commerce", () => {
   });
   it("applies the configured YAML commission depth and retains missing-upline/residual cents in the platform remainder", async () => {
     const { seller, buyer } = await setup();
+    const grandparent = await app.authentication.register({
+      email: `policy-grandparent-${newId()}@example.com`,
+      username: `pg${newId().slice(0, 8)}`,
+      password: "correct-horse-battery",
+      country: "NG",
+    });
     const parent = await app.authentication.register({
       email: `policy-parent-${newId()}@example.com`,
       username: `pp${newId().slice(0, 8)}`,
@@ -173,7 +179,8 @@ suite("wallet-first durable commerce", () => {
       password: "correct-horse-battery",
       country: "NG",
     });
-    await app.referralGraphService.establish(promoter.id, parent.id);
+    await app.referralGraphService.establish(parent.id, grandparent.id);
+    await app.referralGraphService.establish(buyer.id, parent.id);
     const listing = await app.listingService.createPublished(seller, {
       title: "Policy item",
       shortDescription: "A policy item",
@@ -200,7 +207,17 @@ suite("wallet-first durable commerce", () => {
     await app.walletCredit.process(funding.id);
     await app.walletAvailability.runBatch();
     await app.walletCheckoutPayment.pay({ buyerId: buyer.id, checkoutId: checkout.id });
-    const yamlPolicy = { getActive: async () => new CommissionPolicy([20, 10, 5], "percentage") };
+    const yamlPolicy = {
+      getActive: async () =>
+        CommissionPolicy.fromPercentages(
+          [
+            { level: 1, percentage: 20 },
+            { level: 2, percentage: 10 },
+            { level: 3, percentage: 5 },
+          ],
+          10,
+        ),
+    };
     const processor = new PurchaseDistributionProcessor(
       app.purchases,
       app.commissionDistribution,
@@ -218,22 +235,22 @@ suite("wallet-first durable commerce", () => {
     const entries = await app.ledger.findEntriesByPurchaseId(checkout.purchaseId);
     expect(entries.map((entry) => [entry.recipientRole, entry.amount.minorAmount]).sort()).toEqual(
       [
+        ["seller", 5500n],
         ["referral", 1000n],
         ["referral", 2000n],
+        ["platform", 1500n],
       ].sort(),
     );
-    expect(
-      entries.reduce((sum, entry) => sum + entry.amount.minorAmount, 0n) +
-        distribution.platformAmountMinor!,
-    ).toBe(10000n);
-    expect(distribution.platformAmountMinor).toBe(7000n);
+    expect(entries.reduce((sum, entry) => sum + entry.amount.minorAmount, 0n)).toBe(10000n);
+    expect(distribution.platformAmountMinor).toBe(1500n);
     expect(distribution.policySnapshot).toMatchObject({
-      allocatedPercentage: 35,
-      platformRemainderMinor: "7000",
+      sellerRateBasisPoints: 5500,
+      platformRateBasisPoints: 1000,
+      platformAmountMinor: "1500",
       levels: [
-        { level: 1, percentage: 20, recipient: promoter.id, amountMinor: "2000" },
-        { level: 2, percentage: 10, recipient: parent.id, amountMinor: "1000" },
-        { level: 3, percentage: 5, recipient: null, amountMinor: "0" },
+        { level: 1, percentage: 20, recipient: parent.id, amountMinor: "2000" },
+        { level: 2, percentage: 10, recipient: grandparent.id, amountMinor: "1000" },
+        { level: 3, percentage: 5, recipient: null, amountMinor: "500", allocatedTo: "platform" },
       ],
     });
     const operatorPage = await app.operatorDistributions.list({ limit: 25, search: "Policy item" });
@@ -243,13 +260,13 @@ suite("wallet-first durable commerce", () => {
       listingTitle: "Policy item",
       grossAmountMinor: "10000",
       referralAllocatedMinor: "3000",
-      platformRemainderMinor: "7000",
+      platformRemainderMinor: "1500",
       beneficiaryCount: 2,
     });
     const operatorDetail = await app.operatorDistributions.get(distribution.id);
-    expect(operatorDetail.policySnapshot).toMatchObject({ allocatedPercentage: 35 });
+    expect(operatorDetail.policySnapshot).toMatchObject({ platformAmountMinor: "1500" });
     expect(operatorDetail.allocations.map((entry) => entry.account.id).sort()).toEqual(
-      [promoter.id, parent.id].sort(),
+      [parent.id, grandparent.id].sort(),
     );
     expect((await app.operatorEarnings.list({ limit: 25 })).items).toEqual(
       expect.arrayContaining([

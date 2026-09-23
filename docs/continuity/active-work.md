@@ -63,6 +63,13 @@ Referral UI now separates graphical hierarchy exploration from descendant data:
 backed by `GET /api/hierarchy/descendants`. Do not derive the table from the
 visualization tree, because the graph intentionally limits children per branch.
 
+Purchase distribution correction in progress: buyer hierarchy is the sole source
+of commission levels (buyer is Level 0), YAML levels are explicit positive and
+may be sparse, the platform percentage is explicit, missing configured uplines
+remain platform allocation, and the configured seller receives the remainder.
+Listing attribution remains a separate purchase snapshot. Seller/referral/
+platform ledger facts and the immutable policy snapshot must conserve gross.
+
 ## Verification ledger
 
 The 2026-09-10 documentation audit/reorganization changed documentation only. It did not re-run the application test suite because no product code changed. A prior implementation report stated focused payment tests, the non-integration suite, typecheck, lint, formatting, and diff checks passed, but future work must re-run checks relevant to its current code rather than treating historical counts as current evidence.

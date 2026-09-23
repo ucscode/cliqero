@@ -72,8 +72,8 @@ suite("purchase financial distribution", () => {
     const entries = await app.ledger.findEntriesByPurchaseId(value.purchaseId);
     expect(entries.map((e) => [e.recipientRole, e.amount.minorAmount]).sort()).toEqual(
       [
-        ["seller", 91n],
-        ["platform", 10n],
+        ["seller", 84n],
+        ["platform", 17n],
       ].sort(),
     );
     expect(entries.reduce((sum, e) => sum + e.amount.minorAmount, 0n)).toBe(101n);
@@ -109,11 +109,13 @@ suite("purchase financial distribution", () => {
   });
 
   it("uses trusted attribution and bounded exact referral commission facts", async () => {
-    const parent = await account(`parent${newId().slice(0, 5)}`),
+    const grandparent = await account(`grand${newId().slice(0, 5)}`),
+      parent = await account(`parent${newId().slice(0, 5)}`),
       promoter = await account(`promo${newId().slice(0, 5)}`);
-    await app.referralGraphService.establish(promoter.id, parent.id);
+    await app.referralGraphService.establish(parent.id, grandparent.id);
     const seller = await account(`sell${newId().slice(0, 5)}`),
       buyer = await account(`buy${newId().slice(0, 5)}`);
+    await app.referralGraphService.establish(buyer.id, parent.id);
     const listing = await app.listingService.createPublished(seller, {
       title: "Referral",
       shortDescription: "Referral purchase",
@@ -147,8 +149,8 @@ suite("purchase financial distribution", () => {
     expect(
       facts.map((f) => [f.recipientAccountId, f.level, f.calculatedAmount.minorAmount]),
     ).toEqual([
-      [promoter.id, 1, 500n],
-      [parent.id, 2, 250n],
+      [parent.id, 1, 500n],
+      [grandparent.id, 2, 250n],
     ]);
     expect(
       (await app.database.query(`select count(*)::int count from ledger_capability.entries`))
@@ -244,7 +246,7 @@ suite("purchase financial distribution", () => {
     });
     expect((await app.ledger.summarizeAccount(value.seller.id))[0]).toMatchObject({
       balanceState: "pending",
-      amountMinor: 91n,
+      amountMinor: 84n,
     });
     expect(await app.settlement.settle({ now: new Date() })).toMatchObject({ settled: 0 });
     expect(
@@ -255,7 +257,7 @@ suite("purchase financial distribution", () => {
     ).toMatchObject({ settled: 0 });
     expect((await app.ledger.summarizeAccount(value.seller.id))[0]).toMatchObject({
       balanceState: "available",
-      amountMinor: 91n,
+      amountMinor: 84n,
     });
   });
 

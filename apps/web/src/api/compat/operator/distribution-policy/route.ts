@@ -7,11 +7,17 @@ export async function GET(request: Request) {
     const c = getContainer();
     await c.operators.requireCapability(a.id, "finance.read");
     const p = await c.yamlCommissionPolicy.getActive();
+    const allocatedPercentage =
+      p.platformRateBasisPoints / 100 + p.percentages.reduce((sum, value) => sum + value, 0);
     return Response.json({
-      levels: p.rates.map((percentage, idx) => ({ level: idx + 1, percentage })),
-      allocated_percentage: p.percentages.reduce((s, v) => s + v, 0),
+      platform_percentage: p.platformRateBasisPoints / 100,
+      levels: p.levels.map((entry) => ({
+        level: entry.level,
+        percentage: entry.rateBasisPoints / 100,
+      })),
+      allocated_percentage: allocatedPercentage,
       maximum_payable_level: p.maximumRewardedDepth,
-      nominal_platform_remainder_percentage: 100 - p.percentages.reduce((s, v) => s + v, 0),
+      nominal_platform_remainder_percentage: 100 - allocatedPercentage,
     });
   } catch (e) {
     return apiError(e);

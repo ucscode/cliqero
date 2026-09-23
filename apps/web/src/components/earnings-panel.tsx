@@ -55,10 +55,10 @@ export function EarningsPanel() {
       <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Earnings</p>
-          <h2 id="earnings-heading">Referral earnings</h2>
+          <h2 id="earnings-heading">Earnings</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-            Ledger-backed commission activity. Pending earnings become available only when the
-            settlement process says they are ready.
+            Seller and referral earnings from completed purchases. Pending earnings become available
+            only when the settlement process says they are ready.
           </p>
         </div>
         <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
@@ -100,7 +100,7 @@ export function EarningsPanel() {
                   <Money minor="0" currency="USD" />
                 </h3>
                 <p className="text-sm leading-relaxed text-slate-500">
-                  Your referral earnings will appear after qualifying purchases settle.
+                  Your seller and referral earnings will appear after qualifying purchases settle.
                 </p>
               </Card>
             )}

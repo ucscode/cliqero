@@ -32,7 +32,7 @@ Referral rewards come from real commerce, not registration, page views, clicks, 
 
 ## Revenue model
 
-For new catalogue-owned commerce, platform allocation is the remainder after actual payable referral commissions. Missing-upline allocations remain with the platform. There is no ordinary-user seller-credit branch.
+For new catalogue-owned commerce, the configured platform share and explicit hierarchy allocations are reserved first. Missing-upline allocations remain with the platform, and the configured listing seller receives the remaining proceeds. The seller proceeds ledger is separate from referral earnings and platform treasury.
 
 Future revenue extensions may include premium integrations, business API access, advanced catalogue/distribution tooling, managed services, or subscriptions, but these are not prerequisites for the core commerce flow.
 

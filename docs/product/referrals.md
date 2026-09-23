@@ -117,6 +117,8 @@ Cliqero must remain useful as a listing, purchase, and access platform even if m
 
 Commission percentages, referral eligibility, levels, maximum depth, pending periods, and other economic rules should be policy/configuration rather than hard-coded into the relationship graph.
 
+For purchase distribution, the buyer is Level 0 and cannot receive commission. Level N is the buyer's Nth persisted account upline, regardless of any listing promoter recorded by a product referral click. The configured platform percentage and explicit positive level percentages are reserved first; level keys may be sparse and their YAML order has no economic meaning. A configured level without an actual upline is allocated to the platform, while the seller receives the remaining configured share. Listing attribution remains a separate immutable purchase fact for promotion history and does not redefine hierarchy commission.
+
 The base architecture should support simple direct refer-and-earn without requiring a complex network plan.
 
 ## Earnings lifecycle
