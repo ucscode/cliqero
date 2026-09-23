@@ -1,21 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AuthenticationService } from "@/application/identity/authentication";
 import type { AuthenticationGateway } from "@/application/identity/contracts";
 import { Account } from "@/modules/identity/account";
 import {
   DuplicateUsernameError,
-  type AuthAccountLinkState,
+  type AuthIdentityResolution,
   type IdentityPersistence,
 } from "@/modules/identity/persistence";
 
 function dependencies(
   options: {
-    linkState?: AuthAccountLinkState;
+    identity?: AuthIdentityResolution;
     session?: { user: { id: string }; token?: string | null } | null;
   } = {},
 ) {
   const accounts: Account[] = [];
   const removedAuthUsers: string[] = [];
+  const resolveAuthIdentity = vi.fn(
+    async () =>
+      options.identity ?? {
+        state: "complete" as const,
+        account: accounts[0] ?? new Account("550e8400-e29b-41d4-a716-446655440000", "buyer"),
+      },
+  );
   const identity: IdentityPersistence = {
     removeUnlinkedAuthUser: async () => undefined,
     createAccount: async (account) => {
@@ -25,8 +32,7 @@ function dependencies(
     },
     linkCompletedAuthAccount: async () => true,
     removeAuthUser: async (id) => void removedAuthUsers.push(id),
-    authAccountLinkState: async () => options.linkState ?? "complete",
-    accountForAuthUser: async () => accounts[0] ?? null,
+    resolveAuthIdentity,
     authUserEmail: async () => "buyer@example.com",
   };
   const gateway: AuthenticationGateway = {
@@ -42,7 +48,7 @@ function dependencies(
   const service = new AuthenticationService(identity, gateway, {
     transaction: async (operation) => operation(),
   });
-  return { accounts, removedAuthUsers, identity, gateway, service };
+  return { accounts, removedAuthUsers, identity, gateway, resolveAuthIdentity, service };
 }
 
 describe("AuthenticationService application contracts", () => {
@@ -114,23 +120,35 @@ describe("AuthenticationService application contracts", () => {
     expect(calls[1]).toBe(`${account.id}->550e8400-e29b-41d4-a716-446655440000`);
   });
 
-  it.each([
-    ["incomplete", null],
-    ["complete", "buyer"],
-    ["missing", null],
-  ] as const)(
+  it.each(["incomplete", "complete", "missing"] as const)(
     "preserves the %s auth-link state on the application principal",
-    (linkState, username) => {
-      const { accounts, service } = dependencies({
-        linkState,
+    (linkState) => {
+      const identity: AuthIdentityResolution =
+        linkState === "complete"
+          ? {
+              state: "complete",
+              account: new Account("550e8400-e29b-41d4-a716-446655440000", "buyer"),
+            }
+          : { state: linkState, account: null };
+      const { service } = dependencies({
+        identity,
         session: { user: { id: "auth-user" } },
       });
-      if (username) accounts.push(new Account("550e8400-e29b-41d4-a716-446655440000", username));
       return expect(service.principal(new Request("http://localhost"))).resolves.toMatchObject({
         authUserId: "auth-user",
         authLinkState: linkState,
-        account: username ? { username } : null,
+        account: identity.account ? { username: "buyer" } : null,
       });
     },
   );
+
+  it("reuses the unified resolver for completed-account lookup", async () => {
+    const account = new Account("550e8400-e29b-41d4-a716-446655440000", "buyer");
+    const { service, resolveAuthIdentity } = dependencies({
+      identity: { state: "complete", account },
+    });
+    const resolved = await service.accountForAuthUser(account.id);
+    expect(resolved).toEqual(account);
+    expect(resolveAuthIdentity).toHaveBeenCalledWith(account.id);
+  });
 });

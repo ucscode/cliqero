@@ -4,7 +4,7 @@ import { Account } from "@/modules/identity/account";
 import {
   DuplicateUsernameError,
   type IdentityPersistence,
-  type AuthAccountLinkState,
+  type AuthIdentityResolution,
 } from "@/modules/identity/persistence";
 import { assertPasswordMinimum } from "@/modules/identity/password-policy";
 import { normalizeUsername } from "@/modules/identity/username";
@@ -119,21 +119,23 @@ export class AuthenticationService {
   }
 
   async accountForAuthUser(authUserId: string): Promise<Account | null> {
-    return this.identity.accountForAuthUser(authUserId);
+    const identity = await this.identity.resolveAuthIdentity(authUserId);
+    return identity.state === "complete" ? identity.account : null;
   }
 
   async principal(request: Request): Promise<{
     authUserId: string;
     account: Account | null;
-    authLinkState: AuthAccountLinkState;
+    authLinkState: AuthIdentityResolution["state"];
   } | null> {
     try {
       const session = await this.gateway.getSession(request.headers);
       if (!session?.user) return null;
+      const identity = await this.identity.resolveAuthIdentity(session.user.id);
       return {
         authUserId: session.user.id,
-        authLinkState: await this.identity.authAccountLinkState(session.user.id),
-        account: await this.accountForAuthUser(session.user.id),
+        authLinkState: identity.state,
+        account: identity.account,
       };
     } catch {
       return null;

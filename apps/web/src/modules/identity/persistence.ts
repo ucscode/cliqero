@@ -1,6 +1,11 @@
 import type { Account } from "./account";
 
-export type AuthAccountLinkState = "incomplete" | "complete" | "missing";
+export type AuthIdentityResolution =
+  | { state: "missing"; account: null }
+  | { state: "incomplete"; account: null }
+  | { state: "complete"; account: Account };
+
+export type AuthAccountLinkState = AuthIdentityResolution["state"];
 
 export class DuplicateUsernameError extends Error {
   constructor() {
@@ -14,8 +19,7 @@ export interface IdentityPersistence {
   createAccount(account: Account): Promise<void>;
   linkCompletedAuthAccount(authUserId: string, accountId: string): Promise<boolean>;
   removeAuthUser(authUserId: string): Promise<void>;
-  authAccountLinkState(authUserId: string): Promise<AuthAccountLinkState>;
-  accountForAuthUser(authUserId: string): Promise<Account | null>;
+  resolveAuthIdentity(authUserId: string): Promise<AuthIdentityResolution>;
   authUserEmail(authUserId: string): Promise<string | null>;
 }
 

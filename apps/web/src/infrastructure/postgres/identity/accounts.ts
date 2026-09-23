@@ -2,7 +2,7 @@ import { Account, type AccountReader } from "@/modules/identity/account";
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import {
   DuplicateUsernameError,
-  type AuthAccountLinkState,
+  type AuthIdentityResolution,
   type IdentityPersistence,
   type ProfilePersistence,
 } from "@/modules/identity/persistence";
@@ -81,36 +81,27 @@ export class PostgresAccountRepository
     await this.sql.query(`delete from better_auth."user" where id=$1`, [authUserId]);
   }
 
-  async authAccountLinkState(authUserId: string): Promise<AuthAccountLinkState> {
+  async resolveAuthIdentity(authUserId: string): Promise<AuthIdentityResolution> {
     const row = (
       await this.sql.query<{
         onboarding_state: string;
-        account_id: string | null;
+        id: string | null;
+        username: string | null;
+        country: string | null;
       }>(
-        `select l.onboarding_state,a.uuid as account_id
+        `select l.onboarding_state,a.uuid as id,a.username,a.metadata->>'country' as country
          from identity_capability.auth_account_links l
          left join identity_capability.accounts a on a.id=l.account_id
          where l.auth_user_id=$1`,
         [authUserId],
       )
     ).rows[0];
-    if (!row) return "missing";
-    if (row.onboarding_state === "incomplete" && row.account_id === null) return "incomplete";
-    if (row.onboarding_state === "complete" && row.account_id !== null) return "complete";
-    return "missing";
-  }
-
-  async accountForAuthUser(authUserId: string): Promise<Account | null> {
-    const row = (
-      await this.sql.query<AccountRow>(
-        `select a.uuid as id,a.username,a.metadata->>'country' as country
-         from identity_capability.auth_account_links l
-         join identity_capability.accounts a on a.id=l.account_id
-         where l.auth_user_id=$1 and l.onboarding_state='complete'`,
-        [authUserId],
-      )
-    ).rows[0];
-    return row ? new Account(row.id, row.username, row.country) : null;
+    if (!row) return { state: "missing", account: null };
+    if (row.onboarding_state === "incomplete" && row.id === null)
+      return { state: "incomplete", account: null };
+    if (row.onboarding_state === "complete" && row.id && row.username)
+      return { state: "complete", account: new Account(row.id, row.username, row.country) };
+    return { state: "missing", account: null };
   }
 
   async authUserEmail(authUserId: string): Promise<string | null> {
