@@ -210,6 +210,7 @@ function appWith(
       withdrawals: {
         approve: async () => ({}),
         reject: async () => ({}),
+        cancel: async () => ({}),
       },
       listingReviews: {
         visible: async () => ({ items: [], nextCursor: null }),
@@ -324,6 +325,13 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "account",
       "x-required-api-scope": "withdrawals:manage",
     });
+    expect(paths["/api/operator/withdrawals/{withdrawalId}"].patch).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "withdrawals:manage",
+    });
+    expect(paths["/api/operator/withdrawals/{withdrawalId}/approve"]).toBeUndefined();
+    expect(paths["/api/operator/withdrawals/{withdrawalId}/reject"]).toBeUndefined();
+    expect(paths["/api/operator/withdrawals/{withdrawalId}/complete"]).toBeUndefined();
     expect(paths["/api/operator/treasury"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:read",
@@ -618,6 +626,71 @@ describe("Hono API foundation", () => {
         }).fetch(new Request("http://localhost/api/operator/withdrawals"))
       ).status,
     ).toBe(403);
+    const patch = () =>
+      new Request(
+        "http://localhost/api/operator/withdrawals/00000000-0000-4000-8000-000000000010",
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: "approved" }),
+        },
+      );
+    expect((await appWith().fetch(patch())).status).toBe(401);
+    expect((await appWith(base).fetch(patch())).status).toBe(403);
+    expect((await appWith(operator).fetch(patch())).status).toBe(200);
+    expect(
+      (
+        await appWith({
+          ...operator,
+          kind: "api_key" as const,
+          scopes: new Set(["withdrawals:manage"]),
+        }).fetch(patch())
+      ).status,
+    ).toBe(200);
+  });
+  it("uses PATCH for owner cancellation and does not retain command-style withdrawal routes", async () => {
+    const owner = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      capabilities: [],
+      scopes: new Set<string>(),
+    };
+    const patch = new Request(
+      "http://localhost/api/withdrawals/00000000-0000-4000-8000-000000000010",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      },
+    );
+    expect(getLegacyRouteAccess(new URL(patch.url).pathname, patch.method)).toEqual({
+      mode: "account",
+      scope: "withdrawals:create",
+    });
+    expect(
+      (
+        await appWith(owner).fetch(
+          new Request("http://localhost/api/withdrawals/00000000-0000-4000-8000-000000000010", {
+            method: "DELETE",
+          }),
+        )
+      ).status,
+    ).toBe(405);
+
+    const operator = { ...owner, capabilities: ["system.root"] };
+    for (const action of ["approve", "reject", "complete"]) {
+      expect(
+        (
+          await appWith(operator).fetch(
+            new Request(
+              `http://localhost/api/operator/withdrawals/00000000-0000-4000-8000-000000000010/${action}`,
+              { method: "POST" },
+            ),
+          )
+        ).status,
+      ).toBe(404);
+    }
   });
   it("protects distribution and earnings inspection with the capability and scope intersection", async () => {
     const ordinary = {
@@ -890,10 +963,10 @@ describe("Hono API foundation", () => {
       )?.status,
     ).toBe(403);
     expect(
-      getLegacyRouteAccess("/api/withdrawals/00000000-0000-4000-8000-000000000001", "DELETE"),
+      getLegacyRouteAccess("/api/withdrawals/00000000-0000-4000-8000-000000000001", "PATCH"),
     ).toEqual({
       mode: "account",
-      scope: "withdrawals:manage",
+      scope: "withdrawals:create",
     });
     expect(
       getLegacyRouteAccess(

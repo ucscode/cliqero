@@ -16,6 +16,17 @@ export const operatorWithdrawalAttentionSchema = z.enum([
   "retry_wait",
   "none",
 ]);
+export const operatorWithdrawalPatchSchema = z.union([
+  z.object({ status: z.literal("approved") }).strict(),
+  z.object({ status: z.literal("rejected"), reason: z.string().min(3).max(500) }).strict(),
+  z
+    .object({
+      status: z.literal("completed"),
+      external_reference: z.string().min(1).max(200).optional(),
+      note: z.string().min(1).max(500).optional(),
+    })
+    .strict(),
+]);
 export const operatorWithdrawalSchema = z.object({
   id: z.string().uuid(),
   account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),

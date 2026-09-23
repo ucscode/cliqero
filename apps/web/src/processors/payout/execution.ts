@@ -74,7 +74,12 @@ export class PayoutExecutionProcessor {
     if (!attempt) throw new Error("Payout attempt not found");
     return this.finish({ withdrawal, execution, attempt, submit: false }, result, correlationId);
   }
-  async manualComplete(withdrawalId: string, actorId: string, correlationId: string) {
+  async manualComplete(
+    withdrawalId: string,
+    actorId: string,
+    correlationId: string,
+    options: { externalReference?: string; note?: string } = {},
+  ) {
     return this.uow.transaction(async () => {
       const withdrawal = await this.withdrawals.findByIdForUpdate(withdrawalId);
       if (!withdrawal || withdrawal.state !== "approved")
@@ -109,10 +114,13 @@ export class PayoutExecutionProcessor {
         execution.id,
         {
           kind: "succeeded",
-          providerReference: `manual-${withdrawalId}`,
+          providerReference: options.externalReference?.trim() || `manual-${withdrawalId}`,
           amount: withdrawal.amount,
           currency: withdrawal.amount.currency,
-          metadata: { actorId },
+          metadata: {
+            actorId,
+            ...(options.note?.trim() ? { note: options.note.trim() } : {}),
+          },
         },
       );
       await this.funds.releaseOrComplete({
@@ -125,7 +133,7 @@ export class PayoutExecutionProcessor {
         withdrawalId,
         "approved",
         "completed",
-        "Manual payout completion",
+        options.note?.trim() || "Manual payout completion",
       );
       await this.outbox.append([
         {

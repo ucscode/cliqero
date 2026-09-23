@@ -1,10 +1,15 @@
-import { authenticatedAccount } from "../../http";
+import { authenticatedPrincipal } from "../../http";
 import { getContainer } from "@/infrastructure/container";
 import { WALLET_OVERVIEW_ACTIVITY_LIMIT } from "@/modules/wallet/wallet";
 export async function GET(request: Request) {
-  const a = await authenticatedAccount(request);
-  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const values = await getContainer().wallet.history(a.id, WALLET_OVERVIEW_ACTIVITY_LIMIT);
+  const principal = await authenticatedPrincipal(request);
+  if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (principal.kind === "api_key" && !principal.scopes.has("wallet:read"))
+    return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
+  const values = await getContainer().wallet.history(
+    principal.accountId,
+    WALLET_OVERVIEW_ACTIVITY_LIMIT,
+  );
   return Response.json({
     transactions: values.map((v) => ({
       id: v.id,

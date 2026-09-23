@@ -204,7 +204,11 @@ export function WithdrawalsPanel() {
     if (!window.confirm("Cancel this withdrawal request?")) return;
     setError(null);
     try {
-      await apiFetch<Withdrawal>(`/api/withdrawals/${withdrawal.id}`, { method: "DELETE" });
+      await apiFetch<Withdrawal>(`/api/withdrawals/${withdrawal.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
       await load(true);
     } catch (cause) {
       setError(

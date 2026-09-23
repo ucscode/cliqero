@@ -43,13 +43,6 @@ import * as operatorTreasury from "@/api/compat/operator/treasury/route";
 import * as operatorTreasuryEntries from "@/api/compat/operator/treasury/entries/route";
 import * as operatorTreasuryEntry from "@/api/compat/operator/treasury/entries/[id]/route";
 import * as operatorTreasuryExpenses from "@/api/compat/operator/treasury/expenses/route";
-import * as operatorWithdrawals from "@/api/compat/operator/withdrawals/route";
-import * as operatorWithdrawal from "@/api/compat/operator/withdrawals/[id]/route";
-import * as operatorWithdrawalApprove from "@/api/compat/operator/withdrawals/[id]/approve/route";
-import * as operatorWithdrawalComplete from "@/api/compat/operator/withdrawals/[id]/complete/route";
-import * as operatorWithdrawalPayout from "@/api/compat/operator/withdrawals/[id]/payout/route";
-import * as operatorWithdrawalPayoutReconcile from "@/api/compat/operator/withdrawals/[id]/payout/reconcile/route";
-import * as operatorWithdrawalReject from "@/api/compat/operator/withdrawals/[id]/reject/route";
 import * as passwordReset from "@/api/compat/password-reset/route";
 import * as passwordResetRequest from "@/api/compat/password-reset/request/route";
 import * as purchases from "@/api/compat/purchases/route";
@@ -132,16 +125,6 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/operator/treasury/entries", module: operatorTreasuryEntries },
   { pattern: "/api/operator/treasury/expenses", module: operatorTreasuryExpenses },
   { pattern: "/api/operator/treasury", module: operatorTreasury },
-  { pattern: "/api/operator/withdrawals/:id/approve", module: operatorWithdrawalApprove },
-  { pattern: "/api/operator/withdrawals/:id/complete", module: operatorWithdrawalComplete },
-  {
-    pattern: "/api/operator/withdrawals/:id/payout/reconcile",
-    module: operatorWithdrawalPayoutReconcile,
-  },
-  { pattern: "/api/operator/withdrawals/:id/payout", module: operatorWithdrawalPayout },
-  { pattern: "/api/operator/withdrawals/:id/reject", module: operatorWithdrawalReject },
-  { pattern: "/api/operator/withdrawals/:id", module: operatorWithdrawal },
-  { pattern: "/api/operator/withdrawals", module: operatorWithdrawals },
   { pattern: "/api/password-reset/request", module: passwordResetRequest },
   { pattern: "/api/password-reset", module: passwordReset },
   { pattern: "/api/purchases/:id", module: purchaseById },

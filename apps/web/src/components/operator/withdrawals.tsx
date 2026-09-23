@@ -208,15 +208,26 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [withdrawalId]);
-  async function act(action: string, body?: unknown) {
+  async function act(
+    action: "approve" | "reject" | "complete" | "payout" | "payout/reconcile",
+    body?: Record<string, unknown>,
+  ) {
     setBusy(true);
     setError(null);
     try {
-      await apiFetch(`/api/operator/withdrawals/${withdrawalId}/${action}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: body ? JSON.stringify(body) : undefined,
-      });
+      const status =
+        action === "approve" ? "approved" : action === "reject" ? "rejected" : "completed";
+      const statePatch = action === "approve" || action === "reject" || action === "complete";
+      await apiFetch(
+        statePatch
+          ? `/api/operator/withdrawals/${withdrawalId}`
+          : `/api/operator/withdrawals/${withdrawalId}/${action}`,
+        {
+          method: statePatch ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(statePatch ? { status, ...body } : (body ?? {})),
+        },
+      );
       await load();
     } catch (cause) {
       setError(message(cause));

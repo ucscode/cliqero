@@ -9,6 +9,9 @@ from `/api/withdrawals/policy` and `/api/withdrawals`, then submits
 The server reserves available earnings atomically. Completed reservations remain
 consumed by the withdrawable projection; released reservations become available
 again. User cancellation is offered only while a request is still `requested`.
+Cancellation uses the resource mutation `PATCH /api/withdrawals/:id` with
+`{ "status": "cancelled" }`; the record is retained for audit rather than
+deleted.
 
 Payout execution is asynchronous and remains the responsibility of the existing
 operator/worker/provider flow. The UI observes persisted states (`requested`,

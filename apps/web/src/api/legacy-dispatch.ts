@@ -97,7 +97,7 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern === "/api/withdrawals/:id")
     return {
       mode: "account",
-      scope: method === "DELETE" ? "withdrawals:manage" : "withdrawals:read",
+      scope: method === "PATCH" ? "withdrawals:create" : "withdrawals:read",
     };
   return { mode: "account" };
 }

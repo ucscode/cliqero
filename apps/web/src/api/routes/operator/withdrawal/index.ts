@@ -8,6 +8,7 @@ import { jsonSafe } from "../../../shared/serialization";
 import {
   operatorWithdrawalAttentionSchema,
   operatorWithdrawalDetailSchema,
+  operatorWithdrawalPatchSchema,
   operatorWithdrawalSchema,
   operatorWithdrawalStateSchema,
 } from "./contracts";
@@ -104,58 +105,17 @@ export function registerOperatorWithdrawalRoutes(
   const withdrawalParam = { params: z.object({ withdrawalId: z.string().uuid() }) };
   app.openapi(
     createRoute({
-      method: "post",
-      path: "/api/operator/withdrawals/{withdrawalId}/approve",
-      request: withdrawalParam,
-      responses: {
-        200: {
-          description: "Withdrawal approved",
-          content: { "application/json": { schema: z.any() } },
-        },
-        401: {
-          description: "Authentication required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        403: {
-          description: "Operator access required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
-      if (denied) return denied;
-      try {
-        return c.json(
-          jsonSafe(
-            await container.withdrawals.approve(p.accountId, c.req.valid("param").withdrawalId),
-          ),
-          200,
-        );
-      } catch (error) {
-        return domainError(c, error);
-      }
-    },
-  );
-  app.openapi(
-    createRoute({
-      method: "post",
-      path: "/api/operator/withdrawals/{withdrawalId}/reject",
+      method: "patch",
+      path: "/api/operator/withdrawals/{withdrawalId}",
       request: {
         ...withdrawalParam,
         body: {
-          content: {
-            "application/json": {
-              schema: z.object({ reason: z.string().min(3).max(500) }).strict(),
-            },
-          },
+          content: { "application/json": { schema: operatorWithdrawalPatchSchema } },
         },
       },
       responses: {
         200: {
-          description: "Withdrawal rejected",
+          description: "Withdrawal state updated",
           content: { "application/json": { schema: z.any() } },
         },
         401: {
@@ -174,16 +134,18 @@ export function registerOperatorWithdrawalRoutes(
       const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;
       try {
-        return c.json(
-          jsonSafe(
-            await container.withdrawals.reject(
-              p.accountId,
-              c.req.valid("param").withdrawalId,
-              c.req.valid("json").reason,
-            ),
-          ),
-          200,
-        );
+        const id = c.req.valid("param").withdrawalId;
+        const body = c.req.valid("json");
+        const result =
+          body.status === "approved"
+            ? await container.withdrawals.approve(p.accountId, id)
+            : body.status === "rejected"
+              ? await container.withdrawals.reject(p.accountId, id, body.reason)
+              : await container.payoutExecution.manualComplete(id, p.accountId, newId(), {
+                  externalReference: body.external_reference,
+                  note: body.note,
+                });
+        return c.json(jsonSafe(result), 200);
       } catch (error) {
         return domainError(c, error);
       }
@@ -192,7 +154,6 @@ export function registerOperatorWithdrawalRoutes(
   for (const [path, operation] of [
     ["/api/operator/withdrawals/{withdrawalId}/payout", "payout"],
     ["/api/operator/withdrawals/{withdrawalId}/payout/reconcile", "reconcile"],
-    ["/api/operator/withdrawals/{withdrawalId}/complete", "complete"],
   ] as const) {
     app.openapi(
       createRoute({
@@ -224,9 +185,7 @@ export function registerOperatorWithdrawalRoutes(
           const result =
             operation === "payout"
               ? await container.payoutExecution.execute(id, newId())
-              : operation === "reconcile"
-                ? await container.payoutExecution.reconcile(id, newId())
-                : await container.payoutExecution.manualComplete(id, p.accountId, newId());
+              : await container.payoutExecution.reconcile(id, newId());
           return c.json(jsonSafe(result), 200);
         } catch (error) {
           return domainError(c, error);

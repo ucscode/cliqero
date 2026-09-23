@@ -49,4 +49,44 @@ describe("wallet transaction API projection", () => {
     expect(body.transactions[1]).toMatchObject({ type: "purchase_debit" });
     expect(body.transactions[1]).not.toHaveProperty("provider_reference");
   });
+
+  it("allows a wallet-scoped API key to read only its own wallet", async () => {
+    const history = vi.fn(async () => []);
+    fixtures.container = {
+      principalResolver: {
+        resolve: vi.fn(async () => ({
+          accountId: account.id,
+          account,
+          kind: "api_key",
+          capabilities: [],
+          scopes: new Set(["wallet:read"]),
+        })),
+      },
+      wallet: { history },
+    };
+
+    const response = await GET(new Request("http://localhost/api/wallet/transactions"));
+
+    expect(response.status).toBe(200);
+    expect(history).toHaveBeenCalledWith(account.id, expect.any(Number));
+  });
+
+  it("rejects API keys without wallet:read and unauthenticated requests", async () => {
+    fixtures.container = {
+      principalResolver: {
+        resolve: vi.fn(async () => ({
+          accountId: account.id,
+          account,
+          kind: "api_key",
+          capabilities: [],
+          scopes: new Set<string>(),
+        })),
+      },
+      wallet: { history: vi.fn(async () => []) },
+    };
+    expect((await GET(new Request("http://localhost/api/wallet/transactions"))).status).toBe(403);
+
+    fixtures.container.principalResolver.resolve = vi.fn(async () => null);
+    expect((await GET(new Request("http://localhost/api/wallet/transactions"))).status).toBe(401);
+  });
 });

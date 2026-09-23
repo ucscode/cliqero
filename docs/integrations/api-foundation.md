@@ -50,6 +50,8 @@ All ordinary Cliqero application API paths (catalogue, wallet, checkout,
 purchases, referrals, earnings, withdrawals, treasury, integrations, and
 operator commands) are represented in the generated OpenAPI document and enter
 through the single Hono catch-all before the shared application handlers run.
+The complete route/resource classification and current normalization debt are
+recorded in [`docs/api/resource-api-audit.md`](../api/resource-api-audit.md).
 
 ## OpenAPI schema discovery
 
