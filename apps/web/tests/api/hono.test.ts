@@ -284,6 +284,7 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/api-keys"]).toBeUndefined();
     expect(paths["/api/api-keys/{id}/revoke"]).toBeDefined();
     expect(paths["/api/me/access"]).toBeDefined();
+    expect(paths["/api/me/session"]).toBeDefined();
     expect(paths["/api/operator/overview"]).toBeDefined();
     expect(paths["/api/operator/accounts"]).toBeDefined();
     expect(paths["/api/operator/accounts/{accountId}"]).toBeDefined();
@@ -481,6 +482,32 @@ describe("Hono API foundation", () => {
       (await appWith(elevatedOrdinary).fetch(new Request("http://localhost/api/operator/overview")))
         .status,
     ).toBe(403);
+  });
+  it("exposes a canonical browser session only for a linked user session", async () => {
+    const accountId = "00000000-0000-4000-8000-000000000001";
+    const ordinary = {
+      accountId,
+      account: { id: accountId, username: "ordinary" },
+      kind: "user_session" as const,
+      capabilities: [],
+      scopes: new Set<string>(),
+    };
+    const response = await appWith(ordinary).fetch(new Request("http://localhost/api/me/session"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      authenticated: true,
+      account: { id: accountId, username: "ordinary" },
+    });
+    expect((await appWith().fetch(new Request("http://localhost/api/me/session"))).status).toBe(
+      401,
+    );
+    expect(
+      (
+        await appWith({ ...ordinary, kind: "api_key" as const }).fetch(
+          new Request("http://localhost/api/me/session"),
+        )
+      ).status,
+    ).toBe(401);
   });
   it("protects operator funding inspection with the capability and scope intersection", async () => {
     const ordinary = {

@@ -77,6 +77,14 @@ then operator capabilities are evaluated from the account's
 domain records. Public listing reads remain anonymous; authenticated state can
 be resolved server-side without exposing authentication-provider objects.
 
+Better Auth authentication alone is insufficient for Cliqero application
+access. A browser is authenticated only when its Better Auth session is valid
+and that user resolves through `identity_capability.auth_account_links` to a
+completed canonical Cliqero account. The dashboard verifies this boundary
+before rendering; if the account cannot be resolved, it signs out the Better
+Auth session and returns the user to login. Incomplete OAuth identities remain
+limited to `/onboarding` until the account link is completed.
+
 ## Google OAuth setup
 
 The Better Auth base path in this application is `/api/auth`, so the Google

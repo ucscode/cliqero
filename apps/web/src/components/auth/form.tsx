@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { GoogleLogoIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
 import { ApiClientError, apiFetch, presentFormApiError, safeContinuation } from "@/lib/api-client";
+import { fetchCanonicalApplicationSession } from "@/lib/application-session";
 import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -105,6 +106,20 @@ export function AuthForm({
               setError(result.error.message || "Invalid email or password.");
               return;
             }
+          }
+          try {
+            await fetchCanonicalApplicationSession();
+          } catch {
+            try {
+              await authClient.signOut();
+            } catch {
+              // The login boundary still must not enter the dashboard with an
+              // unverified application identity.
+            }
+            setError(
+              "Your session could not be connected to a Cliqero account. Please sign in again.",
+            );
+            return;
           }
           router.push(next);
           router.refresh();

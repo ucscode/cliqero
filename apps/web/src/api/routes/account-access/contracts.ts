@@ -5,3 +5,11 @@ export const accountAccessSchema = z.object({
   capabilities: z.array(z.string()),
   canAccessOperator: z.boolean(),
 });
+
+export const applicationSessionSchema = z.object({
+  authenticated: z.literal(true),
+  account: z.object({
+    id: z.string().uuid(),
+    username: z.string(),
+  }),
+});

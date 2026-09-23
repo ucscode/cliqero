@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { createApiApp } from "@/api/hono";
 import { createContainer } from "@/infrastructure/container";
 import { handlePasswordReset } from "@/api/compat/password-reset/route";
 
@@ -315,6 +316,41 @@ suite("Better Auth and Cliqero identity boundary", () => {
         )
       )?.id,
     ).toBe(account.id);
+  });
+
+  it("requires the canonical account link at the browser application boundary", async () => {
+    const account = await app.authentication.register({
+      email: "boundary@example.com",
+      username: "boundaryuser",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const login = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "boundary@example.com", password: "correct-horse-battery" }),
+      }),
+    );
+    const cookie = login.headers.get("set-cookie")!.split(";")[0];
+    const api = createApiApp(app as any);
+    const valid = await api.fetch(
+      new Request("http://localhost:3000/api/me/session", { headers: { cookie } }),
+    );
+    expect(valid.status).toBe(200);
+    expect(await valid.json()).toEqual({
+      authenticated: true,
+      account: { id: account.id, username: account.username },
+    });
+
+    await app.database.query(
+      `delete from identity_capability.auth_account_links where account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [account.id],
+    );
+    const broken = await api.fetch(
+      new Request("http://localhost:3000/api/me/session", { headers: { cookie } }),
+    );
+    expect(broken.status).toBe(401);
   });
 
   it("represents social-first users as authenticated but incomplete until onboarding", async () => {

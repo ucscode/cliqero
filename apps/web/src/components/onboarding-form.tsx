@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { apiFetch, ApiClientError, presentFormApiError, safeContinuation } from "@/lib/api-client";
+import { authClient } from "@/lib/auth-client";
 import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -39,8 +40,12 @@ export function OnboardingForm() {
       .catch((cause: unknown) => {
         if (!cancelled && cause instanceof ApiClientError && cause.status === 409)
           router.replace(next);
-        else if (!cancelled && cause instanceof ApiClientError && cause.status !== 401)
-          setError("We couldn’t load your account. Please try again.");
+        else if (!cancelled && cause instanceof ApiClientError && cause.status === 401) {
+          return authClient
+            .signOut()
+            .catch(() => undefined)
+            .finally(() => router.replace("/login"));
+        } else if (!cancelled) setError("We couldn’t load your account. Please try again.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
