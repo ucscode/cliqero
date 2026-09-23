@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApiApp } from "@/api/hono";
 import { createContainer } from "@/infrastructure/container";
 import { handlePasswordReset } from "@/api/compat/password-reset/route";
+import { onboardingBoundaryResponse } from "@/api/compat/me/onboarding/route";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -353,6 +354,43 @@ suite("Better Auth and Cliqero identity boundary", () => {
     expect(broken.status).toBe(401);
   });
 
+  it("rejects an orphaned Better Auth session at the onboarding boundary", async () => {
+    const result = await app.authentication.auth.api.signUpEmail({
+      body: {
+        name: "orphaned user",
+        email: "orphaned@example.com",
+        password: "correct-horse-battery",
+      },
+    });
+    const session = await app.authentication.auth.api.signInEmail({
+      body: { email: result.user.email, password: "correct-horse-battery" },
+    });
+    await app.database.query(
+      `delete from identity_capability.auth_account_links where auth_user_id=$1`,
+      [result.user.id],
+    );
+
+    const principal = await app.authentication.principal(
+      new Request("http://localhost:3000", {
+        headers: { authorization: `Bearer ${session.token!}` },
+      }),
+    );
+    expect(principal).toMatchObject({ account: null, authLinkState: "missing" });
+    const response = onboardingBoundaryResponse(principal);
+    expect(response?.status).toBe(401);
+    await expect(response?.json()).resolves.toEqual({
+      error: "Invalid session",
+      code: "invalid_session",
+    });
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text as count from identity_capability.accounts`,
+        )
+      ).rows[0].count,
+    ).toBe("0");
+  });
+
   it("represents social-first users as authenticated but incomplete until onboarding", async () => {
     const referrer = await app.authentication.register({
       email: "social-referrer@example.com",
@@ -373,6 +411,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       }),
     );
     expect(principal?.account).toBeNull();
+    expect(principal?.authLinkState).toBe("incomplete");
     const account = await app.authentication.completeOnboarding(
       result.user.id,
       {

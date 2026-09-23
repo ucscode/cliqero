@@ -1,4 +1,11 @@
 import type { Account } from "./account";
+import type { AuthAccountLinkState } from "./persistence";
+
+export type AuthenticationPrincipal = {
+  authUserId: string;
+  account: Account | null;
+  authLinkState: AuthAccountLinkState;
+};
 
 /** Application-facing identity contract; SQL and Better Auth wiring stay outside the domain module. */
 export interface AuthenticationService {
@@ -13,7 +20,7 @@ export interface AuthenticationService {
   authenticate(token: string): Promise<Account | null>;
   authenticateRequest(request: Request): Promise<Account | null>;
   accountForAuthUser(authUserId: string): Promise<Account | null>;
-  principal(request: Request): Promise<{ authUserId: string; account: Account | null } | null>;
+  principal(request: Request): Promise<AuthenticationPrincipal | null>;
   authUserEmail(authUserId: string): Promise<string | null>;
   resetPassword(authUserId: string, newPassword: string): Promise<void>;
   hasPasswordCredential(authUserId: string): Promise<boolean>;

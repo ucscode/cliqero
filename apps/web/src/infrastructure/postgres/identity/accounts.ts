@@ -2,6 +2,7 @@ import { Account, type AccountReader } from "@/modules/identity/account";
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import {
   DuplicateUsernameError,
+  type AuthAccountLinkState,
   type IdentityPersistence,
   type ProfilePersistence,
 } from "@/modules/identity/persistence";
@@ -78,6 +79,25 @@ export class PostgresAccountRepository
 
   async removeAuthUser(authUserId: string): Promise<void> {
     await this.sql.query(`delete from better_auth."user" where id=$1`, [authUserId]);
+  }
+
+  async authAccountLinkState(authUserId: string): Promise<AuthAccountLinkState> {
+    const row = (
+      await this.sql.query<{
+        onboarding_state: string;
+        account_id: string | null;
+      }>(
+        `select l.onboarding_state,a.uuid as account_id
+         from identity_capability.auth_account_links l
+         left join identity_capability.accounts a on a.id=l.account_id
+         where l.auth_user_id=$1`,
+        [authUserId],
+      )
+    ).rows[0];
+    if (!row) return "missing";
+    if (row.onboarding_state === "incomplete" && row.account_id === null) return "incomplete";
+    if (row.onboarding_state === "complete" && row.account_id !== null) return "complete";
+    return "missing";
   }
 
   async accountForAuthUser(authUserId: string): Promise<Account | null> {

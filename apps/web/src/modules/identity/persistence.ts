@@ -1,5 +1,7 @@
 import type { Account } from "./account";
 
+export type AuthAccountLinkState = "incomplete" | "complete" | "missing";
+
 export class DuplicateUsernameError extends Error {
   constructor() {
     super("That username is already taken.");
@@ -12,6 +14,7 @@ export interface IdentityPersistence {
   createAccount(account: Account): Promise<void>;
   linkCompletedAuthAccount(authUserId: string, accountId: string): Promise<boolean>;
   removeAuthUser(authUserId: string): Promise<void>;
+  authAccountLinkState(authUserId: string): Promise<AuthAccountLinkState>;
   accountForAuthUser(authUserId: string): Promise<Account | null>;
   authUserEmail(authUserId: string): Promise<string | null>;
 }

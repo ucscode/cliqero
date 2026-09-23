@@ -2,9 +2,18 @@ import { describe, expect, it } from "vitest";
 import { AuthenticationService } from "@/application/identity/authentication";
 import type { AuthenticationGateway } from "@/application/identity/contracts";
 import { Account } from "@/modules/identity/account";
-import { DuplicateUsernameError, type IdentityPersistence } from "@/modules/identity/persistence";
+import {
+  DuplicateUsernameError,
+  type AuthAccountLinkState,
+  type IdentityPersistence,
+} from "@/modules/identity/persistence";
 
-function dependencies() {
+function dependencies(
+  options: {
+    linkState?: AuthAccountLinkState;
+    session?: { user: { id: string }; token?: string | null } | null;
+  } = {},
+) {
   const accounts: Account[] = [];
   const removedAuthUsers: string[] = [];
   const identity: IdentityPersistence = {
@@ -16,13 +25,14 @@ function dependencies() {
     },
     linkCompletedAuthAccount: async () => true,
     removeAuthUser: async (id) => void removedAuthUsers.push(id),
+    authAccountLinkState: async () => options.linkState ?? "complete",
     accountForAuthUser: async () => accounts[0] ?? null,
     authUserEmail: async () => "buyer@example.com",
   };
   const gateway: AuthenticationGateway = {
     signUpEmail: async () => ({ user: { id: "auth-user" }, token: "session-token" }),
     signInEmail: async () => ({ user: { id: "auth-user" }, token: "session-token" }),
-    getSession: async () => null,
+    getSession: async () => options.session ?? null,
     resetPassword: async () => undefined,
     hasPasswordCredential: async () => true,
     setPassword: async () => "credential",
@@ -103,4 +113,24 @@ describe("AuthenticationService application contracts", () => {
     expect(calls[0]).toBe(`opaque-token:${account.id}`);
     expect(calls[1]).toBe(`${account.id}->550e8400-e29b-41d4-a716-446655440000`);
   });
+
+  it.each([
+    ["incomplete", null],
+    ["complete", "buyer"],
+    ["missing", null],
+  ] as const)(
+    "preserves the %s auth-link state on the application principal",
+    (linkState, username) => {
+      const { accounts, service } = dependencies({
+        linkState,
+        session: { user: { id: "auth-user" } },
+      });
+      if (username) accounts.push(new Account("550e8400-e29b-41d4-a716-446655440000", username));
+      return expect(service.principal(new Request("http://localhost"))).resolves.toMatchObject({
+        authUserId: "auth-user",
+        authLinkState: linkState,
+        account: username ? { username } : null,
+      });
+    },
+  );
 });

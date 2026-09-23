@@ -1,7 +1,11 @@
 import { newId } from "@/kernel/ids";
 import { PublicApplicationError } from "@/kernel/errors";
 import { Account } from "@/modules/identity/account";
-import { DuplicateUsernameError, type IdentityPersistence } from "@/modules/identity/persistence";
+import {
+  DuplicateUsernameError,
+  type IdentityPersistence,
+  type AuthAccountLinkState,
+} from "@/modules/identity/persistence";
 import { assertPasswordMinimum } from "@/modules/identity/password-policy";
 import { normalizeUsername } from "@/modules/identity/username";
 import type { AuthenticationGateway } from "./contracts";
@@ -118,14 +122,17 @@ export class AuthenticationService {
     return this.identity.accountForAuthUser(authUserId);
   }
 
-  async principal(
-    request: Request,
-  ): Promise<{ authUserId: string; account: Account | null } | null> {
+  async principal(request: Request): Promise<{
+    authUserId: string;
+    account: Account | null;
+    authLinkState: AuthAccountLinkState;
+  } | null> {
     try {
       const session = await this.gateway.getSession(request.headers);
       if (!session?.user) return null;
       return {
         authUserId: session.user.id,
+        authLinkState: await this.identity.authAccountLinkState(session.user.id),
         account: await this.accountForAuthUser(session.user.id),
       };
     } catch {

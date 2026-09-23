@@ -4,6 +4,7 @@ import { getContainer } from "@/infrastructure/container";
 import { usernameSchema } from "@/modules/identity/username";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 import { ACCOUNT_REFERRAL_COOKIE, clearReferralCookieHeader } from "@/modules/referral/cookie";
+import type { AuthenticationPrincipal } from "@/modules/identity/authentication";
 
 const bodySchema = z.object({
   username: usernameSchema,
@@ -14,12 +15,24 @@ const bodySchema = z.object({
     .optional(),
 });
 
+export function onboardingBoundaryResponse(
+  principal: AuthenticationPrincipal | null,
+): Response | null {
+  if (!principal)
+    return Response.json({ error: "Unauthorized", code: "unauthorized" }, { status: 401 });
+  if (principal.authLinkState === "complete" && principal.account)
+    return Response.json({ error: "Account onboarding is already complete" }, { status: 409 });
+  if (principal.authLinkState === "incomplete" && !principal.account) return null;
+  return Response.json({ error: "Invalid session", code: "invalid_session" }, { status: 401 });
+}
+
 export async function GET(request: Request) {
   try {
     const principal = await getContainer().authentication.principal(request);
-    if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
-    if (principal.account)
-      return Response.json({ error: "Account onboarding is already complete" }, { status: 409 });
+    const boundaryResponse = onboardingBoundaryResponse(principal);
+    if (boundaryResponse) return boundaryResponse;
+    if (!principal)
+      return Response.json({ error: "Unauthorized", code: "unauthorized" }, { status: 401 });
     return Response.json({
       hasPassword: await getContainer().authentication.hasPasswordCredential(principal.authUserId),
     });
@@ -31,9 +44,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const principal = await getContainer().authentication.principal(request);
-    if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
-    if (principal.account)
-      return Response.json({ error: "Account onboarding is already complete" }, { status: 409 });
+    const boundaryResponse = onboardingBoundaryResponse(principal);
+    if (boundaryResponse) return boundaryResponse;
+    if (!principal)
+      return Response.json({ error: "Unauthorized", code: "unauthorized" }, { status: 401 });
     const account = await getContainer().authentication.completeOnboarding(
       principal.authUserId,
       bodySchema.parse(await request.json()),
