@@ -210,7 +210,8 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     () => new PostgresReferralAttributionRepository(database),
   );
   const accountReferralAttribution = lazy(
-    () => new AccountReferralAttributionService(referralAttributionRepository(), accounts()),
+    () =>
+      new AccountReferralAttributionService(referralAttributionRepository(), accounts(), database),
   );
   const ledger = lazy(() => new PostgresLedgerRepository(database));
   const financialDistributionPolicy = lazy(

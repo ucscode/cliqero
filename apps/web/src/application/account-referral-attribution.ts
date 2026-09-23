@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { newId } from "@/kernel/ids";
+import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { AccountReader } from "@/modules/identity/account";
 import type {
   AccountReferralAttribution,
@@ -28,6 +29,7 @@ export class AccountReferralAttributionService implements AccountReferralAttribu
   constructor(
     private readonly attributions: AccountReferralAttributionRepository,
     private readonly accounts: AccountReader,
+    private readonly uow: UnitOfWork,
   ) {}
 
   async urlFor(referrerAccountId: string): Promise<string> {
@@ -42,14 +44,16 @@ export class AccountReferralAttributionService implements AccountReferralAttribu
   ): Promise<{ source: string } | null> {
     if (!validAccountId(referrerAccountId) || !(await this.accounts.exists(referrerAccountId)))
       return null;
-    if (validSource(previousSource))
-      await this.attributions.revokeAccountAttribution(hash(previousSource));
     const source = randomBytes(32).toString("base64url");
-    await this.attributions.createAccountAttribution({
-      id: newId(),
-      referrerAccountId,
-      tokenHash: hash(source),
-      expiresAt: new Date(Date.now() + lifetimeSeconds * 1000),
+    await this.uow.transaction(async () => {
+      if (validSource(previousSource))
+        await this.attributions.revokeAccountAttribution(hash(previousSource));
+      await this.attributions.createAccountAttribution({
+        id: newId(),
+        referrerAccountId,
+        tokenHash: hash(source),
+        expiresAt: new Date(Date.now() + lifetimeSeconds * 1000),
+      });
     });
     return { source };
   }

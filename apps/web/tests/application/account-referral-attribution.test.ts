@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AccountReferralAttributionService } from "@/application/account-referral-attribution";
 
+const uow = { transaction: async <T>(operation: () => Promise<T>) => operation() };
+
 describe("AccountReferralAttributionService", () => {
   const referrer = "550e8400-e29b-41d4-a716-446655440000";
   it("creates opaque sliding-window attribution and resolves only valid account links", async () => {
@@ -15,6 +17,7 @@ describe("AccountReferralAttributionService", () => {
         revokeAccountAttribution: async () => undefined,
       },
       { exists: async (accountId) => accountId === referrer },
+      uow,
     );
 
     const visit = await service.visit(referrer);
@@ -38,6 +41,7 @@ describe("AccountReferralAttributionService", () => {
         revokeAccountAttribution: async () => undefined,
       },
       { exists: async (accountId) => accountId === "550e8400-e29b-41d4-a716-446655440000" },
+      uow,
     );
 
     await expect(service.visit("not-an-account")).resolves.toBeNull();

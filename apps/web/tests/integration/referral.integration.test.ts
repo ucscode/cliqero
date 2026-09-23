@@ -1,12 +1,16 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import type { QueryResultRow } from "pg";
+import { AccountReferralAttributionService } from "@/application/account-referral-attribution";
 import { createContainer } from "@/infrastructure/container";
 import { PostgresReferralGraphRepository } from "@/infrastructure/postgres/referral/referrals";
 import type { QueryExecutor, QueryResult } from "@/infrastructure/postgres/shared/query";
 import { newId } from "@/kernel/ids";
+import type { AccountReferralAttributionRepository } from "@/modules/referral/attribution";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
+const tokenHash = (source: string) => createHash("sha256").update(source, "utf8").digest();
 suite("referral graph and trusted purchase attribution", () => {
   const app = createContainer(databaseUrl!);
   beforeEach(() =>
@@ -158,6 +162,66 @@ suite("referral graph and trusted purchase attribution", () => {
         )
       ).rows[0].count,
     ).toBe("0");
+  });
+
+  it("atomically refreshes a repeated account referral click", async () => {
+    const alice = await account("repeat_alice");
+    const first = await app.accountReferralAttribution.visit(alice.id);
+    const startedAt = Date.now();
+    const second = await app.accountReferralAttribution.visit(alice.id, first!.source);
+    const rows = (
+      await app.database.query<{ token_hash: Buffer; state: string; expires_at: Date }>(
+        `select token_hash,state,expires_at
+           from referral_capability.account_attributions
+          where token_hash in ($1,$2)
+          order by id`,
+        [tokenHash(first!.source), tokenHash(second!.source)],
+      )
+    ).rows;
+
+    expect(rows.map((row) => row.state)).toEqual(["revoked", "active"]);
+    expect(rows[1].expires_at.getTime()).toBeGreaterThan(startedAt + 29 * 24 * 60 * 60 * 1000);
+    expect(rows[1].expires_at.getTime()).toBeLessThan(Date.now() + 31 * 24 * 60 * 60 * 1000);
+  });
+
+  it("atomically replaces an account referral with a different referrer", async () => {
+    const alice = await account("replace_alice"),
+      bob = await account("replace_bob");
+    const first = await app.accountReferralAttribution.visit(alice.id);
+    const second = await app.accountReferralAttribution.visit(bob.id, first!.source);
+
+    expect(await app.accountReferralAttribution.resolve(first!.source)).toBeNull();
+    await expect(app.accountReferralAttribution.resolve(second!.source)).resolves.toEqual({
+      referrerAccountId: bob.id,
+    });
+  });
+
+  it("rolls back revocation when replacement creation fails", async () => {
+    const alice = await account("rollback_alice");
+    const first = await app.accountReferralAttribution.visit(alice.id);
+    const repository = app.referralAttributionRepository;
+    const failingRepository: AccountReferralAttributionRepository = {
+      createAccountAttribution: async (input) => {
+        await repository.createAccountAttribution(input);
+        throw new Error("simulated replacement failure");
+      },
+      resolveAccountAttribution: (hash) => repository.resolveAccountAttribution(hash),
+      claimAccountAttribution: (hash, childAccountId) =>
+        repository.claimAccountAttribution(hash, childAccountId),
+      revokeAccountAttribution: (hash) => repository.revokeAccountAttribution(hash),
+    };
+    const failingService = new AccountReferralAttributionService(
+      failingRepository,
+      app.accounts,
+      app.database,
+    );
+
+    await expect(failingService.visit(alice.id, first!.source)).rejects.toThrow(
+      "simulated replacement failure",
+    );
+    await expect(app.accountReferralAttribution.resolve(first!.source)).resolves.toEqual({
+      referrerAccountId: alice.id,
+    });
   });
 
   it("keeps account attribution distinct from listing purchase attribution", async () => {
