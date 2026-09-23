@@ -67,4 +67,66 @@ describe("account projection pagination", () => {
       service.earningEntries("account", { limit: 10, cursor: "not-a-cursor" }),
     ).rejects.toThrow("Invalid pagination cursor");
   });
+
+  it("paginates earnings with the created_at/id keyset", async () => {
+    const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+    const sql = {
+      query: async <T extends object>(query: string, values: readonly unknown[] = []) => {
+        calls.push({ sql: query, values });
+        return result<T>(
+          (calls.length === 1
+            ? [
+                {
+                  id: "entry-1",
+                  purchase_id: "purchase-1",
+                  entry_type: "purchase-earnings",
+                  direction: "credit",
+                  amount_minor: "310",
+                  currency: "USD",
+                  recipient_role: "referral",
+                  balance_state: "available",
+                  created_at: "2026-01-02T00:00:00.000Z",
+                },
+                {
+                  id: "entry-2",
+                  purchase_id: "purchase-2",
+                  entry_type: "purchase-earnings",
+                  direction: "credit",
+                  amount_minor: "620",
+                  currency: "USD",
+                  recipient_role: "seller",
+                  balance_state: "available",
+                  created_at: "2026-01-01T00:00:00.000Z",
+                },
+              ]
+            : [
+                {
+                  id: "entry-2",
+                  purchase_id: "purchase-2",
+                  entry_type: "purchase-earnings",
+                  direction: "credit",
+                  amount_minor: "620",
+                  currency: "USD",
+                  recipient_role: "seller",
+                  balance_state: "available",
+                  created_at: "2026-01-01T00:00:00.000Z",
+                },
+              ]) as T[],
+        );
+      },
+    };
+    const service = new AccountProjectionService(sql);
+
+    const first = await service.earningEntries("account", { limit: 1 });
+    expect(first.items).toHaveLength(1);
+    expect(first.items[0]).toMatchObject({ id: "entry-1", amount_minor: "310" });
+    expect(first.nextCursor).toMatch(/^[A-Za-z0-9_-]+$/);
+
+    const second = await service.earningEntries("account", { limit: 1, cursor: first.nextCursor! });
+    expect(second.items).toHaveLength(1);
+    expect(second.items[0]).toMatchObject({ id: "entry-2", amount_minor: "620" });
+    expect(second.nextCursor).toBeNull();
+    expect(calls[1].values[1]).toBe("2026-01-02T00:00:00.000Z");
+    expect(calls[1].values[2]).toBe("entry-1");
+  });
 });

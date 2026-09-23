@@ -17,23 +17,33 @@ import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { Money } from "./money";
 
+const EARNINGS_PAGE_SIZE = 25;
+
 function label(value: string) {
   return value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+export function earningsEntriesUrl(cursor?: string) {
+  const params = new URLSearchParams({ limit: String(EARNINGS_PAGE_SIZE) });
+  if (cursor) params.set("cursor", cursor);
+  return `/api/earnings/entries?${params.toString()}`;
 }
 
 export function EarningsPanel() {
   const [summary, setSummary] = useState<EarningsSummary | null>(null);
   const [entries, setEntries] = useState<EarningsEntryPage | null>(null);
+  const [entryCursors, setEntryCursors] = useState<Array<string | undefined>>([undefined]);
+  const [entryPage, setEntryPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (cursor?: string) => {
     setLoading(true);
     setError(null);
     try {
       const [earningSummary, entryPage] = await Promise.all([
         apiFetch<EarningsSummary>("/api/earnings"),
-        apiFetch<EarningsEntryPage>("/api/earnings/entries?limit=25"),
+        apiFetch<EarningsEntryPage>(earningsEntriesUrl(cursor)),
       ]);
       setSummary(earningSummary);
       setEntries(entryPage);
@@ -50,6 +60,24 @@ export function EarningsPanel() {
     void load();
   }, [load]);
 
+  const refresh = () => void load(entryCursors[entryPage]);
+  const nextPage = () => {
+    if (!entries?.nextCursor || loading) return;
+    const nextIndex = entryPage + 1;
+    setEntryCursors((current) => [...current.slice(0, nextIndex), entries.nextCursor!]);
+    setEntryPage(nextIndex);
+    void load(entries.nextCursor);
+  };
+  const previousPage = () => {
+    if (entryPage === 0 || loading) return;
+    const previousIndex = entryPage - 1;
+    setEntryPage(previousIndex);
+    void load(entryCursors[previousIndex]);
+  };
+
+  const available = summary?.balances.find((balance) => balance.state === "available") ?? null;
+  const pending = summary?.balances.find((balance) => balance.state === "pending") ?? null;
+
   return (
     <section className="grid gap-4" aria-labelledby="earnings-heading">
       <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
@@ -61,49 +89,36 @@ export function EarningsPanel() {
             only when the settlement process says they are ready.
           </p>
         </div>
-        <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
+        <Button type="button" variant="secondary" onClick={refresh} disabled={loading}>
           {loading ? "Refreshing…" : "Refresh"}
         </Button>
       </div>
       {error && (
         <Toast>
           <span>{error}</span>
-          <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
+          <Button type="button" variant="outline" size="sm" onClick={refresh}>
             Try again
           </Button>
         </Toast>
       )}
       {loading ? (
         <div className="grid gap-4 md:grid-cols-3" aria-label="Loading earnings">
-          <Skeleton className="h-36 w-full" />
-          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-44 w-full md:col-span-2" />
+          <Skeleton className="h-44 w-full" />
         </div>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-3">
-            {(summary?.balances ?? []).length ? (
-              summary!.balances.map((balance) => (
-                <Card className="p-5" key={`${balance.currency}-${balance.state}`}>
-                  <p className="eyebrow">{label(balance.state)}</p>
-                  <h3>
-                    <Money minor={balance.amount_minor} currency={balance.currency} />
-                  </h3>
-                  <p className="text-sm leading-relaxed text-slate-500">
-                    {balance.currency} ledger projection
-                  </p>
-                </Card>
-              ))
-            ) : (
-              <Card className="p-5">
-                <p className="eyebrow">Available</p>
-                <h3>
-                  <Money minor="0" currency="USD" />
-                </h3>
-                <p className="text-sm leading-relaxed text-slate-500">
-                  Your seller and referral earnings will appear after qualifying purchases settle.
-                </p>
-              </Card>
-            )}
+            <EarningsHighlight available={available} />
+            <Card className="p-5">
+              <p className="eyebrow">Pending earnings</p>
+              <p className="mt-4 text-3xl font-semibold tracking-tight">
+                {pending ? <Money minor={pending.amount_minor} currency={pending.currency} /> : "—"}
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                Pending until the settlement process makes them available.
+              </p>
+            </Card>
           </div>
           <Card className="p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -118,29 +133,96 @@ export function EarningsPanel() {
               </Button>
             </div>
           </Card>
-          <Card className="p-5">
-            <div className="flex items-center justify-between gap-3">
-              <h3>Earnings activity</h3>
-              {entries?.items.length ? (
-                <Badge variant="destructive">{entries.items.length}</Badge>
-              ) : null}
-            </div>
-            {entries?.items.length ? (
-              <div className="grid">
-                {entries.items.map((entry) => (
-                  <EarningRow entry={entry} key={entry.id} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No earnings yet"
-                description="Qualifying referral commissions will be recorded here as immutable ledger entries."
-              />
-            )}
-          </Card>
+          <EarningsActivity
+            entries={entries}
+            page={entryPage}
+            onNext={nextPage}
+            onPrevious={previousPage}
+          />
         </>
       )}
     </section>
+  );
+}
+
+export function EarningsHighlight({
+  available,
+}: {
+  available: EarningsSummary["balances"][number] | null;
+}) {
+  return (
+    <Card className="relative overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-amber-50 p-6 shadow-md md:col-span-2">
+      <div className="relative flex items-start justify-between gap-4">
+        <div>
+          <p className="eyebrow text-emerald-800">Available earnings</p>
+          <p className="mt-1 text-sm font-medium text-slate-600">Ready for withdrawal</p>
+        </div>
+        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+          Earned
+        </span>
+      </div>
+      <p className="relative mt-8 text-5xl font-bold tracking-tight text-slate-950">
+        <Money minor={available?.amount_minor ?? "0"} currency={available?.currency ?? "USD"} />
+      </p>
+      <p className="relative mt-3 max-w-md text-sm leading-relaxed text-slate-600">
+        Seller and referral earnings available to request for payout.
+      </p>
+    </Card>
+  );
+}
+
+export function EarningsActivity({
+  entries,
+  page,
+  onNext,
+  onPrevious,
+}: {
+  entries: EarningsEntryPage | null;
+  page: number;
+  onNext: () => void;
+  onPrevious: () => void;
+}) {
+  return (
+    <Card className="p-5">
+      <h3>Earnings activity</h3>
+      {entries?.items.length ? (
+        <>
+          <div className="grid">
+            {entries.items.map((entry) => (
+              <EarningRow entry={entry} key={entry.id} />
+            ))}
+          </div>
+          {(page > 0 || entries.nextCursor) && (
+            <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onPrevious}
+                disabled={page === 0}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-slate-500">Page {page + 1}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onNext}
+                disabled={!entries.nextCursor}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <EmptyState
+          title="No earnings yet"
+          description="Qualifying referral commissions will be recorded here as immutable ledger entries."
+        />
+      )}
+    </Card>
   );
 }
 
@@ -161,11 +243,6 @@ function EarningRow({ entry }: { entry: EarningsEntry }) {
         </Badge>
         <Money minor={signedMinor} currency={entry.currency} />
       </div>
-      {entry.purchase_id && (
-        <small className="col-span-full break-all text-xs text-slate-500">
-          Purchase {entry.purchase_id}
-        </small>
-      )}
     </div>
   );
 }
