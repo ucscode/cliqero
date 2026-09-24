@@ -31,12 +31,15 @@ the withdrawal stores a snapshot of the method identity/display name, saved
 destination name, and ordered structured fields. Later edits, archival, or
 configuration changes do not rewrite this snapshot.
 
-Configured fields use `name` as their submitted value identity. Editable field
-types include `text`, `select`, and `textarea`; `fixed` fields are
-server-injected. Regex and enum rules are enforced server-side. Select options
-are ordered key/label entries: the key is the submitted machine value and the
-label is human-facing. Simple metadata such as `copyable` stays directly on
-the field. HTML-oriented settings such as `placeholder`, `rows`,
+Configured fields use `name` as their value identity. Editable field types
+include `text`, `select`, and `textarea`; `fixed` values are visible and
+read-only to customers, while `hidden` values are omitted from customer
+forms/lists. Both are injected by the server and retained in snapshots. Regex
+and enum rules are enforced server-side. Select options are ordered key/label
+entries: the key is the submitted machine value and the label is human-facing.
+Optional field descriptions provide customer help text. Simple metadata such
+as `copyable` stays directly on the field. HTML-oriented settings such as
+`placeholder`, `rows`,
 `autocomplete`, `aria-*`, and `data-*` live under `attrs`; reserved
 semantic/control properties and event attributes are filtered so they cannot
 override the configured field.
@@ -44,9 +47,11 @@ override the configured field.
 Operator list results stay concise. Authorized operator detail returns the full
 snapshot (`name`, `label`, `value`, optional `displayValue`, `type`,
 `copyable`) so a human or automation can perform the manual payment without
-scraping display text. Ordinary customer withdrawal history does not expose the
-field values. Destination records are archived rather than hard-deleted through
-the customer UI.
+scraping display text. Hidden fields remain available in operator detail;
+`copyable` is operator/automation metadata and does not create customer copy
+actions. Ordinary customer withdrawal history does not expose field values.
+Destination records are archived rather than hard-deleted through the customer
+UI.
 
 ## API access
 

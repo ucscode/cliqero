@@ -42,7 +42,7 @@ function htmlAttrs<T>(attrs?: WithdrawalFieldAttrs) {
 function destinationValues(destination: WithdrawalDestination | null) {
   return Object.fromEntries(
     (destination?.fields ?? [])
-      .filter((field) => field.type !== "fixed")
+      .filter((field) => field.type !== "fixed" && field.type !== "hidden")
       .map((field) => [field.name, field.value]),
   );
 }
@@ -107,6 +107,7 @@ export function PayoutMethodForm({
       {method && (
         <>
           <p className="text-sm text-slate-500">{method.description}</p>
+          <div className="border-t border-slate-200" aria-hidden="true" />
           <div className="grid gap-2">
             <Label htmlFor="payout-method-name">Name</Label>
             <Input
@@ -118,106 +119,122 @@ export function PayoutMethodForm({
               placeholder="e.g. My primary account"
             />
           </div>
-          {method.fields.map((field) => {
-            const fieldId = `payout-method-field-${field.name}`;
-            if (field.type === "fixed")
-              return (
-                <div key={field.name} className="grid gap-2">
-                  <Label htmlFor={fieldId}>{field.label}</Label>
-                  <Input id={fieldId} value={field.value} readOnly />
-                </div>
-              );
+          <div className="border-t border-slate-200" aria-hidden="true" />
+          <div className="grid gap-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+            {method.fields.map((field) => {
+              const fieldId = `payout-method-field-${field.name}`;
+              if (field.type === "hidden") return null;
+              if (field.type === "fixed")
+                return (
+                  <div key={field.name} className="grid gap-2">
+                    <Label htmlFor={fieldId}>{field.label}</Label>
+                    <Input id={fieldId} value={field.value} readOnly />
+                    {field.description && (
+                      <p className="text-xs text-slate-500">{field.description}</p>
+                    )}
+                  </div>
+                );
 
-            if (field.type === "select")
+              if (field.type === "select")
+                return (
+                  <div key={field.name} className="grid gap-2">
+                    <Label htmlFor={fieldId}>
+                      {field.label}
+                      {field.required ? " *" : ""}
+                    </Label>
+                    <Select
+                      {...htmlAttrs<SelectHTMLAttributes<HTMLSelectElement>>(field.attrs)}
+                      id={fieldId}
+                      required={field.required}
+                      value={values[field.name] ?? ""}
+                      onChange={(event) =>
+                        setValues((current) => ({ ...current, [field.name]: event.target.value }))
+                      }
+                    >
+                      <option value="">Choose {field.label.toLowerCase()}</option>
+                      {field.options.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                    {field.description && (
+                      <p className="text-xs text-slate-500">{field.description}</p>
+                    )}
+                  </div>
+                );
+
+              if (field.type === "textarea")
+                return (
+                  <div key={field.name} className="grid gap-2">
+                    <Label htmlFor={fieldId}>
+                      {field.label}
+                      {field.required ? " *" : ""}
+                    </Label>
+                    <Textarea
+                      {...htmlAttrs<TextareaHTMLAttributes<HTMLTextAreaElement>>(field.attrs)}
+                      id={fieldId}
+                      required={field.required}
+                      value={values[field.name] ?? ""}
+                      onChange={(event) =>
+                        setValues((current) => ({ ...current, [field.name]: event.target.value }))
+                      }
+                    />
+                    {field.enum?.length ? (
+                      <p className="text-xs text-slate-500">
+                        Allowed values: {field.enum.join(", ")}
+                      </p>
+                    ) : null}
+                    {field.description && (
+                      <p className="text-xs text-slate-500">{field.description}</p>
+                    )}
+                  </div>
+                );
+
+              const listId = field.enum?.length ? `${fieldId}-values` : undefined;
               return (
                 <div key={field.name} className="grid gap-2">
                   <Label htmlFor={fieldId}>
                     {field.label}
                     {field.required ? " *" : ""}
                   </Label>
-                  <Select
-                    {...htmlAttrs<SelectHTMLAttributes<HTMLSelectElement>>(field.attrs)}
+                  <Input
+                    {...htmlAttrs<InputHTMLAttributes<HTMLInputElement>>(field.attrs)}
                     id={fieldId}
                     required={field.required}
-                    value={values[field.name] ?? ""}
-                    onChange={(event) =>
-                      setValues((current) => ({ ...current, [field.name]: event.target.value }))
-                    }
-                  >
-                    <option value="">Choose {field.label.toLowerCase()}</option>
-                    {field.options.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              );
-
-            if (field.type === "textarea")
-              return (
-                <div key={field.name} className="grid gap-2">
-                  <Label htmlFor={fieldId}>
-                    {field.label}
-                    {field.required ? " *" : ""}
-                  </Label>
-                  <Textarea
-                    {...htmlAttrs<TextareaHTMLAttributes<HTMLTextAreaElement>>(field.attrs)}
-                    id={fieldId}
-                    required={field.required}
+                    pattern={field.regex}
+                    list={listId}
                     value={values[field.name] ?? ""}
                     onChange={(event) =>
                       setValues((current) => ({ ...current, [field.name]: event.target.value }))
                     }
                   />
-                  {field.enum?.length ? (
-                    <p className="text-xs text-slate-500">
-                      Allowed values: {field.enum.join(", ")}
-                    </p>
-                  ) : null}
+                  {listId && (
+                    <datalist id={listId}>
+                      {field.enum?.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
+                  )}
+                  {field.description && (
+                    <p className="text-xs text-slate-500">{field.description}</p>
+                  )}
                 </div>
               );
-
-            const listId = field.enum?.length ? `${fieldId}-values` : undefined;
-            return (
-              <div key={field.name} className="grid gap-2">
-                <Label htmlFor={fieldId}>
-                  {field.label}
-                  {field.required ? " *" : ""}
-                </Label>
-                <Input
-                  {...htmlAttrs<InputHTMLAttributes<HTMLInputElement>>(field.attrs)}
-                  id={fieldId}
-                  required={field.required}
-                  pattern={field.regex}
-                  list={listId}
-                  value={values[field.name] ?? ""}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, [field.name]: event.target.value }))
-                  }
-                />
-                {listId && (
-                  <datalist id={listId}>
-                    {field.enum?.map((value) => (
-                      <option key={value} value={value} />
-                    ))}
-                  </datalist>
-                )}
-              </div>
-            );
-          })}
+            })}
+          </div>
         </>
       )}
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="ghost" disabled={saving} onClick={onCancel}>
-          Cancel
-        </Button>
-        {method && (
+      {method && (
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="ghost" disabled={saving} onClick={onCancel}>
+            Cancel
+          </Button>
           <Button type="submit" disabled={saving}>
             {saving ? "Saving…" : "Save payout method"}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </form>
   );
 }

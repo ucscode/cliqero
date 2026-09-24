@@ -12,6 +12,7 @@ const bank = {
     {
       name: "account_number",
       label: "Account number",
+      description: "Enter the 10-digit account number.",
       type: "text",
       required: true,
       regex: "[0-9]{10}",
@@ -56,6 +57,17 @@ describe("WithdrawalMethodRegistry", () => {
         }),
     ).toThrow();
     expect(
+      () =>
+        new WithdrawalMethodRegistry({
+          methods: [
+            {
+              ...global,
+              fields: [{ name: "network", label: "Network", type: "hidden" }],
+            },
+          ],
+        }),
+    ).toThrow();
+    expect(
       () => new WithdrawalMethodRegistry({ methods: [bank], provider: "not-allowed" }),
     ).toThrow();
     expect(
@@ -85,6 +97,10 @@ describe("WithdrawalMethodRegistry", () => {
   it("enriches trusted metadata and enforces regex server-side", () => {
     const registry = new WithdrawalMethodRegistry({ methods: [bank] });
     const method = registry.requireAvailable("bank_ng", { country: "NG" });
+    expect(method.fields[0]).toMatchObject({
+      name: "account_number",
+      description: "Enter the 10-digit account number.",
+    });
     expect(registry.enrich(method, { account_number: "0123456789" })).toEqual([
       {
         name: "account_number",
@@ -104,6 +120,51 @@ describe("WithdrawalMethodRegistry", () => {
     expect(() => registry.enrich(method, { network: "FAKE" })).toThrow("non-editable");
     expect(() => registry.enrich(method, { extra: "x" })).toThrow("Unknown");
     expect(() => registry.enrich(method, { account_number: "123" })).toThrow("invalid format");
+  });
+
+  it("injects hidden fields, rejects client values, and reconciles against current config", () => {
+    const configuredMethod = {
+      ...global,
+      fields: [
+        ...global.fields.slice(0, 1),
+        {
+          name: "network_id",
+          label: "Network ID",
+          description: "Internal identifier for payout automation.",
+          type: "hidden",
+          value: "tron-mainnet",
+          copyable: true,
+        },
+      ],
+    };
+    const registry = new WithdrawalMethodRegistry({ methods: [configuredMethod] });
+    const method = registry.requireAvailable("usdt_trc20", { country: "US" });
+    const saved = registry.enrich(method, { account_number: "0123456789" });
+
+    expect(saved).toContainEqual({
+      name: "network_id",
+      label: "Network ID",
+      value: "tron-mainnet",
+      type: "hidden",
+      copyable: true,
+    });
+    expect(() =>
+      registry.enrich(method, { account_number: "0123456789", network_id: "spoof" }),
+    ).toThrow("non-editable");
+    expect(registry.reconcile(method, saved)).toEqual(saved);
+
+    const changedRegistry = new WithdrawalMethodRegistry({
+      methods: [
+        {
+          ...configuredMethod,
+          fields: [configuredMethod.fields[0], { ...configuredMethod.fields[1], value: "other" }],
+        },
+      ],
+    });
+    expect(() => changedRegistry.reconcile(changedRegistry.find("usdt_trc20")!, saved)).toThrow(
+      "no longer matches",
+    );
+    expect(() => registry.reconcile(method, saved.slice(0, 1))).toThrow("no longer matches");
   });
 
   it("supports ordered select options and enum-constrained editable values", () => {
@@ -216,9 +277,14 @@ describe("WithdrawalMethodRegistry", () => {
     ]);
     expect(registry.find("usdt_trc20")?.fields[1]).toMatchObject({
       name: "network",
-      type: "fixed",
+      type: "hidden",
       value: "TRC20",
+      description: expect.any(String),
       copyable: true,
+    });
+    expect(registry.find("bank_ng")?.fields[0]).toMatchObject({
+      name: "bank_name",
+      description: expect.any(String),
     });
   });
 });

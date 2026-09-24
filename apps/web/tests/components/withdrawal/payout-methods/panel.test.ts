@@ -40,4 +40,10 @@ describe("Payout Methods UI contract", () => {
     expect(panelSource).toContain('method: "PATCH"');
     expect(panelSource).toContain('status: "archived"');
   });
+
+  it("hides server-owned fields and does not offer customer copy actions", () => {
+    expect(panelSource).toContain('field.type !== "hidden"');
+    expect(panelSource).not.toContain("CopyValue");
+    expect(panelSource).toContain("field.displayValue ?? field.value");
+  });
 });

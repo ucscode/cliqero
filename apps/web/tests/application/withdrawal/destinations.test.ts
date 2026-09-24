@@ -14,6 +14,7 @@ const bankMethod = {
     {
       name: "bank",
       label: "Bank",
+      description: "Choose the bank holding this account.",
       type: "text",
       required: true,
       copyable: true,
@@ -29,7 +30,8 @@ const bankMethod = {
     {
       name: "network",
       label: "Network",
-      type: "fixed",
+      description: "Internal payout network identifier.",
+      type: "hidden",
       value: "TRC20",
       copyable: true,
     },
@@ -85,7 +87,7 @@ describe("WithdrawalDestinationService", () => {
         type: "text",
         copyable: true,
       },
-      { name: "network", label: "Network", value: "TRC20", type: "fixed", copyable: true },
+      { name: "network", label: "Network", value: "TRC20", type: "hidden", copyable: true },
     ]);
     await expect(service.get("other", destination.id)).rejects.toThrow("not found");
     await expect(service.update("other", destination.id, { name: "stolen" })).rejects.toThrow(
@@ -128,6 +130,13 @@ describe("WithdrawalDestinationService", () => {
       values: { bank: "GTBank", account: "0123456789" },
     });
     const snapshot = await service.resolveForWithdrawal("owner", created.id);
+    expect(snapshot.fields[2]).toEqual({
+      name: "network",
+      label: "Network",
+      value: "TRC20",
+      type: "hidden",
+      copyable: true,
+    });
     const updated = await service.update("owner", created.id, {
       name: "New primary",
       values: { bank: "Access", account: "9999999999" },
@@ -192,6 +201,10 @@ describe("WithdrawalDestinationService", () => {
       display_name: "Bank account",
       description: "Nigerian bank account",
       fields: bankMethod.fields,
+    });
+    expect(methods[0]?.fields[0]).toMatchObject({
+      name: "bank",
+      description: "Choose the bank holding this account.",
     });
     expect(methods[0]).not.toHaveProperty("image_url");
 

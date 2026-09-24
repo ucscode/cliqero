@@ -31,7 +31,8 @@ reference these instance keys.
 
 Withdrawal methods are data-collection/presentation definitions in
 `config/modules/withdrawal/methods.yaml`, not payout providers. Define explicit
-method IDs, country eligibility, and ordered `text`/`fixed` fields; never add
+method IDs, country eligibility, and ordered `text`, `select`, `textarea`,
+`fixed`, and `hidden` fields; never add
 transfer credentials or an outbound executor. The tracked
 `config/modules/withdrawal/methods.example.yaml` is the schema example. Like
 other Cliqero YAML, the runtime file uses `parameters` and may optionally

@@ -22,6 +22,12 @@ describe("Payout Methods form pages", () => {
     expect(form).toContain('field.type === "fixed"');
     expect(form).toContain('field.type === "select"');
     expect(form).toContain('field.type === "textarea"');
+    expect(form).toContain('field.type === "hidden"');
+    expect(form).toContain("field.description");
+    expect(form).toContain("border-t border-slate-200");
+    expect(form).toContain("bg-slate-50 p-4");
+    expect(form).toContain("{method && (");
+    expect(form).toContain('.filter((field) => field.type !== "fixed" && field.type !== "hidden")');
   });
 
   it("reuses one form for add and edit, with immutable method on edit and persisted API calls", () => {

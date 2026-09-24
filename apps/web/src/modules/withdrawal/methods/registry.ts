@@ -108,6 +108,7 @@ const attrsSchema = z.record(attrName, attrValue).transform((attributes) =>
 const editableBase = {
   name: fieldName,
   label: z.string().trim().min(1).max(80),
+  description: z.string().trim().min(1).max(500).optional(),
   required: z.boolean(),
   copyable: z.boolean().optional(),
   attrs: attrsSchema.optional(),
@@ -143,7 +144,19 @@ const fixedFieldSchema = z
   .object({
     name: fieldName,
     label: z.string().trim().min(1).max(80),
+    description: z.string().trim().min(1).max(500).optional(),
     type: z.literal("fixed"),
+    value: z.string().trim().min(1).max(500),
+    copyable: z.boolean().optional(),
+  })
+  .strict();
+
+const hiddenFieldSchema = z
+  .object({
+    name: fieldName,
+    label: z.string().trim().min(1).max(80),
+    description: z.string().trim().min(1).max(500).optional(),
+    type: z.literal("hidden"),
     value: z.string().trim().min(1).max(500),
     copyable: z.boolean().optional(),
   })
@@ -163,6 +176,7 @@ const methodSchema = z
           selectFieldSchema,
           textareaFieldSchema,
           fixedFieldSchema,
+          hiddenFieldSchema,
         ]),
       )
       .min(1),
@@ -233,7 +247,9 @@ export class WithdrawalMethodRegistry {
 
   enrich(method: WithdrawalMethod, values: Record<string, string>): DestinationField[] {
     const editable = new Set(
-      method.fields.filter((field) => field.type !== "fixed").map((field) => field.name),
+      method.fields
+        .filter((field) => field.type !== "fixed" && field.type !== "hidden")
+        .map((field) => field.name),
     );
     for (const name of Object.keys(values)) {
       if (!editable.has(name)) throw new Error(`Unknown or non-editable withdrawal field: ${name}`);
@@ -242,7 +258,7 @@ export class WithdrawalMethodRegistry {
     const enriched: DestinationField[] = [];
     for (const field of method.fields) {
       const copyable = field.copyable ?? false;
-      if (field.type === "fixed") {
+      if (field.type === "fixed" || field.type === "hidden") {
         enriched.push({
           name: field.name,
           label: field.label,
@@ -295,13 +311,22 @@ export class WithdrawalMethodRegistry {
 
   reconcile(method: WithdrawalMethod, fields: readonly DestinationField[]) {
     const values: Record<string, string> = {};
+    for (const configured of method.fields) {
+      if (configured.type !== "fixed" && configured.type !== "hidden") continue;
+      const saved = fields.find((field) => field.name === configured.name);
+      if (!saved || saved.type !== configured.type || saved.value !== configured.value)
+        throw new Error(
+          "Saved withdrawal destination no longer matches its method; update it before use",
+        );
+    }
+
     for (const field of fields) {
       const configured = method.fields.find((candidate) => candidate.name === field.name);
       if (!configured || field.type !== configured.type)
         throw new Error(
           "Saved withdrawal destination no longer matches its method; update it before use",
         );
-      if (configured.type === "fixed") {
+      if (configured.type === "fixed" || configured.type === "hidden") {
         if (field.value !== configured.value)
           throw new Error(
             "Saved withdrawal destination no longer matches its method; update it before use",

@@ -52,7 +52,7 @@ export const operatorWithdrawalDetailSchema = operatorWithdrawalSchema.extend({
         label: z.string(),
         value: z.string(),
         displayValue: z.string().optional(),
-        type: z.enum(["text", "select", "textarea", "fixed"]),
+        type: z.enum(["text", "select", "textarea", "fixed", "hidden"]),
         copyable: z.boolean(),
       }),
     ),

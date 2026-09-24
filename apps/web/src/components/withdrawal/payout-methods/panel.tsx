@@ -6,7 +6,6 @@ import { apiFetch } from "@/lib/api-client";
 import type { WithdrawalDestination, WithdrawalMethod } from "@/lib/api-client";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
-import { CopyValue } from "../../copy-value";
 import { EmptyState } from "../../empty-state";
 import { Skeleton } from "../../ui/skeleton";
 import { Toast } from "../../toast";
@@ -97,22 +96,16 @@ export function PayoutMethodsPanel() {
                   )}
                 </div>
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {destination.fields.map((field) => (
-                    <div key={field.name} className="min-w-0">
-                      <dt className="text-xs text-slate-500">{field.label}</dt>
-                      <dd className="break-all text-sm font-medium">
-                        {field.copyable ? (
-                          <CopyValue
-                            label={field.label}
-                            value={field.value}
-                            displayValue={field.displayValue}
-                          />
-                        ) : (
-                          (field.displayValue ?? field.value)
-                        )}
-                      </dd>
-                    </div>
-                  ))}
+                  {destination.fields
+                    .filter((field) => field.type !== "hidden")
+                    .map((field) => (
+                      <div key={field.name} className="min-w-0">
+                        <dt className="text-xs text-slate-500">{field.label}</dt>
+                        <dd className="break-all text-sm font-medium">
+                          {field.displayValue ?? field.value}
+                        </dd>
+                      </div>
+                    ))}
                 </dl>
               </div>
               <div className="flex items-start gap-2">

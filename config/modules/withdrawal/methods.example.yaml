@@ -21,6 +21,7 @@ parameters:
       fields:
         - name: bank_name
           label: Bank
+          description: Enter the name of the bank holding this account.
           type: text
           required: true
           copyable: true
@@ -31,6 +32,7 @@ parameters:
 
         - name: account_number
           label: Account number
+          description: Enter the account number that should receive your withdrawal.
           type: text
           required: true
           # regex is enforced by the server. The browser also receives it as an
@@ -44,6 +46,7 @@ parameters:
 
         - name: account_name
           label: Account name
+          description: Enter the account holder name exactly as registered with the bank.
           type: text
           required: true
           copyable: true
@@ -59,6 +62,7 @@ parameters:
       fields:
         - name: address
           label: Wallet address
+          description: Enter the USDT wallet address that should receive your withdrawal.
           type: text
           required: true
           regex: "^T[1-9A-HJ-NP-Za-km-z]{33}$"
@@ -68,11 +72,13 @@ parameters:
             autocomplete: "off"
             data-network: trc20
 
-        # fixed values are injected by the server and are never accepted from
-        # client-submitted values.
+        # fixed values are shown read-only to customers. Hidden values are
+        # injected by the server, omitted from customer forms/lists, and never
+        # accepted from client-submitted values. Both remain in snapshots.
         - name: network
           label: Network
-          type: fixed
+          description: Internal network identifier retained for payout processing.
+          type: hidden
           value: TRC20
           copyable: true
 

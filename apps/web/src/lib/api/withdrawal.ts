@@ -70,6 +70,7 @@ export type WithdrawalFieldAttrs = Record<string, string | number | boolean>;
 export type WithdrawalSelectOption = { key: string; label: string };
 
 type WithdrawalEditableField = WithdrawalFieldIdentity & {
+  description?: string;
   required: boolean;
   copyable?: boolean;
   attrs?: WithdrawalFieldAttrs;
@@ -93,6 +94,13 @@ export type WithdrawalMethodField =
   | (WithdrawalFieldIdentity & {
       type: "fixed";
       value: string;
+      description?: string;
+      copyable?: boolean;
+    })
+  | (WithdrawalFieldIdentity & {
+      type: "hidden";
+      value: string;
+      description?: string;
       copyable?: boolean;
     });
 export type WithdrawalMethod = {
@@ -106,7 +114,7 @@ export type WithdrawalDestinationField = {
   label: string;
   value: string;
   displayValue?: string;
-  type: "text" | "select" | "textarea" | "fixed";
+  type: "text" | "select" | "textarea" | "fixed" | "hidden";
   copyable: boolean;
 };
 export type WithdrawalDestination = {

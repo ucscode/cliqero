@@ -15,13 +15,21 @@ add payout methods at `/dashboard/payout-methods/new` and edit them at
 method-driven form, and the configured method is fixed when editing. Archived
 destinations are retained and cannot be selected for new requests.
 
-Method fields model actual form controls. Each field uses `name` as its
-submitted value identity and may be `text`, `select`, `textarea`, or
-server-owned `fixed`. Simple Cliqero metadata such as `copyable` stays
-directly on the field. Text and textarea values may be constrained by
-server-enforced `regex` and `enum` rules. Select options are ordered
-`{ key, label }` entries, where the key is submitted and the label is
-human-facing.
+Method fields use `name` as their value identity and may be `text`, `select`,
+`textarea`, server-owned `fixed`, or server-owned `hidden`. Optional field
+`description` text appears as help beneath customer-editable controls and
+visible fixed values. Fixed values appear read-only; hidden values are omitted
+from customer forms and saved-method lists. Both are injected by the server,
+persisted in the destination snapshot, and available to authorized operator
+detail/API consumers. Client submissions cannot set either value. Text and
+textarea values may be constrained by server-enforced `regex` and `enum`
+rules. Select options are ordered `{ key, label }` entries, where the key is
+submitted and the label is human-facing.
+
+The create form groups the method type and its description first, then the
+saved-method name, then the configured payout details. Field `copyable`
+metadata is retained for operator/automation use, not used to add copy actions
+to the customer-facing saved-method list.
 
 Editable fields may define an `attrs` mapping for HTML control attributes such
 as `placeholder`, `rows`, `autocomplete`, `maxlength`, `aria-*`, or
