@@ -148,6 +148,10 @@ seed-blog:
 # Seed all development fixtures
 seed: seed-users seed-catalogue seed-blog
 
+# Create a real checkout-backed development purchase and print its persisted earnings distribution
+dev-distribution buyer="central_left_1" listing="":
+	docker compose exec -T -w /workspace/apps/web main node --import tsx src/infrastructure/development/distribution-scenario.ts {{quote(buyer)}} {{quote(listing)}}
+
 # Validate the development Compose configuration
 compose-dev-config:
 	docker compose config

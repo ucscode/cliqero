@@ -95,3 +95,31 @@ development-only; never use them outside local or development environments.
 `tree_root` is the development system-root/operator account for inspecting the
 whole seeded hierarchy. `central_user` is a normal customer/promoter account
 at depth 3 below `tree_root`, with two seeded downline generations.
+
+## Development purchase distribution scenario
+
+After preparing the local fixtures, run a real wallet-funded checkout and
+purchase distribution without logging into multiple accounts:
+
+```text
+just seed
+just dev-distribution
+just dev-distribution central_right_1 <listing-uuid>
+```
+
+The buyer username is only a development convenience selector; the command
+resolves it to the account UUID before calling application services. The
+default listing is resolved as `toolkit-01` under the `fixture_catalogue`
+seller, since an external key is unique only within its seller. Select any
+other listing by UUID, not by external key or a presumed slug. A custom listing
+must already exist and be published.
+
+Each run funds exactly the selected listing's canonical USD price with the
+development payment provider, makes that credit available, and buys the same
+listing through the normal wallet checkout and current purchase-distribution
+processor. It uses fresh funding and checkout idempotency keys each time. The
+buyer keeps any prior wallet balance: the added funding offsets the purchase,
+so the available balance should have no net change. Funding, checkout,
+purchase, entitlement, and earnings remain as real records in the local
+development database; the command never seeds these records, edits balances,
+or clears existing data.
