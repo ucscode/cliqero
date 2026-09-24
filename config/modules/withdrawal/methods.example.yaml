@@ -64,9 +64,9 @@ parameters:
           type: text
           required: true
           regex: "^T[1-9A-HJ-NP-Za-km-z]{33}$"
-          placeholder: T...
           copyable: true
           attributes:
+            placeholder: T...
             autoComplete: "off"
             data-network: trc20
 
