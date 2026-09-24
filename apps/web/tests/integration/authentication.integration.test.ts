@@ -1,8 +1,26 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiApp } from "@/api/hono";
 import { createContainer } from "@/infrastructure/container";
 import { handlePasswordReset } from "@/api/compat/password-reset/route";
 import { onboardingBoundaryResponse } from "@/api/compat/me/onboarding/route";
+
+const emailDelivery = vi.hoisted(() => ({
+  messages: [] as Array<{ kind: string; email: string; url: string; token: string }>,
+}));
+
+vi.mock("@/lib/email", () => ({
+  sendAuthEmail: async (
+    kind: string,
+    message: { user: { email: string }; url: string; token: string },
+  ) => {
+    emailDelivery.messages.push({
+      kind,
+      email: message.user.email,
+      url: message.url,
+      token: message.token,
+    });
+  },
+}));
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -174,6 +192,61 @@ suite("Better Auth and Cliqero identity boundary", () => {
       headers: new Headers({ authorization: `Bearer ${result.token}` }),
     });
     await expect(app.authentication.authenticate(result.token)).resolves.toBeNull();
+  });
+
+  it("keeps the current email until Better Auth verifies the proposed address", async () => {
+    const currentEmail = "email-change-current@example.com";
+    const proposedEmail = "email-change-new@example.com";
+    const account = await app.authentication.register({
+      email: currentEmail,
+      username: "emailchangeuser",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const signIn = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: currentEmail, password: "correct-horse-battery" }),
+      }),
+    );
+    const cookie = signIn.headers.get("set-cookie")!.split(";")[0];
+    emailDelivery.messages.length = 0;
+    const request = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/change-email", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          newEmail: proposedEmail,
+          callbackURL: "http://localhost:3000/email-verified",
+        }),
+      }),
+    );
+
+    expect(request.status).toBe(200);
+    expect(await request.json()).toMatchObject({ status: true });
+    expect(emailDelivery.messages).toHaveLength(1);
+    expect(emailDelivery.messages[0]).toMatchObject({ kind: "verification", email: proposedEmail });
+    expect((await app.profiles.get(account.id)).email).toBe(currentEmail);
+    expect(
+      (
+        await app.database.query<{ email: string }>(
+          `select email from better_auth."user" where email in ($1,$2)`,
+          [currentEmail, proposedEmail],
+        )
+      ).rows,
+    ).toEqual([{ email: currentEmail }]);
+
+    const verification = new URL(emailDelivery.messages[0].url);
+    const verified = await app.authentication.auth.handler(
+      new Request(
+        `http://localhost:3000/api/auth/verify-email?token=${encodeURIComponent(emailDelivery.messages[0].token)}&callbackURL=${encodeURIComponent("http://localhost:3000/email-verified")}`,
+        { headers: { cookie } },
+      ),
+    );
+    expect(verification.pathname).toBe("/api/auth/verify-email");
+    expect(verified.status).toBe(302);
+    expect((await app.profiles.get(account.id)).email).toBe(proposedEmail);
   });
 
   it("resets a credential without requiring the previous password", async () => {

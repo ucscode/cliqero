@@ -79,52 +79,6 @@ suite("headless API principal and hierarchy read model", () => {
       }),
     ).rejects.toThrow("Unknown API key scope");
   });
-  it("manages personal API keys only for the authenticated account", async () => {
-    const owner = await account("personal"),
-      other = await account("otherkey");
-    const api = createApiApp({
-      ...app,
-      principalResolver: {
-        resolve: async () => ({
-          accountId: owner.id,
-          account: owner,
-          kind: "user_session",
-          capabilities: [],
-          scopes: new Set<string>(),
-        }),
-      },
-    } as any);
-    const createdResponse = await api.fetch(
-      new Request("http://localhost/api/api-keys", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: "personal automation",
-          scopes: ["wallet:read"],
-        }),
-      }),
-    );
-    expect(createdResponse.status).toBe(201);
-    const created = await createdResponse.json();
-    expect(created.secret).toMatch(/^cliq_live_/);
-    const listed = await api.fetch(new Request("http://localhost/api/api-keys"));
-    expect(listed.status).toBe(200);
-    expect((await listed.json()).items).toHaveLength(1);
-    const foreign = await app.apiKeys.create({
-      accountId: other.id,
-      name: "foreign",
-      scopes: [],
-      createdBy: other.id,
-    });
-    const foreignRevoke = await api.fetch(
-      new Request(`http://localhost/api/api-keys/${foreign.id}/revoke`, { method: "POST" }),
-    );
-    expect(foreignRevoke.status).toBe(404);
-    const revoked = await api.fetch(
-      new Request(`http://localhost/api/api-keys/${created.id}/revoke`, { method: "POST" }),
-    );
-    expect(revoked.status).toBe(204);
-  });
   it("returns capability-scoped operator overview data through Hono", async () => {
     const catalogueManager = await account("cataloguemanager"),
       operator = await account("overviewoperator"),

@@ -92,7 +92,8 @@ describe("architectural boundaries", () => {
     expect(existsSync(join(components, "checkout/flow.tsx"))).toBe(true);
     expect(existsSync(join(components, "settings/panel.tsx"))).toBe(true);
     expect(existsSync(join(components, "settings/profile.tsx"))).toBe(true);
-    expect(existsSync(join(components, "settings/api-keys.tsx"))).toBe(true);
+    expect(existsSync(join(components, "settings/api-keys.tsx"))).toBe(false);
+    expect(existsSync(join(components, "settings/account.tsx"))).toBe(false);
     expect(existsSync(join(components, "storefront/catalogue.tsx"))).toBe(true);
     expect(existsSync(join(components, "storefront/featured.tsx"))).toBe(true);
     expect(existsSync(join(components, "storefront/grid.tsx"))).toBe(true);

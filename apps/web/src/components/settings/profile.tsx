@@ -2,11 +2,13 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiClientError, presentFormApiError, apiFetch, type Profile } from "@/lib/api-client";
+import { authClient } from "@/lib/auth-client";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { CountrySelect } from "../country-select";
 import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
 import { HoneypotField } from "../honeypot-field";
@@ -18,13 +20,16 @@ function errorMessage(error: unknown, fallback: string) {
 
 export function ProfileSettings() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [username, setUsername] = useState("");
   const [country, setCountry] = useState("");
+  const [emailChangeOpen, setEmailChangeOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailChangeBusy, setEmailChangeBusy] = useState(false);
+  const [emailChangeMessage, setEmailChangeMessage] = useState<string | null>(null);
+  const [emailChangeError, setEmailChangeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,7 +37,6 @@ export function ProfileSettings() {
     try {
       const value = await apiFetch<Profile>("/api/me/profile");
       setProfile(value);
-      setUsername(value.username);
       setCountry(value.country ?? "");
     } catch (cause) {
       setError(errorMessage(cause, "We couldn’t load your profile."));
@@ -51,7 +55,6 @@ export function ProfileSettings() {
     setBusy(true);
     setError(null);
     setMessage(null);
-    setUsernameError(null);
     try {
       const value = await apiFetch<Profile>("/api/me/profile", {
         method: "PATCH",
@@ -59,20 +62,48 @@ export function ProfileSettings() {
           "content-type": "application/json",
           ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
         },
-        body: JSON.stringify({ username, country: country || null }),
+        body: JSON.stringify({ country: country || null }),
       });
       setProfile(value);
-      setUsername(value.username);
       setCountry(value.country ?? "");
       setMessage("Profile saved.");
     } catch (cause) {
       if (cause instanceof ApiClientError) {
-        const presented = presentFormApiError(cause, ["username"]);
-        setUsernameError(presented.fields.username ?? null);
+        const presented = presentFormApiError(cause, []);
         setError(presented.message);
       } else setError("We couldn’t save your profile.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function requestEmailChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!profile || emailChangeBusy) return;
+    setEmailChangeBusy(true);
+    setEmailChangeError(null);
+    setEmailChangeMessage(null);
+    const proposedEmail = newEmail.trim();
+    if (proposedEmail.toLowerCase() === profile.email.toLowerCase()) {
+      setEmailChangeError("Enter an email address different from your current one.");
+      setEmailChangeBusy(false);
+      return;
+    }
+    try {
+      const result = await authClient.changeEmail({
+        newEmail: proposedEmail,
+        callbackURL: `${window.location.origin}/email-verified`,
+      });
+      if (result.error) throw result.error;
+      setEmailChangeMessage(`Verification email sent to ${proposedEmail}.`);
+      setEmailChangeOpen(false);
+      setNewEmail("");
+    } catch (cause) {
+      setEmailChangeError(
+        cause instanceof Error ? cause.message : "We couldn’t send the verification email.",
+      );
+    } finally {
+      setEmailChangeBusy(false);
     }
   }
 
@@ -94,53 +125,54 @@ export function ProfileSettings() {
       </div>
       {error && <Toast>{error}</Toast>}
       {message && <Toast tone="success">{message}</Toast>}
-      <form className="grid max-w-2xl gap-3" onSubmit={save}>
+      <form id="settings-profile-form" className="grid max-w-2xl gap-3" onSubmit={save}>
         <Label htmlFor="settings-username">Username</Label>
-        <Input
-          id="settings-username"
-          value={username}
-          pattern="[a-z0-9][a-z0-9_-]{2,31}"
-          onChange={(event) => setUsername(event.target.value.toLowerCase())}
-          minLength={3}
-          maxLength={32}
-          autoComplete="username"
-          required
-          aria-describedby={usernameError ? "settings-username-error" : undefined}
-          aria-invalid={Boolean(usernameError)}
-        />
-        {usernameError && (
-          <p id="settings-username-error" className="text-sm text-red-700">
-            {usernameError}
-          </p>
-        )}
-        <p className="text-xs leading-relaxed text-slate-500">
-          Lowercase letters, numbers, underscores, and hyphens. Usernames are unique.
-        </p>
-        <Label htmlFor="settings-country">
-          Country <span>(optional)</span>
-        </Label>
-        <Input
+        <Input id="settings-username" value={profile.username} readOnly />
+        <CountrySelect
           id="settings-country"
           value={country}
-          onChange={(event) => setCountry(event.target.value.toUpperCase())}
-          maxLength={2}
-          placeholder="NG"
+          onChange={setCountry}
+          required={false}
         />
-        <Label htmlFor="settings-email">Email</Label>
-        <Input
-          id="settings-email"
-          value={profile.email}
-          readOnly
-          aria-describedby="settings-email-help"
-        />
-        <p id="settings-email-help" className="text-xs leading-relaxed text-slate-500">
-          Email changes are managed by the authentication provider.
-        </p>
-        <Button type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Save profile"}
-        </Button>
         <HoneypotField />
       </form>
+      <div className="grid max-w-2xl gap-3">
+        <Label htmlFor="settings-email">Email</Label>
+        <Input id="settings-email" value={profile.email} readOnly />
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-fit"
+          onClick={() => {
+            setEmailChangeOpen((open) => !open);
+            setEmailChangeError(null);
+            setEmailChangeMessage(null);
+          }}
+        >
+          {emailChangeOpen ? "Cancel email change" : "Change email"}
+        </Button>
+        {emailChangeMessage && <Toast tone="success">{emailChangeMessage}</Toast>}
+        {emailChangeError && <Toast>{emailChangeError}</Toast>}
+        {emailChangeOpen && (
+          <form className="grid gap-3" onSubmit={requestEmailChange}>
+            <Label htmlFor="settings-new-email">New email</Label>
+            <Input
+              id="settings-new-email"
+              type="email"
+              autoComplete="email"
+              required
+              value={newEmail}
+              onChange={(event) => setNewEmail(event.target.value)}
+            />
+            <Button type="submit" disabled={emailChangeBusy}>
+              {emailChangeBusy ? "Sending…" : "Send verification"}
+            </Button>
+          </form>
+        )}
+      </div>
+      <Button type="submit" form="settings-profile-form" disabled={busy}>
+        {busy ? "Saving…" : "Save profile"}
+      </Button>
     </Card>
   );
 }

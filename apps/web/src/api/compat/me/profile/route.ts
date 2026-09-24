@@ -1,10 +1,8 @@
 import { z } from "zod";
 import { authenticatedAccount, apiError } from "../../http";
 import { getContainer } from "@/infrastructure/container";
-import { usernameSchema } from "@/modules/identity/username";
 const schema = z
   .object({
-    username: usernameSchema.optional(),
     country: z
       .string()
       .regex(/^[A-Z]{2}$/)

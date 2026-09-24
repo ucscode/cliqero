@@ -275,11 +275,11 @@ describe("Hono API foundation", () => {
       }),
     });
     expect(paths["/api/operator/treasury/entries"]).toBeDefined();
-    expect(paths["/api/api-keys"]).toBeDefined();
+    expect(paths["/api/api-keys"]).toBeUndefined();
     expect(paths["/api/operator/accounts/{accountId}/api-keys"]).toBeDefined();
     expect(paths["/api/operator/accounts/{accountId}/api-keys/{id}/revoke"]).toBeDefined();
     expect(paths["/api/operator/api-keys"]).toBeUndefined();
-    expect(paths["/api/api-keys/{id}/revoke"]).toBeDefined();
+    expect(paths["/api/api-keys/{id}/revoke"]).toBeUndefined();
     expect(paths["/api/me/access"]).toBeDefined();
     expect(paths["/api/me/session"]).toBeDefined();
     expect(paths["/api/operator/overview"]).toBeDefined();
@@ -382,7 +382,7 @@ describe("Hono API foundation", () => {
           }),
         )
       ).status,
-    ).toBe(401);
+    ).toBe(404);
   });
   it("fails closed for missing non-development schema configuration", async () => {
     expect(
@@ -849,22 +849,7 @@ describe("Hono API foundation", () => {
     );
     expect(response.status).toBe(400);
   });
-  it("keeps personal API-key management owner-scoped and scope constrained", async () => {
-    const account = {
-      accountId: "00000000-0000-4000-8000-000000000001",
-      account: {},
-      kind: "user_session" as const,
-      capabilities: [],
-      scopes: new Set<string>(),
-    };
-    const list = await appWith(account).fetch(new Request("http://localhost/api/api-keys"));
-    expect(list.status).toBe(200);
-    expect(await list.json()).toEqual({ items: [] });
-    const keyPrincipal = { ...account, kind: "api_key" as const };
-    const denied = await appWith(keyPrincipal).fetch(new Request("http://localhost/api/api-keys"));
-    expect(denied.status).toBe(403);
-  });
-  it("does not let a normal account grant operator API-key scopes", async () => {
+  it("does not register ordinary customer API-key routes", async () => {
     const principal = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: {},
@@ -872,32 +857,16 @@ describe("Hono API foundation", () => {
       capabilities: [],
       scopes: new Set<string>(),
     };
-    const response = await appWith(principal).fetch(
-      new Request("http://localhost/api/api-keys", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "elevated", scopes: ["treasury:manage"] }),
-      }),
-    );
-    expect(response.status).toBe(403);
-  });
-  it("does not let finance inspection authority create the broad legacy operations scope", async () => {
-    const principal = {
-      accountId: "00000000-0000-4000-8000-000000000001",
-      account: {},
-      kind: "user_session" as const,
-      capabilities: ["finance.read"],
-      scopes: new Set<string>(),
-    };
-    const response = await appWith(principal).fetch(
-      new Request("http://localhost/api/api-keys", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "finance", scopes: ["operations:manage"] }),
-      }),
-    );
-    expect(response.status).toBe(403);
-    expect((await response.json()).code).toBe("insufficient_scope");
+    for (const [path, method] of [
+      ["/api/api-keys", "GET"],
+      ["/api/api-keys", "POST"],
+      ["/api/api-keys/00000000-0000-4000-8000-000000000001/revoke", "POST"],
+    ] as const) {
+      const response = await appWith(principal).fetch(
+        new Request(`http://localhost${path}`, { method }),
+      );
+      expect(response.status).toBe(404);
+    }
   });
   it("enforces capability and API-key scope intersection for compatibility routes", async () => {
     const operatorKey = {

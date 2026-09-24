@@ -33,6 +33,12 @@ describe("Better Auth optional social providers", () => {
     );
 
     expect(boundary.auth.options.emailAndPassword?.enabled).toBe(true);
+    expect(boundary.auth.options.user?.changeEmail).toEqual({
+      enabled: true,
+      updateEmailWithoutVerification: false,
+    });
+    expect(boundary.auth.options.emailVerification?.sendVerificationEmail).toBeTypeOf("function");
+    expect(boundary.auth.options.emailVerification?.sendOnSignUp).toBe(true);
     expect(boundary.auth.options.socialProviders).toEqual({});
     expect(boundary.auth.options.account?.accountLinking).toMatchObject({
       enabled: true,

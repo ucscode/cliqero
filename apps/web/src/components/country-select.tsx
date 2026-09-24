@@ -9,18 +9,22 @@ const countries = getData().sort((a, b) => a.name.localeCompare(b.name));
 export function CountrySelect({
   value,
   onChange,
+  id = "country",
+  required = true,
 }: {
   value: string;
   onChange: (value: string) => void;
+  id?: string;
+  required?: boolean;
 }) {
   return (
     <div className="grid gap-2">
-      <Label htmlFor="country">Country</Label>
+      <Label htmlFor={id}>Country</Label>
       <Select
-        id="country"
+        id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        required
+        required={required}
       >
         <option value="">Select a country</option>
         {countries.map((country) => (

@@ -80,6 +80,12 @@ export class BetterAuthBoundary implements AuthenticationGateway {
         fields: {
           name: "display_name",
         },
+        changeEmail: {
+          enabled: true,
+          // Better Auth sends verification to the proposed address and only
+          // updates the canonical email after that link is used.
+          updateEmailWithoutVerification: false,
+        },
       },
       emailAndPassword: {
         enabled: true,
