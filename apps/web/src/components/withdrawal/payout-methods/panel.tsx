@@ -84,16 +84,36 @@ export function PayoutMethodsPanel() {
       ) : destinations.length ? (
         <div className="grid gap-3">
           {destinations.map((destination) => (
-            <Card key={destination.id} className="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Card key={destination.id} className="grid gap-4 p-5">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3>{destination.name}</h3>
-                  <span className="text-sm text-slate-500">{destination.method.display_name}</span>
-                  {!destination.method.available && (
-                    <span className="text-xs font-semibold text-amber-700">
-                      Unavailable for new withdrawals
-                    </span>
-                  )}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs text-slate-500">{destination.method.display_name}</p>
+                      {!destination.method.available && (
+                        <span className="text-xs font-semibold text-amber-700">
+                          Unavailable for new withdrawals
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="mt-1 break-words">{destination.name}</h3>
+                  </div>
+                  <div className="flex shrink-0 items-start gap-2">
+                    <Button asChild variant="secondary" disabled={!destination.method.available}>
+                      <Link
+                        href={`/dashboard/payout-methods/${encodeURIComponent(destination.id)}/edit`}
+                      >
+                        Edit
+                      </Link>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => void archiveDestination(destination)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </div>
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
                   {destination.fields
@@ -107,22 +127,6 @@ export function PayoutMethodsPanel() {
                       </div>
                     ))}
                 </dl>
-              </div>
-              <div className="flex items-start gap-2">
-                <Button asChild variant="secondary" disabled={!destination.method.available}>
-                  <Link
-                    href={`/dashboard/payout-methods/${encodeURIComponent(destination.id)}/edit`}
-                  >
-                    Edit
-                  </Link>
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => void archiveDestination(destination)}
-                >
-                  Remove
-                </Button>
               </div>
             </Card>
           ))}

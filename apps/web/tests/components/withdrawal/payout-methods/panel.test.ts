@@ -46,4 +46,16 @@ describe("Payout Methods UI contract", () => {
     expect(panelSource).not.toContain("CopyValue");
     expect(panelSource).toContain("field.displayValue ?? field.value");
   });
+
+  it("places subdued method metadata above the wrapping saved name and keeps actions at the top right", () => {
+    const cardStart = panelSource.indexOf("<Card key={destination.id}");
+    const methodName = panelSource.indexOf("{destination.method.display_name}", cardStart);
+    const savedName = panelSource.indexOf("{destination.name}", cardStart);
+    expect(methodName).toBeGreaterThan(cardStart);
+    expect(methodName).toBeLessThan(savedName);
+    expect(panelSource).toContain('className="mt-1 break-words"');
+    expect(panelSource).toContain("flex items-start justify-between gap-3");
+    expect(panelSource).toContain("flex shrink-0 items-start gap-2");
+    expect(panelSource).toContain("Unavailable for new withdrawals");
+  });
 });
