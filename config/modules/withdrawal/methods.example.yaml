@@ -26,6 +26,7 @@ parameters:
           required: true
           config:
             placeholder: Guaranty Trust Bank
+            copyable: true
 
         - name: account_number
           label: Account number
