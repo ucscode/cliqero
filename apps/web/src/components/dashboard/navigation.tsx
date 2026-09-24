@@ -23,7 +23,11 @@ const navigation = [
   { label: "Referrals", href: "/dashboard?section=referrals", section: "referrals" },
   { label: "Earnings", href: "/dashboard?section=earnings", section: "earnings" },
   { label: "Withdrawals", href: "/dashboard?section=withdrawals", section: "withdrawals" },
-  { label: "Purse", href: "/dashboard?section=purse", section: "purse" },
+  {
+    label: "Payout Methods",
+    href: "/dashboard?section=payout-methods",
+    section: "payout-methods",
+  },
   { label: "Settings", href: "/dashboard?section=settings", section: "settings" },
 ];
 
@@ -31,7 +35,7 @@ const primaryNavigation = navigation.filter((item) =>
   ["overview", "catalogue", "purchases"].includes(item.section),
 );
 const moneyNavigation = navigation.filter((item) =>
-  ["wallet", "earnings", "withdrawals", "purse"].includes(item.section),
+  ["wallet", "earnings", "withdrawals", "payout-methods"].includes(item.section),
 );
 const referralNavigation = navigation.filter((item) =>
   ["promote", "hierarchy", "referrals"].includes(item.section),
@@ -39,6 +43,14 @@ const referralNavigation = navigation.filter((item) =>
 
 export function dashboardSectionTitle(section: string) {
   return navigation.find((item) => item.section === section)?.label ?? "Dashboard";
+}
+
+export function resolveNavigationGroupOpen(active: boolean, manualOpen: boolean | null) {
+  return manualOpen ?? active;
+}
+
+export function nextNavigationGroupOpen(active: boolean, manualOpen: boolean | null) {
+  return !resolveNavigationGroupOpen(active, manualOpen);
 }
 
 export function DashboardNavigation({
@@ -60,8 +72,18 @@ export function DashboardNavigation({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          <DashboardNavGroup label="Money" items={moneyNavigation} section={section} />
-          <DashboardNavGroup label="Referrals" items={referralNavigation} section={section} />
+          <DashboardNavGroup
+            key={`Money-${section}`}
+            label="Money"
+            items={moneyNavigation}
+            section={section}
+          />
+          <DashboardNavGroup
+            key={`Referrals-${section}`}
+            label="Referrals"
+            items={referralNavigation}
+            section={section}
+          />
           <SidebarMenuItem className="mt-2 border-t border-slate-200 pt-2">
             <SidebarMenuButton asChild isActive={section === "settings"} className="font-medium">
               <Link href="/dashboard?section=settings">Settings</Link>
@@ -90,16 +112,16 @@ function DashboardNavGroup({
   section: string;
 }) {
   const active = items.some((item) => item.section === section);
-  const [manualOpen, setManualOpen] = useState(false);
-  const open = active || manualOpen;
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const open = resolveNavigationGroupOpen(active, manualOpen);
 
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         type="button"
-        isActive={active}
+        className={active ? "bg-emerald-50 font-semibold text-emerald-900" : undefined}
         aria-expanded={open}
-        onClick={() => setManualOpen((value) => !value)}
+        onClick={() => setManualOpen((value) => nextNavigationGroupOpen(active, value))}
       >
         <span>{label}</span>
         <ChevronDown

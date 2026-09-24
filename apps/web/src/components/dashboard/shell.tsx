@@ -28,8 +28,8 @@ import { HierarchyPanel } from "../hierarchy/panel";
 import { ReferralsPanel } from "../referral/panel";
 import { EarningsPanel } from "../earnings-panel";
 import { WithdrawalsPanel } from "../withdrawal/panel";
-import { PursePanel } from "../withdrawal/purse/panel";
-import { PurseFormPage } from "../withdrawal/purse/form-page";
+import { PayoutMethodsPanel } from "../withdrawal/payout-methods/panel";
+import { PayoutMethodFormPage } from "../withdrawal/payout-methods/form-page";
 import { SettingsPanel } from "../settings";
 import { BrandLink } from "../brand-identity";
 import { CheckoutFlow } from "../checkout/flow";
@@ -57,15 +57,15 @@ export function DashboardShell({
   fundingProvider,
   fundingAmount,
   fundingHistoryPage = false,
-  purseFormMode,
-  purseDestinationId,
+  payoutMethodFormMode,
+  payoutDestinationId,
 }: {
   dedicatedWalletFunding?: boolean;
   fundingProvider?: string;
   fundingAmount?: string;
   fundingHistoryPage?: boolean;
-  purseFormMode?: "create" | "edit";
-  purseDestinationId?: string;
+  payoutMethodFormMode?: "create" | "edit";
+  payoutDestinationId?: string;
 }) {
   const session = authClient.useSession();
   const { refetch: refetchSession } = session;
@@ -74,8 +74,8 @@ export function DashboardShell({
   const lastSessionRefreshAt = useRef(0);
   const invalidationStarted = useRef(false);
   const params = useSearchParams();
-  const section = purseFormMode
-    ? "purse"
+  const section = payoutMethodFormMode
+    ? "payout-methods"
     : dedicatedWalletFunding || fundingHistoryPage
       ? "wallet"
       : (params.get("section") ?? (params.get("buy") ? "checkout" : "overview"));
@@ -229,12 +229,12 @@ export function DashboardShell({
           ? "Fund wallet"
           : section === "withdrawals"
             ? "Withdrawals"
-            : section === "purse"
-              ? purseFormMode === "create"
-                ? "Add purse"
-                : purseFormMode === "edit"
-                  ? "Edit purse"
-                  : "Purse"
+            : section === "payout-methods"
+              ? payoutMethodFormMode === "create"
+                ? "Add payout method"
+                : payoutMethodFormMode === "edit"
+                  ? "Edit payout method"
+                  : "Payout Methods"
               : section === "settings"
                 ? "Settings"
                 : dashboardSectionTitle(section);
@@ -261,11 +261,11 @@ export function DashboardShell({
     <EarningsPanel />
   ) : section === "withdrawals" ? (
     <WithdrawalsPanel />
-  ) : section === "purse" ? (
-    purseFormMode ? (
-      <PurseFormPage mode={purseFormMode} destinationId={purseDestinationId} />
+  ) : section === "payout-methods" ? (
+    payoutMethodFormMode ? (
+      <PayoutMethodFormPage mode={payoutMethodFormMode} destinationId={payoutDestinationId} />
     ) : (
-      <PursePanel />
+      <PayoutMethodsPanel />
     )
   ) : section === "settings" ? (
     <SettingsPanel />

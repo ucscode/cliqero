@@ -11,7 +11,7 @@ import { EmptyState } from "../../empty-state";
 import { Skeleton } from "../../ui/skeleton";
 import { Toast } from "../../toast";
 
-export function PursePanel() {
+export function PayoutMethodsPanel() {
   const [methods, setMethods] = useState<WithdrawalMethod[]>([]);
   const [destinations, setDestinations] = useState<WithdrawalDestination[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +42,7 @@ export function PursePanel() {
   }, [load]);
 
   async function archiveDestination(destination: WithdrawalDestination) {
-    if (!window.confirm(`Remove “${destination.name}” from your purse?`)) return;
+    if (!window.confirm(`Remove “${destination.name}” from payout methods?`)) return;
     setError(null);
     try {
       await apiFetch(`/api/withdrawal-destinations/${destination.id}`, {
@@ -52,21 +52,17 @@ export function PursePanel() {
       });
       await load();
     } catch {
-      setError("This purse could not be removed. Please try again.");
+      setError("This payout method could not be removed. Please try again.");
     }
   }
 
   return (
-    <section className="grid gap-4" aria-labelledby="purse-heading">
+    <section className="grid gap-4" aria-label="Payout Methods">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="eyebrow">Money</p>
-          <h2 id="purse-heading">Purse</h2>
-          <p className="mt-2 text-sm text-slate-500">Save where you want to receive withdrawals.</p>
-        </div>
+        <p className="text-sm text-slate-500">Manage where you receive withdrawals.</p>
         {destinations.length > 0 && (
           <Button asChild disabled={loading}>
-            <Link href="/dashboard/purse/new">Add purse</Link>
+            <Link href="/dashboard/payout-methods/new">Add payout method</Link>
           </Button>
         )}
       </div>
@@ -78,7 +74,7 @@ export function PursePanel() {
       ) : loadFailed ? (
         <Card className="grid gap-3 p-5">
           <p className="text-sm text-slate-600">
-            Your purse could not be loaded. Please try again.
+            Your payout methods could not be loaded. Please try again.
           </p>
           <div>
             <Button type="button" variant="secondary" onClick={() => void load()}>
@@ -121,7 +117,9 @@ export function PursePanel() {
               </div>
               <div className="flex items-start gap-2">
                 <Button asChild variant="secondary" disabled={!destination.method.available}>
-                  <Link href={`/dashboard/purse/${encodeURIComponent(destination.id)}/edit`}>
+                  <Link
+                    href={`/dashboard/payout-methods/${encodeURIComponent(destination.id)}/edit`}
+                  >
                     Edit
                   </Link>
                 </Button>
@@ -139,7 +137,7 @@ export function PursePanel() {
       ) : (
         <Card>
           <EmptyState
-            title="Your purse is empty"
+            title="No payout methods saved"
             description="Add a bank account, crypto wallet, or another available withdrawal method."
           />
           {!methods.length && (
@@ -149,7 +147,7 @@ export function PursePanel() {
           )}
           <div className="px-5 pb-5">
             <Button asChild>
-              <Link href="/dashboard/purse/new">Add purse</Link>
+              <Link href="/dashboard/payout-methods/new">Add payout method</Link>
             </Button>
           </div>
         </Card>

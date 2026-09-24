@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { DashboardShell } from "@/components/dashboard";
 
-export default async function EditPursePage({
+export default async function EditPayoutMethodPage({
   params,
 }: {
   params: Promise<{ destinationId: string }>;
@@ -9,7 +9,7 @@ export default async function EditPursePage({
   const { destinationId } = await params;
   return (
     <Suspense fallback={<div className="page-loading" />}>
-      <DashboardShell purseFormMode="edit" purseDestinationId={destinationId} />
+      <DashboardShell payoutMethodFormMode="edit" payoutDestinationId={destinationId} />
     </Suspense>
   );
 }

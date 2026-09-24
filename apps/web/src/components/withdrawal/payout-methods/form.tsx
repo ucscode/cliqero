@@ -47,7 +47,7 @@ function destinationValues(destination: WithdrawalDestination | null) {
   );
 }
 
-export function PurseForm({
+export function PayoutMethodForm({
   methods,
   destination = null,
   saving,
@@ -62,7 +62,7 @@ export function PurseForm({
   onSave: (input: { methodId: string; name: string; values: Record<string, string> }) => void;
   onCancel: () => void;
 }) {
-  // New purses intentionally start without a selected method.
+  // New payout methods intentionally start without a selected type.
   const [methodId, setMethodId] = useState(destination?.method.id ?? "");
   const [name, setName] = useState(destination?.name ?? "");
   const [values, setValues] = useState<Record<string, string>>(() =>
@@ -77,17 +77,17 @@ export function PurseForm({
   }
 
   return (
-    <form className="grid gap-4" onSubmit={submit}>
+    <form className="grid gap-4" aria-label="Payout method details" onSubmit={submit}>
       {error && <Toast>{error}</Toast>}
       <div className="grid gap-2">
-        <Label htmlFor="purse-method-choice">Method</Label>
+        <Label htmlFor="payout-method-type">Type</Label>
         {destination ? (
           <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
             {destination.method.display_name}
           </p>
         ) : (
           <Select
-            id="purse-method-choice"
+            id="payout-method-type"
             value={methodId}
             onChange={(event) => {
               setMethodId(event.target.value);
@@ -95,7 +95,7 @@ export function PurseForm({
             }}
             required
           >
-            <option value="">Choose a method</option>
+            <option value="">Choose a payout type</option>
             {methods.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.display_name}
@@ -108,9 +108,9 @@ export function PurseForm({
         <>
           <p className="text-sm text-slate-500">{method.description}</p>
           <div className="grid gap-2">
-            <Label htmlFor="purse-name">Name</Label>
+            <Label htmlFor="payout-method-name">Name</Label>
             <Input
-              id="purse-name"
+              id="payout-method-name"
               required
               maxLength={100}
               value={name}
@@ -119,7 +119,7 @@ export function PurseForm({
             />
           </div>
           {method.fields.map((field) => {
-            const fieldId = `purse-field-${field.name}`;
+            const fieldId = `payout-method-field-${field.name}`;
             if (field.type === "fixed")
               return (
                 <div key={field.name} className="grid gap-2">
@@ -214,7 +214,7 @@ export function PurseForm({
         </Button>
         {method && (
           <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save purse"}
+            {saving ? "Saving…" : "Save payout method"}
           </Button>
         )}
       </div>

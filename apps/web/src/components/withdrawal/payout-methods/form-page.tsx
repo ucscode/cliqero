@@ -9,11 +9,11 @@ import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
 import { EmptyState } from "../../empty-state";
 import { Skeleton } from "../../ui/skeleton";
-import { PurseForm } from "./form";
+import { PayoutMethodForm } from "./form";
 
-const purseListHref = "/dashboard?section=purse";
+const payoutMethodsHref = "/dashboard?section=payout-methods";
 
-export function PurseFormPage({
+export function PayoutMethodFormPage({
   mode,
   destinationId,
 }: {
@@ -73,10 +73,10 @@ export function PurseFormPage({
           }),
         });
       }
-      router.replace(purseListHref);
+      router.replace(payoutMethodsHref);
       router.refresh();
     } catch {
-      setError("The purse could not be saved. Check the details and try again.");
+      setError("The payout method could not be saved. Check the details and try again.");
     } finally {
       setSaving(false);
     }
@@ -88,14 +88,10 @@ export function PurseFormPage({
   const canEdit = Boolean(destination?.method.available && editMethod);
 
   return (
-    <section className="grid gap-4" aria-labelledby="purse-form-heading">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="eyebrow">Purse</p>
-          <h2 id="purse-form-heading">{mode === "create" ? "Add purse" : "Edit purse"}</h2>
-        </div>
+    <section className="grid gap-4" aria-label="Payout method form">
+      <div className="flex justify-end">
         <Button asChild variant="secondary">
-          <Link href={purseListHref}>Back to Purse</Link>
+          <Link href={payoutMethodsHref}>Back to Payout Methods</Link>
         </Button>
       </div>
       {loading ? (
@@ -105,7 +101,7 @@ export function PurseFormPage({
       ) : loadFailed ? (
         <Card className="grid gap-3 p-5">
           <EmptyState
-            title="Purse form unavailable"
+            title="Payout method form unavailable"
             description="We couldn’t load the required information. Please try again."
           />
           <div>
@@ -117,33 +113,33 @@ export function PurseFormPage({
       ) : mode === "edit" && !destination ? (
         <Card>
           <EmptyState
-            title="Purse not found"
-            description="This purse could not be found for your account."
+            title="Payout method not found"
+            description="This payout method could not be found for your account."
           />
         </Card>
       ) : mode === "edit" && !canEdit ? (
         <Card>
           <EmptyState
-            title="Purse unavailable for editing"
+            title="Payout method unavailable for editing"
             description="This withdrawal method is not currently available for your account."
           />
         </Card>
       ) : mode === "create" && methods.length === 0 ? (
         <Card>
           <EmptyState
-            title="No withdrawal methods available"
+            title="No payout methods available"
             description="There are no withdrawal methods currently available for your account."
           />
         </Card>
       ) : (
         <Card className="p-5">
-          <PurseForm
+          <PayoutMethodForm
             methods={methods}
             destination={mode === "edit" ? destination : null}
             saving={saving}
             error={error}
             onSave={(input) => void save(input)}
-            onCancel={() => router.push(purseListHref)}
+            onCancel={() => router.push(payoutMethodsHref)}
           />
         </Card>
       )}

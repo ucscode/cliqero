@@ -3,21 +3,23 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const panelSource = readFileSync(
-  resolve(process.cwd(), "src/components/withdrawal/purse/panel.tsx"),
+  resolve(process.cwd(), "src/components/withdrawal/payout-methods/panel.tsx"),
   "utf8",
 );
-describe("purse UI contract", () => {
-  it("uses Purse terminology and renders a friendly empty state", () => {
-    expect(panelSource).toContain('<h2 id="purse-heading">Purse</h2>');
-    expect(panelSource).toContain("Save where you want to receive withdrawals.");
-    expect(panelSource).toContain("Your purse is empty");
+describe("Payout Methods UI contract", () => {
+  it("uses Payout Methods terminology and renders the specified empty state", () => {
+    expect(panelSource).toContain('aria-label="Payout Methods"');
+    expect(panelSource).toContain("Manage where you receive withdrawals.");
+    expect(panelSource).toContain("No payout methods saved");
     expect(panelSource).toContain("Add a bank account, crypto wallet");
-    expect(panelSource).toContain("Add purse");
+    expect(panelSource).toContain("Add payout method");
+    expect(panelSource).not.toContain("Purse");
     expect(panelSource).not.toContain("Withdrawal methods</h2>");
   });
 
   it("loads configured methods, keeps unavailable destinations visible and archives with PATCH", () => {
     expect(panelSource).toContain('apiFetch<WithdrawalMethod[]>("/api/withdrawal-methods")');
+    expect(panelSource).toContain("WithdrawalDestination");
     expect(panelSource).toContain(
       'apiFetch<WithdrawalDestination[]>("/api/withdrawal-destinations")',
     );
@@ -29,8 +31,10 @@ describe("purse UI contract", () => {
   });
 
   it("uses dedicated add/edit pages and keeps removal as an archive PATCH", () => {
-    expect(panelSource).toContain('href="/dashboard/purse/new"');
-    expect(panelSource).toContain("/dashboard/purse/${encodeURIComponent(destination.id)}/edit");
+    expect(panelSource).toContain('href="/dashboard/payout-methods/new"');
+    expect(panelSource).toContain(
+      "/dashboard/payout-methods/${encodeURIComponent(destination.id)}/edit",
+    );
     expect(panelSource).not.toContain("Dialog");
     expect(panelSource).not.toContain("image_url");
     expect(panelSource).toContain('method: "PATCH"');
