@@ -1,0 +1,49 @@
+parameters:
+  methods:
+    - id: bank_ng
+      enabled: true
+      display_name: Bank account
+      image_url: /images/payment/bank-transfer.svg
+      description: Receive a withdrawal through a Nigerian bank account.
+      filters:
+        countries:
+          - NG
+      fields:
+        - key: bank_name
+          label: Bank
+          type: text
+          required: true
+          placeholder: Guaranty Trust Bank
+          copyable: true
+        - key: account_number
+          label: Account number
+          type: text
+          required: true
+          pattern: "^[0-9]{10}$"
+          input_mode: numeric
+          copyable: true
+        - key: account_name
+          label: Account name
+          type: text
+          required: true
+          copyable: true
+    - id: usdt_trc20
+      enabled: true
+      display_name: USDT (TRC20)
+      image_url: /images/payment/usdt-trc20.svg
+      description: Receive USDT through the TRON network.
+      filters:
+        countries: null
+      fields:
+        - key: address
+          label: Wallet address
+          type: text
+          required: true
+          placeholder: T...
+          pattern: "^T[1-9A-HJ-NP-Za-km-z]{33}$"
+          copyable: true
+        - key: network
+          label: Network
+          type: fixed
+          value: TRC20
+          copyable: true

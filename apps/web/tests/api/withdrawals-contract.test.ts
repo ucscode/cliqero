@@ -4,13 +4,26 @@ import { presentWithdrawal, presentWithdrawalPolicy } from "@/api/compat/withdra
 import { Money } from "@/modules/money/money";
 
 describe("withdrawal API contract", () => {
-  it("exposes exact minor units and masks destination details", () => {
+  it("exposes exact minor units and only a safe destination identity", () => {
     const presented = presentWithdrawal({
       id: "withdrawal",
       accountId: "account",
       amount: Money.of(1250n, "USD"),
-      destinationType: "manual",
-      destinationReference: "destination-secret-1234",
+      destination: {
+        savedDestinationId: "saved-destination",
+        method: "bank_ng",
+        methodName: "Bank account",
+        name: "Primary",
+        fields: [
+          {
+            key: "account",
+            label: "Account",
+            value: "destination-secret-1234",
+            type: "text",
+            copyable: true,
+          },
+        ],
+      },
       state: "requested",
       idempotencyKey: "key",
       correlationId: "correlation",
@@ -21,7 +34,7 @@ describe("withdrawal API contract", () => {
     expect(presented).toMatchObject({
       amount_minor: "1250",
       currency: "USD",
-      destination_summary: "••••1234",
+      destination: { method: "bank_ng", method_name: "Bank account", name: "Primary" },
       state: "requested",
     });
     expect(JSON.stringify(presented)).not.toContain("destination-secret");
@@ -44,5 +57,23 @@ describe("withdrawal API contract", () => {
       mode: "account",
       scope: "withdrawals:read",
     });
+  });
+
+  it("applies existing read/create scopes to methods, destinations, and withdrawals", () => {
+    expect(getLegacyRouteAccess("/api/withdrawal-methods", "GET")?.scope).toBe("withdrawals:read");
+    expect(getLegacyRouteAccess("/api/withdrawal-destinations", "GET")?.scope).toBe(
+      "withdrawals:read",
+    );
+    expect(getLegacyRouteAccess("/api/withdrawal-destinations", "POST")?.scope).toBe(
+      "withdrawals:create",
+    );
+    expect(getLegacyRouteAccess("/api/withdrawal-destinations/example", "PATCH")?.scope).toBe(
+      "withdrawals:create",
+    );
+    expect(getLegacyRouteAccess("/api/withdrawal-destinations/example", "GET")?.scope).toBe(
+      "withdrawals:read",
+    );
+    expect(getLegacyRouteAccess("/api/withdrawals", "GET")?.scope).toBe("withdrawals:read");
+    expect(getLegacyRouteAccess("/api/withdrawals", "POST")?.scope).toBe("withdrawals:create");
   });
 });

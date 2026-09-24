@@ -66,6 +66,9 @@ import * as walletTransactions from "@/api/compat/wallet/transactions/route";
 import * as withdrawals from "@/api/compat/withdrawals/route";
 import * as withdrawalById from "@/api/compat/withdrawals/[id]/route";
 import * as withdrawalPolicy from "@/api/compat/withdrawals/policy/route";
+import * as withdrawalMethods from "@/api/compat/withdrawal-methods/route";
+import * as withdrawalDestinations from "@/api/compat/withdrawal-destinations/route";
+import * as withdrawalDestinationById from "@/api/compat/withdrawal-destinations/[id]/route";
 
 type RouteModule = Record<string, unknown>;
 export type LegacyRoute = {
@@ -148,4 +151,7 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/withdrawals/policy", module: withdrawalPolicy },
   { pattern: "/api/withdrawals/:id", module: withdrawalById },
   { pattern: "/api/withdrawals", module: withdrawals },
+  { pattern: "/api/withdrawal-methods", module: withdrawalMethods },
+  { pattern: "/api/withdrawal-destinations/:id", module: withdrawalDestinationById },
+  { pattern: "/api/withdrawal-destinations", module: withdrawalDestinations },
 ];

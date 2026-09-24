@@ -5,8 +5,7 @@ export type Withdrawal = {
   id: string;
   amount_minor: string;
   currency: string;
-  destination_type: "bank" | "manual";
-  destination_summary: string;
+  destination: { method: string; method_name: string; name: string };
   state: WithdrawalState;
   reason: string | null;
   created_at: string;
@@ -39,7 +38,7 @@ export type OperatorWithdrawal = {
   account: { id: string; username: string; email: string | null };
   amountMinor: string;
   currency: string;
-  destination: { type: "bank" | "manual"; summary: string };
+  destination: { method: string; methodName: string; name: string };
   state: OperatorWithdrawalState;
   reason: string | null;
   createdAt: string;
@@ -56,4 +55,49 @@ export type OperatorWithdrawal = {
   attention: OperatorWithdrawalAttention;
 };
 export type OperatorWithdrawalPage = { items: OperatorWithdrawal[]; nextCursor: string | null };
-export type OperatorWithdrawalDetail = OperatorWithdrawal;
+export type OperatorWithdrawalDetail = Omit<OperatorWithdrawal, "destination"> & {
+  destination: OperatorWithdrawal["destination"] & {
+    savedDestinationId: string;
+    fields: Array<{
+      key: string;
+      label: string;
+      value: string;
+      type: "text" | "fixed";
+      copyable: boolean;
+    }>;
+  };
+};
+
+export type WithdrawalMethodField = {
+  key: string;
+  label: string;
+  type: "text" | "fixed";
+  copyable: boolean;
+  required?: boolean;
+  placeholder?: string;
+  pattern?: string;
+  input_mode?: "text" | "numeric" | "decimal" | "tel" | "email" | "url";
+  value?: string;
+};
+export type WithdrawalMethod = {
+  id: string;
+  display_name: string;
+  image_url: string;
+  description: string;
+  fields: WithdrawalMethodField[];
+};
+export type WithdrawalDestination = {
+  id: string;
+  method: { id: string; display_name: string; image_url: string | null; available: boolean };
+  name: string;
+  fields: Array<{
+    key: string;
+    label: string;
+    value: string;
+    type: "text" | "fixed";
+    copyable: boolean;
+  }>;
+  status: "active" | "archived";
+  created_at: string;
+  updated_at: string;
+};

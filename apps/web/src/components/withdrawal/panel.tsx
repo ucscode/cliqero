@@ -12,11 +12,13 @@ import {
   type Withdrawal,
   type WithdrawalPage,
   type WithdrawalPolicy,
+  type WithdrawalDestination,
 } from "@/lib/api-client";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
+import { Select } from "../ui/select";
 import { Label } from "../ui/label";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
@@ -67,6 +69,7 @@ export function WithdrawalsPanel() {
   const [policy, setPolicy] = useState<WithdrawalPolicy | null>(null);
   const [page, setPage] = useState<WithdrawalPage | null>(null);
   const [earnings, setEarnings] = useState<EarningsSummary | null>(null);
+  const [destinations, setDestinations] = useState<WithdrawalDestination[]>([]);
   const [amount, setAmount] = useState("");
   const [destination, setDestination] = useState("");
   const [loading, setLoading] = useState(true);
@@ -82,14 +85,16 @@ export function WithdrawalsPanel() {
     else setLoading(true);
     setError(null);
     try {
-      const [nextPolicy, nextPage, nextEarnings] = await Promise.all([
+      const [nextPolicy, nextPage, nextEarnings, nextDestinations] = await Promise.all([
         apiFetch<WithdrawalPolicy>("/api/withdrawals/policy"),
         apiFetch<WithdrawalPage>("/api/withdrawals"),
         apiFetch<EarningsSummary>("/api/earnings"),
+        apiFetch<WithdrawalDestination[]>("/api/withdrawal-destinations"),
       ]);
       setPolicy(nextPolicy);
       setPage(nextPage);
       setEarnings(nextEarnings);
+      setDestinations(nextDestinations.filter((destination) => destination.method.available));
     } catch (cause) {
       setError(cause instanceof ApiClientError ? cause.message : "We couldn’t load withdrawals.");
     } finally {
@@ -165,10 +170,10 @@ export function WithdrawalsPanel() {
       return;
     }
     if (!destination.trim()) {
-      setError("Enter a withdrawal destination reference.");
+      setError("Choose a saved withdrawal destination.");
       return;
     }
-    const signature = `${amountMinor}|${destination.trim()}`;
+    const signature = `${amountMinor}|${destination}`;
     if (requestSignature.current !== signature) {
       requestSignature.current = signature;
       idempotencyKey.current = `ui-withdrawal-${crypto.randomUUID()}`;
@@ -185,8 +190,7 @@ export function WithdrawalsPanel() {
         body: JSON.stringify({
           amount_minor: amountMinor,
           currency,
-          destination_type: "manual",
-          destination_reference: destination.trim(),
+          destination_id: destination,
         }),
       });
       setSuccess("Withdrawal request received. Payment follows operator review.");
@@ -224,7 +228,7 @@ export function WithdrawalsPanel() {
           <p className="eyebrow">Withdrawals</p>
           <h2 id="withdrawals-heading">Move available earnings</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-            Request a withdrawal from settled referral earnings. Your buyer wallet remains separate.
+            Request a withdrawal from your available earnings. Your buyer wallet remains separate.
           </p>
         </div>
         <Button
@@ -303,20 +307,40 @@ export function WithdrawalsPanel() {
                   ? ` · Maximum ${formatMinorUsd(policy.maximum_amount_minor)}`
                   : ""}
               </span>
-              <Label htmlFor="withdrawal-destination">Payout destination reference</Label>
-              <Input
-                id="withdrawal-destination"
-                placeholder="Your saved or provider-approved reference"
-                value={destination}
-                onChange={(event) => setDestination(event.target.value)}
-                disabled={!policy?.enabled || submitting}
-              />
-              <span className="text-xs text-slate-500">
-                This milestone uses the existing provider-neutral manual destination.
-              </span>
-              <Button type="submit" disabled={!policy?.enabled || submitting}>
+              {destinations.length ? (
+                <>
+                  <Label htmlFor="withdrawal-destination">Send to</Label>
+                  <Select
+                    id="withdrawal-destination"
+                    value={destination}
+                    onChange={(event) => setDestination(event.target.value)}
+                    disabled={!policy?.enabled || submitting}
+                    required
+                  >
+                    <option value="">Choose a saved destination</option>
+                    {destinations.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} — {item.method.display_name}
+                      </option>
+                    ))}
+                  </Select>
+                </>
+              ) : (
+                <p className="text-sm text-slate-600">
+                  Add a withdrawal method before requesting a withdrawal.
+                </p>
+              )}
+              <Button
+                type="submit"
+                disabled={!policy?.enabled || submitting || !destinations.length}
+              >
                 {submitting ? "Submitting…" : "Request withdrawal"}
               </Button>
+              {!destinations.length && (
+                <Button asChild variant="secondary">
+                  <Link href="/dashboard?section=withdrawal-methods">Add a withdrawal method</Link>
+                </Button>
+              )}
               <HoneypotField />
             </form>
           </Card>
@@ -360,8 +384,7 @@ function WithdrawalRow({
           <Money minor={withdrawal.amount_minor} currency={withdrawal.currency} />
         </strong>
         <span className="break-words text-sm text-slate-500">
-          {withdrawal.destination_type === "manual" ? "Manual destination" : "Bank destination"} ·{" "}
-          {withdrawal.destination_summary}
+          {withdrawal.destination.method_name} · {withdrawal.destination.name}
         </span>
         <small className="text-xs text-slate-500">
           {new Date(withdrawal.created_at).toLocaleDateString()}

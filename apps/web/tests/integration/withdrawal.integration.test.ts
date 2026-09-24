@@ -7,7 +7,7 @@ suite("withdrawal lifecycle", () => {
   const app = createContainer(databaseUrl!);
   beforeEach(async () => {
     await app.database.query(
-      `truncate table withdrawal_capability.withdrawals,ledger_capability.withdrawal_reservation_events,ledger_capability.withdrawal_reservations,ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.purchase_distributions,payment_capability.reconciliation_attempts,payment_capability.provider_events,access_capability.access_grants,entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,identity_capability.account_capabilities,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`,
+      `truncate table withdrawal_capability.withdrawals,withdrawal_capability.destinations,ledger_capability.withdrawal_reservation_events,ledger_capability.withdrawal_reservations,ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.purchase_distributions,payment_capability.reconciliation_attempts,payment_capability.provider_events,access_capability.access_grants,entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,identity_capability.account_capabilities,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`,
     );
     await app.database.query(
       `update ledger_capability.distribution_policy set initial_balance_state='available',settlement_delay_seconds=0,platform_rate_basis_points=0`,
@@ -60,16 +60,20 @@ suite("withdrawal lifecycle", () => {
       `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [seller.id],
     );
-    return { seller, buyer };
+    const savedDestination = await app.withdrawalDestinations.create(seller.id, {
+      method: "bank_ng",
+      name: "Test account",
+      values: { bank_name: "Test bank", account_number: "0123456789", account_name: "Seller" },
+    });
+    return { seller, buyer, destinationId: savedDestination.id };
   }
   it("reserves available funds atomically and blocks pending funds", async () => {
-    const { seller } = await setup();
+    const { seller, destinationId } = await setup();
     const first = await app.withdrawals.request({
       accountId: seller.id,
       amountMinor: 8000n,
       currency: "USD",
-      destinationType: "manual",
-      destinationReference: "ops-ref",
+      destinationId,
       idempotencyKey: "w-1",
       correlationId: newId(),
     });
@@ -78,8 +82,7 @@ suite("withdrawal lifecycle", () => {
         accountId: seller.id,
         amountMinor: 3000n,
         currency: "USD",
-        destinationType: "manual",
-        destinationReference: "ops-ref",
+        destinationId,
         idempotencyKey: "w-2",
         correlationId: newId(),
       }),
@@ -89,22 +92,95 @@ suite("withdrawal lifecycle", () => {
         accountId: seller.id,
         amountMinor: 8000n,
         currency: "USD",
-        destinationType: "manual",
-        destinationReference: "ops-ref",
+        destinationId,
         idempotencyKey: "w-1",
         correlationId: newId(),
       }),
     ).resolves.toMatchObject({ id: first.id });
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(8000n);
   });
-  it("rejects semantic idempotency-key reuse for a different withdrawal", async () => {
-    const { seller } = await setup();
+  it("snapshots destination facts and leaves idempotent retries bound to the original destination ID", async () => {
+    const { seller, destinationId } = await setup();
     const first = await app.withdrawals.request({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
-      destinationType: "manual",
-      destinationReference: "same-key",
+      destinationId,
+      idempotencyKey: "snapshot-key",
+      correlationId: newId(),
+    });
+    const firstAccount = first.destination.fields.find((field) => field.key === "account_number");
+    expect(firstAccount?.value).toBe("0123456789");
+    await expect(
+      app.database.query(
+        `update withdrawal_capability.withdrawals set destination_name='mutated' where uuid=$1`,
+        [first.id],
+      ),
+    ).rejects.toThrow("snapshots are immutable");
+
+    await app.withdrawalDestinations.update(seller.id, destinationId, {
+      values: { bank_name: "Changed bank", account_number: "9999999999", account_name: "Changed" },
+    });
+    const retry = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: "snapshot-key",
+      correlationId: newId(),
+    });
+    expect(retry.destination.fields.find((field) => field.key === "account_number")?.value).toBe(
+      "0123456789",
+    );
+
+    const second = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: "snapshot-key-2",
+      correlationId: newId(),
+    });
+    expect(second.destination.fields.find((field) => field.key === "account_number")?.value).toBe(
+      "9999999999",
+    );
+    await app.withdrawalDestinations.update(seller.id, destinationId, { status: "archived" });
+    await expect(
+      app.withdrawalDestinations.resolveForWithdrawal(seller.id, destinationId),
+    ).rejects.toThrow("archived");
+    await expect(
+      app.withdrawals.request({
+        accountId: seller.id,
+        amountMinor: 1000n,
+        currency: "USD",
+        destinationId,
+        idempotencyKey: "snapshot-key",
+        correlationId: newId(),
+      }),
+    ).resolves.toMatchObject({ id: first.id });
+    await expect(
+      app.withdrawals.request({
+        accountId: seller.id,
+        amountMinor: 1000n,
+        currency: "USD",
+        destinationId,
+        idempotencyKey: "archived-new-request",
+        correlationId: newId(),
+      }),
+    ).rejects.toThrow("archived");
+    expect(
+      (await app.withdrawalRepository.findById(first.id))?.destination.fields.find(
+        (field) => field.key === "account_number",
+      )?.value,
+    ).toBe("0123456789");
+  });
+  it("rejects semantic idempotency-key reuse for a different withdrawal", async () => {
+    const { seller, destinationId } = await setup();
+    const first = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationId,
       idempotencyKey: "semantic-key",
       correlationId: newId(),
     });
@@ -113,8 +189,7 @@ suite("withdrawal lifecycle", () => {
         accountId: seller.id,
         amountMinor: 2000n,
         currency: "USD",
-        destinationType: "manual",
-        destinationReference: "same-key",
+        destinationId,
         idempotencyKey: "semantic-key",
         correlationId: newId(),
       }),
@@ -124,8 +199,7 @@ suite("withdrawal lifecycle", () => {
         accountId: seller.id,
         amountMinor: 1000n,
         currency: "USD",
-        destinationType: "manual",
-        destinationReference: "different-destination",
+        destinationId: newId(),
         idempotencyKey: "semantic-key",
         correlationId: newId(),
       }),
@@ -137,15 +211,14 @@ suite("withdrawal lifecycle", () => {
     ).toHaveLength(1);
   });
   it("converges concurrent identical requests on one withdrawal", async () => {
-    const { seller } = await setup();
+    const { seller, destinationId } = await setup();
     const idempotencyKey = "concurrent-same-key";
     const results = await Promise.all([
       app.withdrawals.request({
         accountId: seller.id,
         amountMinor: 4000n,
         currency: "USD",
-        destinationType: "manual",
-        destinationReference: "same-destination",
+        destinationId,
         idempotencyKey,
         correlationId: newId(),
       }),
@@ -153,8 +226,7 @@ suite("withdrawal lifecycle", () => {
         accountId: seller.id,
         amountMinor: 4000n,
         currency: "USD",
-        destinationType: "manual",
-        destinationReference: "same-destination",
+        destinationId,
         idempotencyKey,
         correlationId: newId(),
       }),
@@ -168,14 +240,13 @@ suite("withdrawal lifecycle", () => {
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(4000n);
   });
   it("prevents concurrent overspending and supports reject/release and manual completion", async () => {
-    const { seller } = await setup();
+    const { seller, destinationId } = await setup();
     const results = await Promise.allSettled([
       app.withdrawals.request({
         accountId: seller.id,
         amountMinor: 8000n,
         currency: "USD",
-        destinationType: "manual",
-        destinationReference: "a",
+        destinationId,
         idempotencyKey: "wa",
         correlationId: newId(),
       }),
@@ -183,8 +254,7 @@ suite("withdrawal lifecycle", () => {
         accountId: seller.id,
         amountMinor: 8000n,
         currency: "USD",
-        destinationType: "manual",
-        destinationReference: "b",
+        destinationId,
         idempotencyKey: "wb",
         correlationId: newId(),
       }),
@@ -200,8 +270,7 @@ suite("withdrawal lifecycle", () => {
       accountId: seller.id,
       amountMinor: 5000n,
       currency: "USD",
-      destinationType: "manual",
-      destinationReference: "c",
+      destinationId,
       idempotencyKey: "wc",
       correlationId: newId(),
     });
@@ -227,21 +296,19 @@ suite("withdrawal lifecycle", () => {
         accountId: seller.id,
         amountMinor: 5001n,
         currency: "USD",
-        destinationType: "manual",
-        destinationReference: "after-completion",
+        destinationId,
         idempotencyKey: "after-completion",
         correlationId: newId(),
       }),
     ).rejects.toThrow("Insufficient available funds");
   });
   it("cancels a requested withdrawal and releases its reservation", async () => {
-    const { seller } = await setup();
+    const { seller, destinationId } = await setup();
     const withdrawal = await app.withdrawals.request({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
-      destinationType: "manual",
-      destinationReference: "cancelled-request",
+      destinationId,
       idempotencyKey: "cancel-request",
       correlationId: newId(),
     });
@@ -263,13 +330,12 @@ suite("withdrawal lifecycle", () => {
     expect(events.rows[0]?.kind).toBe("released");
   });
   it("does not allow cancellation after approval and keeps ownership immutable", async () => {
-    const { seller } = await setup();
+    const { seller, destinationId } = await setup();
     const withdrawal = await app.withdrawals.request({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
-      destinationType: "manual",
-      destinationReference: "private",
+      destinationId,
       idempotencyKey: "wx",
       correlationId: newId(),
     });

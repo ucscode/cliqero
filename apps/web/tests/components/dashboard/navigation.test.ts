@@ -8,7 +8,7 @@ const source = readFileSync(
   "utf8",
 );
 
-describe("referral dashboard navigation", () => {
+describe("dashboard navigation", () => {
   it("exposes Promote, Hierarchy, and Referrals as separate sections", () => {
     expect(source).toContain('label: "Promote"');
     expect(source).toContain('label: "Hierarchy"');
@@ -17,5 +17,11 @@ describe("referral dashboard navigation", () => {
     expect(source).toContain("/dashboard?section=hierarchy");
     expect(source).toContain("/dashboard?section=referrals");
     expect(dashboardSectionTitle("hierarchy")).toBe("Hierarchy");
+  });
+
+  it("includes withdrawal methods in Money navigation", () => {
+    expect(source).toContain('label: "Withdrawal methods"');
+    expect(source).toContain("/dashboard?section=withdrawal-methods");
+    expect(dashboardSectionTitle("withdrawal-methods")).toBe("Withdrawal methods");
   });
 });

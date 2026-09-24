@@ -1,13 +1,39 @@
 import type { Money } from "@/modules/money/money";
 export type WithdrawalState =
   "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
-export type DestinationType = "bank" | "manual";
+
+export type DestinationField = {
+  key: string;
+  label: string;
+  value: string;
+  type: "text" | "fixed";
+  copyable: boolean;
+};
+
+export type WithdrawalDestinationSnapshot = {
+  savedDestinationId: string;
+  method: string;
+  methodName: string;
+  name: string;
+  fields: DestinationField[];
+};
+
+export type SavedWithdrawalDestination = {
+  id: string;
+  accountId: string;
+  method: string;
+  name: string;
+  fields: DestinationField[];
+  status: "active" | "archived";
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export interface Withdrawal {
   id: string;
   accountId: string;
   amount: Money;
-  destinationType: DestinationType;
-  destinationReference: string;
+  destination: WithdrawalDestinationSnapshot;
   state: WithdrawalState;
   idempotencyKey: string;
   correlationId: string;
@@ -49,4 +75,11 @@ export interface WithdrawalRepository {
     externalReference: string | null,
     note: string | null,
   ): Promise<Date>;
+}
+
+export interface WithdrawalDestinationRepository {
+  findById(id: string): Promise<SavedWithdrawalDestination | null>;
+  listForAccount(accountId: string): Promise<readonly SavedWithdrawalDestination[]>;
+  create(destination: SavedWithdrawalDestination): Promise<void>;
+  update(destination: SavedWithdrawalDestination): Promise<void>;
 }

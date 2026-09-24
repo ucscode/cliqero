@@ -2,6 +2,13 @@ import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 
 type WithdrawalState = "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
 type Cursor = { createdAt: string; id: string };
+type DestinationField = {
+  key: string;
+  label: string;
+  value: string;
+  type: "text" | "fixed";
+  copyable: boolean;
+};
 
 function encodeCursor(createdAt: string | Date, id: string) {
   return Buffer.from(
@@ -24,17 +31,12 @@ function decodeCursor(value?: string): Cursor | null {
     throw new Error("Invalid pagination cursor");
   }
 }
-function mask(value: string) {
-  const trimmed = value.trim();
-  return trimmed.length <= 4 ? "••••" : `••••${trimmed.slice(-4)}`;
-}
-
 export type OperatorWithdrawal = {
   id: string;
   account: { id: string; username: string; email: string | null };
   amountMinor: string;
   currency: string;
-  destination: { type: "bank" | "manual"; summary: string };
+  destination: { method: string; methodName: string; name: string };
   state: WithdrawalState;
   reason: string | null;
   createdAt: string;
@@ -51,9 +53,14 @@ export type OperatorWithdrawal = {
   attention: "review" | "action_required" | "none";
 };
 
-export type OperatorWithdrawalDetail = OperatorWithdrawal;
+export type OperatorWithdrawalDetail = OperatorWithdrawal & {
+  destination: OperatorWithdrawal["destination"] & {
+    savedDestinationId: string;
+    fields: DestinationField[];
+  };
+};
 
-function map(row: any): OperatorWithdrawal {
+function map(row: any, detail = false): OperatorWithdrawal {
   const attention =
     row.state === "requested" ? "review" : row.state === "approved" ? "action_required" : "none";
   return {
@@ -61,7 +68,14 @@ function map(row: any): OperatorWithdrawal {
     account: { id: row.account_id, username: row.username, email: row.email },
     amountMinor: String(row.amount_minor),
     currency: row.currency,
-    destination: { type: row.destination_type, summary: mask(row.destination_reference) },
+    destination: {
+      method: row.destination_method,
+      methodName: row.destination_method_name,
+      name: row.destination_name,
+      ...(detail
+        ? { savedDestinationId: row.saved_destination_id, fields: row.destination_details }
+        : {}),
+    },
     state: row.state,
     reason: row.reason ?? null,
     externalReference: row.external_reference ?? null,
@@ -82,7 +96,7 @@ function map(row: any): OperatorWithdrawal {
 }
 
 const projection = `
-  select w.uuid as id,a.uuid as account_id,a.username,a.email,w.amount_minor,w.currency,w.destination_type,w.destination_reference,w.state,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) completed_by,w.completed_at,w.created_at,w.updated_at,
+  select w.uuid as id,a.uuid as account_id,a.username,a.email,w.amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) completed_by,w.completed_at,w.created_at,w.updated_at,
     r.uuid reservation_id,r.amount_minor reservation_amount_minor,r.currency reservation_currency,
     (select e.kind from ledger_capability.withdrawal_reservation_events e where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) reservation_state
    from withdrawal_capability.withdrawals w
@@ -113,7 +127,7 @@ export class OperatorWithdrawalService {
     const rows = (
       await this.sql.query<any>(
         `select * from (${projection}) q
-          where ($1::text is null or q.id::text=$1 or q.destination_reference ilike '%'||$1||'%' escape '\\' or q.external_reference ilike '%'||$1||'%' escape '\\' or q.username ilike '%'||$1||'%' escape '\\' or q.email ilike '%'||$1||'%' escape '\\')
+          where ($1::text is null or q.id::text=$1 or q.destination_name ilike '%'||$1||'%' escape '\\' or q.destination_details::text ilike '%'||$1||'%' escape '\\' or q.external_reference ilike '%'||$1||'%' escape '\\' or q.username ilike '%'||$1||'%' escape '\\' or q.email ilike '%'||$1||'%' escape '\\')
             and ($2::text is null or q.state=$2)
             and ($3::text is null or case when q.state='requested' then 'review' when q.state='approved' then 'action_required' else 'none' end=$3::text)
             and ($4::timestamptz is null or (q.created_at,(select id from withdrawal_capability.withdrawals where uuid=q.id))<($4::timestamptz,(select id from withdrawal_capability.withdrawals where uuid=$5)))
@@ -123,7 +137,7 @@ export class OperatorWithdrawalService {
     ).rows;
     const items = rows
       .slice(0, input.limit)
-      .map(map)
+      .map((row) => map(row))
       .filter((item) => !input.attention || item.attention === input.attention);
     return {
       items,
@@ -136,6 +150,6 @@ export class OperatorWithdrawalService {
   async get(id: string): Promise<OperatorWithdrawalDetail> {
     const row = (await this.sql.query<any>(`${projection} where w.uuid=$1`, [id])).rows[0];
     if (!row) throw new Error("Withdrawal not found");
-    return map(row);
+    return map(row, true) as OperatorWithdrawalDetail;
   }
 }

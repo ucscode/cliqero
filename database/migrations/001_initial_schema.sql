@@ -259,6 +259,19 @@ CREATE FUNCTION wallet_capability.prevent_movement_mutation() RETURNS trigger
   raise exception 'Wallet movements are append-only; use a compensating entry' using errcode='55000';
 end $$;
 
+-- Name: prevent_destination_snapshot_change(); Type: FUNCTION; Schema: withdrawal_capability; Owner: -
+--
+
+CREATE FUNCTION withdrawal_capability.prevent_destination_snapshot_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ begin
+  if row(new.saved_destination_id,new.destination_method,new.destination_method_name,new.destination_name,new.destination_details)
+     is distinct from row(old.saved_destination_id,old.destination_method,old.destination_method_name,old.destination_name,old.destination_details) then
+    raise exception 'Withdrawal destination snapshots are immutable' using errcode='55000';
+  end if;
+  return new;
+end $$;
+
 
 SET default_table_access_method = heap;
 
@@ -1665,8 +1678,11 @@ CREATE TABLE withdrawal_capability.withdrawals (
     uuid uuid NOT NULL,
     amount_minor bigint NOT NULL,
     currency text NOT NULL,
-    destination_type text NOT NULL,
-    destination_reference text NOT NULL,
+    saved_destination_id uuid NOT NULL,
+    destination_method text NOT NULL,
+    destination_method_name text NOT NULL,
+    destination_name text NOT NULL,
+    destination_details jsonb NOT NULL,
     state text DEFAULT 'requested'::text NOT NULL,
     idempotency_key text NOT NULL,
     correlation_id uuid NOT NULL,
@@ -1682,8 +1698,34 @@ CREATE TABLE withdrawal_capability.withdrawals (
     account_id bigint NOT NULL,
     CONSTRAINT withdrawals_amount_positive CHECK ((amount_minor > 0)),
     CONSTRAINT withdrawals_currency_format CHECK ((currency ~ '^[A-Z]{3}$'::text)),
-    CONSTRAINT withdrawals_destination_type_valid CHECK ((destination_type = ANY (ARRAY['bank'::text, 'manual'::text]))),
+    CONSTRAINT withdrawals_destination_method_valid CHECK ((destination_method ~ '^[a-z0-9][a-z0-9_-]*$'::text)),
+    CONSTRAINT withdrawals_destination_names_nonempty CHECK ((length(btrim(destination_method_name)) > 0 AND length(btrim(destination_name)) > 0)),
+    CONSTRAINT withdrawals_destination_details_array CHECK ((jsonb_typeof(destination_details) = 'array'::text)),
     CONSTRAINT withdrawals_state_valid CHECK ((state = ANY (ARRAY['requested'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text, 'completed'::text, 'failed'::text])))
+);
+
+-- Name: destinations; Type: TABLE; Schema: withdrawal_capability; Owner: -
+--
+
+CREATE TABLE withdrawal_capability.destinations (
+    uuid uuid NOT NULL,
+    account_id bigint NOT NULL,
+    method_key text NOT NULL,
+    name text NOT NULL,
+    details jsonb NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    id bigint NOT NULL,
+    CONSTRAINT destinations_name_nonempty CHECK ((length(btrim(name)) > 0)),
+    CONSTRAINT destinations_method_key_valid CHECK ((method_key ~ '^[a-z0-9][a-z0-9_-]*$'::text)),
+    CONSTRAINT destinations_details_array CHECK ((jsonb_typeof(details) = 'array'::text)),
+    CONSTRAINT destinations_status_valid CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))
+);
+
+ALTER TABLE withdrawal_capability.destinations ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME withdrawal_capability.destinations_id_seq
+    START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1
 );
 
 
@@ -2994,6 +3036,11 @@ CREATE INDEX wallet_debit_account_idx ON wallet_capability.debits USING btree (a
 
 CREATE INDEX withdrawals_account_idx ON withdrawal_capability.withdrawals USING btree (account_id, created_at DESC);
 
+-- Name: destinations_account_status_idx; Type: INDEX; Schema: withdrawal_capability; Owner: -
+--
+
+CREATE INDEX destinations_account_status_idx ON withdrawal_capability.destinations USING btree (account_id, status, created_at DESC);
+
 
 --
 -- Name: withdrawals_state_idx; Type: INDEX; Schema: withdrawal_capability; Owner: -
@@ -3028,6 +3075,11 @@ CREATE TRIGGER account_referrals_delete_guard BEFORE DELETE ON referral_capabili
 --
 
 CREATE TRIGGER account_referrals_hierarchy_guard BEFORE INSERT OR UPDATE OF parent_account_id ON referral_capability.account_referrals FOR EACH ROW EXECUTE FUNCTION referral_capability.enforce_account_referral_hierarchy();
+
+-- Name: withdrawals_destination_snapshot_guard; Type: TRIGGER; Schema: withdrawal_capability; Owner: -
+--
+
+CREATE TRIGGER withdrawals_destination_snapshot_guard BEFORE UPDATE ON withdrawal_capability.withdrawals FOR EACH ROW EXECUTE FUNCTION withdrawal_capability.prevent_destination_snapshot_change();
 
 
 --
@@ -3578,6 +3630,21 @@ ALTER TABLE ONLY withdrawal_capability.withdrawals
 
 ALTER TABLE ONLY withdrawal_capability.withdrawals
     ADD CONSTRAINT withdrawals_completed_by_fk FOREIGN KEY (completed_by) REFERENCES identity_capability.accounts(id);
+
+ALTER TABLE ONLY withdrawal_capability.destinations
+    ADD CONSTRAINT destinations_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY withdrawal_capability.destinations
+    ADD CONSTRAINT destinations_uuid_unique UNIQUE (uuid);
+
+ALTER TABLE ONLY withdrawal_capability.destinations
+    ADD CONSTRAINT destinations_uuid_account_unique UNIQUE (uuid, account_id);
+
+ALTER TABLE ONLY withdrawal_capability.destinations
+    ADD CONSTRAINT destinations_account_fk FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id);
+
+ALTER TABLE ONLY withdrawal_capability.withdrawals
+    ADD CONSTRAINT withdrawals_saved_destination_owner_fk FOREIGN KEY (saved_destination_id, account_id) REFERENCES withdrawal_capability.destinations(uuid, account_id);
 
 
 --

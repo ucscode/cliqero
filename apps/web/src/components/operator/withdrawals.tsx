@@ -19,6 +19,7 @@ import { Select } from "../ui/select";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
+import { CopyValue } from "../copy-value";
 
 const states: Array<[OperatorWithdrawalState, string]> = [
   ["requested", "Requested"],
@@ -262,10 +263,23 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
         </Card>
         <Card>
           <h3>Destination</h3>
-          <p>
-            {item.destination.type} · {item.destination.summary}
+          <p className="mb-3">
+            {item.destination.methodName} · {item.destination.name}
           </p>
-          <p className="panel-intro">Raw destination references are intentionally masked.</p>
+          <dl className="grid gap-3">
+            {item.destination.fields.map((field) => (
+              <div key={field.key} className="min-w-0">
+                <dt className="text-xs font-semibold text-slate-500">{field.label}</dt>
+                <dd className="break-all">
+                  {field.copyable ? (
+                    <CopyValue label={field.label} value={field.value} />
+                  ) : (
+                    field.value
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </Card>
         <Card>
           <h3>Reservation</h3>

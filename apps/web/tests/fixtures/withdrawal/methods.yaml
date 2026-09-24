@@ -1,0 +1,4 @@
+imports:
+  - ./bank-method.yaml
+parameters:
+  methods: []

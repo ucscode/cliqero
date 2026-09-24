@@ -21,4 +21,17 @@ describe("canonical withdrawal schema", () => {
     expect(schema).not.toContain("payout_recipients");
     expect(schema).not.toContain("payout_executions");
   });
+
+  it("stores owned destinations and immutable withdrawal snapshots without free-form fields", () => {
+    expect(schema).toContain("CREATE TABLE withdrawal_capability.destinations");
+    expect(schema).toContain("destinations_account_fk FOREIGN KEY (account_id)");
+    expect(schema).toContain("destinations_uuid_unique UNIQUE (uuid)");
+    expect(schema).toContain("destinations_status_valid CHECK");
+    expect(schema).toContain("details jsonb NOT NULL");
+    expect(schema).toContain("destination_details jsonb NOT NULL");
+    expect(schema).toContain("withdrawals_saved_destination_owner_fk");
+    expect(schema).toContain("withdrawals_destination_snapshot_guard");
+    expect(schema).not.toContain("destination_type text NOT NULL");
+    expect(schema).not.toContain("destination_reference text NOT NULL");
+  });
 });

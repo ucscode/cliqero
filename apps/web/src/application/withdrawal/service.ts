@@ -10,6 +10,7 @@ import type {
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import { Money } from "@/modules/money/money";
 import type { WithdrawalPersistence } from "@/application/withdrawal/contracts";
+import type { WithdrawalDestinationService } from "@/application/withdrawal/destinations";
 export class WithdrawalService {
   constructor(
     private readonly withdrawals: WithdrawalRepository,
@@ -19,13 +20,13 @@ export class WithdrawalService {
     private readonly uow: UnitOfWork,
     private readonly operators: OperatorAuthorizationService,
     private readonly persistence: WithdrawalPersistence,
+    private readonly destinations: WithdrawalDestinationService,
   ) {}
   async request(input: {
     accountId: string;
     amountMinor: bigint;
     currency: string;
-    destinationType: "bank" | "manual";
-    destinationReference: string;
+    destinationId: string;
     idempotencyKey: string;
     correlationId: string;
   }): Promise<Withdrawal> {
@@ -39,18 +40,20 @@ export class WithdrawalService {
       throw new Error("Withdrawal amount is below the minimum");
     if (policy.maximumAmount && input.amountMinor > policy.maximumAmount.minorAmount)
       throw new Error("Withdrawal amount exceeds the maximum");
-    if (!input.destinationReference.trim()) throw new Error("Withdrawal destination is required");
     return this.persistence.withIdempotencyLock(input.idempotencyKey, async () => {
       const prior = await this.withdrawals.findByIdempotencyKey(input.idempotencyKey);
       if (prior) return this.resolveIdempotent(prior, input);
+      const destination = await this.destinations.resolveForWithdrawal(
+        input.accountId,
+        input.destinationId,
+      );
       const id = newId();
       const amount = Money.of(input.amountMinor, input.currency);
       const withdrawal: Withdrawal = {
         id,
         accountId: input.accountId,
         amount,
-        destinationType: input.destinationType,
-        destinationReference: input.destinationReference.trim(),
+        destination,
         state: "requested",
         idempotencyKey: input.idempotencyKey,
         correlationId: input.correlationId,
@@ -84,16 +87,14 @@ export class WithdrawalService {
       accountId: string;
       amountMinor: bigint;
       currency: string;
-      destinationType: "bank" | "manual";
-      destinationReference: string;
+      destinationId: string;
     },
   ) {
     const same =
       existing.accountId === input.accountId &&
       existing.amount.minorAmount === input.amountMinor &&
       existing.amount.currency === input.currency &&
-      existing.destinationType === input.destinationType &&
-      existing.destinationReference === input.destinationReference.trim();
+      existing.destination.savedDestinationId === input.destinationId;
     if (!same) throw new Error("Withdrawal idempotency key is already used for another request");
     return existing;
   }

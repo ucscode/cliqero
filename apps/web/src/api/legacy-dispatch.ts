@@ -92,6 +92,14 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
     };
   if (pattern.startsWith("/api/earnings")) return { mode: "account", scope: "earnings:read" };
   if (pattern === "/api/withdrawals/policy") return { mode: "account", scope: "withdrawals:read" };
+  if (pattern === "/api/withdrawal-methods") return { mode: "account", scope: "withdrawals:read" };
+  if (pattern === "/api/withdrawal-destinations")
+    return { mode: "account", scope: method === "GET" ? "withdrawals:read" : "withdrawals:create" };
+  if (pattern === "/api/withdrawal-destinations/:id")
+    return {
+      mode: "account",
+      scope: method === "PATCH" ? "withdrawals:create" : "withdrawals:read",
+    };
   if (pattern === "/api/withdrawals")
     return { mode: "account", scope: method === "GET" ? "withdrawals:read" : "withdrawals:create" };
   if (pattern === "/api/withdrawals/:id")

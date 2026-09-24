@@ -25,7 +25,7 @@ export const operatorWithdrawalSchema = z.object({
   account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),
   amountMinor: z.string(),
   currency: z.string(),
-  destination: z.object({ type: z.enum(["bank", "manual"]), summary: z.string() }),
+  destination: z.object({ method: z.string(), methodName: z.string(), name: z.string() }),
   state: operatorWithdrawalStateSchema,
   reason: z.string().nullable(),
   createdAt: z.string(),
@@ -43,4 +43,17 @@ export const operatorWithdrawalSchema = z.object({
   completedAt: z.string().nullable(),
   attention: operatorWithdrawalAttentionSchema,
 });
-export const operatorWithdrawalDetailSchema = operatorWithdrawalSchema;
+export const operatorWithdrawalDetailSchema = operatorWithdrawalSchema.extend({
+  destination: operatorWithdrawalSchema.shape.destination.extend({
+    savedDestinationId: z.string().uuid(),
+    fields: z.array(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        value: z.string(),
+        type: z.enum(["text", "fixed"]),
+        copyable: z.boolean(),
+      }),
+    ),
+  }),
+});

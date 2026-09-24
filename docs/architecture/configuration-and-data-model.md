@@ -29,6 +29,15 @@ provider capability metadata, not a feature-level policy: each operation checks
 the capability it actually needs. Module-level `media_provider` values
 reference these instance keys.
 
+Withdrawal methods are data-collection/presentation definitions in
+`config/modules/withdrawal/methods.yaml`, not payout providers. Define explicit
+method IDs, country eligibility, and ordered `text`/`fixed` fields; never add
+transfer credentials or an outbound executor. The tracked
+`config/modules/withdrawal/methods.example.yaml` is the schema example. Like
+other Cliqero YAML, the runtime file uses `parameters` and may optionally
+compose relative YAML imports through the central loader; withdrawal code
+consumes the resulting effective parameters.
+
 ## Deployment values
 
 Environment variables cover concerns such as application URL, PostgreSQL bootstrap connection, Better Auth bootstrap values, ports, and persistent paths. See [Installation and Configuration](../operations/installation-and-configuration.md).
@@ -53,7 +62,14 @@ Historical `seller_id`-style fields may remain for compatibility/audit but are n
 
 Use JSON/EAV/key-value structures for peripheral or evolving attributes where relational integrity is unnecessary. Keep core authorization, commercial, accounting, and identity invariants relational.
 
-Core relational examples include account identity, listing identity/state, purchase snapshots, entitlement ownership/state, access-grant token hash, funding/payment facts, ledger facts, referral graph/attribution, withdrawals, treasury entries, idempotency, and audit identifiers.
+Core relational examples include account identity, listing identity/state, purchase snapshots, entitlement ownership/state, access-grant token hash, funding/payment facts, ledger facts, referral graph/attribution, withdrawals, treasury entries, idempotency, and audit identifiers. Saved withdrawal destinations store validated ordered details as JSONB; each withdrawal separately snapshots its destination so edits cannot rewrite financial history.
+
+No established application-level encrypted-field convention currently exists.
+Withdrawal destination details therefore use the required validated PostgreSQL
+JSONB storage without bespoke encryption. The feature does not log destination
+values, restricts full saved-destination reads to the owning account, limits
+full withdrawal snapshots to authorized operator detail, and keeps ordinary
+customer history reduced to method/name identity.
 
 ## Money representation
 

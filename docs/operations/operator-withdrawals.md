@@ -1,6 +1,6 @@
 # Operator withdrawals
 
-Withdrawals move settled seller or referral earnings through a reviewable
+Withdrawals move available seller proceeds or referral earnings through a reviewable
 manual payment workflow. Cliqero records the request and reservation; it does
 not send outbound funds.
 
@@ -23,6 +23,20 @@ transition, so the reserved funds cannot be consumed twice. Account owners may
 cancel only a still-requested withdrawal; cancellation releases the
 reservation.
 
+## Destination snapshot
+
+An account selects one of its active saved destinations when requesting a
+withdrawal. A destination is created from a configured withdrawal method, and
+the withdrawal stores a snapshot of the method key/display name, saved
+destination name, and ordered structured fields. Later edits, archival, or
+configuration changes do not rewrite this snapshot.
+
+Operator list results stay concise. Authorized operator detail returns the full
+snapshot (`key`, `label`, `value`, `type`, `copyable`) so a human or automation
+can perform the manual payment without scraping display text. Ordinary customer
+withdrawal history does not expose the field values. Destination records are
+archived rather than hard-deleted through the customer UI.
+
 ## API access
 
 The operator API is resource-based:
@@ -37,9 +51,8 @@ capability. API-key clients also need the `withdrawals:manage` scope.
 
 Cliqero business actions are API-operable; that does not mean Cliqero internally
 automates the external payment. Operators can handle the workflow in the UI,
-while an external automation such as n8n can read requests, send funds through
-its own integration, and record completion through the same API. Both update
-the same Withdrawal resource.
-
-Destination references remain masked in operator projections. Saved
-structured withdrawal methods are a separate future feature.
+while an external automation such as n8n can read a withdrawal detail, send
+funds through its own integration, and record completion through the same API.
+Both update the same Withdrawal resource. Operator APIs require the
+`withdrawals.manage` capability and API keys additionally require the
+`withdrawals:manage` scope.

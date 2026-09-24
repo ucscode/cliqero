@@ -8,8 +8,13 @@ function fixture(state: Withdrawal["state"] = "approved") {
     id: "withdrawal-1",
     accountId: "account-1",
     amount: Money.of(2500n, "USD"),
-    destinationType: "manual",
-    destinationReference: "masked-destination",
+    destination: {
+      savedDestinationId: "destination-1",
+      method: "bank_ng",
+      methodName: "Bank account",
+      name: "Primary",
+      fields: [],
+    },
     state,
     idempotencyKey: "key-1",
     correlationId: "correlation-1",
@@ -59,6 +64,7 @@ function fixture(state: Withdrawal["state"] = "approved") {
       requireCapability,
     },
     { withIdempotencyLock: async (_key, operation) => operation() },
+    { resolveForWithdrawal: async () => withdrawal.destination } as any,
   );
   return { service, withdrawal, complete, releaseOrComplete, append, requireCapability };
 }

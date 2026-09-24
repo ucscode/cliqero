@@ -122,6 +122,9 @@ import { OperatorWithdrawalService } from "@/infrastructure/postgres/operator/wi
 import { getBlogService } from "@/infrastructure/blog/service";
 import { PostgresAuditRecorder } from "@/infrastructure/postgres/shared/audit";
 import { PostgresWithdrawalPersistence } from "@/infrastructure/postgres/withdrawal/transaction";
+import { PostgresWithdrawalDestinationRepository } from "@/infrastructure/postgres/withdrawal/destinations";
+import { WithdrawalDestinationService } from "@/application/withdrawal/destinations";
+import { WithdrawalMethodRegistry } from "@/modules/withdrawal/methods/registry";
 import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 import { ProviderConfigurationError, ProviderUnavailableError } from "@/kernel/provider-error";
@@ -226,6 +229,19 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   );
   const reversals = lazy(() => new PostgresReversalRepository(database));
   const withdrawalRepository = lazy(() => new PostgresWithdrawalRepository(database));
+  const withdrawalDestinationRepository = lazy(
+    () => new PostgresWithdrawalDestinationRepository(database),
+  );
+  const withdrawalMethods = lazy(() => WithdrawalMethodRegistry.load());
+  const withdrawalDestinations = lazy(
+    () =>
+      new WithdrawalDestinationService(
+        withdrawalDestinationRepository(),
+        accounts(),
+        withdrawalMethods(),
+        database,
+      ),
+  );
   const withdrawalPolicy = lazy(() => new PostgresWithdrawalPolicyRepository(database));
   const fundsReservation = lazy(() => new PostgresLedgerFundsReservationService(database));
   const withdrawalPersistence = lazy(() => new PostgresWithdrawalPersistence(database, database));
@@ -239,6 +255,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         database,
         operators(),
         withdrawalPersistence(),
+        withdrawalDestinations(),
       ),
   );
 
@@ -769,6 +786,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get withdrawals() {
       return withdrawals();
+    },
+    get withdrawalDestinations() {
+      return withdrawalDestinations();
     },
     get exchangeRates() {
       return exchangeRates();
