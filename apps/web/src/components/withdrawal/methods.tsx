@@ -295,7 +295,9 @@ export function WithdrawalMethodsPanel() {
                         {field.required ? " *" : ""}
                       </Label>
                       <Select
-                        {...htmlAttributes<SelectHTMLAttributes<HTMLSelectElement>>(field.attributes)}
+                        {...htmlAttributes<SelectHTMLAttributes<HTMLSelectElement>>(
+                          field.attributes,
+                        )}
                         id={fieldId}
                         required={field.required}
                         value={values[field.name] ?? ""}
@@ -306,7 +308,9 @@ export function WithdrawalMethodsPanel() {
                           }))
                         }
                       >
-                        <option value="">{field.placeholder ?? `Choose ${field.label.toLowerCase()}`}</option>
+                        <option value="">
+                          {field.placeholder ?? `Choose ${field.label.toLowerCase()}`}
+                        </option>
                         {field.options.map((option) => (
                           <option key={option.key} value={option.key}>
                             {option.value}
@@ -324,7 +328,9 @@ export function WithdrawalMethodsPanel() {
                         {field.required ? " *" : ""}
                       </Label>
                       <Textarea
-                        {...htmlAttributes<TextareaHTMLAttributes<HTMLTextAreaElement>>(field.attributes)}
+                        {...htmlAttributes<TextareaHTMLAttributes<HTMLTextAreaElement>>(
+                          field.attributes,
+                        )}
                         id={fieldId}
                         required={field.required}
                         {...(field.placeholder === undefined
@@ -354,7 +360,9 @@ export function WithdrawalMethodsPanel() {
                       {field.required ? " *" : ""}
                     </Label>
                     <Input
-                      {...htmlAttributes<InputHTMLAttributes<HTMLInputElement>>(field.attributes)}
+                      {...htmlAttributes<InputHTMLAttributes<HTMLInputElement>>(
+                        field.attributes,
+                      )}
                       id={fieldId}
                       required={field.required}
                       {...(field.placeholder === undefined
