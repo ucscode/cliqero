@@ -39,9 +39,9 @@ operator configuration; change `config/site.yaml` or
 | `MAILPIT_SMTP_PORT`  | No       | `1025`                                                                                                                         | Mailpit Compose service                              | Host port published for local SMTP capture.                                          |
 | `MAILPIT_WEB_PORT`   | No       | `8025`                                                                                                                         | Mailpit Compose service                              | Host port published for the Mailpit web UI.                                          |
 
-When running outside Compose, set `DATABASE_URL` explicitly. The local `just`
-integration-test recipe supplies `TEST_DATABASE_URL` separately; it does not
-change the application database configuration.
+When running outside Compose, set `DATABASE_URL` explicitly. Local integration
+tests use `cliqero_test`, a disposable database kept separate from the normal
+`cliqero` development database.
 
 ## Authentication and security
 
@@ -100,9 +100,15 @@ It is not a production log rotation setting.
 
 ## Testing and diagnostics tooling
 
-| Variable            | Required                   | Default                                                                          | Used by                  | Description                                                                                                                       |
-| ------------------- | -------------------------- | -------------------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `TEST_DATABASE_URL` | Only for integration tests | `postgresql://cliqero:cliqero-local@localhost:5432/cliqero` in the `just` recipe | Integration test command | PostgreSQL connection used by the shared integration test database. It is test-only and is not application runtime configuration. |
+| Variable            | Required                                | Default                                                        | Used by                 | Description                                                                                                                                                                                                                        |
+| ------------------- | --------------------------------------- | -------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TEST_DATABASE_URL` | Optional override for integration tests | Automatically built for local `cliqero_test`; unset by default | `just test-integration` | Overrides the automatically provisioned local test database, for example in CI or when using an external PostgreSQL test instance. Never point it at the normal development database because integration fixtures truncate tables. |
+
+Without this override, `just test-integration` starts the existing Compose
+PostgreSQL service, recreates `cliqero_test`, applies the canonical
+`database/migrations/001_initial_schema.sql` baseline, and runs the suite. The
+separate `just test-db-reset` target performs only that reset. Neither command
+resets `cliqero`.
 
 ## Configuration ownership rule
 

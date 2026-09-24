@@ -94,9 +94,13 @@ test:
 test-unit:
 	APP_URL=http://localhost:3000 npm test --workspace @cliqero/web -- --exclude src/integration/**
 
-# Run the complete PostgreSQL integration suite
+# Reset only the disposable local integration database from the canonical schema
+test-db-reset:
+	node scripts/test-database.mjs reset
+
+# Run PostgreSQL integration tests; provisions cliqero_test locally unless overridden
 test-integration:
-	TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgresql://cliqero:cliqero-local@localhost:5432/cliqero}" APP_URL=http://localhost:3000 MEDIA_ROOT=/tmp/cliqero-media BLOG_DATABASE_PATH=/tmp/cliqero-blog-integration.sqlite npm run test:integration --workspace @cliqero/web -- --no-file-parallelism
+	node scripts/test-database.mjs integration
 
 # Run TypeScript checks
 typecheck:

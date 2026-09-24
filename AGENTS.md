@@ -823,3 +823,15 @@ schema changes must be folded into `database/migrations/001_initial_schema.sql`.
 Do not add numbered incremental migrations. Start preserving incremental
 migration history only when the project reaches a stage where existing deployed
 database state must be upgraded non-destructively.
+
+## PostgreSQL integration tests
+
+Use `just test-integration` for PostgreSQL integration validation. Unless an
+explicit `TEST_DATABASE_URL` override is supplied, it prepares a disposable
+`cliqero_test` database on the existing local Compose PostgreSQL service from
+`database/migrations/001_initial_schema.sql`; it never targets the normal
+`cliqero` development database. Do not skip integration tests just because
+`TEST_DATABASE_URL` was not manually exported when local PostgreSQL tooling is
+available. Report them skipped only when the PostgreSQL service or required
+tooling cannot be used. `just test-db-reset` recreates only the disposable test
+database without running the suite.

@@ -262,7 +262,7 @@ just format-check
 just build
 ```
 
-The PostgreSQL integration suite is intentionally run without file parallelism because shared integration fixtures are not safe for parallel truncation.
+The PostgreSQL integration suite is intentionally run without file parallelism because shared integration fixtures are not safe for parallel truncation. `just test-integration` starts the existing Compose PostgreSQL service if needed, resets the separate `cliqero_test` database from `database/migrations/001_initial_schema.sql`, then runs the suite. It never resets the normal `cliqero` development database. Use `just test-db-reset` to prepare the disposable test database without running tests. Set `TEST_DATABASE_URL` only to override the managed local test database, such as in CI or when using an external PostgreSQL test instance.
 
 ## Useful container access
 
