@@ -13,7 +13,13 @@ Configuration is separated by responsibility rather than placed into one global 
 
 Tracked `*.example.yaml` files document supported provider configuration. Real YAML provider files are ignored by Git and excluded from normal source control.
 
-YAML can explicitly reference environment values with `%env(NAME)%`; environment variables do not implicitly override YAML authority.
+Every Cliqero configuration YAML uses the `imports` + `parameters` envelope.
+The central loader recursively composes explicitly imported YAML files relative
+to their importer, deep-merges mappings, concatenates arrays in order, and
+applies the importing file's parameters last. Imports split one complex config;
+they do not create a global configuration tree. Environment placeholders are
+resolved after composition, and environment variables do not implicitly
+override YAML authority.
 
 Object storage configuration uses named instances. The `providers` map key is
 the persisted storage instance identity; the nested `provider` value is only

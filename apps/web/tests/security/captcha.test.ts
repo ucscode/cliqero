@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { verifyCaptchaToken } from "@/security/captcha";
+import { configurationEnvelope } from "../config/yaml-fixture";
 
 const files: string[] = [];
 afterEach(() => {
@@ -14,7 +15,7 @@ function configuration(contents: string) {
     fs.mkdtempSync(path.join(os.tmpdir(), "cliqero-captcha-")),
     "captcha.yaml",
   );
-  fs.writeFileSync(file, contents);
+  fs.writeFileSync(file, configurationEnvelope(contents));
   files.push(file);
   return file;
 }

@@ -1,12 +1,15 @@
-# Optional public storage instance for listing media.
-# Omit to use media.default_provider.
-# ---------------------------
-# media_provider: filesystem
-# -------------------------
-home:
-  featured_limit: 6
-catalogue:
-  page_size: 12
-reviews:
-  visible: true
-  page_size: 10
+imports:
+
+parameters:
+  # Optional public storage instance for listing media.
+  # Omit to use media.default_provider.
+  # ---------------------------
+  # media_provider: filesystem
+  # -------------------------
+  home:
+    featured_limit: 6
+  catalogue:
+    page_size: 12
+  reviews:
+    visible: true
+    page_size: 10

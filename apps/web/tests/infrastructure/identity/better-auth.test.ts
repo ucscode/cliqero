@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import { BetterAuthBoundary } from "@/infrastructure/identity/better-auth";
+import { configurationEnvelope } from "../../config/yaml-fixture";
 
 const directories: string[] = [];
 const database = {
@@ -20,7 +21,10 @@ describe("Better Auth optional social providers", () => {
     const directory = await mkdtemp(join(tmpdir(), "cliqero-auth-boundary-"));
     directories.push(directory);
     const config = join(directory, "auth.yaml");
-    await writeFile(config, "social:\n  google:\n    enabled: true\n    client_id: client\n");
+    await writeFile(
+      config,
+      configurationEnvelope("social:\n  google:\n    enabled: true\n    client_id: client\n"),
+    );
 
     const boundary = new BetterAuthBoundary(
       database,

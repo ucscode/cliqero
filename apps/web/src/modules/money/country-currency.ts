@@ -1,4 +1,5 @@
-import { loadYamlConfiguration } from "@/config/yaml";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 export interface CurrencyMappingConfig {
   enabled?: boolean;
@@ -35,10 +36,28 @@ export class CountryCurrencyResolver {
 export function loadCountryCurrencyResolver(
   path = "apps/web/data/reference/country-currencies.json",
 ): CountryCurrencyResolver {
-  const value = loadYamlConfiguration(path, process.env, { required: true });
+  const filePath = resolveReferencePath(path);
+  const value = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
   if (!value || Array.isArray(value) || typeof value !== "object")
     throw new Error(`${path} must contain an object mapping country codes to currency codes`);
   return new CountryCurrencyResolver(value as Record<string, string>);
+}
+
+function resolveReferencePath(path: string): string {
+  if (isAbsolute(path)) {
+    if (existsSync(path)) return path;
+    throw new Error(`Required reference data file is missing: ${path}`);
+  }
+
+  let directory = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    const candidate = resolve(directory, path);
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  throw new Error(`Required reference data file is missing: ${path}`);
 }
 
 function validateMapping(mapping: Readonly<Record<string, string>>) {

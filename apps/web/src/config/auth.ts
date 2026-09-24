@@ -1,6 +1,9 @@
 import { z } from "zod";
-import { YAMLParseError } from "yaml";
-import { loadYamlConfiguration, MissingEnvironmentVariableError } from "./yaml";
+import {
+  loadYamlConfiguration,
+  MissingEnvironmentVariableError,
+  YamlConfigurationError,
+} from "./yaml";
 
 const publicConfiguration = (() => {
   try {
@@ -59,7 +62,7 @@ export function loadAuthConfiguration(path = "config/security/auth.yaml"): AuthC
   try {
     raw = loadYamlConfiguration(path);
   } catch (error) {
-    if (error instanceof YAMLParseError || error instanceof MissingEnvironmentVariableError)
+    if (error instanceof YamlConfigurationError || error instanceof MissingEnvironmentVariableError)
       throw new AuthProviderConfigurationError(
         "google",
         "Google authentication configuration is invalid",

@@ -1,23 +1,26 @@
-# Direct USDT funding on TRON mainnet (TRC20), verified from public chain data.
-# Copy to usdt_trc20.yaml locally and keep enabled=false until configured.
-enabled: false
-display_name: Direct USDT TRC20
-image_url: /images/payment/usdt-trc20.svg
-description: Send USDT on the TRON TRC20 network directly to the configured receiving wallet.
-config:
-  # Fill with a dedicated production receiving address (never a private key).
-  wallet_address: "YOUR_TRC20_RECEIVING_WALLET"
-  # Official TRON mainnet USD₮ contract.
-  token_contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
-  confirmations_required: 20
-  # Reject submitted transactions older than this provider-owned admission window.
-  max_transaction_age_seconds: 86400
-  verification:
-    provider: trongrid
-    api_base_url: https://api.trongrid.io
-    api_key: "YOUR_TRON_PRO_API_KEY"
-    # Local/testnet acceptance uses Shasta:
-    # api_base_url: https://api.shasta.trongrid.io
-    # token_contract: TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs
-filters:
-  countries: null
+imports:
+
+parameters:
+  # Direct USDT funding on TRON mainnet (TRC20), verified from public chain data.
+  # Copy to usdt_trc20.yaml locally and keep enabled=false until configured.
+  enabled: false
+  display_name: Direct USDT TRC20
+  image_url: /images/payment/usdt-trc20.svg
+  description: Send USDT on the TRON TRC20 network directly to the configured receiving wallet.
+  config:
+    # Fill with a dedicated production receiving address (never a private key).
+    wallet_address: "YOUR_TRC20_RECEIVING_WALLET"
+    # Official TRON mainnet USD₮ contract.
+    token_contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+    confirmations_required: 20
+    # Reject submitted transactions older than this provider-owned admission window.
+    max_transaction_age_seconds: 86400
+    verification:
+      provider: trongrid
+      api_base_url: https://api.trongrid.io
+      api_key: "YOUR_TRON_PRO_API_KEY"
+      # Local/testnet acceptance uses Shasta:
+      # api_base_url: https://api.shasta.trongrid.io
+      # token_contract: TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs
+  filters:
+    countries: null

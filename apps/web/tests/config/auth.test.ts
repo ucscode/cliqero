@@ -9,6 +9,7 @@ import {
   hasGoogleAuthentication,
   loadAuthConfiguration,
 } from "@/config/auth";
+import { configurationEnvelope } from "./yaml-fixture";
 
 const files: string[] = [];
 afterEach(() => {
@@ -17,7 +18,7 @@ afterEach(() => {
 
 function configuration(contents: string) {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cliqero-auth-")), "auth.yaml");
-  fs.writeFileSync(file, contents);
+  fs.writeFileSync(file, configurationEnvelope(contents));
   files.push(file);
   return file;
 }
@@ -66,7 +67,7 @@ describe("YAML Better Auth providers", () => {
 
   it("reports missing auth environment values as typed configuration failures", () => {
     const file = configuration(
-      "social:\n  google:\n    enabled: true\n    client_id: %env(MISSING_AUTH_CLIENT_ID)%\n    client_secret: secret\n",
+      'social:\n  google:\n    enabled: true\n    client_id: "%env(MISSING_AUTH_CLIENT_ID)%"\n    client_secret: secret\n',
     );
     const failures: Error[] = [];
 

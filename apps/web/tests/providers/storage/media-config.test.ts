@@ -3,11 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadMediaStorage } from "@/providers/storage/media-config";
+import { configurationEnvelope } from "../../config/yaml-fixture";
 
 const environment: Record<string, string | undefined> = {
   APP_URL: "http://localhost:3000",
   MEDIA_ROOT: "/tmp/cliqero-media",
 };
+
+async function writeConfiguration(path: string, parameters: string) {
+  await writeFile(path, configurationEnvelope(parameters));
+}
 
 describe("media storage configuration", () => {
   it("accepts arbitrary instance names and resolves the default by instance identity", () => {
@@ -32,11 +37,11 @@ providers:
       public_base_url: http://localhost:3000/media/local_public
       `;
       const custom = join(root, "custom.yaml");
-      await writeFile(custom, `default_provider: custom_media${base}`);
+      await writeConfiguration(custom, `default_provider: custom_media${base}`);
       expect(loadMediaStorage(custom, environment).names()).toEqual(["custom_media"]);
 
       const missing = join(root, "missing.yaml");
-      await writeFile(missing, `default_provider: absent${base}`);
+      await writeConfiguration(missing, `default_provider: absent${base}`);
       expect(() => loadMediaStorage(missing, environment)).toThrow(
         "default_provider must reference a configured storage instance",
       );
@@ -49,7 +54,7 @@ providers:
     const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
     try {
       const config = join(root, "config.yaml");
-      await writeFile(
+      await writeConfiguration(
         config,
         `default_provider: local_files
 providers:
@@ -81,7 +86,7 @@ providers:
     const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
     try {
       const config = join(root, "config.yaml");
-      await writeFile(
+      await writeConfiguration(
         config,
         `default_provider: broken_supabase
 providers:
@@ -112,7 +117,7 @@ providers:
     const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
     try {
       const config = join(root, "config.yaml");
-      await writeFile(
+      await writeConfiguration(
         config,
         `default_provider: filesystem
 providers:
@@ -146,7 +151,7 @@ providers:
     try {
       const storageRoot = join(root, "objects");
       const config = join(root, "config.yaml");
-      await writeFile(
+      await writeConfiguration(
         config,
         `default_provider: local_files\nproviders:\n  local_files:\n    provider: filesystem\n    visibility: private\n    config:\n      root: ${storageRoot}\n`,
       );
@@ -175,7 +180,7 @@ providers:
       const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
       try {
         const config = join(root, "config.yaml");
-        await writeFile(
+        await writeConfiguration(
           config,
           `default_provider: media\nproviders:\n  media:\n    provider: ${provider}\n    visibility: public\n    config:\n      ${providerConfig}\n`,
         );
@@ -194,7 +199,7 @@ providers:
     const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
     try {
       const config = join(root, "config.yaml");
-      await writeFile(
+      await writeConfiguration(
         config,
         `default_provider: private_files\nproviders:\n  private_files:\n    provider: filesystem\n    visibility: private\n    config:\n      root: /tmp/cliqero-media\n  private_files_with_url:\n    provider: filesystem\n    visibility: private\n    config:\n      root: /tmp/cliqero-media\n      public_base_url: https://media.example.com\n  private_r2:\n    provider: cloudflare-r2\n    visibility: private\n    config:\n      endpoint: https://account.r2.cloudflarestorage.com\n      bucket: evidence\n      access_key_id: id\n      secret_access_key: secret\n`,
       );
@@ -218,7 +223,7 @@ providers:
     const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
     try {
       const config = join(root, "config.yaml");
-      await writeFile(
+      await writeConfiguration(
         config,
         `default_provider: private_r2\nproviders:\n  private_r2:\n    provider: cloudflare-r2\n    visibility: private\n    config:\n      endpoint: https://account.r2.cloudflarestorage.com\n      bucket: evidence\n      public_base_url: https://media.example.com\n      access_key_id: id\n      secret_access_key: secret\n`,
       );
@@ -235,7 +240,7 @@ providers:
     const root = await mkdtemp(join(tmpdir(), "cliqero-storage-config-"));
     try {
       const config = join(root, "config.yaml");
-      await writeFile(
+      await writeConfiguration(
         config,
         `default_provider: supabase_public\nproviders:\n  supabase_public:\n    provider: supabase\n    visibility: public\n    config:\n      endpoint: https://project.supabase.co\n      bucket: public-media\n      service_key: secret\n  supabase_private:\n    provider: supabase\n    visibility: private\n    config:\n      endpoint: https://project.supabase.co\n      bucket: private-media\n      service_key: secret\n`,
       );

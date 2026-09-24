@@ -3,9 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadPaystackConfiguration } from "@/providers/payment/paystack/config";
+import { configurationEnvelope } from "../../../config/yaml-fixture";
 
 function configText(currencies: string, defaultCurrency: string) {
-  return `enabled: true
+  return configurationEnvelope(`enabled: true
 display_name: Paystack
 image_url: /images/payment/paystack.svg
 description: Pay with Paystack.
@@ -17,7 +18,7 @@ config:
   default_currency: ${defaultCurrency}
 filters:
   countries: [NG, GH]
-`;
+`);
 }
 
 describe("Paystack configuration", () => {

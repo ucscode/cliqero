@@ -59,6 +59,13 @@ describe("YAML commission policy", () => {
       "Required configuration file is missing",
     ));
 
+  it("loads distribution policy from the enveloped example", () => {
+    expect(loadYamlCommissionPolicy("config/hierarchy/distribution.example.yaml")).toMatchObject({
+      platformRateBasisPoints: 1000,
+      maximumRewardedDepth: 3,
+    });
+  });
+
   it("normalizes explicit null levels to no referral allocation", () =>
     expect(
       commissionPolicyFromYaml({

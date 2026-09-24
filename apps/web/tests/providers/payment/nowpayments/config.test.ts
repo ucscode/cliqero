@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadNowPaymentsConfiguration } from "@/providers/payment/nowpayments/config";
+import { configurationEnvelope } from "../../../config/yaml-fixture";
 
 const directories: string[] = [];
 
@@ -27,7 +28,9 @@ function writeConfig(
     .join("\n");
   writeFileSync(
     path,
-    `enabled: true\ndisplay_name: NOWPayments\nimage_url: /images/payment/nowpayments.svg\ndescription: Pay through NOWPayments.\nconfig:\n  api_key: test-key\n  api_base_url: ${apiBaseUrl}\n  ${callback ? `ipn_callback_url: ${callback}\n  ` : ""}pay_currencies:\n${paymentCurrencies}\n${extra}${sandbox}\n`,
+    configurationEnvelope(
+      `enabled: true\ndisplay_name: NOWPayments\nimage_url: /images/payment/nowpayments.svg\ndescription: Pay through NOWPayments.\nconfig:\n  api_key: test-key\n  api_base_url: ${apiBaseUrl}\n  ${callback ? `ipn_callback_url: ${callback}\n  ` : ""}pay_currencies:\n${paymentCurrencies}\n${extra}${sandbox}\n`,
+    ),
   );
   return path;
 }

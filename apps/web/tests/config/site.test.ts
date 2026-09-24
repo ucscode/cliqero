@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { loadSiteConfiguration } from "@/config/site";
+import { configurationEnvelope } from "./yaml-fixture";
 
 const files: string[] = [];
 afterEach(() => {
@@ -13,7 +14,9 @@ it("loads site identity from YAML and reuses APP_URL", () => {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cliqero-site-")), "site.yaml");
   fs.writeFileSync(
     file,
-    'name: Example\nurl: "%env(APP_URL)%"\nsupport_email: help@example.test\ndescription: "A site"\n',
+    configurationEnvelope(
+      'name: Example\nurl: "%env(APP_URL)%"\nsupport_email: help@example.test\ndescription: "A site"\n',
+    ),
   );
   files.push(file);
   const previous = process.env.APP_URL;

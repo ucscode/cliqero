@@ -1,43 +1,46 @@
-# The map key is an arbitrary storage instance identity and is what gets
-# persisted in storage_provider/proof_storage_provider. The nested provider
-# selects the driver; modules reference the instance key, not the driver name.
-default_provider: filesystem
+imports:
 
-providers:
-  # Filesystem requires only root. container is optional logical metadata; when
-  # omitted, Cliqero uses the instance name. It does not change the disk path.
-  #
-  # For public filesystem storage, public_base_url must point at Cliqero's
-  # built-in public media route: <APP_URL>/media/<instance-name>.
-  # Using an arbitrary path (for example /vision/filesystem) will not work
-  # unless a matching application route is implemented.
-  filesystem:
-    provider: filesystem
-    visibility: public
-    config:
-      root: "%env(MEDIA_ROOT)%"
-      # container: media
-      public_base_url: "%env(APP_URL)%/media/filesystem"
+parameters:
+  # The map key is an arbitrary storage instance identity and is what gets
+  # persisted in storage_provider/proof_storage_provider. The nested provider
+  # selects the driver; modules reference the instance key, not the driver name.
+  default_provider: filesystem
 
-  # Supabase requires endpoint, bucket, and service_key. It needs no separate
-  # public_base_url; visibility alone controls whether public URLs are allowed.
-  supabase:
-    provider: supabase
-    visibility: private
-    config:
-      endpoint: https://project-ref.supabase.co
-      bucket: media
-      service_key: supabase_service_role_example
+  providers:
+    # Filesystem requires only root. container is optional logical metadata; when
+    # omitted, Cliqero uses the instance name. It does not change the disk path.
+    #
+    # For public filesystem storage, public_base_url must point at Cliqero's
+    # built-in public media route: <APP_URL>/media/<instance-name>.
+    # Using an arbitrary path (for example /vision/filesystem) will not work
+    # unless a matching application route is implemented.
+    filesystem:
+      provider: filesystem
+      visibility: public
+      config:
+        root: "%env(MEDIA_ROOT)%"
+        # container: media
+        public_base_url: "%env(APP_URL)%/media/filesystem"
 
-  # R2 requires endpoint, bucket, access_key_id, and secret_access_key.
-  # public_base_url is required for public visibility, optional for private
-  # visibility, and never overrides the visibility setting.
-  cloudflare:
-    provider: cloudflare-r2
-    visibility: public
-    config:
-      endpoint: https://account-id.r2.cloudflarestorage.com
-      bucket: media
-      public_base_url: https://media.example.com
-      access_key_id: r2_access_key_example
-      secret_access_key: r2_secret_key_example
+    # Supabase requires endpoint, bucket, and service_key. It needs no separate
+    # public_base_url; visibility alone controls whether public URLs are allowed.
+    supabase:
+      provider: supabase
+      visibility: private
+      config:
+        endpoint: https://project-ref.supabase.co
+        bucket: media
+        service_key: supabase_service_role_example
+
+    # R2 requires endpoint, bucket, access_key_id, and secret_access_key.
+    # public_base_url is required for public visibility, optional for private
+    # visibility, and never overrides the visibility setting.
+    cloudflare:
+      provider: cloudflare-r2
+      visibility: public
+      config:
+        endpoint: https://account-id.r2.cloudflarestorage.com
+        bucket: media
+        public_base_url: https://media.example.com
+        access_key_id: r2_access_key_example
+        secret_access_key: r2_secret_key_example

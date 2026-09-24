@@ -1,7 +1,10 @@
-# Better Auth social providers. Copy to config/security/auth.yaml.
-# Disabled providers are ignored; enabled providers require both credentials.
-social:
-  google:
-    enabled: false
-    client_id: ""
-    client_secret: ""
+imports:
+
+parameters:
+  # Better Auth social providers. Copy to config/security/auth.yaml.
+  # Disabled providers are ignored; enabled providers require both credentials.
+  social:
+    google:
+      enabled: false
+      client_id: ""
+      client_secret: ""

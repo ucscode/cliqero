@@ -107,13 +107,74 @@ The default Docker filesystem root is `/var/lib/cliqero/media` and is persisted
 by the `media-data` volume. Listing media is one consumer of this shared
 registry. The real media YAML is required at runtime and remains ignored.
 
-YAML may reference an environment value explicitly:
+Every Cliqero configuration YAML uses the same loader envelope. `imports` and
+`parameters` are the only allowed document-root keys; `parameters` holds the
+ordinary configuration object consumed by the existing domain loader:
 
 ```yaml
-callback_url: "%env(APP_URL)%/some/provider/callback"
+imports:
+
+parameters:
+  callback_url: "%env(APP_URL)%/some/provider/callback"
 ```
 
-Resolution is recursive. Missing referenced variables fail with configuration context. `%%env(NAME)%%` escapes a placeholder when literal text is required.
+Empty `imports` (`imports:`, `null`, or `[]`) normalizes to an empty list, and
+empty `parameters` (`parameters:`, `null`, or `{}`) normalizes to an empty
+mapping. Configuration values written directly at the document root are
+invalid. Domain schemas continue receiving the effective parameters object and
+do not need to know about the envelope.
+
+Use imports only to split one complex configuration when useful; they do not
+create a global configuration tree, and existing independently owned config
+files should remain independent. Imports may be recursive, and each explicit
+YAML path resolves relative to the file that declares it. Globs, directories,
+and URLs are not supported. Missing imported files and circular imports are
+configuration errors.
+
+Composition order is imports in listed order, followed by the importing file's
+own `parameters`. Mappings deep-merge recursively, arrays concatenate in order,
+and later scalar values replace earlier ones. Thus the importing file wins
+conflicts. `null` inside `parameters` remains a real value; only the two
+envelope fields receive empty-value normalization.
+
+For example, a large bank-transfer configuration can import account fragments
+without changing the final object shape accepted by the bank-transfer loader:
+
+```yaml
+imports:
+  - ./bank_transfer/nigeria-uba.yaml
+  - ./bank_transfer/us-first.yaml
+
+parameters:
+  enabled: true
+  display_name: Bank transfer
+  filters:
+    countries:
+      - NG
+      - US
+  config:
+    instruction: Use the funding reference as narration.
+```
+
+Each account fragment has the same envelope and can contribute to the
+`config.accounts` array. Splitting is optional; examples are kept together for
+easy local setup.
+
+YAML may reference an environment value explicitly inside `parameters`:
+
+```yaml
+imports:
+
+parameters:
+  callback_url: "%env(APP_URL)%/some/provider/callback"
+```
+
+The loader composes raw values before placeholder resolution. Existing lazy
+provider behavior is preserved: disabled providers can be inspected without
+resolving their imported secrets. Direct `loadYamlConfiguration()` consumers
+resolve recursively after composition. Missing referenced variables fail with
+configuration context. `%%env(NAME)%%` escapes a placeholder when literal text
+is required.
 
 ## Payment providers
 
@@ -126,14 +187,17 @@ Use YAML block-style sequences and mappings. Avoid flow-style collections in mai
 Payment-module examples use the same top-level eligibility shape:
 
 ```yaml
-enabled: true
-display_name: Provider name
-image_url: /images/payment/provider.svg
-description: Provider description.
-filters:
-  countries: null
-config:
-  # Provider-specific settings belong here.
+imports:
+
+parameters:
+  enabled: true
+  display_name: Provider name
+  image_url: /images/payment/provider.svg
+  description: Provider description.
+  filters:
+    countries: null
+  config:
+    # Provider-specific settings belong here.
 ```
 
 `filters.countries` gates provider visibility for the authenticated customer's
@@ -149,14 +213,17 @@ Referral distribution is configured independently from payment providers in `con
 Conceptually:
 
 ```yaml
-distribution:
-  platform:
-    percentage: 10
-  commission:
-    levels:
-      1: 50
-      2: 30
-      3: 10
+imports:
+
+parameters:
+  distribution:
+    platform:
+      percentage: 10
+    commission:
+      levels:
+        1: 50
+        2: 30
+        3: 10
 ```
 
 Percentages are integer percentages, not basis points. The platform percentage plus all configured level percentages must not exceed 100. Level keys are positive integers and may be sparse; YAML ordering has no economic meaning. `levels: null` and `levels: {}` deliberately mean no referral allocations, and the seller receives the remaining configured share. A configured level without an actual upline is allocated to the platform.

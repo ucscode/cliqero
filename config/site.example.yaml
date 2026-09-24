@@ -1,4 +1,7 @@
-name: Cliqero
-url: "%env(APP_URL)%"
-support_email: support@cliqero.com
-description: "Catalogue commerce, wallet access and referrals."
+imports:
+
+parameters:
+  name: Cliqero
+  url: "%env(APP_URL)%"
+  support_email: support@cliqero.com
+  description: "Catalogue commerce, wallet access and referrals."

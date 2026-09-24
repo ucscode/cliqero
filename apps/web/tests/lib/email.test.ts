@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { authenticationEmailContent } from "@/lib/email";
+import { authenticationEmailContent, loadEmailConfiguration } from "@/lib/email";
 
 describe("authentication email content", () => {
+  it("loads SMTP settings from the enveloped example", () => {
+    expect(loadEmailConfiguration("config/modules/email.example.yaml")).toMatchObject({
+      provider: "smtp",
+      smtp: { host: "mailpit", port: 1025, secure: false },
+    });
+  });
+
   it("creates a branded password-reset message with safe fallback content", () => {
     const message = authenticationEmailContent("reset", "http://localhost/reset-password/token");
     expect(message.subject).toContain("reset your password");

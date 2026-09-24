@@ -10,9 +10,23 @@ export class MissingEnvironmentVariableError extends Error {
   }
 }
 
+export class YamlConfigurationError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "YamlConfigurationError";
+  }
+}
+
 type RuntimeModules = {
-  fs: { existsSync(path: string): boolean; readFileSync(path: string, encoding: "utf8"): string };
-  path: { dirname(path: string): string; resolve(...paths: string[]): string };
+  fs: {
+    existsSync(path: string): boolean;
+    realpathSync(path: string): string;
+    readFileSync(path: string, encoding: "utf8"): string;
+  };
+  path: {
+    dirname(path: string): string;
+    resolve(...paths: string[]): string;
+  };
 };
 
 function runtimeModules(): RuntimeModules | null {
@@ -31,7 +45,121 @@ function runtimeModules(): RuntimeModules | null {
 export function parseYamlConfiguration(path: string): unknown {
   const resolved = resolveConfigurationPath(path);
   if (!resolved) return null;
-  return parse(runtimeModules()!.fs.readFileSync(resolved, "utf8"));
+  const modules = runtimeModules();
+  if (!modules) return null;
+  return readComposedConfiguration(resolved, modules, []);
+}
+
+type ConfigurationParameters = Record<string, unknown>;
+
+function isMapping(value: unknown): value is ConfigurationParameters {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function mergeConfiguration(
+  earlier: ConfigurationParameters,
+  later: ConfigurationParameters,
+): ConfigurationParameters {
+  return Object.fromEntries(
+    Object.entries(earlier)
+      .map(([key, value]) => [key, value])
+      .concat(
+        Object.entries(later).map(([key, value]) => [
+          key,
+          Object.hasOwn(earlier, key) && isMapping(earlier[key]) && isMapping(value)
+            ? mergeConfiguration(earlier[key], value)
+            : Object.hasOwn(earlier, key) && Array.isArray(earlier[key]) && Array.isArray(value)
+              ? [...earlier[key], ...value]
+              : value,
+        ]),
+      ),
+  );
+}
+
+function invalidEnvelope(path: string, reason: string): never {
+  throw new YamlConfigurationError(`Invalid YAML configuration envelope in "${path}": ${reason}`);
+}
+
+function readConfigurationEnvelope(path: string, source: string) {
+  let document: unknown;
+  try {
+    document = parse(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "invalid YAML syntax";
+    throw new YamlConfigurationError(`Invalid YAML configuration in "${path}": ${message}`, {
+      cause: error,
+    });
+  }
+
+  if (!isMapping(document)) invalidEnvelope(path, "the document root must be a mapping");
+  const unknownKeys = Object.keys(document).filter(
+    (key) => key !== "imports" && key !== "parameters",
+  );
+  if (unknownKeys.length) invalidEnvelope(path, `unknown root key(s): ${unknownKeys.join(", ")}`);
+  if (!Object.hasOwn(document, "imports") || !Object.hasOwn(document, "parameters"))
+    invalidEnvelope(path, 'both "imports" and "parameters" keys are required');
+
+  const importsValue = document.imports;
+  let imports: string[];
+  if (importsValue === null) imports = [];
+  else if (Array.isArray(importsValue)) {
+    imports = importsValue.map((item) => {
+      if (typeof item !== "string" || !item.trim())
+        invalidEnvelope(path, '"imports" must contain only non-empty path strings');
+      const importPath = item.trim();
+      if (
+        /^[a-z][a-z\d+.-]*:/i.test(importPath) ||
+        importPath.startsWith("/") ||
+        importPath.startsWith("\\") ||
+        /^[a-z]:[\\/]/i.test(importPath) ||
+        /[*?\[\]]/.test(importPath)
+      )
+        invalidEnvelope(path, `unsupported import path "${importPath}"`);
+      if (!/\.ya?ml$/i.test(importPath))
+        invalidEnvelope(path, `imports must reference explicit YAML files: "${importPath}"`);
+      return importPath;
+    });
+  } else invalidEnvelope(path, '"imports" must be null or an array of non-empty path strings');
+
+  const parametersValue = document.parameters;
+  if (parametersValue !== null && !isMapping(parametersValue))
+    invalidEnvelope(path, '"parameters" must be null or a mapping');
+
+  return {
+    imports,
+    parameters: parametersValue ?? {},
+  };
+}
+
+function readComposedConfiguration(
+  filePath: string,
+  modules: RuntimeModules,
+  importChain: string[],
+): ConfigurationParameters {
+  const canonicalPath = modules.fs.realpathSync(filePath);
+  const cycleStart = importChain.indexOf(canonicalPath);
+  if (cycleStart >= 0) {
+    const cycle = [...importChain.slice(cycleStart), canonicalPath];
+    throw new YamlConfigurationError(`Circular YAML configuration import: ${cycle.join(" -> ")}`);
+  }
+
+  const { imports, parameters } = readConfigurationEnvelope(
+    canonicalPath,
+    modules.fs.readFileSync(canonicalPath, "utf8"),
+  );
+  const chain = [...importChain, canonicalPath];
+  let merged: ConfigurationParameters = {};
+  for (const importPath of imports) {
+    const childPath = modules.path.resolve(modules.path.dirname(canonicalPath), importPath);
+    if (!modules.fs.existsSync(childPath))
+      throw new YamlConfigurationError(
+        `Missing imported YAML configuration "${childPath}" imported by "${canonicalPath}"`,
+      );
+    merged = mergeConfiguration(merged, readComposedConfiguration(childPath, modules, chain));
+  }
+  return mergeConfiguration(merged, parameters);
 }
 
 function resolveConfigurationPath(path: string): string | null {

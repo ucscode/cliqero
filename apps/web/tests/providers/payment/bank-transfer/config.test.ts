@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadBankTransferConfiguration } from "@/providers/payment/bank-transfer/config";
+import { configurationEnvelope } from "../../../config/yaml-fixture";
 
 describe("bank transfer configuration", () => {
   it("loads provider accounts from nested config with arbitrary ordered fields", () => {
@@ -10,7 +11,7 @@ describe("bank transfer configuration", () => {
     const path = join(directory, "bank.yaml");
     writeFileSync(
       path,
-      `enabled: true
+      configurationEnvelope(`enabled: true
 display_name: Bank transfer
 image_url: /images/payment/bank-transfer.svg
 description: Transfer funds from your bank account.
@@ -34,7 +35,7 @@ config:
           label: Custom note
           value: Send reference
           copyable: true
-`,
+`),
     );
     try {
       const loaded = loadBankTransferConfiguration(path);
@@ -68,7 +69,7 @@ config:
     const path = join(directory, "bank.yaml");
     writeFileSync(
       path,
-      `enabled: true
+      configurationEnvelope(`enabled: true
 display_name: Bank transfer
 image_url: /images/payment/bank-transfer.svg
 description: Transfer funds from your bank account.
@@ -83,7 +84,7 @@ config:
         - key: bank_name
           label: Bank
           value: Example Bank
-`,
+`),
     );
     try {
       expect(loadBankTransferConfiguration(path)?.filters).toEqual({ countries: ["NG", "US"] });
@@ -97,7 +98,7 @@ config:
     const path = join(directory, "bank.yaml");
     writeFileSync(
       path,
-      `enabled: true
+      configurationEnvelope(`enabled: true
 display_name: Bank transfer
 image_url: /images/payment/bank-transfer.svg
 description: Transfer funds from your bank account.
@@ -111,7 +112,7 @@ config:
           label: Bank
           value: Example Bank
           important: true
-`,
+`),
     );
     try {
       expect(() => loadBankTransferConfiguration(path)).toThrow(/Unrecognized key.*important/);

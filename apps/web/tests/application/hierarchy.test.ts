@@ -20,6 +20,12 @@ describe("hierarchy visualization configuration", () => {
     expect(() => visualizationConfig("config/does-not-exist-visualization.yaml")).toThrow(
       "Required configuration file is missing",
     ));
+  it("loads visualization settings through the enveloped example", () => {
+    expect(visualizationConfig("config/hierarchy/visualization.example.yaml")).toEqual({
+      depth: 3,
+      childLimit: 50,
+    });
+  });
   it("accepts positive integer depth and child limit without a hierarchy ceiling", () => {
     expect(
       visualizationConfigFromValue({

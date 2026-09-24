@@ -7,6 +7,7 @@ import {
   discoverExampleConfiguration,
   normalizeBundleName,
 } from "../../../../scripts/create-local-config";
+import { configurationEnvelope } from "../config/yaml-fixture";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -19,9 +20,15 @@ async function fixtureRoot() {
   await writeFile(join(root, ".env.example"), "EXAMPLE=true\n");
   await writeFile(join(root, ".env"), "REAL_SECRET=never-copy\n");
   await mkdir(join(root, "config", "security"), { recursive: true });
-  await writeFile(join(root, "config", "site.example.yaml"), "name: Example\n");
+  await writeFile(
+    join(root, "config", "site.example.yaml"),
+    configurationEnvelope("name: Example\n"),
+  );
   await writeFile(join(root, "config", "site.yaml"), "name: Secret site\n");
-  await writeFile(join(root, "config", "security", "auth.example.yml"), "social: {}\n");
+  await writeFile(
+    join(root, "config", "security", "auth.example.yml"),
+    configurationEnvelope("social: {}\n"),
+  );
   return root;
 }
 
@@ -29,7 +36,10 @@ describe("local configuration bundle generator", () => {
   it("discovers examples generically and preserves their runtime-relative paths", async () => {
     const root = await fixtureRoot();
     await mkdir(join(root, "config", "future"), { recursive: true });
-    await writeFile(join(root, "config", "future", "nested.example.yaml"), "enabled: true\n");
+    await writeFile(
+      join(root, "config", "future", "nested.example.yaml"),
+      configurationEnvelope("enabled: true\n"),
+    );
     expect(await discoverExampleConfiguration(root)).toEqual([
       ".env.example",
       "config/future/nested.example.yaml",
@@ -47,18 +57,18 @@ describe("local configuration bundle generator", () => {
       "EXAMPLE=true\n",
     );
     await expect(readFile(join(bundle.destination, "config", "site.yaml"), "utf8")).resolves.toBe(
-      "name: Example\n",
+      configurationEnvelope("name: Example\n"),
     );
     await expect(
       readFile(join(bundle.destination, "config", "security", "auth.yml"), "utf8"),
-    ).resolves.toBe("social: {}\n");
+    ).resolves.toBe(configurationEnvelope("social: {}\n"));
     await expect(readFile(join(root, ".env"), "utf8")).resolves.toBe("REAL_SECRET=never-copy\n");
     await expect(readFile(join(root, "config", "site.yaml"), "utf8")).resolves.toBe(
       "name: Secret site\n",
     );
     await expect(readFile(join(root, ".env.example"), "utf8")).resolves.toBe("EXAMPLE=true\n");
     await expect(readFile(join(root, "config", "site.example.yaml"), "utf8")).resolves.toBe(
-      "name: Example\n",
+      configurationEnvelope("name: Example\n"),
     );
   });
 
