@@ -67,22 +67,40 @@ export type OperatorWithdrawalDetail = Omit<OperatorWithdrawal, "destination"> &
   };
 };
 
-export type WithdrawalFieldConfig = {
-  placeholder?: string;
-  rows?: number;
-  copyable?: boolean;
-};
-export type WithdrawalMethodField = {
+type WithdrawalFieldIdentity = {
   name: string;
   label: string;
-  type: "text" | "select" | "textarea" | "fixed";
-  required?: boolean;
-  regex?: string;
-  allowed_values?: string[];
-  options?: Record<string, string>;
-  value?: string;
-  config?: WithdrawalFieldConfig;
 };
+type WithdrawalCopyConfig = { copyable?: boolean };
+type WithdrawalTextConfig = WithdrawalCopyConfig & { placeholder?: string };
+type WithdrawalTextareaConfig = WithdrawalTextConfig & { rows?: number };
+
+export type WithdrawalMethodField =
+  | (WithdrawalFieldIdentity & {
+      type: "text";
+      required: boolean;
+      regex?: string;
+      allowed_values?: string[];
+      config?: WithdrawalTextConfig;
+    })
+  | (WithdrawalFieldIdentity & {
+      type: "select";
+      required: boolean;
+      options: Record<string, string>;
+      config?: WithdrawalCopyConfig;
+    })
+  | (WithdrawalFieldIdentity & {
+      type: "textarea";
+      required: boolean;
+      regex?: string;
+      allowed_values?: string[];
+      config?: WithdrawalTextareaConfig;
+    })
+  | (WithdrawalFieldIdentity & {
+      type: "fixed";
+      value: string;
+      config?: WithdrawalCopyConfig;
+    });
 export type WithdrawalMethod = {
   id: string;
   display_name: string;

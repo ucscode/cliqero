@@ -121,7 +121,9 @@ describe("WithdrawalDestinationService", () => {
     ).rejects.toThrow("Bank is required");
   });
 
-  it("rebuilds metadata on edit, preserves an old withdrawal snapshot, and archives without deletion", async () => {
+  it(
+    "rebuilds metadata on edit, preserves an old withdrawal snapshot, and archives without deletion",
+    async () => {
     const { service, destinationRepository, rows } = fixture();
     const created = await service.create("owner", {
       method: "bank_ng",
@@ -148,8 +150,9 @@ describe("WithdrawalDestinationService", () => {
     expect(destinationRepository.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: "archived" }),
     );
-    await expect(service.resolveForWithdrawal("owner", created.id)).rejects.toThrow("archived");
-  });
+      await expect(service.resolveForWithdrawal("owner", created.id)).rejects.toThrow("archived");
+    },
+  );
 
   it("keeps disabled destinations visible as unavailable history", async () => {
     const existing: SavedWithdrawalDestination = {

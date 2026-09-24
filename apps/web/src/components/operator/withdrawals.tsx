@@ -272,7 +272,11 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
                 <dt className="text-xs font-semibold text-slate-500">{field.label}</dt>
                 <dd className="break-all">
                   {field.copyable ? (
-                    <CopyValue label={field.label} value={field.value} displayValue={field.displayValue} />
+                    <CopyValue
+                    label={field.label}
+                    value={field.value}
+                    displayValue={field.displayValue}
+                  />
                   ) : (
                     field.displayValue ?? field.value
                   )}
