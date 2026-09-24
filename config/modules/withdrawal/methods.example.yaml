@@ -16,35 +16,40 @@ parameters:
         countries:
           - NG
 
-      # Fields are ordered form controls. `name` is the value key submitted by
-      # the client. Labels, control types, fixed values and presentation config
-      # are trusted server-owned metadata and must not come from the browser.
+      # Fields are ordered form controls. `name` is the submitted value identity.
+      # `copyable` and simple presentation values such as `placeholder` stay
+      # directly on the field. `attributes` is for additional HTML attributes.
       fields:
         - name: bank_name
           label: Bank
           type: text
           required: true
-          config:
-            placeholder: Guaranty Trust Bank
-            copyable: true
+          placeholder: Guaranty Trust Bank
+          copyable: true
+          attributes:
+            autoComplete: organization
+            data-withdrawal-field: bank
 
         - name: account_number
           label: Account number
           type: text
           required: true
-          # regex is enforced by the server. The browser may also use it as an
-          # HTML pattern for earlier feedback, but client validation is advisory.
+          # regex is enforced by the server. The browser also receives it as an
+          # HTML pattern for early feedback, but server validation is authoritative.
           regex: "^[0-9]{10}$"
-          config:
-            placeholder: "0123456789"
-            copyable: true
+          placeholder: "0123456789"
+          copyable: true
+          attributes:
+            autoComplete: "off"
+            data-withdrawal-field: account-number
 
         - name: account_name
           label: Account name
           type: text
           required: true
-          config:
-            copyable: true
+          copyable: true
+          attributes:
+            autoComplete: name
 
     - id: usdt_trc20
       enabled: true
@@ -59,9 +64,11 @@ parameters:
           type: text
           required: true
           regex: "^T[1-9A-HJ-NP-Za-km-z]{33}$"
-          config:
-            placeholder: T...
-            copyable: true
+          placeholder: T...
+          copyable: true
+          attributes:
+            autoComplete: "off"
+            data-network: trc20
 
         # fixed values are injected by the server and are never accepted from
         # client-submitted values.
@@ -69,26 +76,35 @@ parameters:
           label: Network
           type: fixed
           value: TRC20
-          config:
-            copyable: true
+          copyable: true
 
-  # Other supported editable controls:
+  # A select uses an ordered array of machine keys and human-facing values:
   #
   # - name: account_type
   #   label: Account type
   #   type: select
   #   required: true
   #   options:
-  #     savings: Savings
-  #     current: Current
+  #     - key: savings
+  #       value: Savings
+  #     - key: current
+  #       value: Current
+  #
+  # Text and textarea fields may restrict values with `enum` in addition to
+  # server-side `regex` validation:
   #
   # - name: note
   #   label: Payment note
   #   type: textarea
   #   required: false
-  #   allowed_values:
+  #   enum:
   #     - personal
   #     - business
-  #   config:
-  #     placeholder: Optional note
+  #   placeholder: Optional note
+  #   attributes:
   #     rows: 4
+  #     data-purpose: withdrawal-note
+  #
+  # Attributes cannot override Cliqero-owned control properties such as name,
+  # type, required, value, id, list or pattern; event-style on* attributes are
+  # ignored as well.

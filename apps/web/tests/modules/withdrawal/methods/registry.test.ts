@@ -16,14 +16,14 @@ const bank = {
       type: "text",
       required: true,
       regex: "[0-9]{10}",
-      config: { copyable: true },
+      copyable: true,
     },
     {
       name: "network",
       label: "Network",
       type: "fixed",
       value: "TRC20",
-      config: { copyable: true },
+      copyable: true,
     },
   ],
 };
@@ -104,7 +104,7 @@ describe("WithdrawalMethodRegistry", () => {
     expect(() => registry.enrich(method, { account_number: "123" })).toThrow("invalid format");
   });
 
-  it("supports select options, textarea fields and allowed text values", () => {
+  it("supports ordered select options and enum-constrained editable values", () => {
     const method = {
       ...global,
       id: "structured",
@@ -114,11 +114,11 @@ describe("WithdrawalMethodRegistry", () => {
           label: "Bank",
           type: "select",
           required: true,
-          options: {
-            uba: "United Bank for Africa",
-            gtbank: "Guaranty Trust Bank",
-          },
-          config: { copyable: true },
+          copyable: true,
+          options: [
+            { key: "uba", value: "United Bank for Africa" },
+            { key: "gtbank", value: "Guaranty Trust Bank" },
+          ],
         },
         {
           name: "note",
@@ -126,8 +126,8 @@ describe("WithdrawalMethodRegistry", () => {
           type: "textarea",
           required: true,
           regex: "[a-z]+",
-          allowed_values: ["personal", "business"],
-          config: { rows: 4 },
+          enum: ["personal", "business"],
+          attributes: { rows: 4 },
         },
       ],
     };
@@ -159,6 +159,46 @@ describe("WithdrawalMethodRegistry", () => {
     );
   });
 
+  it("keeps form attributes extensible without allowing them to override field semantics", () => {
+    const registry = new WithdrawalMethodRegistry({
+      methods: [
+        {
+          ...global,
+          id: "attributes",
+          fields: [
+            {
+              name: "account",
+              label: "Account",
+              type: "text",
+              required: true,
+              placeholder: "Direct placeholder",
+              attributes: {
+                placeholder: "Attribute placeholder",
+                rows: 4,
+                "data-purpose": "withdrawal",
+                name: "spoofed",
+                type: "email",
+                required: false,
+                pattern: ".*",
+                onClick: "not-processed",
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(registry.find("attributes")?.fields[0]).toMatchObject({
+      name: "account",
+      placeholder: "Direct placeholder",
+      attributes: {
+        placeholder: "Attribute placeholder",
+        rows: 4,
+        "data-purpose": "withdrawal",
+      },
+    });
+  });
+
   it("loads imported definitions through the shared YAML composition loader", () => {
     const path = resolve(process.cwd(), "tests/fixtures/withdrawal/methods.yaml");
     const registry = WithdrawalMethodRegistry.load(path);
@@ -180,7 +220,7 @@ describe("WithdrawalMethodRegistry", () => {
         name: "network",
         type: "fixed",
         value: "TRC20",
-        config: { copyable: true },
+        copyable: true,
       });
     },
   );

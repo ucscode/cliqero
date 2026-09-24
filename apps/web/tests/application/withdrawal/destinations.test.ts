@@ -17,7 +17,7 @@ const bankMethod = {
       label: "Bank",
       type: "text",
       required: true,
-      config: { copyable: true },
+      copyable: true,
     },
     {
       name: "account",
@@ -25,14 +25,14 @@ const bankMethod = {
       type: "text",
       required: true,
       regex: "^[0-9]{10}$",
-      config: { copyable: true },
+      copyable: true,
     },
     {
       name: "network",
       label: "Network",
       type: "fixed",
       value: "TRC20",
-      config: { copyable: true },
+      copyable: true,
     },
   ],
 };

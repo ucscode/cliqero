@@ -71,35 +71,35 @@ type WithdrawalFieldIdentity = {
   name: string;
   label: string;
 };
-type WithdrawalCopyConfig = { copyable?: boolean };
-type WithdrawalTextConfig = WithdrawalCopyConfig & { placeholder?: string };
-type WithdrawalTextareaConfig = WithdrawalTextConfig & { rows?: number };
+export type WithdrawalFieldAttributes = Record<string, string | number | boolean>;
+export type WithdrawalSelectOption = { key: string; value: string };
+
+type WithdrawalEditableField = WithdrawalFieldIdentity & {
+  required: boolean;
+  copyable?: boolean;
+  placeholder?: string;
+  attributes?: WithdrawalFieldAttributes;
+};
 
 export type WithdrawalMethodField =
-  | (WithdrawalFieldIdentity & {
+  | (WithdrawalEditableField & {
       type: "text";
-      required: boolean;
       regex?: string;
-      allowed_values?: string[];
-      config?: WithdrawalTextConfig;
+      enum?: string[];
     })
-  | (WithdrawalFieldIdentity & {
+  | (WithdrawalEditableField & {
       type: "select";
-      required: boolean;
-      options: Record<string, string>;
-      config?: WithdrawalCopyConfig;
+      options: WithdrawalSelectOption[];
     })
-  | (WithdrawalFieldIdentity & {
+  | (WithdrawalEditableField & {
       type: "textarea";
-      required: boolean;
       regex?: string;
-      allowed_values?: string[];
-      config?: WithdrawalTextareaConfig;
+      enum?: string[];
     })
   | (WithdrawalFieldIdentity & {
       type: "fixed";
       value: string;
-      config?: WithdrawalCopyConfig;
+      copyable?: boolean;
     });
 export type WithdrawalMethod = {
   id: string;

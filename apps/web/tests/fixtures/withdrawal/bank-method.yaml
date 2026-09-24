@@ -13,5 +13,4 @@ parameters:
           label: Account
           type: text
           required: true
-          config:
-            copyable: true
+          copyable: true

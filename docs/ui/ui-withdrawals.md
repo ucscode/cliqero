@@ -12,12 +12,20 @@ requests.
 
 Method fields model actual form controls. Each field uses `name` as its
 submitted value identity and may be `text`, `select`, `textarea`, or
-server-owned `fixed`. Selects expose configured value/label options. Text and
-textarea fields may define server-enforced `regex` and `allowed_values`
-rules. UI-oriented details such as placeholders, textarea rows, and whether a
-saved value is copyable live under `config`. The browser may mirror a regex
-through the HTML `pattern` attribute for early feedback, but the server remains
-authoritative.
+server-owned `fixed`. Simple field settings such as `copyable` and
+`placeholder` live directly on the field rather than under another config
+object. Text and textarea values may be constrained by server-enforced `regex`
+and `enum` rules. Select options are ordered `{ key, value }` entries, where
+the key is submitted and the value is the human-facing label.
+
+Editable fields may also define an `attributes` mapping for additional form
+attributes such as `rows`, `autocomplete`, `placeholder`, `aria-*`, or
+`data-*`. Cliqero-owned properties such as `name`, `type`, `required`,
+`value`, `id`, `list`, and `pattern` are filtered out of this mapping,
+as are event-style `on*` attributes, so attributes cannot override field
+identity or validation behavior. A direct `placeholder` takes precedence over
+an attribute placeholder. The browser mirrors `regex` through the HTML
+`pattern` attribute for early feedback, but the server remains authoritative.
 
 The panel reads policy, earnings, and saved destinations, then submits
 `POST /api/withdrawals` with `amount_minor`, `currency`, and the owned

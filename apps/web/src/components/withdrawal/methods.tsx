@@ -1,7 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { apiFetch, type WithdrawalDestination, type WithdrawalMethod } from "@/lib/api-client";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+  type InputHTMLAttributes,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from "react";
+import {
+  apiFetch,
+  type WithdrawalDestination,
+  type WithdrawalFieldAttributes,
+  type WithdrawalMethod,
+} from "@/lib/api-client";
 import { ApiClientError } from "@/lib/api-client";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -13,6 +26,10 @@ import { EmptyState } from "../empty-state";
 import { Skeleton } from "../ui/skeleton";
 import { Toast } from "../toast";
 import { CopyValue } from "../copy-value";
+
+function htmlAttributes<T>(attributes?: WithdrawalFieldAttributes) {
+  return (attributes ?? {}) as unknown as T;
+}
 
 export function WithdrawalMethodsPanel() {
   const [methods, setMethods] = useState<WithdrawalMethod[]>([]);
@@ -278,6 +295,7 @@ export function WithdrawalMethodsPanel() {
                         {field.required ? " *" : ""}
                       </Label>
                       <Select
+                        {...htmlAttributes<SelectHTMLAttributes<HTMLSelectElement>>(field.attributes)}
                         id={fieldId}
                         required={field.required}
                         value={values[field.name] ?? ""}
@@ -288,10 +306,10 @@ export function WithdrawalMethodsPanel() {
                           }))
                         }
                       >
-                        <option value="">Choose {field.label.toLowerCase()}</option>
-                        {Object.entries(field.options).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
+                        <option value="">{field.placeholder ?? `Choose ${field.label.toLowerCase()}`}</option>
+                        {field.options.map((option) => (
+                          <option key={option.key} value={option.key}>
+                            {option.value}
                           </option>
                         ))}
                       </Select>
@@ -306,10 +324,12 @@ export function WithdrawalMethodsPanel() {
                         {field.required ? " *" : ""}
                       </Label>
                       <Textarea
+                        {...htmlAttributes<TextareaHTMLAttributes<HTMLTextAreaElement>>(field.attributes)}
                         id={fieldId}
                         required={field.required}
-                        placeholder={field.config?.placeholder}
-                        rows={field.config?.rows}
+                        {...(field.placeholder === undefined
+                          ? {}
+                          : { placeholder: field.placeholder })}
                         value={values[field.name] ?? ""}
                         onChange={(event) =>
                           setValues((current) => ({
@@ -318,15 +338,15 @@ export function WithdrawalMethodsPanel() {
                           }))
                         }
                       />
-                      {field.allowed_values?.length ? (
+                      {field.enum?.length ? (
                         <p className="text-xs text-slate-500">
-                          Allowed values: {field.allowed_values.join(", ")}
+                          Allowed values: {field.enum.join(", ")}
                         </p>
                       ) : null}
                     </div>
                   );
 
-                const listId = field.allowed_values?.length ? `${fieldId}-values` : undefined;
+                const listId = field.enum?.length ? `${fieldId}-values` : undefined;
                 return (
                   <div key={field.name} className="grid gap-2">
                     <Label htmlFor={fieldId}>
@@ -334,9 +354,12 @@ export function WithdrawalMethodsPanel() {
                       {field.required ? " *" : ""}
                     </Label>
                     <Input
+                      {...htmlAttributes<InputHTMLAttributes<HTMLInputElement>>(field.attributes)}
                       id={fieldId}
                       required={field.required}
-                      placeholder={field.config?.placeholder}
+                      {...(field.placeholder === undefined
+                        ? {}
+                        : { placeholder: field.placeholder })}
                       pattern={field.regex}
                       list={listId}
                       value={values[field.name] ?? ""}
@@ -349,7 +372,7 @@ export function WithdrawalMethodsPanel() {
                     />
                     {listId ? (
                       <datalist id={listId}>
-                        {field.allowed_values?.map((value) => <option key={value} value={value} />)}
+                        {field.enum?.map((value) => <option key={value} value={value} />)}
                       </datalist>
                     ) : null}
                   </div>

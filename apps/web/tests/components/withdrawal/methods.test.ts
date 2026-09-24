@@ -21,11 +21,15 @@ describe("saved withdrawal methods UI contract", () => {
     expect(source).toContain('field.type === "select"');
     expect(source).toContain('field.type === "textarea"');
     expect(source).toContain("field.regex");
-    expect(source).toContain("field.allowed_values");
-    expect(source).toContain("field.config?.placeholder");
-    expect(source).toContain("field.config?.rows");
+    expect(source).toContain("field.enum");
+    expect(source).toContain("field.attributes");
+    expect(source).toContain("field.placeholder");
+    expect(source).toContain("option.key");
+    expect(source).toContain("option.value");
     expect(source).toContain("field.name");
     expect(source).toContain("JSON.stringify({ method: method.id, name, values })");
+    expect(source).not.toContain("allowed_values");
+    expect(source).not.toContain("field.config");
     expect(source).not.toContain("input_mode");
     expect(source).not.toContain("field.pattern");
     expect(source).not.toContain("field.key");

@@ -23,7 +23,7 @@ const regex = z
     }
   }, "Field regex is not a valid regular expression");
 
-const allowedValues = z
+const enumValues = z
   .array(z.string().trim().min(1).max(500))
   .min(1)
   .superRefine((values, context) => {
@@ -33,63 +33,112 @@ const allowedValues = z
         context.addIssue({
           code: "custom",
           path: [index],
-          message: "Allowed values must be unique",
+          message: "Enum values must be unique",
         });
       unique.add(value);
     });
   });
 
-const textConfigSchema = z
+const optionSchema = z
   .object({
-    placeholder: z.string().max(200).optional(),
-    copyable: z.boolean().optional(),
+    key: z.string().trim().min(1).max(500),
+    value: z.string().trim().min(1).max(200),
   })
   .strict();
 
-const textareaConfigSchema = z
-  .object({
-    placeholder: z.string().max(200).optional(),
-    rows: z.number().int().min(2).max(20).optional(),
-    copyable: z.boolean().optional(),
-  })
-  .strict();
+const optionsSchema = z
+  .array(optionSchema)
+  .min(1)
+  .superRefine((options, context) => {
+    const keys = new Set<string>();
+    options.forEach((option, index) => {
+      if (keys.has(option.key))
+        context.addIssue({
+          code: "custom",
+          path: [index, "key"],
+          message: "Select option keys must be unique",
+        });
+      keys.add(option.key);
+    });
+  });
 
-const simpleConfigSchema = z.object({ copyable: z.boolean().optional() }).strict();
+const ignoredAttributeNames = new Set([
+  "name",
+  "type",
+  "required",
+  "value",
+  "defaultvalue",
+  "checked",
+  "defaultchecked",
+  "pattern",
+  "id",
+  "list",
+  "multiple",
+  "form",
+  "formaction",
+  "formenctype",
+  "formmethod",
+  "formnovalidate",
+  "formtarget",
+  "children",
+  "dangerouslysetinnerhtml",
+  "ref",
+  "key",
+  "class",
+  "classname",
+  "style",
+  "label",
+  "copyable",
+  "regex",
+  "enum",
+  "options",
+]);
+
+const attributeName = z.string().regex(/^[A-Za-z][A-Za-z0-9_.:-]*$/);
+const attributeValue = z.union([z.string().max(500), z.number().finite(), z.boolean()]);
+const attributesSchema = z
+  .record(attributeName, attributeValue)
+  .transform((attributes) =>
+    Object.fromEntries(
+      Object.entries(attributes).filter(([name]) => {
+        const normalized = name.toLowerCase();
+        return !ignoredAttributeNames.has(normalized) && !normalized.startsWith("on");
+      }),
+    ),
+  );
+
+const editableBase = {
+  name: fieldName,
+  label: z.string().trim().min(1).max(80),
+  required: z.boolean(),
+  copyable: z.boolean().optional(),
+  placeholder: z.string().max(200).optional(),
+  attributes: attributesSchema.optional(),
+};
 
 const textFieldSchema = z
   .object({
-    name: fieldName,
-    label: z.string().trim().min(1).max(80),
+    ...editableBase,
     type: z.literal("text"),
-    required: z.boolean(),
     regex: regex.optional(),
-    allowed_values: allowedValues.optional(),
-    config: textConfigSchema.optional(),
+    enum: enumValues.optional(),
   })
   .strict();
 
 const textareaFieldSchema = z
   .object({
-    name: fieldName,
-    label: z.string().trim().min(1).max(80),
+    ...editableBase,
     type: z.literal("textarea"),
-    required: z.boolean(),
     regex: regex.optional(),
-    allowed_values: allowedValues.optional(),
-    config: textareaConfigSchema.optional(),
+    enum: enumValues.optional(),
   })
   .strict();
 
 const selectFieldSchema = z
   .object({
-    name: fieldName,
-    label: z.string().trim().min(1).max(80),
+    ...editableBase,
     type: z.literal("select"),
-    required: z.boolean(),
-    options: z
-      .record(z.string().min(1).max(500), z.string().trim().min(1).max(200))
-      .refine((options) => Object.keys(options).length > 0, "Select fields require options"),
-    config: simpleConfigSchema.optional(),
+    options: optionsSchema,
   })
   .strict();
 
@@ -99,7 +148,7 @@ const fixedFieldSchema = z
     label: z.string().trim().min(1).max(80),
     type: z.literal("fixed"),
     value: z.string().trim().min(1).max(500),
-    config: simpleConfigSchema.optional(),
+    copyable: z.boolean().optional(),
   })
   .strict();
 
@@ -197,7 +246,7 @@ export class WithdrawalMethodRegistry {
 
     const enriched: DestinationField[] = [];
     for (const field of method.fields) {
-      const copyable = field.config?.copyable ?? false;
+      const copyable = field.copyable ?? false;
       if (field.type === "fixed") {
         enriched.push({
           name: field.name,
@@ -217,20 +266,20 @@ export class WithdrawalMethodRegistry {
       }
 
       if (field.type === "select") {
-        if (!Object.hasOwn(field.options, value))
-          throw new Error(`${field.label} has an invalid value`);
+        const option = field.options.find((candidate) => candidate.key === value);
+        if (!option) throw new Error(`${field.label} has an invalid value`);
         enriched.push({
           name: field.name,
           label: field.label,
           value,
-          displayValue: field.options[value],
+          displayValue: option.value,
           type: field.type,
           copyable,
         });
         continue;
       }
 
-      if (field.allowed_values && !field.allowed_values.includes(value))
+      if (field.enum && !field.enum.includes(value))
         throw new Error(`${field.label} has an invalid value`);
 
       if (field.regex) {
