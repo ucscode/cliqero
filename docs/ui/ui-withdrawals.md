@@ -10,6 +10,15 @@ dedicated Withdrawal methods section lists, adds, edits, and archives saved
 destinations. Archived destinations are retained and cannot be selected for new
 requests.
 
+Method fields model actual form controls. Each field uses `name` as its
+submitted value identity and may be `text`, `select`, `textarea`, or
+server-owned `fixed`. Selects expose configured value/label options. Text and
+textarea fields may define server-enforced `regex` and `allowed_values`
+rules. UI-oriented details such as placeholders, textarea rows, and whether a
+saved value is copyable live under `config`. The browser may mirror a regex
+through the HTML `pattern` attribute for early feedback, but the server remains
+authoritative.
+
 The panel reads policy, earnings, and saved destinations, then submits
 `POST /api/withdrawals` with `amount_minor`, `currency`, and the owned
 `destination_id`, plus an idempotency key. It never accepts free-form payment
@@ -34,12 +43,13 @@ destinations. A PATCH with `{ "status": "archived" }` is the supported Remove
 operation; there is no archive command URL or hard-delete UI.
 
 Withdrawal YAML lives in `config/modules/withdrawal/methods.yaml`; the tracked
-`methods.example.yaml` documents the supported schema. It uses the shared
-`parameters` envelope and can optionally import relative YAML fragments through
-the generic configuration loader. Top-level method country filters decide
-eligibility only; they do not execute or select a payout provider.
-For local use, copy the example to `config/modules/withdrawal/methods.yaml` and
-edit the methods for the development account countries.
+`methods.example.yaml` documents the supported schema and includes comments
+for non-obvious settings. It uses the shared `parameters` envelope and can
+optionally import relative YAML fragments through the generic configuration
+loader. Top-level method country filters decide eligibility only; they do not
+execute or select a payout provider. For local use, copy the example to
+`config/modules/withdrawal/methods.yaml` and edit the methods for the
+development account countries.
 
 Cliqero remains manual-first. An operator or external automation reads an
 approved withdrawal's structured snapshot, sends payment outside Cliqero, then

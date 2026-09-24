@@ -20,7 +20,7 @@ describe("operator withdrawal projection", () => {
               destination_name: "Primary",
               destination_details: [
                 {
-                  key: "account_number",
+                  name: "account_number",
                   label: "Account number",
                   value: "0123456789",
                   type: "text",
@@ -52,7 +52,7 @@ describe("operator withdrawal projection", () => {
       methodName: "Bank account",
       name: "Primary",
       savedDestinationId: "00000000-0000-4000-8000-000000000003",
-      fields: [{ key: "account_number", value: "0123456789", copyable: true }],
+      fields: [{ name: "account_number", value: "0123456789", copyable: true }],
     });
     expect(item.reservation).toMatchObject({ state: "reserved", amountMinor: "4000" });
     expect(item).toMatchObject({
@@ -81,7 +81,7 @@ describe("operator withdrawal projection", () => {
             destination_name: "Primary",
             destination_details: [
               {
-                key: "account",
+                name: "account",
                 label: "Account",
                 value: "0123456789",
                 type: "text",

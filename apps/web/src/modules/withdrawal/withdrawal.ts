@@ -1,12 +1,18 @@
 import type { Money } from "@/modules/money/money";
 export type WithdrawalState =
-  "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
+  | "requested"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "completed"
+  | "failed";
 
 export type DestinationField = {
-  key: string;
+  name: string;
   label: string;
   value: string;
-  type: "text" | "fixed";
+  displayValue?: string;
+  type: "text" | "select" | "textarea" | "fixed";
   copyable: boolean;
 };
 

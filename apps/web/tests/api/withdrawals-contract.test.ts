@@ -16,7 +16,7 @@ describe("withdrawal API contract", () => {
         name: "Primary",
         fields: [
           {
-            key: "account",
+            name: "account",
             label: "Account",
             value: "destination-secret-1234",
             type: "text",

@@ -268,13 +268,13 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
           </p>
           <dl className="grid gap-3">
             {item.destination.fields.map((field) => (
-              <div key={field.key} className="min-w-0">
+              <div key={field.name} className="min-w-0">
                 <dt className="text-xs font-semibold text-slate-500">{field.label}</dt>
                 <dd className="break-all">
                   {field.copyable ? (
-                    <CopyValue label={field.label} value={field.value} />
+                    <CopyValue label={field.label} value={field.value} displayValue={field.displayValue} />
                   ) : (
-                    field.value
+                    field.displayValue ?? field.value
                   )}
                 </dd>
               </div>

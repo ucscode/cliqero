@@ -1,32 +1,50 @@
+# Withdrawal methods define reusable destination forms; they never execute payouts.
+# Copy this file to config/modules/withdrawal/methods.yaml for local use.
+# Real runtime YAML is ignored by Git. Large method files may use the shared
+# optional `imports` envelope key to split definitions into smaller YAML files.
 parameters:
+  # Method IDs are stable application identities. Keep them lowercase and unique.
   methods:
     - id: bank_ng
       enabled: true
       display_name: Bank account
       image_url: /images/payment/bank-transfer.svg
       description: Receive a withdrawal through a Nigerian bank account.
+
+      # null means globally eligible. Otherwise list uppercase ISO alpha-2 codes.
       filters:
         countries:
           - NG
+
+      # Fields are ordered form controls. `name` is the value key submitted by
+      # the client. Labels, control types, fixed values and presentation config
+      # are trusted server-owned metadata and must not come from the browser.
       fields:
-        - key: bank_name
+        - name: bank_name
           label: Bank
           type: text
           required: true
-          placeholder: Guaranty Trust Bank
-          copyable: true
-        - key: account_number
+          config:
+            placeholder: Guaranty Trust Bank
+
+        - name: account_number
           label: Account number
           type: text
           required: true
-          pattern: "^[0-9]{10}$"
-          input_mode: numeric
-          copyable: true
-        - key: account_name
+          # regex is enforced by the server. The browser may also use it as an
+          # HTML pattern for earlier feedback, but client validation is advisory.
+          regex: "^[0-9]{10}$"
+          config:
+            placeholder: "0123456789"
+            copyable: true
+
+        - name: account_name
           label: Account name
           type: text
           required: true
-          copyable: true
+          config:
+            copyable: true
+
     - id: usdt_trc20
       enabled: true
       display_name: USDT (TRC20)
@@ -35,15 +53,41 @@ parameters:
       filters:
         countries: null
       fields:
-        - key: address
+        - name: address
           label: Wallet address
           type: text
           required: true
-          placeholder: T...
-          pattern: "^T[1-9A-HJ-NP-Za-km-z]{33}$"
-          copyable: true
-        - key: network
+          regex: "^T[1-9A-HJ-NP-Za-km-z]{33}$"
+          config:
+            placeholder: T...
+            copyable: true
+
+        # fixed values are injected by the server and are never accepted from
+        # client-submitted values.
+        - name: network
           label: Network
           type: fixed
           value: TRC20
-          copyable: true
+          config:
+            copyable: true
+
+  # Other supported editable controls:
+  #
+  # - name: account_type
+  #   label: Account type
+  #   type: select
+  #   required: true
+  #   options:
+  #     savings: Savings
+  #     current: Current
+  #
+  # - name: note
+  #   label: Payment note
+  #   type: textarea
+  #   required: false
+  #   allowed_values:
+  #     - personal
+  #     - business
+  #   config:
+  #     placeholder: Optional note
+  #     rows: 4

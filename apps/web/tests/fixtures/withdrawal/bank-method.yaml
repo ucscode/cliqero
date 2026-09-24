@@ -9,8 +9,9 @@ parameters:
         countries:
           - NG
       fields:
-        - key: account
+        - name: account
           label: Account
           type: text
           required: true
-          copyable: true
+          config:
+            copyable: true

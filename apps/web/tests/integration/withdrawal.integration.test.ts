@@ -109,7 +109,7 @@ suite("withdrawal lifecycle", () => {
       idempotencyKey: "snapshot-key",
       correlationId: newId(),
     });
-    const firstAccount = first.destination.fields.find((field) => field.key === "account_number");
+    const firstAccount = first.destination.fields.find((field) => field.name === "account_number");
     expect(firstAccount?.value).toBe("0123456789");
     await expect(
       app.database.query(
@@ -129,7 +129,7 @@ suite("withdrawal lifecycle", () => {
       idempotencyKey: "snapshot-key",
       correlationId: newId(),
     });
-    expect(retry.destination.fields.find((field) => field.key === "account_number")?.value).toBe(
+    expect(retry.destination.fields.find((field) => field.name === "account_number")?.value).toBe(
       "0123456789",
     );
 
@@ -141,7 +141,7 @@ suite("withdrawal lifecycle", () => {
       idempotencyKey: "snapshot-key-2",
       correlationId: newId(),
     });
-    expect(second.destination.fields.find((field) => field.key === "account_number")?.value).toBe(
+    expect(second.destination.fields.find((field) => field.name === "account_number")?.value).toBe(
       "9999999999",
     );
     await app.withdrawalDestinations.update(seller.id, destinationId, { status: "archived" });
@@ -170,7 +170,7 @@ suite("withdrawal lifecycle", () => {
     ).rejects.toThrow("archived");
     expect(
       (await app.withdrawalRepository.findById(first.id))?.destination.fields.find(
-        (field) => field.key === "account_number",
+        (field) => field.name === "account_number",
       )?.value,
     ).toBe("0123456789");
   });

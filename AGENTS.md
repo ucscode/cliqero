@@ -759,6 +759,18 @@ architecturally complete.
 
 # Contributor checks
 
+## YAML configuration comments
+
+Every new Cliqero-owned runtime configuration YAML file under `config/`, including
+tracked `*.example.yaml` templates, must contain useful explanatory comments. A
+new configuration file is not complete when it is only a bare schema/value
+dump. Comment the file's purpose and, where relevant, non-obvious fields,
+accepted values, null/disabled semantics, security-sensitive values, and
+operational effects. Keep comments close to the settings they explain.
+
+This requirement applies to Cliqero runtime configuration, not framework/tool
+YAML such as GitHub Actions workflows or Docker Compose files.
+
 When introducing a new directly-consumed Cliqero runtime environment variable,
 document it in `docs/operations/environment-variables.md` in the same change.
 Add it to `.env.example` only when it is required for normal bootstrap,

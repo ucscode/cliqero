@@ -12,16 +12,28 @@ const bankMethod = {
   description: "Nigerian bank account",
   filters: { countries: ["NG"] },
   fields: [
-    { key: "bank", label: "Bank", type: "text", required: true, copyable: true },
     {
-      key: "account",
+      name: "bank",
+      label: "Bank",
+      type: "text",
+      required: true,
+      config: { copyable: true },
+    },
+    {
+      name: "account",
       label: "Account number",
       type: "text",
       required: true,
-      pattern: "^[0-9]{10}$",
-      copyable: true,
+      regex: "^[0-9]{10}$",
+      config: { copyable: true },
     },
-    { key: "network", label: "Network", type: "fixed", value: "TRC20", copyable: true },
+    {
+      name: "network",
+      label: "Network",
+      type: "fixed",
+      value: "TRC20",
+      config: { copyable: true },
+    },
   ],
 };
 
@@ -66,15 +78,15 @@ describe("WithdrawalDestinationService", () => {
       values: { bank: "GTBank", account: "0123456789" },
     });
     expect(destination.fields).toEqual([
-      { key: "bank", label: "Bank", value: "GTBank", type: "text", copyable: true },
+      { name: "bank", label: "Bank", value: "GTBank", type: "text", copyable: true },
       {
-        key: "account",
+        name: "account",
         label: "Account number",
         value: "0123456789",
         type: "text",
         copyable: true,
       },
-      { key: "network", label: "Network", value: "TRC20", type: "fixed", copyable: true },
+      { name: "network", label: "Network", value: "TRC20", type: "fixed", copyable: true },
     ]);
     await expect(service.get("other", destination.id)).rejects.toThrow("not found");
     await expect(service.update("other", destination.id, { name: "stolen" })).rejects.toThrow(
@@ -146,7 +158,13 @@ describe("WithdrawalDestinationService", () => {
       method: "bank_ng",
       name: "Primary",
       fields: [
-        { key: "account", label: "Account", value: "0123456789", type: "text", copyable: true },
+        {
+          name: "account",
+          label: "Account",
+          value: "0123456789",
+          type: "text",
+          copyable: true,
+        },
       ],
       status: "active",
       createdAt: new Date(),

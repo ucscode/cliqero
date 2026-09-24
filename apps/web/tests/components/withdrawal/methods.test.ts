@@ -16,11 +16,18 @@ describe("saved withdrawal methods UI contract", () => {
     expect(source).toContain("Unavailable for new withdrawals");
   });
 
-  it("renders configured editable fields and fixed fields without submitting trusted values", () => {
+  it("renders configured text, select, textarea and fixed controls", () => {
     expect(source).toContain('field.type === "fixed"');
-    expect(source).toContain("field.pattern");
-    expect(source).toContain("field.input_mode");
+    expect(source).toContain('field.type === "select"');
+    expect(source).toContain('field.type === "textarea"');
+    expect(source).toContain("field.regex");
+    expect(source).toContain("field.allowed_values");
+    expect(source).toContain("field.config?.placeholder");
+    expect(source).toContain("field.config?.rows");
+    expect(source).toContain("field.name");
     expect(source).toContain("JSON.stringify({ method: method.id, name, values })");
-    expect(source).not.toContain("values[field.key] = field.value");
+    expect(source).not.toContain("input_mode");
+    expect(source).not.toContain("field.pattern");
+    expect(source).not.toContain("field.key");
   });
 });

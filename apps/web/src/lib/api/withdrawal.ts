@@ -1,5 +1,10 @@
 export type WithdrawalState =
-  "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
+  | "requested"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "completed"
+  | "failed";
 
 export type Withdrawal = {
   id: string;
@@ -58,26 +63,25 @@ export type OperatorWithdrawalPage = { items: OperatorWithdrawal[]; nextCursor: 
 export type OperatorWithdrawalDetail = Omit<OperatorWithdrawal, "destination"> & {
   destination: OperatorWithdrawal["destination"] & {
     savedDestinationId: string;
-    fields: Array<{
-      key: string;
-      label: string;
-      value: string;
-      type: "text" | "fixed";
-      copyable: boolean;
-    }>;
+    fields: WithdrawalDestinationField[];
   };
 };
 
-export type WithdrawalMethodField = {
-  key: string;
-  label: string;
-  type: "text" | "fixed";
-  copyable: boolean;
-  required?: boolean;
+export type WithdrawalFieldConfig = {
   placeholder?: string;
-  pattern?: string;
-  input_mode?: "text" | "numeric" | "decimal" | "tel" | "email" | "url";
+  rows?: number;
+  copyable?: boolean;
+};
+export type WithdrawalMethodField = {
+  name: string;
+  label: string;
+  type: "text" | "select" | "textarea" | "fixed";
+  required?: boolean;
+  regex?: string;
+  allowed_values?: string[];
+  options?: Record<string, string>;
   value?: string;
+  config?: WithdrawalFieldConfig;
 };
 export type WithdrawalMethod = {
   id: string;
@@ -86,17 +90,19 @@ export type WithdrawalMethod = {
   description: string;
   fields: WithdrawalMethodField[];
 };
+export type WithdrawalDestinationField = {
+  name: string;
+  label: string;
+  value: string;
+  displayValue?: string;
+  type: "text" | "select" | "textarea" | "fixed";
+  copyable: boolean;
+};
 export type WithdrawalDestination = {
   id: string;
   method: { id: string; display_name: string; image_url: string | null; available: boolean };
   name: string;
-  fields: Array<{
-    key: string;
-    label: string;
-    value: string;
-    type: "text" | "fixed";
-    copyable: boolean;
-  }>;
+  fields: WithdrawalDestinationField[];
   status: "active" | "archived";
   created_at: string;
   updated_at: string;

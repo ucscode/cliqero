@@ -11,20 +11,26 @@ const bank = {
   filters: { countries: ["NG"] },
   fields: [
     {
-      key: "account_number",
+      name: "account_number",
       label: "Account number",
       type: "text",
       required: true,
-      pattern: "^[0-9]{10}$",
-      copyable: true,
+      regex: "[0-9]{10}",
+      config: { copyable: true },
     },
-    { key: "network", label: "Network", type: "fixed", value: "TRC20", copyable: true },
+    {
+      name: "network",
+      label: "Network",
+      type: "fixed",
+      value: "TRC20",
+      config: { copyable: true },
+    },
   ],
 };
 const global = { ...bank, id: "usdt_trc20", filters: { countries: null } };
 
 describe("WithdrawalMethodRegistry", () => {
-  it("validates definitions, unique IDs and field keys", () => {
+  it("validates definitions, unique IDs and field names", () => {
     expect(() => new WithdrawalMethodRegistry({ methods: [bank, bank] })).toThrow("unique");
     expect(
       () =>
@@ -42,7 +48,7 @@ describe("WithdrawalMethodRegistry", () => {
           methods: [
             {
               ...bank,
-              fields: [{ key: "network", label: "Network", type: "fixed", copyable: true }],
+              fields: [{ name: "network", label: "Network", type: "fixed" }],
             },
           ],
         }),
@@ -53,9 +59,9 @@ describe("WithdrawalMethodRegistry", () => {
     expect(
       () =>
         new WithdrawalMethodRegistry({
-          methods: [{ ...bank, fields: [{ ...bank.fields[0], pattern: "[0-9]+" }] }],
+          methods: [{ ...bank, fields: [{ ...bank.fields[0], regex: "(" }] }],
         }),
-    ).toThrow("anchored");
+    ).toThrow("regular expression");
   });
 
   it("applies enabled and country eligibility without inferring country", () => {
@@ -74,22 +80,83 @@ describe("WithdrawalMethodRegistry", () => {
     ]);
   });
 
-  it("enriches client values using ordered trusted config and rejects fixed/unknown values", () => {
+  it("enriches trusted metadata and enforces regex server-side", () => {
     const registry = new WithdrawalMethodRegistry({ methods: [bank] });
     const method = registry.requireAvailable("bank_ng", { country: "NG" });
     expect(registry.enrich(method, { account_number: "0123456789" })).toEqual([
       {
-        key: "account_number",
+        name: "account_number",
         label: "Account number",
         value: "0123456789",
         type: "text",
         copyable: true,
       },
-      { key: "network", label: "Network", value: "TRC20", type: "fixed", copyable: true },
+      {
+        name: "network",
+        label: "Network",
+        value: "TRC20",
+        type: "fixed",
+        copyable: true,
+      },
     ]);
     expect(() => registry.enrich(method, { network: "FAKE" })).toThrow("non-editable");
     expect(() => registry.enrich(method, { extra: "x" })).toThrow("Unknown");
     expect(() => registry.enrich(method, { account_number: "123" })).toThrow("invalid format");
+  });
+
+  it("supports select options, textarea fields and allowed text values", () => {
+    const method = {
+      ...global,
+      id: "structured",
+      fields: [
+        {
+          name: "bank",
+          label: "Bank",
+          type: "select",
+          required: true,
+          options: {
+            uba: "United Bank for Africa",
+            gtbank: "Guaranty Trust Bank",
+          },
+          config: { copyable: true },
+        },
+        {
+          name: "note",
+          label: "Note",
+          type: "textarea",
+          required: true,
+          regex: "[a-z]+",
+          allowed_values: ["personal", "business"],
+          config: { rows: 4 },
+        },
+      ],
+    };
+    const registry = new WithdrawalMethodRegistry({ methods: [method] });
+    const configured = registry.requireAvailable("structured", { country: null });
+
+    expect(registry.enrich(configured, { bank: "uba", note: "personal" })).toEqual([
+      {
+        name: "bank",
+        label: "Bank",
+        value: "uba",
+        displayValue: "United Bank for Africa",
+        type: "select",
+        copyable: true,
+      },
+      {
+        name: "note",
+        label: "Note",
+        value: "personal",
+        type: "textarea",
+        copyable: false,
+      },
+    ]);
+    expect(() => registry.enrich(configured, { bank: "unknown", note: "personal" })).toThrow(
+      "invalid value",
+    );
+    expect(() => registry.enrich(configured, { bank: "uba", note: "other" })).toThrow(
+      "invalid value",
+    );
   });
 
   it("loads imported definitions through the shared YAML composition loader", () => {
@@ -100,7 +167,7 @@ describe("WithdrawalMethodRegistry", () => {
     ]);
   });
 
-  it("loads the tracked bank and USDT example methods from the standard configuration path", () => {
+  it("loads the commented bank and USDT example methods from the standard configuration path", () => {
     const path = resolve(process.cwd(), "../../config/modules/withdrawal/methods.example.yaml");
     const registry = WithdrawalMethodRegistry.load(path);
     expect(registry.listForAccount({ country: "NG" }).map((method) => method.id)).toEqual([
@@ -108,9 +175,10 @@ describe("WithdrawalMethodRegistry", () => {
       "usdt_trc20",
     ]);
     expect(registry.find("usdt_trc20")?.fields[1]).toMatchObject({
-      key: "network",
+      name: "network",
       type: "fixed",
       value: "TRC20",
+      config: { copyable: true },
     });
   });
 });

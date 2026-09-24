@@ -8,6 +8,7 @@ import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select } from "../ui/select";
+import { Textarea } from "../ui/textarea";
 import { EmptyState } from "../empty-state";
 import { Skeleton } from "../ui/skeleton";
 import { Toast } from "../toast";
@@ -70,8 +71,8 @@ export function WithdrawalMethodsPanel() {
     setValues(
       Object.fromEntries(
         destination.fields
-          .filter((field) => field.type === "text")
-          .map((field) => [field.key, field.value]),
+          .filter((field) => field.type !== "fixed")
+          .map((field) => [field.name, field.value]),
       ),
     );
     setError(null);
@@ -175,13 +176,17 @@ export function WithdrawalMethodsPanel() {
                 </div>
                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
                   {destination.fields.map((field) => (
-                    <div key={field.key} className="min-w-0">
+                    <div key={field.name} className="min-w-0">
                       <dt className="text-xs text-slate-500">{field.label}</dt>
                       <dd className="break-all text-sm font-medium">
                         {field.copyable ? (
-                          <CopyValue label={field.label} value={field.value} />
+                          <CopyValue
+                            label={field.label}
+                            value={field.value}
+                            displayValue={field.displayValue}
+                          />
                         ) : (
-                          field.value
+                          field.displayValue ?? field.value
                         )}
                       </dd>
                     </div>
@@ -252,34 +257,104 @@ export function WithdrawalMethodsPanel() {
                   placeholder="e.g. My primary account"
                 />
               </div>
-              {method.fields.map((field) =>
-                field.type === "fixed" ? (
-                  <div key={field.key} className="grid gap-2">
-                    <Label>{field.label}</Label>
-                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                      {field.value}
-                    </p>
-                  </div>
-                ) : (
-                  <div key={field.key} className="grid gap-2">
-                    <Label htmlFor={`withdrawal-field-${field.key}`}>
+              {method.fields.map((field) => {
+                const fieldId = `withdrawal-field-${field.name}`;
+
+                if (field.type === "fixed")
+                  return (
+                    <div key={field.name} className="grid gap-2">
+                      <Label>{field.label}</Label>
+                      <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                        {field.value}
+                      </p>
+                    </div>
+                  );
+
+                if (field.type === "select")
+                  return (
+                    <div key={field.name} className="grid gap-2">
+                      <Label htmlFor={fieldId}>
+                        {field.label}
+                        {field.required ? " *" : ""}
+                      </Label>
+                      <Select
+                        id={fieldId}
+                        required={field.required}
+                        value={values[field.name] ?? ""}
+                        onChange={(event) =>
+                          setValues((current) => ({
+                            ...current,
+                            [field.name]: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Choose {field.label.toLowerCase()}</option>
+                        {Object.entries(field.options).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  );
+
+                if (field.type === "textarea")
+                  return (
+                    <div key={field.name} className="grid gap-2">
+                      <Label htmlFor={fieldId}>
+                        {field.label}
+                        {field.required ? " *" : ""}
+                      </Label>
+                      <Textarea
+                        id={fieldId}
+                        required={field.required}
+                        placeholder={field.config?.placeholder}
+                        rows={field.config?.rows}
+                        value={values[field.name] ?? ""}
+                        onChange={(event) =>
+                          setValues((current) => ({
+                            ...current,
+                            [field.name]: event.target.value,
+                          }))
+                        }
+                      />
+                      {field.allowed_values?.length ? (
+                        <p className="text-xs text-slate-500">
+                          Allowed values: {field.allowed_values.join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+
+                const listId = field.allowed_values?.length ? `${fieldId}-values` : undefined;
+                return (
+                  <div key={field.name} className="grid gap-2">
+                    <Label htmlFor={fieldId}>
                       {field.label}
                       {field.required ? " *" : ""}
                     </Label>
                     <Input
-                      id={`withdrawal-field-${field.key}`}
+                      id={fieldId}
                       required={field.required}
-                      placeholder={field.placeholder}
-                      pattern={field.pattern}
-                      inputMode={field.input_mode}
-                      value={values[field.key] ?? ""}
+                      placeholder={field.config?.placeholder}
+                      pattern={field.regex}
+                      list={listId}
+                      value={values[field.name] ?? ""}
                       onChange={(event) =>
-                        setValues((current) => ({ ...current, [field.key]: event.target.value }))
+                        setValues((current) => ({
+                          ...current,
+                          [field.name]: event.target.value,
+                        }))
                       }
                     />
+                    {listId ? (
+                      <datalist id={listId}>
+                        {field.allowed_values?.map((value) => <option key={value} value={value} />)}
+                      </datalist>
+                    ) : null}
                   </div>
-                ),
-              )}
+                );
+              })}
               <div className="flex gap-2">
                 <Button type="submit" disabled={saving}>
                   {saving ? "Saving…" : editing ? "Save changes" : "Save method"}

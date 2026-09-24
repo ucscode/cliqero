@@ -48,10 +48,11 @@ export const operatorWithdrawalDetailSchema = operatorWithdrawalSchema.extend({
     savedDestinationId: z.string().uuid(),
     fields: z.array(
       z.object({
-        key: z.string(),
+        name: z.string(),
         label: z.string(),
         value: z.string(),
-        type: z.enum(["text", "fixed"]),
+        displayValue: z.string().optional(),
+        type: z.enum(["text", "select", "textarea", "fixed"]),
         copyable: z.boolean(),
       }),
     ),

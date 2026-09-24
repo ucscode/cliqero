@@ -9,41 +9,100 @@ const countryCode = z
   .string()
   .regex(/^[A-Z]{2}$/)
   .refine((value) => countryCodes.has(value));
+
+const fieldName = z.string().regex(/^[a-z][a-z0-9_]*$/);
+const regex = z
+  .string()
+  .max(256)
+  .refine((value) => {
+    try {
+      new RegExp(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Field regex is not a valid regular expression");
+
+const allowedValues = z
+  .array(z.string().trim().min(1).max(500))
+  .min(1)
+  .superRefine((values, context) => {
+    const unique = new Set<string>();
+    values.forEach((value, index) => {
+      if (unique.has(value))
+        context.addIssue({
+          code: "custom",
+          path: [index],
+          message: "Allowed values must be unique",
+        });
+      unique.add(value);
+    });
+  });
+
+const textConfigSchema = z
+  .object({
+    placeholder: z.string().max(200).optional(),
+    copyable: z.boolean().optional(),
+  })
+  .strict();
+
+const textareaConfigSchema = z
+  .object({
+    placeholder: z.string().max(200).optional(),
+    rows: z.number().int().min(2).max(20).optional(),
+    copyable: z.boolean().optional(),
+  })
+  .strict();
+
+const simpleConfigSchema = z.object({ copyable: z.boolean().optional() }).strict();
+
 const textFieldSchema = z
   .object({
-    key: z.string().regex(/^[a-z][a-z0-9_]*$/),
+    name: fieldName,
     label: z.string().trim().min(1).max(80),
     type: z.literal("text"),
     required: z.boolean(),
-    placeholder: z.string().max(200).optional(),
-    pattern: z
-      .string()
-      .max(256)
-      .refine((value) => value.startsWith("^") && value.endsWith("$"), {
-        message: "Text field patterns must be anchored to the full value",
-      })
-      .refine((value) => {
-        try {
-          new RegExp(value);
-          return true;
-        } catch {
-          return false;
-        }
-      }, "Text field pattern is not a valid regular expression")
-      .optional(),
-    input_mode: z.enum(["text", "numeric", "decimal", "tel", "email", "url"]).optional(),
-    copyable: z.boolean(),
+    regex: regex.optional(),
+    allowed_values: allowedValues.optional(),
+    config: textConfigSchema.optional(),
   })
   .strict();
+
+const textareaFieldSchema = z
+  .object({
+    name: fieldName,
+    label: z.string().trim().min(1).max(80),
+    type: z.literal("textarea"),
+    required: z.boolean(),
+    regex: regex.optional(),
+    allowed_values: allowedValues.optional(),
+    config: textareaConfigSchema.optional(),
+  })
+  .strict();
+
+const selectFieldSchema = z
+  .object({
+    name: fieldName,
+    label: z.string().trim().min(1).max(80),
+    type: z.literal("select"),
+    required: z.boolean(),
+    options: z
+      .record(z.string().min(1).max(500), z.string().trim().min(1).max(200))
+      .refine((options) => Object.keys(options).length > 0, "Select fields require options"),
+    config: simpleConfigSchema.optional(),
+  })
+  .strict();
+
 const fixedFieldSchema = z
   .object({
-    key: z.string().regex(/^[a-z][a-z0-9_]*$/),
+    name: fieldName,
     label: z.string().trim().min(1).max(80),
     type: z.literal("fixed"),
     value: z.string().trim().min(1).max(500),
-    copyable: z.boolean(),
+    config: simpleConfigSchema.optional(),
   })
   .strict();
+
 const methodSchema = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
@@ -52,21 +111,31 @@ const methodSchema = z
     image_url: z.string().trim().min(1).max(500),
     description: z.string().trim().min(1).max(500),
     filters: z.object({ countries: z.array(countryCode).nullable() }).strict(),
-    fields: z.array(z.discriminatedUnion("type", [textFieldSchema, fixedFieldSchema])).min(1),
+    fields: z
+      .array(
+        z.discriminatedUnion("type", [
+          textFieldSchema,
+          selectFieldSchema,
+          textareaFieldSchema,
+          fixedFieldSchema,
+        ]),
+      )
+      .min(1),
   })
   .strict()
   .superRefine((method, context) => {
-    const keys = new Set<string>();
+    const names = new Set<string>();
     method.fields.forEach((field, index) => {
-      if (keys.has(field.key))
+      if (names.has(field.name))
         context.addIssue({
           code: "custom",
-          path: ["fields", index, "key"],
-          message: "Field keys must be unique",
+          path: ["fields", index, "name"],
+          message: "Field names must be unique",
         });
-      keys.add(field.key);
+      names.add(field.name);
     });
   });
+
 const configurationSchema = z
   .object({ methods: z.array(methodSchema) })
   .strict()
@@ -119,39 +188,63 @@ export class WithdrawalMethodRegistry {
 
   enrich(method: WithdrawalMethod, values: Record<string, string>): DestinationField[] {
     const editable = new Set(
-      method.fields.filter((field) => field.type === "text").map((field) => field.key),
+      method.fields.filter((field) => field.type !== "fixed").map((field) => field.name),
     );
-    for (const key of Object.keys(values)) {
-      if (!editable.has(key)) throw new Error(`Unknown or non-editable withdrawal field: ${key}`);
+    for (const name of Object.keys(values)) {
+      if (!editable.has(name))
+        throw new Error(`Unknown or non-editable withdrawal field: ${name}`);
     }
+
     const enriched: DestinationField[] = [];
     for (const field of method.fields) {
+      const copyable = field.config?.copyable ?? false;
       if (field.type === "fixed") {
         enriched.push({
-          key: field.key,
+          name: field.name,
           label: field.label,
           value: field.value,
           type: field.type,
-          copyable: field.copyable,
+          copyable,
         });
         continue;
       }
-      const raw = values[field.key];
+
+      const raw = values[field.name];
       const value = raw?.trim();
       if (!value) {
         if (field.required) throw new Error(`${field.label} is required`);
         continue;
       }
-      if (field.pattern) {
-        const match = new RegExp(field.pattern).exec(value);
-        if (!match || match[0] !== value) throw new Error(`${field.label} has an invalid format`);
+
+      if (field.type === "select") {
+        if (!Object.hasOwn(field.options, value))
+          throw new Error(`${field.label} has an invalid value`);
+        enriched.push({
+          name: field.name,
+          label: field.label,
+          value,
+          displayValue: field.options[value],
+          type: field.type,
+          copyable,
+        });
+        continue;
       }
+
+      if (field.allowed_values && !field.allowed_values.includes(value))
+        throw new Error(`${field.label} has an invalid value`);
+
+      if (field.regex) {
+        const match = new RegExp(field.regex).exec(value);
+        if (!match || match[0] !== value)
+          throw new Error(`${field.label} has an invalid format`);
+      }
+
       enriched.push({
-        key: field.key,
+        name: field.name,
         label: field.label,
         value,
         type: field.type,
-        copyable: field.copyable,
+        copyable,
       });
     }
     return enriched;
@@ -160,16 +253,19 @@ export class WithdrawalMethodRegistry {
   reconcile(method: WithdrawalMethod, fields: readonly DestinationField[]) {
     const values: Record<string, string> = {};
     for (const field of fields) {
-      const configured = method.fields.find((candidate) => candidate.key === field.key);
+      const configured = method.fields.find((candidate) => candidate.name === field.name);
       if (!configured || field.type !== configured.type)
         throw new Error(
           "Saved withdrawal destination no longer matches its method; update it before use",
         );
-      if (configured.type === "text") values[configured.key] = field.value;
-      else if (field.value !== configured.value)
-        throw new Error(
-          "Saved withdrawal destination no longer matches its method; update it before use",
-        );
+      if (configured.type === "fixed") {
+        if (field.value !== configured.value)
+          throw new Error(
+            "Saved withdrawal destination no longer matches its method; update it before use",
+          );
+      } else {
+        values[configured.name] = field.value;
+      }
     }
     return this.enrich(method, values);
   }

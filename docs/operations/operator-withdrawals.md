@@ -27,15 +27,23 @@ reservation.
 
 An account selects one of its active saved destinations when requesting a
 withdrawal. A destination is created from a configured withdrawal method, and
-the withdrawal stores a snapshot of the method key/display name, saved
+the withdrawal stores a snapshot of the method identity/display name, saved
 destination name, and ordered structured fields. Later edits, archival, or
 configuration changes do not rewrite this snapshot.
 
+Configured fields use `name` as their submitted value identity. Editable field
+types include `text`, `select`, and `textarea`; `fixed` fields are
+server-injected. Regex and allowed-value rules are enforced server-side.
+Select options are configured as value-to-label mappings. Presentation options
+such as `copyable`, placeholders, and textarea rows live under the field's
+`config` mapping.
+
 Operator list results stay concise. Authorized operator detail returns the full
-snapshot (`key`, `label`, `value`, `type`, `copyable`) so a human or automation
-can perform the manual payment without scraping display text. Ordinary customer
-withdrawal history does not expose the field values. Destination records are
-archived rather than hard-deleted through the customer UI.
+snapshot (`name`, `label`, `value`, optional `displayValue`, `type`,
+`copyable`) so a human or automation can perform the manual payment without
+scraping display text. Ordinary customer withdrawal history does not expose the
+field values. Destination records are archived rather than hard-deleted through
+the customer UI.
 
 ## API access
 
@@ -46,8 +54,9 @@ The operator API is resource-based:
 - `PATCH /api/operator/withdrawals/{withdrawalId}`
 
 The PATCH accepts approval, rejection with a reason, or completion with an
-optional `external_reference` and `note`. It requires the `withdrawals.manage`
-capability. API-key clients also need the `withdrawals:manage` scope.
+optional `external_reference` and `note`. It requires the
+`withdrawals.manage` capability. API-key clients also need the
+`withdrawals:manage` scope.
 
 Cliqero business actions are API-operable; that does not mean Cliqero internally
 automates the external payment. Operators can handle the workflow in the UI,

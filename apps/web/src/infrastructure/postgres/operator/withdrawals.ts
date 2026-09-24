@@ -1,12 +1,19 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 
-type WithdrawalState = "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
+type WithdrawalState =
+  | "requested"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "completed"
+  | "failed";
 type Cursor = { createdAt: string; id: string };
 type DestinationField = {
-  key: string;
+  name: string;
   label: string;
   value: string;
-  type: "text" | "fixed";
+  displayValue?: string;
+  type: "text" | "select" | "textarea" | "fixed";
   copyable: boolean;
 };
 
