@@ -34,11 +34,12 @@ configuration changes do not rewrite this snapshot.
 Configured fields use `name` as their submitted value identity. Editable field
 types include `text`, `select`, and `textarea`; `fixed` fields are
 server-injected. Regex and enum rules are enforced server-side. Select options
-are ordered key/value entries: the key is the submitted machine value and the
-value is the human-facing label. Simple metadata such as `copyable` and
-`placeholder` stays directly on the field. Additional HTML-oriented settings
-may live under `attributes`; reserved semantic/control properties and event
-attributes are filtered so they cannot override the configured field.
+are ordered key/label entries: the key is the submitted machine value and the
+label is human-facing. Simple metadata such as `copyable` stays directly on
+the field. HTML-oriented settings such as `placeholder`, `rows`,
+`autocomplete`, `aria-*`, and `data-*` live under `attrs`; reserved
+semantic/control properties and event attributes are filtered so they cannot
+override the configured field.
 
 Operator list results stay concise. Authorized operator detail returns the full
 snapshot (`name`, `label`, `value`, optional `displayValue`, `type`,

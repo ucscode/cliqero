@@ -12,7 +12,7 @@ import {
 import {
   apiFetch,
   type WithdrawalDestination,
-  type WithdrawalFieldAttributes,
+  type WithdrawalFieldAttrs,
   type WithdrawalMethod,
 } from "@/lib/api-client";
 import { ApiClientError } from "@/lib/api-client";
@@ -27,8 +27,24 @@ import { Skeleton } from "../ui/skeleton";
 import { Toast } from "../toast";
 import { CopyValue } from "../copy-value";
 
-function htmlAttributes<T>(attributes?: WithdrawalFieldAttributes) {
-  return (attributes ?? {}) as unknown as T;
+const reactAttrNames: Record<string, string> = {
+  autocomplete: "autoComplete",
+  autocapitalize: "autoCapitalize",
+  inputmode: "inputMode",
+  maxlength: "maxLength",
+  minlength: "minLength",
+  readonly: "readOnly",
+  spellcheck: "spellCheck",
+  tabindex: "tabIndex",
+};
+
+function htmlAttrs<T>(attrs?: WithdrawalFieldAttrs) {
+  return Object.fromEntries(
+    Object.entries(attrs ?? {}).map(([name, value]) => [
+      reactAttrNames[name.toLowerCase()] ?? name,
+      value,
+    ]),
+  ) as unknown as T;
 }
 
 export function WithdrawalMethodsPanel() {
@@ -295,8 +311,8 @@ export function WithdrawalMethodsPanel() {
                         {field.required ? " *" : ""}
                       </Label>
                       <Select
-                        {...htmlAttributes<SelectHTMLAttributes<HTMLSelectElement>>(
-                          field.attributes,
+                        {...htmlAttrs<SelectHTMLAttributes<HTMLSelectElement>>(
+                          field.attrs,
                         )}
                         id={fieldId}
                         required={field.required}
@@ -308,12 +324,10 @@ export function WithdrawalMethodsPanel() {
                           }))
                         }
                       >
-                        <option value="">
-                          {field.placeholder ?? `Choose ${field.label.toLowerCase()}`}
-                        </option>
+                        <option value="">Choose {field.label.toLowerCase()}</option>
                         {field.options.map((option) => (
                           <option key={option.key} value={option.key}>
-                            {option.value}
+                            {option.label}
                           </option>
                         ))}
                       </Select>
@@ -328,14 +342,11 @@ export function WithdrawalMethodsPanel() {
                         {field.required ? " *" : ""}
                       </Label>
                       <Textarea
-                        {...htmlAttributes<TextareaHTMLAttributes<HTMLTextAreaElement>>(
-                          field.attributes,
+                        {...htmlAttrs<TextareaHTMLAttributes<HTMLTextAreaElement>>(
+                          field.attrs,
                         )}
                         id={fieldId}
                         required={field.required}
-                        {...(field.placeholder === undefined
-                          ? {}
-                          : { placeholder: field.placeholder })}
                         value={values[field.name] ?? ""}
                         onChange={(event) =>
                           setValues((current) => ({
@@ -360,14 +371,11 @@ export function WithdrawalMethodsPanel() {
                       {field.required ? " *" : ""}
                     </Label>
                     <Input
-                      {...htmlAttributes<InputHTMLAttributes<HTMLInputElement>>(
-                        field.attributes,
+                      {...htmlAttrs<InputHTMLAttributes<HTMLInputElement>>(
+                        field.attrs,
                       )}
                       id={fieldId}
                       required={field.required}
-                      {...(field.placeholder === undefined
-                        ? {}
-                        : { placeholder: field.placeholder })}
                       pattern={field.regex}
                       list={listId}
                       value={values[field.name] ?? ""}

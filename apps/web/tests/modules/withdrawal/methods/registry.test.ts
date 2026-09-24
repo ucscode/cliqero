@@ -116,8 +116,8 @@ describe("WithdrawalMethodRegistry", () => {
           required: true,
           copyable: true,
           options: [
-            { key: "uba", value: "United Bank for Africa" },
-            { key: "gtbank", value: "Guaranty Trust Bank" },
+            { key: "uba", label: "United Bank for Africa" },
+            { key: "gtbank", label: "Guaranty Trust Bank" },
           ],
         },
         {
@@ -127,7 +127,7 @@ describe("WithdrawalMethodRegistry", () => {
           required: true,
           regex: "[a-z]+",
           enum: ["personal", "business"],
-          attributes: { rows: 4 },
+          attrs: { rows: 4 },
         },
       ],
     };
@@ -159,21 +159,20 @@ describe("WithdrawalMethodRegistry", () => {
     );
   });
 
-  it("keeps form attributes extensible without allowing them to override field semantics", () => {
+  it("keeps attrs extensible without allowing them to override field semantics", () => {
     const registry = new WithdrawalMethodRegistry({
       methods: [
         {
           ...global,
-          id: "attributes",
+          id: "attrs",
           fields: [
             {
               name: "account",
               label: "Account",
               type: "text",
               required: true,
-              placeholder: "Direct placeholder",
-              attributes: {
-                placeholder: "Attribute placeholder",
+              attrs: {
+                placeholder: "Account number",
                 rows: 4,
                 "data-purpose": "withdrawal",
                 name: "spoofed",
@@ -188,11 +187,10 @@ describe("WithdrawalMethodRegistry", () => {
       ],
     });
 
-    expect(registry.find("attributes")?.fields[0]).toMatchObject({
+    expect(registry.find("attrs")?.fields[0]).toMatchObject({
       name: "account",
-      placeholder: "Direct placeholder",
-      attributes: {
-        placeholder: "Attribute placeholder",
+      attrs: {
+        placeholder: "Account number",
         rows: 4,
         "data-purpose": "withdrawal",
       },

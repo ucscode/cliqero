@@ -12,20 +12,21 @@ requests.
 
 Method fields model actual form controls. Each field uses `name` as its
 submitted value identity and may be `text`, `select`, `textarea`, or
-server-owned `fixed`. Simple field settings such as `copyable` and
-`placeholder` live directly on the field rather than under another config
-object. Text and textarea values may be constrained by server-enforced `regex`
-and `enum` rules. Select options are ordered `{ key, value }` entries, where
-the key is submitted and the value is the human-facing label.
+server-owned `fixed`. Simple Cliqero metadata such as `copyable` stays
+directly on the field. Text and textarea values may be constrained by
+server-enforced `regex` and `enum` rules. Select options are ordered
+`{ key, label }` entries, where the key is submitted and the label is
+human-facing.
 
-Editable fields may also define an `attributes` mapping for additional form
-attributes such as `rows`, `autoComplete`, `placeholder`, `aria-*`, or
+Editable fields may define an `attrs` mapping for HTML control attributes such
+as `placeholder`, `rows`, `autocomplete`, `maxlength`, `aria-*`, or
 `data-*`. Cliqero-owned properties such as `name`, `type`, `required`,
-`value`, `id`, `list`, and `pattern` are filtered out of this mapping,
-as are event-style `on*` attributes, so attributes cannot override field
-identity or validation behavior. A direct `placeholder` takes precedence over
-an attribute placeholder. The browser mirrors `regex` through the HTML
-`pattern` attribute for early feedback, but the server remains authoritative.
+`value`, `id`, `list`, and `pattern` are filtered out of `attrs`, as
+are event-style `on*` attributes, so attrs cannot override field identity or
+validation behavior. HTML attribute spelling is used in YAML; the React
+renderer translates names such as `autocomplete` and `maxlength`
+internally. The browser mirrors `regex` through the HTML `pattern` attribute
+for early feedback, but the server remains authoritative.
 
 The panel reads policy, earnings, and saved destinations, then submits
 `POST /api/withdrawals` with `amount_minor`, `currency`, and the owned

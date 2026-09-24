@@ -17,17 +17,17 @@ parameters:
           - NG
 
       # Fields are ordered form controls. `name` is the submitted value identity.
-      # `copyable` and simple presentation values such as `placeholder` stay
-      # directly on the field. `attributes` is for additional HTML attributes.
+      # `copyable` is Cliqero metadata; actual HTML control attributes such as
+      # placeholder, autocomplete, rows and data-* belong under `attrs`.
       fields:
         - name: bank_name
           label: Bank
           type: text
           required: true
-          placeholder: Guaranty Trust Bank
           copyable: true
-          attributes:
-            autoComplete: organization
+          attrs:
+            placeholder: Guaranty Trust Bank
+            autocomplete: organization
             data-withdrawal-field: bank
 
         - name: account_number
@@ -37,10 +37,10 @@ parameters:
           # regex is enforced by the server. The browser also receives it as an
           # HTML pattern for early feedback, but server validation is authoritative.
           regex: "^[0-9]{10}$"
-          placeholder: "0123456789"
           copyable: true
-          attributes:
-            autoComplete: "off"
+          attrs:
+            placeholder: "0123456789"
+            autocomplete: "off"
             data-withdrawal-field: account-number
 
         - name: account_name
@@ -48,8 +48,8 @@ parameters:
           type: text
           required: true
           copyable: true
-          attributes:
-            autoComplete: name
+          attrs:
+            autocomplete: name
 
     - id: usdt_trc20
       enabled: true
@@ -65,9 +65,9 @@ parameters:
           required: true
           regex: "^T[1-9A-HJ-NP-Za-km-z]{33}$"
           copyable: true
-          attributes:
+          attrs:
             placeholder: T...
-            autoComplete: "off"
+            autocomplete: "off"
             data-network: trc20
 
         # fixed values are injected by the server and are never accepted from
@@ -78,7 +78,7 @@ parameters:
           value: TRC20
           copyable: true
 
-  # A select uses an ordered array of machine keys and human-facing values:
+  # A select uses an ordered array of machine keys and human-facing labels:
   #
   # - name: account_type
   #   label: Account type
@@ -86,9 +86,9 @@ parameters:
   #   required: true
   #   options:
   #     - key: savings
-  #       value: Savings
+  #       label: Savings
   #     - key: current
-  #       value: Current
+  #       label: Current
   #
   # Text and textarea fields may restrict values with `enum` in addition to
   # server-side `regex` validation:
@@ -100,11 +100,11 @@ parameters:
   #   enum:
   #     - personal
   #     - business
-  #   placeholder: Optional note
-  #   attributes:
+  #   attrs:
+  #     placeholder: Optional note
   #     rows: 4
   #     data-purpose: withdrawal-note
   #
-  # Attributes cannot override Cliqero-owned control properties such as name,
+  # attrs cannot override Cliqero-owned control properties such as name,
   # type, required, value, id, list or pattern; event-style on* attributes are
   # ignored as well.

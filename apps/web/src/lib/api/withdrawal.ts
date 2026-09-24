@@ -71,14 +71,13 @@ type WithdrawalFieldIdentity = {
   name: string;
   label: string;
 };
-export type WithdrawalFieldAttributes = Record<string, string | number | boolean>;
-export type WithdrawalSelectOption = { key: string; value: string };
+export type WithdrawalFieldAttrs = Record<string, string | number | boolean>;
+export type WithdrawalSelectOption = { key: string; label: string };
 
 type WithdrawalEditableField = WithdrawalFieldIdentity & {
   required: boolean;
   copyable?: boolean;
-  placeholder?: string;
-  attributes?: WithdrawalFieldAttributes;
+  attrs?: WithdrawalFieldAttrs;
 };
 
 export type WithdrawalMethodField =

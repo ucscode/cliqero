@@ -42,7 +42,7 @@ const enumValues = z
 const optionSchema = z
   .object({
     key: z.string().trim().min(1).max(500),
-    value: z.string().trim().min(1).max(200),
+    label: z.string().trim().min(1).max(200),
   })
   .strict();
 
@@ -62,7 +62,7 @@ const optionsSchema = z
     });
   });
 
-const ignoredAttributeNames = new Set([
+const ignoredAttrNames = new Set([
   "name",
   "type",
   "required",
@@ -94,15 +94,15 @@ const ignoredAttributeNames = new Set([
   "options",
 ]);
 
-const attributeName = z.string().regex(/^[A-Za-z][A-Za-z0-9_.:-]*$/);
-const attributeValue = z.union([z.string().max(500), z.number().finite(), z.boolean()]);
-const attributesSchema = z
-  .record(attributeName, attributeValue)
+const attrName = z.string().regex(/^[A-Za-z][A-Za-z0-9_.:-]*$/);
+const attrValue = z.union([z.string().max(500), z.number().finite(), z.boolean()]);
+const attrsSchema = z
+  .record(attrName, attrValue)
   .transform((attributes) =>
     Object.fromEntries(
       Object.entries(attributes).filter(([name]) => {
         const normalized = name.toLowerCase();
-        return !ignoredAttributeNames.has(normalized) && !normalized.startsWith("on");
+        return !ignoredAttrNames.has(normalized) && !normalized.startsWith("on");
       }),
     ),
   );
@@ -112,8 +112,7 @@ const editableBase = {
   label: z.string().trim().min(1).max(80),
   required: z.boolean(),
   copyable: z.boolean().optional(),
-  placeholder: z.string().max(200).optional(),
-  attributes: attributesSchema.optional(),
+  attrs: attrsSchema.optional(),
 };
 
 const textFieldSchema = z
@@ -272,7 +271,7 @@ export class WithdrawalMethodRegistry {
           name: field.name,
           label: field.label,
           value,
-          displayValue: option.value,
+          displayValue: option.label,
           type: field.type,
           copyable,
         });
