@@ -27,8 +27,8 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
       [buyerId, listingId],
     );
   }
-  async findById(id: string) {
-    return this.find("uuid = $1", [id]);
+  async findById(id: string, options?: { forUpdate?: boolean }) {
+    return this.find("uuid = $1", [id], options?.forUpdate);
   }
   async save(entitlement: Entitlement): Promise<void> {
     await this.sql.query(
@@ -45,14 +45,18 @@ export class PostgresEntitlementRepository implements EntitlementRepository {
       ],
     );
   }
-  private async find(where: string, values: readonly unknown[]): Promise<Entitlement | null> {
+  private async find(
+    where: string,
+    values: readonly unknown[],
+    forUpdate = false,
+  ): Promise<Entitlement | null> {
     const row = (
       await this.sql.query<EntitlementRow>(
         `select e.uuid as id,
           (select uuid from identity_capability.accounts where id=e.buyer_id) as buyer_id,
           (select uuid from listing_capability.listings where id=e.listing_id) as listing_id,
           (select uuid from purchase_capability.purchases where id=e.purchase_id) as purchase_id,
-          e.state,e.expires_at from entitlement_capability.entitlements e where ${where} limit 1`,
+          e.state,e.expires_at from entitlement_capability.entitlements e where ${where} limit 1${forUpdate ? " for update of e" : ""}`,
         values,
       )
     ).rows[0];

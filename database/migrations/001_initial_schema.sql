@@ -473,7 +473,7 @@ CREATE TABLE entitlement_capability.entitlements (
     buyer_id bigint NOT NULL,
     listing_id bigint NOT NULL,
     purchase_id bigint NOT NULL,
-    CONSTRAINT entitlements_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'revoked'::text, 'expired'::text])))
+    CONSTRAINT entitlements_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'consumed'::text, 'revoked'::text, 'expired'::text])))
 );
 
 

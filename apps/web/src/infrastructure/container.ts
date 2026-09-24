@@ -37,6 +37,7 @@ import { ListingService } from "@/application/listing/service";
 import { CheckoutService } from "@/application/checkout/service";
 import { PaymentCompletionService } from "@/application/checkout/completion";
 import { BuyerAccessService } from "@/application/access";
+import { PackageEntitlementService } from "@/application/package/entitlements";
 import { ReferralGraphService } from "@/application/referrals";
 import { ReferralAttributionService } from "@/application/attributions";
 import { AccountReferralAttributionService } from "@/application/account-referral-attribution";
@@ -552,6 +553,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const buyerAccess = lazy(
     () => new BuyerAccessService(access(), listings(), database, purchases(), entitlements()),
   );
+  const packageEntitlements = lazy(
+    () => new PackageEntitlementService(entitlements(), database, auditRecorder()),
+  );
   const hierarchy = lazy(() => new HierarchyService(new PostgresHierarchyReader(database)));
   const integrations = lazy(() => new PostgresIntegrationService(database, database));
   const profiles = lazy(() => new ProfileService(accounts()));
@@ -793,6 +797,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get buyerAccess() {
       return buyerAccess();
+    },
+    get packageEntitlements() {
+      return packageEntitlements();
     },
     get access() {
       return access();

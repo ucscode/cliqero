@@ -60,6 +60,11 @@ The destination may point to:
 
 Cliqero does not infer product type from the URL and does not need to know what happens after authorized access is handed off.
 
+The generic relationship is `listing -> purchase -> entitlement -> destination`.
+Cliqero owns purchase and entitlement/access state; the destination application
+owns package-specific behavior. The entitlement model does not encode a package
+type, capability, benefit, or action.
+
 ## Buyer access URL
 
 A raw destination should not normally be the authorization mechanism. The buyer should open the listing through a Cliqero access route so the platform can validate entitlement and create an auditable handoff.
@@ -120,6 +125,26 @@ The API should expose only the minimum information that the authenticated integr
 The API response is authoritative at verification time. Because `source` contains no self-contained claims, revocation, entitlement changes, refunds, and future access policy changes can take effect centrally without invalidating a token format.
 
 A destination that does not integrate with Cliqero may simply ignore the `source` parameter when its own access model does not require verification. This must not force every listing into a custom integration.
+
+### Package entitlement management API
+
+An integration uses its listing-scoped integration credential to read or update
+an entitlement:
+
+```http
+GET /api/package/entitlements/{id}
+PATCH /api/package/entitlements/{id}
+Authorization: Bearer <integration-credential>
+```
+
+The response contains only the entitlement ID, listing ID, lifecycle state,
+expiry, and current access availability. An entitlement outside the
+integration's listing scope is returned as not found, just like a missing
+entitlement. PATCH accepts only `state` and/or `expires_at`; terminal states
+cannot be reopened. `consumed` represents successful one-time use and is
+distinct from `expired`, which represents time/policy expiration. Existing
+source tokens are checked against current entitlement state, so they stop
+authorizing after consumption, revocation, or expiry.
 
 ## API-first access capability
 

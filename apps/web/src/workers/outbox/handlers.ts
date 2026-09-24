@@ -11,7 +11,7 @@ export class AuditedFactHandler implements OutboxEventHandler {
     "withdrawal.cancelled",
     "withdrawal.completed",
   ];
-  async handle(_: ClaimedOutboxEvent): Promise<void> {
+  async handle(): Promise<void> {
     // These durable facts currently have no additional asynchronous consequence.
     // Explicit acknowledgement keeps the dispatcher contract visible until a real consumer exists.
   }
@@ -40,7 +40,9 @@ export class PurchaseReversalEntitlementHandler implements OutboxEventHandler {
         : null;
     if (!purchaseId) throw new Error("Reversal payload is invalid");
     const entitlement = await this.entitlements.findByPurchaseId(purchaseId);
-    if (!entitlement) return;
+    // A reversal revokes a still-active entitlement. Already-terminal history
+    // (including a consumed one-time entitlement) remains unchanged.
+    if (!entitlement || entitlement.state !== "active") return;
     entitlement.revoke();
     await this.entitlements.save(entitlement);
   }

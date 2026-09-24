@@ -12,7 +12,11 @@ The economically meaningful event is a verified purchase, not a page view, CTA c
 
 Core sequence:
 
-`listing -> wallet checkout -> wallet debit -> paid purchase -> entitlement -> access`
+`listing -> purchase -> entitlement -> destination`
+
+A purchase may be paid through the supported checkout flow. The destination URL
+identifies where the buyer is handed off; the destination/application behind
+that URL determines what the purchased listing does.
 
 ## Purchase record
 
@@ -50,11 +54,16 @@ The exact names may evolve during implementation, but invalid transitions must b
 
 ## Entitlement
 
-A successful purchase creates or activates an entitlement owned by the buyer for the listing.
+A successful purchase creates an active entitlement owned by the buyer for the
+listing. Cliqero owns entitlement/access state; the destination owns
+package-specific behavior. Entitlements remain generic and contain no
+capability, benefit, package type, or action description.
 
-Entitlement is the stable authorization concept. It should be able to represent future requirements such as expiration, revocation, limited access, or consumption without forcing Cliqero to know the product type.
-
-V1 should not invent those variants unless required. A normal purchase can simply create an active entitlement.
+The lifecycle states are `active`, `consumed`, `expired`, and `revoked`.
+`consumed` records successful one-time use and is distinct from `expired`, which
+records a time/policy end. `revoked` records administrative invalidation. Only
+an active entitlement whose expiry is absent or still in the future is usable.
+Terminal states cannot be reopened; a new purchase creates a new entitlement.
 
 ## Access lifecycle
 
@@ -94,6 +103,21 @@ A destination integration authenticates to Cliqero and asks whether a `source` c
 The destination then decides what to do: serve a file, create a session, expose software, provision an account, reveal an offer, or perform another service-specific action.
 
 Cliqero must not encode those behaviors into the core purchase model.
+
+Destination integrations may manage an entitlement they are authorized to
+verify through the listing-scoped package API:
+
+```http
+GET /api/package/entitlements/{id}
+PATCH /api/package/entitlements/{id}
+Authorization: Bearer <integration-credential>
+```
+
+PATCH accepts lifecycle state and/or `expires_at`. For one-time use, the
+destination sets `state` to `consumed`; it does not ask Cliqero to implement the
+destination's specific behavior. State and expiry changes are transactional,
+listing-scoped, and audited. Existing source tokens stop authorizing as soon as
+their entitlement becomes unusable.
 
 ## Referral consequence
 

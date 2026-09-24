@@ -9,7 +9,7 @@ export type Purchase = {
   currency: string;
   state: "pending" | "paid" | "completed" | "failed" | "refunded";
   created_at: string;
-  entitlement_state: "active" | "revoked" | "expired" | null;
+  entitlement_state: "active" | "consumed" | "revoked" | "expired" | null;
   entitlement_expires_at: string | null;
   access_available: boolean;
 };

@@ -22,6 +22,7 @@ import { registerFundingRoutes } from "./routes/funding";
 import { registerPaymentCallbackRoutes } from "./routes/payment-callbacks";
 import { registerReviewRoutes } from "./routes/reviews";
 import { registerAccountAccessRoutes } from "./routes/account-access";
+import { registerPackageEntitlementRoutes } from "./routes/package/entitlements";
 import { accountAccessOpenApiMetadata } from "./routes/account-access/metadata";
 import { blogOpenApiMetadata } from "./routes/blog/metadata";
 import { hierarchyOpenApiMetadata } from "./routes/hierarchy/metadata";
@@ -89,6 +90,7 @@ export function createApiApp(
   registerFundingRoutes(app, container);
   registerPaymentCallbackRoutes(app, container);
   registerAccountAccessRoutes(app, container);
+  registerPackageEntitlementRoutes(app, container);
 
   // Compatibility handlers are internal adapters around the same application
   // services. This fallback keeps one authoritative HTTP router while legacy

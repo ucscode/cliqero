@@ -312,4 +312,38 @@ suite("purchase financial distribution", () => {
       )?.amountMinor,
     ).toBe(0n);
   });
+
+  it("preserves consumed entitlement history when a purchase is reversed", async () => {
+    const value = await completed();
+    const entitlement = await app.entitlements.findByPurchaseId(value.purchaseId);
+    expect(entitlement).not.toBeNull();
+    entitlement!.consume();
+    await app.entitlements.save(entitlement!);
+    await app.purchaseDistribution.process({
+      purchaseId: value.purchaseId,
+      correlationId: newId(),
+    });
+    await app.purchaseReversal.process({
+      purchaseId: value.purchaseId,
+      reason: "refund after one-time use",
+      source: "operator",
+      idempotencyKey: "reverse-consumed-entitlement",
+      correlationId: newId(),
+    });
+    const dispatcher = new OutboxDispatcher(
+      "reversal-consumed-test",
+      app.outbox,
+      new OutboxHandlerRegistry()
+        .register(new AuditedFactHandler())
+        .register(
+          new (await import("@/workers/outbox/handlers")).PurchaseReversalEntitlementHandler(
+            app.entitlements,
+          ),
+        ),
+      { info: () => undefined, error: () => undefined },
+      { pollMilliseconds: 1, staleAfterMilliseconds: 1000 },
+    );
+    await dispatcher.runOnce();
+    expect((await app.entitlements.findByPurchaseId(value.purchaseId))?.state).toBe("consumed");
+  });
 });
