@@ -29,6 +29,7 @@ import { ReferralsPanel } from "../referral/panel";
 import { EarningsPanel } from "../earnings-panel";
 import { WithdrawalsPanel } from "../withdrawal/panel";
 import { PursePanel } from "../withdrawal/purse/panel";
+import { PurseFormPage } from "../withdrawal/purse/form-page";
 import { SettingsPanel } from "../settings";
 import { BrandLink } from "../brand-identity";
 import { CheckoutFlow } from "../checkout/flow";
@@ -56,11 +57,15 @@ export function DashboardShell({
   fundingProvider,
   fundingAmount,
   fundingHistoryPage = false,
+  purseFormMode,
+  purseDestinationId,
 }: {
   dedicatedWalletFunding?: boolean;
   fundingProvider?: string;
   fundingAmount?: string;
   fundingHistoryPage?: boolean;
+  purseFormMode?: "create" | "edit";
+  purseDestinationId?: string;
 }) {
   const session = authClient.useSession();
   const { refetch: refetchSession } = session;
@@ -69,8 +74,9 @@ export function DashboardShell({
   const lastSessionRefreshAt = useRef(0);
   const invalidationStarted = useRef(false);
   const params = useSearchParams();
-  const section =
-    dedicatedWalletFunding || fundingHistoryPage
+  const section = purseFormMode
+    ? "purse"
+    : dedicatedWalletFunding || fundingHistoryPage
       ? "wallet"
       : (params.get("section") ?? (params.get("buy") ? "checkout" : "overview"));
   const buy = params.get("buy");
@@ -224,7 +230,11 @@ export function DashboardShell({
           : section === "withdrawals"
             ? "Withdrawals"
             : section === "purse"
-              ? "Purse"
+              ? purseFormMode === "create"
+                ? "Add purse"
+                : purseFormMode === "edit"
+                  ? "Edit purse"
+                  : "Purse"
               : section === "settings"
                 ? "Settings"
                 : dashboardSectionTitle(section);
@@ -252,7 +262,11 @@ export function DashboardShell({
   ) : section === "withdrawals" ? (
     <WithdrawalsPanel />
   ) : section === "purse" ? (
-    <PursePanel />
+    purseFormMode ? (
+      <PurseFormPage mode={purseFormMode} destinationId={purseDestinationId} />
+    ) : (
+      <PursePanel />
+    )
   ) : section === "settings" ? (
     <SettingsPanel />
   ) : buy ? (

@@ -1,10 +1,5 @@
 export type WithdrawalState =
-  | "requested"
-  | "approved"
-  | "rejected"
-  | "cancelled"
-  | "completed"
-  | "failed";
+  "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
 
 export type Withdrawal = {
   id: string;
@@ -103,7 +98,6 @@ export type WithdrawalMethodField =
 export type WithdrawalMethod = {
   id: string;
   display_name: string;
-  image_url: string;
   description: string;
   fields: WithdrawalMethodField[];
 };
@@ -117,7 +111,7 @@ export type WithdrawalDestinationField = {
 };
 export type WithdrawalDestination = {
   id: string;
-  method: { id: string; display_name: string; image_url: string | null; available: boolean };
+  method: { id: string; display_name: string; available: boolean };
   name: string;
   fields: WithdrawalDestinationField[];
   status: "active" | "archived";

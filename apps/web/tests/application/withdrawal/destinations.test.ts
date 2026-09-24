@@ -8,7 +8,6 @@ const bankMethod = {
   id: "bank_ng",
   enabled: true,
   display_name: "Bank account",
-  image_url: "/bank.svg",
   description: "Nigerian bank account",
   filters: { countries: ["NG"] },
   fields: [
@@ -121,38 +120,35 @@ describe("WithdrawalDestinationService", () => {
     ).rejects.toThrow("Bank is required");
   });
 
-  it(
-    "rebuilds metadata on edit, preserves an old withdrawal snapshot, and archives without deletion",
-    async () => {
-      const { service, destinationRepository, rows } = fixture();
-      const created = await service.create("owner", {
-        method: "bank_ng",
-        name: "Primary",
-        values: { bank: "GTBank", account: "0123456789" },
-      });
-      const snapshot = await service.resolveForWithdrawal("owner", created.id);
-      const updated = await service.update("owner", created.id, {
-        name: "New primary",
-        values: { bank: "Access", account: "9999999999" },
-      });
-      expect(updated.fields[0]).toMatchObject({
-        label: "Bank",
-        value: "Access",
-        type: "text",
-        copyable: true,
-      });
-      expect(snapshot.fields[1].value).toBe("0123456789");
-      expect((await service.resolveForWithdrawal("owner", created.id)).fields[1].value).toBe(
-        "9999999999",
-      );
-      await service.update("owner", created.id, { status: "archived" });
-      expect(rows.has(created.id)).toBe(true);
-      expect(destinationRepository.update).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "archived" }),
-      );
-      await expect(service.resolveForWithdrawal("owner", created.id)).rejects.toThrow("archived");
-    },
-  );
+  it("rebuilds metadata on edit, preserves an old withdrawal snapshot, and archives without deletion", async () => {
+    const { service, destinationRepository, rows } = fixture();
+    const created = await service.create("owner", {
+      method: "bank_ng",
+      name: "Primary",
+      values: { bank: "GTBank", account: "0123456789" },
+    });
+    const snapshot = await service.resolveForWithdrawal("owner", created.id);
+    const updated = await service.update("owner", created.id, {
+      name: "New primary",
+      values: { bank: "Access", account: "9999999999" },
+    });
+    expect(updated.fields[0]).toMatchObject({
+      label: "Bank",
+      value: "Access",
+      type: "text",
+      copyable: true,
+    });
+    expect(snapshot.fields[1].value).toBe("0123456789");
+    expect((await service.resolveForWithdrawal("owner", created.id)).fields[1].value).toBe(
+      "9999999999",
+    );
+    await service.update("owner", created.id, { status: "archived" });
+    expect(rows.has(created.id)).toBe(true);
+    expect(destinationRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "archived" }),
+    );
+    await expect(service.resolveForWithdrawal("owner", created.id)).rejects.toThrow("archived");
+  });
 
   it("keeps disabled destinations visible as unavailable history", async () => {
     const existing: SavedWithdrawalDestination = {
@@ -186,5 +182,29 @@ describe("WithdrawalDestinationService", () => {
       }),
     ).rejects.toThrow("unavailable");
     expect(await service.methodsFor("owner")).toEqual([]);
+  });
+
+  it("projects withdrawal method and saved-method identity without image configuration", async () => {
+    const { service } = fixture();
+    const methods = await service.methodsFor("owner");
+    expect(methods[0]).toEqual({
+      id: "bank_ng",
+      display_name: "Bank account",
+      description: "Nigerian bank account",
+      fields: bankMethod.fields,
+    });
+    expect(methods[0]).not.toHaveProperty("image_url");
+
+    const destination = await service.create("owner", {
+      method: "bank_ng",
+      name: "Primary",
+      values: { bank: "GTBank", account: "0123456789" },
+    });
+    expect(destination.method).toEqual({
+      id: "bank_ng",
+      display_name: "Bank account",
+      available: true,
+    });
+    expect(destination.method).not.toHaveProperty("image_url");
   });
 });

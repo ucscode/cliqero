@@ -6,11 +6,13 @@ withdrawable balance. Buyer-wallet funds and company treasury remain separate.
 Withdrawal methods are configured form definitions; saved withdrawal
 destinations are account-owned reusable values for those definitions; each
 withdrawal stores an immutable snapshot of the selected destination. The
-dedicated Purse section is the account-facing interface that lists, adds, edits,
-and archives saved destinations. “Purse” is user-facing terminology only: a
-withdrawal method remains a configured definition, and a destination remains
-the persisted domain/API resource. Archived destinations are retained and
-cannot be selected for new requests.
+dedicated Purse section is the account-facing interface that lists and archives
+saved destinations. “Purse” is user-facing terminology only: a withdrawal
+method remains a configured definition, and a destination remains the persisted
+domain/API resource. Customers add purses at `/dashboard/purse/new` and edit
+them at `/dashboard/purse/{destinationId}/edit`; both pages use the same
+method-driven form, and the method is fixed when editing. Archived destinations
+are retained and cannot be selected for new requests.
 
 Method fields model actual form controls. Each field uses `name` as its
 submitted value identity and may be `text`, `select`, `textarea`, or
@@ -60,7 +62,9 @@ optionally import relative YAML fragments through the generic configuration
 loader. Top-level method country filters decide eligibility only; they do not
 execute or select a payout provider. For local use, copy the example to
 `config/modules/withdrawal/methods.yaml` and edit the methods for the
-development account countries.
+development account countries. Withdrawal method definitions do not support
+`image_url`; method identity is presented through its configured display name
+and description.
 
 Cliqero remains manual-first. An operator or external automation reads an
 approved withdrawal's structured snapshot, sends payment outside Cliqero, then

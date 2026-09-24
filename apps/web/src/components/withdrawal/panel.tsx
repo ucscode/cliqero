@@ -326,7 +326,7 @@ export function WithdrawalsPanel() {
                   </Select>
                 </>
               ) : (
-                <p className="text-sm text-slate-600">Your purse has no available destinations.</p>
+                <p className="text-sm text-slate-600">No purse is available for withdrawals.</p>
               )}
               <Button
                 type="submit"
@@ -336,7 +336,7 @@ export function WithdrawalsPanel() {
               </Button>
               {!destinations.length && (
                 <Button asChild variant="secondary">
-                  <Link href="/dashboard?section=purse">Add destination</Link>
+                  <Link href="/dashboard/purse/new">Add purse</Link>
                 </Button>
               )}
               <HoneypotField />

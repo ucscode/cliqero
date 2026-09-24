@@ -6,7 +6,6 @@ const bank = {
   id: "bank_ng",
   enabled: true,
   display_name: "Bank account",
-  image_url: "/bank.svg",
   description: "Nigerian bank account",
   filters: { countries: ["NG"] },
   fields: [
@@ -31,6 +30,9 @@ const global = { ...bank, id: "usdt_trc20", filters: { countries: null } };
 
 describe("WithdrawalMethodRegistry", () => {
   it("validates definitions, unique IDs and field names", () => {
+    expect(
+      () => new WithdrawalMethodRegistry({ methods: [{ ...bank, image_url: "/bank.svg" }] }),
+    ).toThrow();
     expect(() => new WithdrawalMethodRegistry({ methods: [bank, bank] })).toThrow("unique");
     expect(
       () =>
@@ -205,21 +207,18 @@ describe("WithdrawalMethodRegistry", () => {
     ]);
   });
 
-  it(
-    "loads the commented bank and USDT example methods from the standard configuration path",
-    () => {
-      const path = resolve(process.cwd(), "../../config/modules/withdrawal/methods.example.yaml");
-      const registry = WithdrawalMethodRegistry.load(path);
-      expect(registry.listForAccount({ country: "NG" }).map((method) => method.id)).toEqual([
-        "bank_ng",
-        "usdt_trc20",
-      ]);
-      expect(registry.find("usdt_trc20")?.fields[1]).toMatchObject({
-        name: "network",
-        type: "fixed",
-        value: "TRC20",
-        copyable: true,
-      });
-    },
-  );
+  it("loads the commented bank and USDT example methods from the standard configuration path", () => {
+    const path = resolve(process.cwd(), "../../config/modules/withdrawal/methods.example.yaml");
+    const registry = WithdrawalMethodRegistry.load(path);
+    expect(registry.listForAccount({ country: "NG" }).map((method) => method.id)).toEqual([
+      "bank_ng",
+      "usdt_trc20",
+    ]);
+    expect(registry.find("usdt_trc20")?.fields[1]).toMatchObject({
+      name: "network",
+      type: "fixed",
+      value: "TRC20",
+      copyable: true,
+    });
+  });
 });

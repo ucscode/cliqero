@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
 import type { WithdrawalDestination, WithdrawalMethod } from "@/lib/api-client";
 import { Button } from "../../ui/button";
@@ -9,17 +10,13 @@ import { CopyValue } from "../../copy-value";
 import { EmptyState } from "../../empty-state";
 import { Skeleton } from "../../ui/skeleton";
 import { Toast } from "../../toast";
-import { DestinationDialog } from "./destination-dialog";
 
 export function PursePanel() {
   const [methods, setMethods] = useState<WithdrawalMethod[]>([]);
   const [destinations, setDestinations] = useState<WithdrawalDestination[]>([]);
-  const [editing, setEditing] = useState<WithdrawalDestination | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,7 +31,6 @@ export function PursePanel() {
       setDestinations(nextDestinations);
     } catch {
       setLoadFailed(true);
-      setError(null);
     } finally {
       setLoading(false);
     }
@@ -45,47 +41,18 @@ export function PursePanel() {
     void load();
   }, [load]);
 
-  function addDestination() {
-    setEditing(null);
-    setSuccess(null);
-    setError(null);
-    setDialogOpen(true);
-  }
-
-  function editDestination(destination: WithdrawalDestination) {
-    if (
-      !destination.method.available ||
-      !methods.some((method) => method.id === destination.method.id)
-    )
-      return;
-    setEditing(destination);
-    setSuccess(null);
-    setError(null);
-    setDialogOpen(true);
-  }
-
-  async function saveDestination() {
-    const wasEditing = editing !== null;
-    setEditing(null);
-    setDialogOpen(false);
-    setSuccess(wasEditing ? "Destination updated." : "Destination saved.");
-    await load();
-  }
-
   async function archiveDestination(destination: WithdrawalDestination) {
     if (!window.confirm(`Remove “${destination.name}” from your purse?`)) return;
     setError(null);
-    setSuccess(null);
     try {
       await apiFetch(`/api/withdrawal-destinations/${destination.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status: "archived" }),
       });
-      setSuccess("Destination removed from your purse.");
       await load();
     } catch {
-      setError("This destination could not be removed. Please try again.");
+      setError("This purse could not be removed. Please try again.");
     }
   }
 
@@ -98,13 +65,12 @@ export function PursePanel() {
           <p className="mt-2 text-sm text-slate-500">Save where you want to receive withdrawals.</p>
         </div>
         {destinations.length > 0 && (
-          <Button type="button" onClick={addDestination} disabled={!methods.length || loading}>
-            Add destination
+          <Button asChild disabled={loading}>
+            <Link href="/dashboard/purse/new">Add purse</Link>
           </Button>
         )}
       </div>
       {error && <Toast>{error}</Toast>}
-      {success && <Toast tone="success">{success}</Toast>}
       {loading ? (
         <Card>
           <Skeleton className="h-40 w-full" />
@@ -126,13 +92,6 @@ export function PursePanel() {
             <Card key={destination.id} className="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_auto]">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  {destination.method.image_url && (
-                    <img
-                      src={destination.method.image_url}
-                      alt=""
-                      className="h-6 w-6 object-contain"
-                    />
-                  )}
                   <h3>{destination.name}</h3>
                   <span className="text-sm text-slate-500">{destination.method.display_name}</span>
                   {!destination.method.available && (
@@ -161,13 +120,10 @@ export function PursePanel() {
                 </dl>
               </div>
               <div className="flex items-start gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={!destination.method.available}
-                  onClick={() => editDestination(destination)}
-                >
-                  Edit
+                <Button asChild variant="secondary" disabled={!destination.method.available}>
+                  <Link href={`/dashboard/purse/${encodeURIComponent(destination.id)}/edit`}>
+                    Edit
+                  </Link>
                 </Button>
                 <Button
                   type="button"
@@ -192,20 +148,11 @@ export function PursePanel() {
             </p>
           )}
           <div className="px-5 pb-5">
-            <Button type="button" onClick={addDestination} disabled={!methods.length}>
-              Add destination
+            <Button asChild>
+              <Link href="/dashboard/purse/new">Add purse</Link>
             </Button>
           </div>
         </Card>
-      )}
-      {dialogOpen && (
-        <DestinationDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          methods={methods}
-          destination={editing}
-          onSaved={saveDestination}
-        />
       )}
     </section>
   );

@@ -8,7 +8,6 @@ parameters:
     - id: bank_ng
       enabled: true
       display_name: Bank account
-      image_url: /images/payment/bank-transfer.svg
       description: Receive a withdrawal through a Nigerian bank account.
 
       # null means globally eligible. Otherwise list uppercase ISO alpha-2 codes.
@@ -54,7 +53,6 @@ parameters:
     - id: usdt_trc20
       enabled: true
       display_name: USDT (TRC20)
-      image_url: /images/payment/usdt-trc20.svg
       description: Receive USDT through the TRON network.
       filters:
         countries: null

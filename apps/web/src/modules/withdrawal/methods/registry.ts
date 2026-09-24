@@ -96,16 +96,14 @@ const ignoredAttrNames = new Set([
 
 const attrName = z.string().regex(/^[A-Za-z][A-Za-z0-9_.:-]*$/);
 const attrValue = z.union([z.string().max(500), z.number().finite(), z.boolean()]);
-const attrsSchema = z
-  .record(attrName, attrValue)
-  .transform((attributes) =>
-    Object.fromEntries(
-      Object.entries(attributes).filter(([name]) => {
-        const normalized = name.toLowerCase();
-        return !ignoredAttrNames.has(normalized) && !normalized.startsWith("on");
-      }),
-    ),
-  );
+const attrsSchema = z.record(attrName, attrValue).transform((attributes) =>
+  Object.fromEntries(
+    Object.entries(attributes).filter(([name]) => {
+      const normalized = name.toLowerCase();
+      return !ignoredAttrNames.has(normalized) && !normalized.startsWith("on");
+    }),
+  ),
+);
 
 const editableBase = {
   name: fieldName,
@@ -156,7 +154,6 @@ const methodSchema = z
     id: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
     enabled: z.boolean(),
     display_name: z.string().trim().min(1).max(100),
-    image_url: z.string().trim().min(1).max(500),
     description: z.string().trim().min(1).max(500),
     filters: z.object({ countries: z.array(countryCode).nullable() }).strict(),
     fields: z
@@ -239,8 +236,7 @@ export class WithdrawalMethodRegistry {
       method.fields.filter((field) => field.type !== "fixed").map((field) => field.name),
     );
     for (const name of Object.keys(values)) {
-      if (!editable.has(name))
-        throw new Error(`Unknown or non-editable withdrawal field: ${name}`);
+      if (!editable.has(name)) throw new Error(`Unknown or non-editable withdrawal field: ${name}`);
     }
 
     const enriched: DestinationField[] = [];
@@ -283,8 +279,7 @@ export class WithdrawalMethodRegistry {
 
       if (field.regex) {
         const match = new RegExp(field.regex).exec(value);
-        if (!match || match[0] !== value)
-          throw new Error(`${field.label} has an invalid format`);
+        if (!match || match[0] !== value) throw new Error(`${field.label} has an invalid format`);
       }
 
       enriched.push({

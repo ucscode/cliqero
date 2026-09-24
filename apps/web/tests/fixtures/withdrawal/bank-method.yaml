@@ -3,7 +3,6 @@ parameters:
     - id: fixture_bank
       enabled: true
       display_name: Fixture bank
-      image_url: /bank.svg
       description: Imported method fixture
       filters:
         countries:

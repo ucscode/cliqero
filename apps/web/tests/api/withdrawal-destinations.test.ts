@@ -15,7 +15,7 @@ function setup(kind: "user_session" | "api_key", scopes: string[] = []) {
     capabilities: [],
     scopes: new Set(scopes),
   };
-  const methodsFor = vi.fn(async () => []);
+  const methodsFor = vi.fn(async (): Promise<Record<string, unknown>[]> => []);
   const list = vi.fn(async () => []);
   const create = vi.fn(async () => ({ id: "destination" }));
   const get = vi.fn(async () => ({ id: "destination" }));
@@ -109,5 +109,25 @@ describe("withdrawal destination resources", () => {
     const response = await methods.GET(new Request("http://localhost/api/withdrawal-methods"));
     expect(response.status).toBe(403);
     expect(apiKey.methodsFor).not.toHaveBeenCalled();
+  });
+
+  it("returns withdrawal methods without image presentation metadata", async () => {
+    const session = setup("user_session");
+    session.methodsFor.mockResolvedValue([
+      {
+        id: "bank_ng",
+        display_name: "Bank account",
+        description: "Receive a withdrawal through a Nigerian bank account.",
+        fields: [],
+      },
+    ]);
+
+    const response = await methods.GET(new Request("http://localhost/api/withdrawal-methods"));
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload[0]).toEqual(
+      expect.objectContaining({ id: "bank_ng", display_name: "Bank account" }),
+    );
+    expect(payload[0]).not.toHaveProperty("image_url");
   });
 });

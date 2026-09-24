@@ -20,7 +20,6 @@ export class WithdrawalDestinationService {
     return this.methods.listForAccount(account).map((method) => ({
       id: method.id,
       display_name: method.display_name,
-      image_url: method.image_url,
       description: method.description,
       fields: method.fields,
     }));
@@ -126,7 +125,6 @@ export class WithdrawalDestinationService {
       method: {
         id: destination.method,
         display_name: method?.display_name ?? destination.method,
-        image_url: method?.image_url ?? null,
         available,
       },
       name: destination.name,

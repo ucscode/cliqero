@@ -12,7 +12,7 @@ describe("purse UI contract", () => {
     expect(panelSource).toContain("Save where you want to receive withdrawals.");
     expect(panelSource).toContain("Your purse is empty");
     expect(panelSource).toContain("Add a bank account, crypto wallet");
-    expect(panelSource).toContain("Add destination");
+    expect(panelSource).toContain("Add purse");
     expect(panelSource).not.toContain("Withdrawal methods</h2>");
   });
 
@@ -28,8 +28,12 @@ describe("purse UI contract", () => {
     expect(panelSource).not.toContain("/archive");
   });
 
-  it("opens the reusable destination dialog", () => {
-    expect(panelSource).toContain("<DestinationDialog");
-    expect(panelSource).toContain("WithdrawalDestination");
+  it("uses dedicated add/edit pages and keeps removal as an archive PATCH", () => {
+    expect(panelSource).toContain('href="/dashboard/purse/new"');
+    expect(panelSource).toContain("/dashboard/purse/${encodeURIComponent(destination.id)}/edit");
+    expect(panelSource).not.toContain("Dialog");
+    expect(panelSource).not.toContain("image_url");
+    expect(panelSource).toContain('method: "PATCH"');
+    expect(panelSource).toContain('status: "archived"');
   });
 });
