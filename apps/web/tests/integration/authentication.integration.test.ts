@@ -168,7 +168,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
     const result = await app.authentication.login(email, "correct-horse-battery");
     expect((await app.authentication.authenticate(result.token))?.id).toBe(account.id);
     await expect(app.authentication.login(email, "wrong-password")).rejects.toThrow(
-      "Invalid credentials",
+      "Invalid email or password",
     );
     await app.authentication.auth.api.signOut({
       headers: new Headers({ authorization: `Bearer ${result.token}` }),
@@ -194,7 +194,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
     await app.authentication.resetPassword(authUserId, "console-reset-password-b");
 
     await expect(app.authentication.login(email, "console-reset-password-a")).rejects.toThrow(
-      "Invalid credentials",
+      "Invalid email or password",
     );
     await expect(
       app.authentication.login(email, "console-reset-password-b"),
@@ -223,7 +223,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       body: { token, newPassword: "password-after-reset" },
     });
     await expect(app.authentication.login(email, "password-before-reset")).rejects.toThrow(
-      "Invalid credentials",
+      "Invalid email or password",
     );
     await expect(app.authentication.login(email, "password-after-reset")).resolves.toBeDefined();
     await expect(
@@ -273,7 +273,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
     );
     expect(response.status).toBe(200);
     await expect(app.authentication.login(email, "password-before-reset")).rejects.toThrow(
-      "Invalid credentials",
+      "Invalid email or password",
     );
     await expect(app.authentication.login(email, "password-after-reset")).resolves.toBeDefined();
     const reuse = await handlePasswordReset(
@@ -516,16 +516,45 @@ suite("Better Auth and Cliqero identity boundary", () => {
     const context = await app.authentication.auth.$context;
     const existingCredential = await context.internalAdapter.findCredentialAccount(result.user.id);
     await context.internalAdapter.deleteAccount(existingCredential!.id);
+    await context.internalAdapter.createAccount({
+      userId: result.user.id,
+      providerId: "google",
+      accountId: "google-oauth-conflict-subject",
+      issuer: "https://accounts.google.com",
+    });
     const session = await context.internalAdapter.createSession(result.user.id);
 
     await expect(
       app.authentication.completeOnboarding(
         result.user.id,
-        { username: "takenonboarding", password: "oauth-password" },
+        { username: "takenonboarding", country: "NG", password: "oauth-password" },
         new Headers({ authorization: `Bearer ${session!.token}` }),
       ),
     ).rejects.toMatchObject({ code: "username_taken" });
     expect(await app.authentication.hasPasswordCredential(result.user.id)).toBe(false);
+    await expect(
+      app.authentication.principal(
+        new Request("http://localhost:3000/api/me", {
+          headers: { authorization: `Bearer ${session!.token}` },
+        }),
+      ),
+    ).resolves.toMatchObject({ authLinkState: "incomplete", account: null });
+    expect(await app.authentication.accountForAuthUser(result.user.id)).toBeNull();
+    expect(
+      (
+        await app.database.query<{ provider_id: string }>(
+          `select "providerId" as provider_id from better_auth.account where "userId"=$1`,
+          [result.user.id],
+        )
+      ).rows.map((row) => row.provider_id),
+    ).toEqual(["google"]);
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text as count from identity_capability.accounts where username='takenonboarding'`,
+        )
+      ).rows[0].count,
+    ).toBe("1");
   });
 
   it("keeps account linking explicit and requires verified local email ownership", () => {

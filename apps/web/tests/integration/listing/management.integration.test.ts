@@ -495,21 +495,37 @@ suite("listing management and media", () => {
         position: 1,
       });
       await app.listingService.publish(owner, listing.id);
-      const exported = await app.listingTransfer.export(owner),
-        transfer = fakeTransfer(),
-        result = await transfer.import(target, {
-          format,
-          mode: "create",
-          body: serializeTransfer(exported, format),
-        });
-      expect(result).toMatchObject({ created: 1, failed: 0 });
-      const copy = (await app.listingService.findByExternalKey(target, `roundtrip-${format}`))!;
-      expect(copy).toMatchObject({
-        title: `${format} listing`,
+      const exported = await app.listingTransfer.export(owner);
+      expect(exported[0]).toMatchObject({
         short_description: "Round-trip listing",
         long_description: "Round trip",
+        metadata: { format, featured: true },
+      });
+      expect(exported[0]).not.toHaveProperty("shortDescription");
+      const transfer = fakeTransfer();
+      const result = await transfer.import(target, {
+        format,
+        mode: "create",
+        body: serializeTransfer(exported, format),
+      });
+      expect(result).toMatchObject({ created: 1, failed: 0 });
+      const copy = (await app.listingService.findByExternalKey(target, `roundtrip-${format}`))!;
+      expect({
+        title: copy.title,
+        shortDescription: copy.shortDescription,
+        longDescription: copy.longDescription,
+        state: copy.state,
+        metadata: copy.metadata,
+        destination: copy.destination,
+        externalKey: copy.externalKey,
+      }).toEqual({
+        title: `${format} listing`,
+        shortDescription: "Round-trip listing",
+        longDescription: "Round trip",
         state: "published",
         metadata: { format, featured: true },
+        destination: "https://destination.example/item",
+        externalKey: `roundtrip-${format}`,
       });
       expect(copy.price.snapshot()).toEqual({ minorAmount: "425", currency: "USD" });
       const gallery = (await app.listingMediaRepository.listByListing(copy.id)).filter(

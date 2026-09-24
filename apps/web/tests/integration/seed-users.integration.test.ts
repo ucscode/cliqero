@@ -1,4 +1,9 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/email", () => ({
+  sendAuthEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { createContainer } from "@/infrastructure/container";
 import {
   DEVELOPMENT_USER_PASSWORD,

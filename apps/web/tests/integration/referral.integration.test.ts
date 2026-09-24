@@ -615,10 +615,12 @@ suite("referral graph and trusted purchase attribution", () => {
   });
   it("calculates bounded exact commission facts without ledger entries", async () => {
     const { buyer, referrer, listing } = await commerce();
+    const level1 = await account("level1");
     const level2 = await account("level2"),
       level3 = await account("level3"),
       level4 = await account("level4");
-    await app.referralGraphService.establish(referrer.id, level2.id);
+    await app.referralGraphService.establish(buyer.id, level1.id);
+    await app.referralGraphService.establish(level1.id, level2.id);
     await app.referralGraphService.establish(level2.id, level3.id);
     await app.referralGraphService.establish(level3.id, level4.id);
     const visit = await app.referralAttribution.visit(referrer.id, listing.id);
@@ -635,6 +637,10 @@ suite("referral graph and trusted purchase attribution", () => {
       correlationId: newId(),
     });
     const purchase = (await app.purchases.findById(checkout.purchaseId!))!;
+    expect(purchase.terms.referralReferrerAccountId).toBe(referrer.id);
+    expect(
+      (await app.referralGraph.getUplines(buyer.id, 4)).map((upline) => upline.accountId),
+    ).toEqual([level1.id, level2.id, level3.id, level4.id]);
     await app.database.query(
       `update referral_capability.commission_policy set rates_basis_points=array[1000,500,333],updated_at=now() where singleton=true`,
     );
@@ -650,7 +656,7 @@ suite("referral graph and trusted purchase attribution", () => {
         amount: fact.calculatedAmount.minorAmount,
       })),
     ).toEqual([
-      { recipient: referrer.id, level: 1, rate: 1000, amount: 100n },
+      { recipient: level1.id, level: 1, rate: 1000, amount: 100n },
       { recipient: level2.id, level: 2, rate: 500, amount: 50n },
       { recipient: level3.id, level: 3, rate: 333, amount: 33n },
     ]);
