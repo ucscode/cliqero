@@ -6,9 +6,11 @@ withdrawable balance. Buyer-wallet funds and company treasury remain separate.
 Withdrawal methods are configured form definitions; saved withdrawal
 destinations are account-owned reusable values for those definitions; each
 withdrawal stores an immutable snapshot of the selected destination. The
-dedicated Withdrawal methods section lists, adds, edits, and archives saved
-destinations. Archived destinations are retained and cannot be selected for new
-requests.
+dedicated Purse section is the account-facing interface that lists, adds, edits,
+and archives saved destinations. “Purse” is user-facing terminology only: a
+withdrawal method remains a configured definition, and a destination remains
+the persisted domain/API resource. Archived destinations are retained and
+cannot be selected for new requests.
 
 Method fields model actual form controls. Each field uses `name` as its
 submitted value identity and may be `text`, `select`, `textarea`, or

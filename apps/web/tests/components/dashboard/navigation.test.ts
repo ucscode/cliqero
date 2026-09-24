@@ -19,9 +19,9 @@ describe("dashboard navigation", () => {
     expect(dashboardSectionTitle("hierarchy")).toBe("Hierarchy");
   });
 
-  it("includes withdrawal methods in Money navigation", () => {
-    expect(source).toContain('label: "Withdrawal methods"');
-    expect(source).toContain("/dashboard?section=withdrawal-methods");
-    expect(dashboardSectionTitle("withdrawal-methods")).toBe("Withdrawal methods");
+  it("includes Purse in Money navigation", () => {
+    expect(source).toContain('label: "Purse"');
+    expect(source).toContain("/dashboard?section=purse");
+    expect(dashboardSectionTitle("purse")).toBe("Purse");
   });
 });

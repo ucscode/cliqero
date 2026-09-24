@@ -10,7 +10,9 @@ describe("withdrawal request UI contract", () => {
     expect(source).toContain("destination_id: destination");
     expect(source).toContain("amount_minor: amountMinor");
     expect(source).toContain("currency,");
-    expect(source).toContain("Add a withdrawal method");
+    expect(source).toContain("Your purse has no available destinations.");
+    expect(source).toContain("/dashboard?section=purse");
+    expect(source).toContain("Add destination");
     expect(source).not.toContain("Payout destination reference");
     expect(source).not.toContain("destination_reference");
     expect(source).not.toContain("destination_type");

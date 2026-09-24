@@ -28,7 +28,7 @@ import { HierarchyPanel } from "../hierarchy/panel";
 import { ReferralsPanel } from "../referral/panel";
 import { EarningsPanel } from "../earnings-panel";
 import { WithdrawalsPanel } from "../withdrawal/panel";
-import { WithdrawalMethodsPanel } from "../withdrawal/methods";
+import { PursePanel } from "../withdrawal/purse/panel";
 import { SettingsPanel } from "../settings";
 import { BrandLink } from "../brand-identity";
 import { CheckoutFlow } from "../checkout/flow";
@@ -223,8 +223,8 @@ export function DashboardShell({
           ? "Fund wallet"
           : section === "withdrawals"
             ? "Withdrawals"
-            : section === "withdrawal-methods"
-              ? "Withdrawal methods"
+            : section === "purse"
+              ? "Purse"
               : section === "settings"
                 ? "Settings"
                 : dashboardSectionTitle(section);
@@ -251,8 +251,8 @@ export function DashboardShell({
     <EarningsPanel />
   ) : section === "withdrawals" ? (
     <WithdrawalsPanel />
-  ) : section === "withdrawal-methods" ? (
-    <WithdrawalMethodsPanel />
+  ) : section === "purse" ? (
+    <PursePanel />
   ) : section === "settings" ? (
     <SettingsPanel />
   ) : buy ? (
