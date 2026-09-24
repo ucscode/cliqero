@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # Paystack payment capability configuration.
   # Copy this tracked template to config/modules/payment/paystack.yaml locally.

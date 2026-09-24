@@ -37,12 +37,16 @@ describe("YAML configuration composition", () => {
       "empty.yaml": "imports:\nparameters:\n",
       "nulls.yaml": "imports: null\nparameters: null\n",
       "arrays.yaml": "imports: []\nparameters: {}\n",
+      "missing-imports.yaml": "parameters:\n  name: Cliqero\n",
       "named.yaml": envelope("name: Cliqero"),
     });
 
     expect(parseYamlConfiguration(join(root, "empty.yaml"))).toEqual({});
     expect(parseYamlConfiguration(join(root, "nulls.yaml"))).toEqual({});
     expect(parseYamlConfiguration(join(root, "arrays.yaml"))).toEqual({});
+    expect(parseYamlConfiguration(join(root, "missing-imports.yaml"))).toEqual({
+      name: "Cliqero",
+    });
     expect(parseYamlConfiguration(join(root, "named.yaml"))).toEqual({ name: "Cliqero" });
   });
 
@@ -53,6 +57,7 @@ describe("YAML configuration composition", () => {
     ["mapping imports", "imports:\n  file: ./child.yaml\nparameters: {}\n"],
     ["scalar parameters", "imports:\nparameters: scalar\n"],
     ["array parameters", "imports:\nparameters:\n  - item\n"],
+    ["missing parameters", "imports:\n"],
     ["absolute imports", "imports:\n  - /tmp/child.yaml\nparameters: {}\n"],
     ["non-YAML imports", "imports:\n  - ./child.json\nparameters: {}\n"],
     ["glob imports", "imports:\n  - ./*.yaml\nparameters: {}\n"],

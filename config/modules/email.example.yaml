@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # Authentication email delivery. Copy to config/modules/email.yaml.
   # Real YAML is ignored by Git and can contain SMTP credentials directly.

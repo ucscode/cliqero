@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # Direct USDT funding on TRON mainnet (TRC20), verified from public chain data.
   # Copy to usdt_trc20.yaml locally and keep enabled=false until configured.

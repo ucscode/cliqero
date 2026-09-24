@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # Manual bank-transfer funding instructions. No automatic confirmation is implied.
   # Copy to bank_transfer.yaml for local use; the non-example file is Git-ignored.

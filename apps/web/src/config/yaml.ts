@@ -98,10 +98,10 @@ function readConfigurationEnvelope(path: string, source: string) {
     (key) => key !== "imports" && key !== "parameters",
   );
   if (unknownKeys.length) invalidEnvelope(path, `unknown root key(s): ${unknownKeys.join(", ")}`);
-  if (!Object.hasOwn(document, "imports") || !Object.hasOwn(document, "parameters"))
-    invalidEnvelope(path, 'both "imports" and "parameters" keys are required');
+  if (!Object.hasOwn(document, "parameters"))
+    invalidEnvelope(path, 'the "parameters" key is required');
 
-  const importsValue = document.imports;
+  const importsValue = Object.hasOwn(document, "imports") ? document.imports : null;
   let imports: string[];
   if (importsValue === null) imports = [];
   else if (Array.isArray(importsValue)) {

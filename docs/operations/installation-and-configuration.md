@@ -107,22 +107,21 @@ The default Docker filesystem root is `/var/lib/cliqero/media` and is persisted
 by the `media-data` volume. Listing media is one consumer of this shared
 registry. The real media YAML is required at runtime and remains ignored.
 
-Every Cliqero configuration YAML uses the same loader envelope. `imports` and
-`parameters` are the only allowed document-root keys; `parameters` holds the
-ordinary configuration object consumed by the existing domain loader:
+Every Cliqero configuration YAML uses `parameters` as its document envelope.
+`imports` is optional and is declared only when that file imports other
+configuration. The parameters mapping holds the ordinary configuration object
+consumed by the existing domain loader:
 
 ```yaml
-imports:
-
 parameters:
   callback_url: "%env(APP_URL)%/some/provider/callback"
 ```
 
-Empty `imports` (`imports:`, `null`, or `[]`) normalizes to an empty list, and
-empty `parameters` (`parameters:`, `null`, or `{}`) normalizes to an empty
-mapping. Configuration values written directly at the document root are
-invalid. Domain schemas continue receiving the effective parameters object and
-do not need to know about the envelope.
+Missing `imports`, `imports:`, `imports: null`, and `imports: []` all normalize
+to an empty list. Empty `parameters` (`parameters:`, `null`, or `{}`) normalizes
+to an empty mapping. Configuration values written directly at the document
+root are invalid. Domain schemas continue receiving the effective parameters
+object and do not need to know about the envelope.
 
 Use imports only to split one complex configuration when useful; they do not
 create a global configuration tree, and existing independently owned config
@@ -134,8 +133,8 @@ configuration errors.
 Composition order is imports in listed order, followed by the importing file's
 own `parameters`. Mappings deep-merge recursively, arrays concatenate in order,
 and later scalar values replace earlier ones. Thus the importing file wins
-conflicts. `null` inside `parameters` remains a real value; only the two
-envelope fields receive empty-value normalization.
+conflicts. `null` inside `parameters` remains a real value; only the envelope
+fields receive empty-value normalization.
 
 For example, a large bank-transfer configuration can import account fragments
 without changing the final object shape accepted by the bank-transfer loader:
@@ -163,8 +162,6 @@ easy local setup.
 YAML may reference an environment value explicitly inside `parameters`:
 
 ```yaml
-imports:
-
 parameters:
   callback_url: "%env(APP_URL)%/some/provider/callback"
 ```
@@ -187,8 +184,6 @@ Use YAML block-style sequences and mappings. Avoid flow-style collections in mai
 Payment-module examples use the same top-level eligibility shape:
 
 ```yaml
-imports:
-
 parameters:
   enabled: true
   display_name: Provider name
@@ -213,8 +208,6 @@ Referral distribution is configured independently from payment providers in `con
 Conceptually:
 
 ```yaml
-imports:
-
 parameters:
   distribution:
     platform:

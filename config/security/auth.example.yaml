@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # Better Auth social providers. Copy to config/security/auth.yaml.
   # Disabled providers are ignored; enabled providers require both credentials.

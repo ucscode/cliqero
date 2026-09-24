@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # Maximum descendant window returned by the hierarchy read API.
   hierarchy:

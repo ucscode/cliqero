@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # Whole-number sale-distribution percentages. The buyer is Level 0 and never
   # receives commission. Level N is the buyer's Nth upline; keys must be positive

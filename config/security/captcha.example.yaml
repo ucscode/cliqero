@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # Optional provider-neutral CAPTCHA capability configuration.
   # Copy to config/security/captcha.yaml. Real YAML files are ignored by Git and

@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # The map key is an arbitrary storage instance identity and is what gets
   # persisted in storage_provider/proof_storage_provider. The nested provider

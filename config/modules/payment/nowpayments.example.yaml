@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   # NOWPayments standard API (sandbox: https://api-sandbox.nowpayments.io).
   # Copy to nowpayments.yaml locally. Set enabled=true only after filling secrets.

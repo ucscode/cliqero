@@ -1,5 +1,3 @@
-imports:
-
 parameters:
   name: Cliqero
   url: "%env(APP_URL)%"
