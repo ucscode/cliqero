@@ -7,7 +7,6 @@ import {
   ApiClientError,
   apiFetch,
   formatMinorCurrency,
-  type EarningsSummary,
   type Withdrawal,
   type WithdrawalPage,
   type WithdrawalPolicy,
@@ -29,23 +28,9 @@ import { WithdrawalHistoryList } from "./history/list";
 
 export const WITHDRAWAL_HISTORY_PREVIEW_SIZE = 5;
 
-function availableEarnings(
-  page: WithdrawalPage | null,
-  summary: EarningsSummary | null,
-  currency: string,
-): string {
-  if (page?.available_minor !== undefined) return page.available_minor;
-  return (
-    summary?.balances.find(
-      (balance) => balance.state === "available" && balance.currency === currency,
-    )?.amount_minor ?? "0"
-  );
-}
-
 export function WithdrawalsPanel() {
   const [policy, setPolicy] = useState<WithdrawalPolicy | null>(null);
   const [page, setPage] = useState<WithdrawalPage | null>(null);
-  const [earnings, setEarnings] = useState<EarningsSummary | null>(null);
   const [destinations, setDestinations] = useState<WithdrawalDestination[]>([]);
   const [amount, setAmount] = useState("");
   const [destination, setDestination] = useState("");
@@ -65,15 +50,13 @@ export function WithdrawalsPanel() {
     else setLoading(true);
     setError(null);
     try {
-      const [nextPolicy, nextPage, nextEarnings, nextDestinations] = await Promise.all([
+      const [nextPolicy, nextPage, nextDestinations] = await Promise.all([
         apiFetch<WithdrawalPolicy>("/api/withdrawals/policy"),
         apiFetch<WithdrawalPage>(`/api/withdrawals?limit=${WITHDRAWAL_HISTORY_PREVIEW_SIZE}`),
-        apiFetch<EarningsSummary>("/api/earnings"),
         apiFetch<WithdrawalDestination[]>("/api/withdrawal-destinations"),
       ]);
       setPolicy(nextPolicy);
       setPage(nextPage);
-      setEarnings(nextEarnings);
       setDestinations(nextDestinations.filter((destination) => destination.method.available));
     } catch (cause) {
       setError(cause instanceof ApiClientError ? cause.message : "We couldn’t load withdrawals.");
@@ -90,7 +73,7 @@ export function WithdrawalsPanel() {
   }, [load]);
 
   const currency = policy?.currency ?? "USD";
-  const availableMinor = availableEarnings(page, earnings, currency);
+  const availableMinor = page?.available_minor ?? "0";
   const reservedMinor =
     page?.reservations.find((reservation) => reservation.currency === currency)?.reserved_minor ??
     "0";

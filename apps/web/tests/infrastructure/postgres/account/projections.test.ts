@@ -7,6 +7,23 @@ function result<T extends object>(rows: T[]): QueryResult<T> {
 }
 
 describe("account projection pagination", () => {
+  it("preserves raw ledger available balances without reservation semantics", async () => {
+    const service = new AccountProjectionService({
+      query: async <T extends object>() =>
+        result([
+          { currency: "USD", balance_state: "available", amount_minor: "340" },
+          { currency: "USD", balance_state: "pending", amount_minor: "50" },
+        ] as T[]),
+    });
+
+    await expect(service.earnings("account")).resolves.toEqual({
+      balances: [
+        { currency: "USD", state: "available", amount_minor: "340" },
+        { currency: "USD", state: "pending", amount_minor: "50" },
+      ],
+    });
+  });
+
   it("uses a created_at/id keyset cursor for purchases", async () => {
     const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
     const sql = {

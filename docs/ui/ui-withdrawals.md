@@ -3,6 +3,12 @@
 The dashboard Withdrawals panel requests settled earnings from the account's
 withdrawable balance. Buyer-wallet funds and company treasury remain separate.
 
+Ledger available earnings are the settled balance recorded by ledger state.
+Withdrawable earnings are the amount currently available for a new withdrawal
+after reservation accounting. Customer-facing “Available earnings” and “Ready
+for withdrawal” use the withdrawable amount; raw ledger balances remain
+available separately for accounting views.
+
 Withdrawal methods are configured form definitions; saved withdrawal
 destinations are account-owned reusable values for those definitions; each
 withdrawal stores an immutable snapshot of the selected destination. The

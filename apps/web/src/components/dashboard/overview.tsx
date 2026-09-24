@@ -54,22 +54,7 @@ export function DashboardOverview({
           </Link>
         </Card>
         <Card className="p-5">
-          <p className="eyebrow">Available earnings</p>
-          <h2 className="my-2 text-3xl font-semibold tracking-tight">
-            <Money
-              minor={
-                earnings?.balances.find((balance) => balance.state === "available")?.amount_minor ??
-                "0"
-              }
-              currency="USD"
-            />
-          </h2>
-          <Link
-            className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
-            href="/dashboard?section=earnings"
-          >
-            View earnings <ArrowUpRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
-          </Link>
+          <OverviewEarningsCard earnings={earnings} />
         </Card>
         <Card className="p-5">
           <p className="eyebrow">Purchases</p>
@@ -96,5 +81,30 @@ export function DashboardOverview({
         </Button>
       </Card>
     </div>
+  );
+}
+
+export function OverviewEarningsCard({ earnings }: { earnings: EarningsSummary | null }) {
+  const withdrawable = earnings?.withdrawable_balances.find(
+    (balance) => balance.currency === earnings.withdrawal_currency,
+  );
+
+  return (
+    <>
+      <p className="eyebrow">Available earnings</p>
+      <h2 className="my-2 text-3xl font-semibold tracking-tight">
+        {withdrawable ? (
+          <Money minor={withdrawable.amount_minor} currency={withdrawable.currency} />
+        ) : (
+          "—"
+        )}
+      </h2>
+      <Link
+        className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+        href="/dashboard?section=earnings"
+      >
+        View earnings <ArrowUpRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
+      </Link>
+    </>
   );
 }

@@ -4,8 +4,15 @@ export type EarningsBalance = {
   amount_minor: string;
 };
 
+export type WithdrawableBalance = {
+  currency: string;
+  amount_minor: string;
+};
+
 export type EarningsSummary = {
   balances: EarningsBalance[];
+  withdrawal_currency: string;
+  withdrawable_balances: WithdrawableBalance[];
 };
 
 export type EarningsEntry = {

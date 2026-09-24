@@ -75,7 +75,10 @@ export function EarningsPanel() {
     void load(entryCursors[previousIndex]);
   };
 
-  const available = summary?.balances.find((balance) => balance.state === "available") ?? null;
+  const withdrawable =
+    summary?.withdrawable_balances.find(
+      (balance) => balance.currency === summary.withdrawal_currency,
+    ) ?? null;
   const pending = summary?.balances.find((balance) => balance.state === "pending") ?? null;
 
   return (
@@ -109,7 +112,7 @@ export function EarningsPanel() {
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-3">
-            <EarningsHighlight available={available} />
+            <EarningsHighlight withdrawable={withdrawable} />
             <Card className="p-5">
               <p className="eyebrow">Pending earnings</p>
               <p className="mt-4 text-3xl font-semibold tracking-tight">
@@ -146,9 +149,9 @@ export function EarningsPanel() {
 }
 
 export function EarningsHighlight({
-  available,
+  withdrawable,
 }: {
-  available: EarningsSummary["balances"][number] | null;
+  withdrawable: EarningsSummary["withdrawable_balances"][number] | null;
 }) {
   return (
     <Card className="relative overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-amber-50 p-6 shadow-md md:col-span-2">
@@ -162,7 +165,11 @@ export function EarningsHighlight({
         </span>
       </div>
       <p className="relative mt-8 text-4xl font-bold tracking-tight text-slate-950">
-        <Money minor={available?.amount_minor ?? "0"} currency={available?.currency ?? "USD"} />
+        {withdrawable ? (
+          <Money minor={withdrawable.amount_minor} currency={withdrawable.currency} />
+        ) : (
+          "—"
+        )}
       </p>
       <p className="relative mt-3 max-w-md text-sm leading-relaxed text-slate-600">
         Seller and referral earnings available to request for payout.

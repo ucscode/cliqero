@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   EarningsActivity,
   EarningsHighlight,
   earningsEntriesUrl,
 } from "@/components/earnings-panel";
+import { OverviewEarningsCard } from "@/components/dashboard/overview";
+
+const earningsPanelSource = readFileSync(
+  resolve(process.cwd(), "src/components/earnings-panel.tsx"),
+  "utf8",
+);
 
 const entries = {
   items: [
@@ -36,16 +44,60 @@ const entries = {
 };
 
 describe("earnings panel presentation", () => {
-  it("highlights the available earnings amount", () => {
+  it("highlights the withdrawable amount using its projected currency", () => {
     const output = renderToStaticMarkup(
       createElement(EarningsHighlight, {
-        available: { currency: "USD", state: "available", amount_minor: "12345" },
+        withdrawable: { currency: "NGN", amount_minor: "230" },
       }),
     );
 
     expect(output).toContain("Available earnings");
     expect(output).toContain("Ready for withdrawal");
-    expect(output).toContain("$123.45");
+    expect(output).toContain("NGN");
+    expect(output).toContain("2.30");
+    expect(earningsPanelSource).toContain("summary?.withdrawable_balances.find");
+    expect(earningsPanelSource).not.toContain(
+      'summary?.balances.find((balance) => balance.state === "available")',
+    );
+  });
+
+  it("renders the overview withdrawable balance rather than the raw ledger balance", () => {
+    const output = renderToStaticMarkup(
+      createElement(OverviewEarningsCard, {
+        earnings: {
+          balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
+          withdrawal_currency: "USD",
+          withdrawable_balances: [{ currency: "USD", amount_minor: "230" }],
+        },
+      }),
+    );
+
+    expect(output).toContain("Available earnings");
+    expect(output).toContain("$2.30");
+    expect(output).not.toContain("$3.40");
+    expect(output).toContain("View earnings");
+  });
+
+  it("selects the withdrawal-policy currency when multiple balances exist", () => {
+    const output = renderToStaticMarkup(
+      createElement(OverviewEarningsCard, {
+        earnings: {
+          balances: [
+            { currency: "USD", state: "available", amount_minor: "900" },
+            { currency: "NGN", state: "available", amount_minor: "1000" },
+          ],
+          withdrawal_currency: "NGN",
+          withdrawable_balances: [
+            { currency: "NGN", amount_minor: "230" },
+            { currency: "USD", amount_minor: "800" },
+          ],
+        },
+      }),
+    );
+
+    expect(output).toContain("NGN");
+    expect(output).toContain("2.30");
+    expect(output).not.toContain("$8.00");
   });
 
   it("keeps activity calm and does not expose purchase UUIDs", () => {

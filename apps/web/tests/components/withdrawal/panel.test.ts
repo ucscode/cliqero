@@ -82,4 +82,10 @@ describe("withdrawal request UI contract", () => {
     expect(source).toContain("Withdrawals are currently disabled.");
     expect(source).not.toContain("setTimeout");
   });
+
+  it("uses the withdrawal resource's authoritative available amount", () => {
+    expect(source).toContain('const availableMinor = page?.available_minor ?? "0";');
+    expect(source).not.toContain('apiFetch<EarningsSummary>("/api/earnings")');
+    expect(source).not.toContain('balance.state === "available"');
+  });
 });

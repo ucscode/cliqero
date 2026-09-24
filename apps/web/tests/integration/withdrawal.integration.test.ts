@@ -353,6 +353,34 @@ suite("withdrawal lifecycle", () => {
     );
     expect(events.rows[0]?.kind).toBe("released");
   });
+  it("reflects reserved, released, and completed amounts in withdrawable earnings", async () => {
+    const { seller, destinationId } = await setup();
+    const initial = await app.fundsReservation.available(seller.id, "USD");
+
+    const released = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 1100n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: "availability-release",
+      correlationId: newId(),
+    });
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initial - 1100n);
+    await app.withdrawals.reject(seller.id, released.id, "release reservation");
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initial);
+
+    const completed = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 1100n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: "availability-complete",
+      correlationId: newId(),
+    });
+    await app.withdrawals.approve(seller.id, completed.id);
+    await app.withdrawals.complete(seller.id, completed.id);
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initial - 1100n);
+  });
   it("does not allow cancellation after approval and keeps ownership immutable", async () => {
     const { seller, destinationId } = await setup();
     const withdrawal = await app.withdrawals.request({
