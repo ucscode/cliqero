@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { imageSize } from "image-size-next";
 import { fixturePng } from "@/infrastructure/postgres/seed/fixture-media";
 import { inspectImage, MAX_IMAGE_BYTES } from "@/modules/listing/media/image";
 
@@ -29,8 +30,15 @@ describe("listing image inspection", () => {
     expect(() => inspectImage(new Uint8Array())).toThrow("empty");
     expect(() => inspectImage(new Uint8Array(MAX_IMAGE_BYTES + 1))).toThrow("10 MiB");
     expect(() => inspectImage(new Uint8Array([0xff, 0xd8, 0xff]))).toThrow();
-    expect(() => inspectImage(onePixelBmp)).toThrow("Unsupported image type");
+    expect(() => inspectImage(onePixelBmp)).toThrow();
     expect(() => inspectImage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toThrow();
+  });
+
+  it("disables unsupported image-size-next parsers at module initialization", () => {
+    expect(() => imageSize(onePixelBmp)).toThrow("disabled file type: bmp");
+    expect(() => imageSize(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toThrow(
+      "disabled file type: svg",
+    );
   });
 
   it("rejects a declared MIME type that differs from detected bytes", () => {
