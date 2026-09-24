@@ -9,6 +9,7 @@ import {
   earningsEntriesUrl,
 } from "@/components/earnings-panel";
 import { OverviewEarningsCard } from "@/components/dashboard/overview";
+import { findWithdrawableBalance } from "@/components/earnings/withdrawable";
 
 const earningsPanelSource = readFileSync(
   resolve(process.cwd(), "src/components/earnings-panel.tsx"),
@@ -55,7 +56,7 @@ describe("earnings panel presentation", () => {
     expect(output).toContain("Ready for withdrawal");
     expect(output).toContain("NGN");
     expect(output).toContain("2.30");
-    expect(earningsPanelSource).toContain("summary?.withdrawable_balances.find");
+    expect(earningsPanelSource).toContain("findWithdrawableBalance(summary)");
     expect(earningsPanelSource).not.toContain(
       'summary?.balances.find((balance) => balance.state === "available")',
     );
@@ -76,6 +77,57 @@ describe("earnings panel presentation", () => {
     expect(output).toContain("$2.30");
     expect(output).not.toContain("$3.40");
     expect(output).toContain("View earnings");
+  });
+
+  it("shows unavailable when the overview earnings summary is null", () => {
+    const output = renderToStaticMarkup(createElement(OverviewEarningsCard, { earnings: null }));
+
+    expect(output).toContain("Available earnings");
+    expect(output).toContain(">—</h2>");
+  });
+
+  it("keeps overview safe when a stale response omits withdrawable balances", () => {
+    const staleSummary = {
+      balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
+      withdrawal_currency: "USD",
+    } as unknown as Parameters<typeof OverviewEarningsCard>[0]["earnings"];
+    const output = renderToStaticMarkup(
+      createElement(OverviewEarningsCard, { earnings: staleSummary }),
+    );
+
+    expect(output).toContain(">—</h2>");
+    expect(output).not.toContain("$3.40");
+  });
+
+  it("keeps overview safe when a stale response omits withdrawal currency", () => {
+    const staleSummary = {
+      balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
+      withdrawable_balances: [{ currency: "USD", amount_minor: "230" }],
+    } as unknown as Parameters<typeof OverviewEarningsCard>[0]["earnings"];
+    const output = renderToStaticMarkup(
+      createElement(OverviewEarningsCard, { earnings: staleSummary }),
+    );
+
+    expect(output).toContain(">—</h2>");
+  });
+
+  it("keeps the earnings summary selector safe for partial runtime responses", () => {
+    const staleWithoutProjection = {
+      balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
+      withdrawal_currency: "USD",
+    } as unknown as NonNullable<Parameters<typeof findWithdrawableBalance>[0]>;
+    const staleWithoutCurrency = {
+      balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
+      withdrawable_balances: [{ currency: "USD", amount_minor: "230" }],
+    } as unknown as NonNullable<Parameters<typeof findWithdrawableBalance>[0]>;
+
+    expect(findWithdrawableBalance(null)).toBeNull();
+    expect(findWithdrawableBalance(staleWithoutProjection)).toBeNull();
+    expect(findWithdrawableBalance(staleWithoutCurrency)).toBeNull();
+    expect(earningsPanelSource).toContain("findWithdrawableBalance(summary)");
+    expect(earningsPanelSource).not.toContain(
+      'summary?.balances.find((balance) => balance.state === "available")',
+    );
   });
 
   it("selects the withdrawal-policy currency when multiple balances exist", () => {

@@ -14,6 +14,7 @@ import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Money } from "../money";
 import { Toast } from "../toast";
+import { findWithdrawableBalance } from "../earnings/withdrawable";
 
 export function DashboardOverview({
   profile,
@@ -85,9 +86,7 @@ export function DashboardOverview({
 }
 
 export function OverviewEarningsCard({ earnings }: { earnings: EarningsSummary | null }) {
-  const withdrawable = earnings?.withdrawable_balances.find(
-    (balance) => balance.currency === earnings.withdrawal_currency,
-  );
+  const withdrawable = findWithdrawableBalance(earnings);
 
   return (
     <>

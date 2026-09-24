@@ -16,6 +16,7 @@ import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
 import { Toast } from "./toast";
 import { Money } from "./money";
+import { findWithdrawableBalance } from "./earnings/withdrawable";
 
 const EARNINGS_PAGE_SIZE = 25;
 
@@ -75,10 +76,7 @@ export function EarningsPanel() {
     void load(entryCursors[previousIndex]);
   };
 
-  const withdrawable =
-    summary?.withdrawable_balances.find(
-      (balance) => balance.currency === summary.withdrawal_currency,
-    ) ?? null;
+  const withdrawable = findWithdrawableBalance(summary);
   const pending = summary?.balances.find((balance) => balance.state === "pending") ?? null;
 
   return (
