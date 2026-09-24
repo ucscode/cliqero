@@ -58,10 +58,8 @@ import { SettlementProcessor } from "@/processors/ledger/settlement";
 import { PostgresSettlementStore } from "@/infrastructure/postgres/ledger/settlement";
 import { PostgresSettlementPolicyRepository } from "@/infrastructure/postgres/ledger/settlement-policy";
 import { PostgresLedgerFundsReservationService } from "@/infrastructure/postgres/ledger/reservations";
-import {
-  PostgresWithdrawalPolicyRepository,
-  PostgresWithdrawalRepository,
-} from "@/infrastructure/postgres/withdrawal/withdrawals";
+import { PostgresWithdrawalRepository } from "@/infrastructure/postgres/withdrawal/withdrawals";
+import { WithdrawalPolicyLoader } from "@/modules/withdrawal/policy/loader";
 import { WithdrawalService } from "@/application/withdrawal/service";
 import { PostgresPaystackOperationsRepository } from "@/infrastructure/postgres/payment/paystack/operations";
 import { ExchangeRateService } from "@/modules/money/exchange-service";
@@ -242,7 +240,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         database,
       ),
   );
-  const withdrawalPolicy = lazy(() => new PostgresWithdrawalPolicyRepository(database));
+  const withdrawalPolicy = lazy(() => new WithdrawalPolicyLoader());
   const fundsReservation = lazy(() => new PostgresLedgerFundsReservationService(database));
   const withdrawalPersistence = lazy(() => new PostgresWithdrawalPersistence(database, database));
   const withdrawals = lazy(

@@ -15,9 +15,6 @@ suite("withdrawal lifecycle", () => {
     await app.database.query(
       `update referral_capability.commission_policy set rates_basis_points='{}'`,
     );
-    await app.database.query(
-      `update withdrawal_capability.policy set minimum_amount_minor=1,maximum_amount_minor=null,currency='USD',enabled=true`,
-    );
   });
   afterAll(() => app.database.close());
   async function setup() {
@@ -98,6 +95,33 @@ suite("withdrawal lifecycle", () => {
       }),
     ).resolves.toMatchObject({ id: first.id });
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(8000n);
+  });
+  it("paginates account history by stable keyset without overlap and remains account-scoped", async () => {
+    const { seller, buyer, destinationId } = await setup();
+    for (let index = 0; index < 3; index += 1) {
+      await app.withdrawals.request({
+        accountId: seller.id,
+        amountMinor: 100n,
+        currency: "USD",
+        destinationId,
+        idempotencyKey: `history-page-${index}`,
+        correlationId: newId(),
+      });
+    }
+    const first = await app.withdrawalRepository.listForAccount(seller.id, { limit: 2 });
+    expect(first.items).toHaveLength(2);
+    expect(first.nextCursor).toBeTruthy();
+    const second = await app.withdrawalRepository.listForAccount(seller.id, {
+      cursor: first.nextCursor!,
+      limit: 2,
+    });
+    const ids = [...first.items, ...second.items].map((item) => item.id);
+    expect(second.items).toHaveLength(1);
+    expect(new Set(ids).size).toBe(3);
+    expect(second.nextCursor).toBeNull();
+    expect(
+      (await app.withdrawalRepository.listForAccount(buyer.id, { limit: 10 })).items,
+    ).toHaveLength(0);
   });
   it("snapshots destination facts and leaves idempotent retries bound to the original destination ID", async () => {
     const { seller, destinationId } = await setup();
@@ -205,7 +229,7 @@ suite("withdrawal lifecycle", () => {
       }),
     ).rejects.toThrow("already used for another request");
     expect(
-      (await app.withdrawalRepository.listForAccount(seller.id)).filter(
+      (await app.withdrawalRepository.listForAccount(seller.id, { limit: 50 })).items.filter(
         (item) => item.id === first.id,
       ),
     ).toHaveLength(1);
@@ -233,7 +257,7 @@ suite("withdrawal lifecycle", () => {
     ]);
     expect(results[0].id).toBe(results[1].id);
     expect(
-      (await app.withdrawalRepository.listForAccount(seller.id)).filter(
+      (await app.withdrawalRepository.listForAccount(seller.id, { limit: 50 })).items.filter(
         (item) => item.id === results[0].id,
       ),
     ).toHaveLength(1);

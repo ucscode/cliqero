@@ -41,16 +41,36 @@ renderer translates names such as `autocomplete` and `maxlength`
 internally. The browser mirrors `regex` through the HTML `pattern` attribute
 for early feedback, but the server remains authoritative.
 
+The required deployment policy is loaded from
+`config/modules/withdrawal/policy.yaml` through the shared YAML configuration
+loader. It declares `enabled`, an uppercase three-letter `currency`, a positive
+integer `minimum_amount_minor`, and a positive integer or `null`
+`maximum_amount_minor`; monetary limits are integer minor units (for example,
+USD 100 means $1.00), and a configured maximum cannot be below the minimum.
+There is no PostgreSQL withdrawal-policy table or database fallback. Missing or
+invalid policy configuration prevents withdrawal operations from silently
+using an invented default.
+
 The panel reads policy, earnings, and saved destinations, then submits
 `POST /api/withdrawals` with `amount_minor`, `currency`, and the owned
-`destination_id`, plus an idempotency key. It never accepts free-form payment
-details. The server validates method availability and snapshots ordered field
-labels, values, types, and copy metadata before reserving available earnings
-atomically. Customer withdrawal history exposes only method/name identity, not
-bank or wallet fields. Completed reservations remain consumed by the
-withdrawable projection; released reservations become available again. User
-cancellation is offered only while a request is still `requested` and uses
-`PATCH /api/withdrawals/:id` with `{ "status": "cancelled" }`.
+`destination_id`, plus an idempotency key. The customer form asks only for the
+amount and payout method; it has no free-form withdrawal note. It never accepts
+free-form payment details. The server validates method availability and
+snapshots ordered field labels, values, types, and copy metadata before
+reserving available earnings atomically. Customer withdrawal history exposes
+only method/name identity, not bank or wallet fields. Completed reservations
+remain consumed by the withdrawable projection; released reservations become
+available again. User cancellation is offered only while a request is still
+`requested` and uses `PATCH /api/withdrawals/:id` with
+`{ "status": "cancelled" }`.
+
+The Withdrawals dashboard displays only the five most recent requests as a
+preview. “View full history” opens `/dashboard/withdrawals/history`. That page
+uses account-scoped server-side keyset pagination (`limit` and opaque
+`next_cursor` on `GET /api/withdrawals`); each page contains at most 25
+withdrawals, ordered newest-first by creation time and stable database ID.
+Previous-page navigation reuses the cursor trail rather than loading the whole
+history into the browser.
 
 An approved withdrawal is paid manually outside Cliqero. The operator then
 records the already-sent payment, optional external reference, and note through

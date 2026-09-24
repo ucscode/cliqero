@@ -4,7 +4,7 @@ import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { LedgerFundsReservationService } from "@/modules/ledger/reservations";
 import type {
   Withdrawal,
-  WithdrawalPolicyRepository,
+  WithdrawalPolicySource,
   WithdrawalRepository,
 } from "@/modules/withdrawal/withdrawal";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
@@ -14,7 +14,7 @@ import type { WithdrawalDestinationService } from "@/application/withdrawal/dest
 export class WithdrawalService {
   constructor(
     private readonly withdrawals: WithdrawalRepository,
-    private readonly policy: WithdrawalPolicyRepository,
+    private readonly policy: WithdrawalPolicySource,
     private readonly funds: LedgerFundsReservationService,
     private readonly outbox: EventOutbox,
     private readonly uow: UnitOfWork,
@@ -98,8 +98,8 @@ export class WithdrawalService {
     if (!same) throw new Error("Withdrawal idempotency key is already used for another request");
     return existing;
   }
-  async list(accountId: string) {
-    return this.withdrawals.listForAccount(accountId);
+  async list(accountId: string, page: { cursor?: string; limit: number }) {
+    return this.withdrawals.listForAccount(accountId, page);
   }
   async get(accountId: string, id: string) {
     const withdrawal = await this.withdrawals.findById(id);

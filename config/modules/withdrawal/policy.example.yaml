@@ -1,0 +1,11 @@
+# Controls whether accounts can request withdrawals and the accepted amount
+# boundaries. Runtime policy is required from policy.yaml.
+parameters:
+  enabled: true
+  currency: USD
+
+  # Monetary limits use integer minor units (USD 100 = $1.00).
+  minimum_amount_minor: 100
+
+  # null means there is no configured maximum.
+  maximum_amount_minor: null

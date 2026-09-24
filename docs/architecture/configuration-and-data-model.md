@@ -39,6 +39,13 @@ other Cliqero YAML, the runtime file uses `parameters` and may optionally
 compose relative YAML imports through the central loader; withdrawal code
 consumes the resulting effective parameters.
 
+Withdrawal request limits are required deployment configuration at
+`config/modules/withdrawal/policy.yaml`, documented by
+`policy.example.yaml`. The shared YAML loader provides the effective
+`enabled`, currency, minimum, and optional maximum values to the withdrawal
+application service. Limits use integer minor units. They are not mutable
+PostgreSQL policy state; missing or invalid YAML is a configuration error.
+
 ## Deployment values
 
 Environment variables cover concerns such as application URL, PostgreSQL bootstrap connection, Better Auth bootstrap values, ports, and persistent paths. See [Installation and Configuration](../operations/installation-and-configuration.md).

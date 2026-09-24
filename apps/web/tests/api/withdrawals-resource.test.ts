@@ -9,6 +9,7 @@ vi.mock("@/infrastructure/container", () => ({
 
 import * as withdrawalRoute from "@/api/compat/withdrawals/[id]/route";
 import * as withdrawalCollectionRoute from "@/api/compat/withdrawals/route";
+import * as withdrawalPolicyRoute from "@/api/compat/withdrawals/policy/route";
 
 const withdrawal = {
   id: "00000000-0000-4000-8000-000000000010",
@@ -30,6 +31,81 @@ const withdrawal = {
 };
 
 describe("owner withdrawal resource mutation", () => {
+  it("returns an account-scoped cursor page alongside balances and reservations", async () => {
+    const list = vi.fn(async () => ({
+      items: [withdrawal],
+      nextCursor: "next-cursor",
+    }));
+    fixtures.container = {
+      principalResolver: {
+        resolve: vi.fn(async () => ({
+          accountId: withdrawal.accountId,
+          account: { id: withdrawal.accountId },
+          kind: "user_session",
+          capabilities: [],
+          scopes: new Set<string>(),
+        })),
+      },
+      withdrawals: { list },
+      fundsReservation: {
+        summarize: vi.fn(async () => []),
+        available: vi.fn(async () => 9000n),
+      },
+      withdrawalPolicy: {
+        getActive: vi.fn(async () => ({
+          enabled: true,
+          minimumAmount: Money.of(100n, "USD"),
+          maximumAmount: null,
+        })),
+      },
+    };
+    const response = await withdrawalCollectionRoute.GET(
+      new Request("http://localhost/api/withdrawals?limit=25&cursor=opaque-cursor"),
+    );
+    expect(response.status).toBe(200);
+    expect(list).toHaveBeenCalledWith(withdrawal.accountId, {
+      limit: 25,
+      cursor: "opaque-cursor",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      withdrawals: [{ id: withdrawal.id }],
+      next_cursor: "next-cursor",
+      available_minor: "9000",
+      reservations: [],
+    });
+  });
+
+  it("serves the effective configured policy contract to authenticated callers", async () => {
+    const getActive = vi.fn(async () => ({
+      enabled: false,
+      minimumAmount: Money.of(750n, "NGN"),
+      maximumAmount: Money.of(50_000n, "NGN"),
+    }));
+    fixtures.container = {
+      principalResolver: {
+        resolve: vi.fn(async () => ({
+          accountId: withdrawal.accountId,
+          account: { id: withdrawal.accountId },
+          kind: "user_session",
+          capabilities: [],
+          scopes: new Set<string>(),
+        })),
+      },
+      withdrawalPolicy: { getActive },
+    };
+    const response = await withdrawalPolicyRoute.GET(
+      new Request("http://localhost/api/withdrawals/policy"),
+    );
+    expect(response.status).toBe(200);
+    expect(getActive).toHaveBeenCalledOnce();
+    await expect(response.json()).resolves.toEqual({
+      enabled: false,
+      minimum_amount_minor: "750",
+      maximum_amount_minor: "50000",
+      currency: "NGN",
+    });
+  });
+
   it("accepts destination_id and rejects the legacy free-form destination contract", async () => {
     const request = vi.fn(async () => withdrawal);
     fixtures.container = {
@@ -78,6 +154,19 @@ describe("owner withdrawal resource mutation", () => {
       }),
     );
     expect(legacy.status).toBe(400);
+    const note = await withdrawalCollectionRoute.POST(
+      new Request("http://localhost/api/withdrawals", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": "withdrawal-3" },
+        body: JSON.stringify({
+          amount_minor: "1250",
+          currency: "USD",
+          destination_id: withdrawal.destination.savedDestinationId,
+          note: "please expedite",
+        }),
+      }),
+    );
+    expect(note.status).toBe(400);
     expect(request).toHaveBeenCalledTimes(1);
   });
 

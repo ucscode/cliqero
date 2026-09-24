@@ -29,6 +29,11 @@ async function fixtureRoot() {
     join(root, "config", "security", "auth.example.yml"),
     configurationEnvelope("social: {}\n"),
   );
+  await mkdir(join(root, "config", "modules", "withdrawal"), { recursive: true });
+  await writeFile(
+    join(root, "config", "modules", "withdrawal", "policy.example.yaml"),
+    configurationEnvelope("enabled: true\n"),
+  );
   return root;
 }
 
@@ -43,6 +48,7 @@ describe("local configuration bundle generator", () => {
     expect(await discoverExampleConfiguration(root)).toEqual([
       ".env.example",
       "config/future/nested.example.yaml",
+      "config/modules/withdrawal/policy.example.yaml",
       "config/security/auth.example.yml",
       "config/site.example.yaml",
     ]);
@@ -50,6 +56,7 @@ describe("local configuration bundle generator", () => {
     expect(bundle.files).toEqual([
       ".env",
       "config/future/nested.yaml",
+      "config/modules/withdrawal/policy.yaml",
       "config/security/auth.yml",
       "config/site.yaml",
     ]);
@@ -59,6 +66,9 @@ describe("local configuration bundle generator", () => {
     await expect(readFile(join(bundle.destination, "config", "site.yaml"), "utf8")).resolves.toBe(
       configurationEnvelope("name: Example\n"),
     );
+    await expect(
+      readFile(join(bundle.destination, "config", "modules", "withdrawal", "policy.yaml"), "utf8"),
+    ).resolves.toBe(configurationEnvelope("enabled: true\n"));
     await expect(
       readFile(join(bundle.destination, "config", "security", "auth.yml"), "utf8"),
     ).resolves.toBe(configurationEnvelope("social: {}\n"));

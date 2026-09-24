@@ -1654,22 +1654,6 @@ ALTER TABLE wallet_capability.debits ALTER COLUMN id ADD GENERATED ALWAYS AS IDE
 
 
 --
--- Name: policy; Type: TABLE; Schema: withdrawal_capability; Owner: -
---
-
-CREATE TABLE withdrawal_capability.policy (
-    singleton boolean DEFAULT true NOT NULL,
-    minimum_amount_minor bigint DEFAULT 100 NOT NULL,
-    maximum_amount_minor bigint,
-    currency text DEFAULT 'USD'::text NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
-    CONSTRAINT policy_singleton_check CHECK (singleton),
-    CONSTRAINT withdrawal_policy_currency_format CHECK ((currency ~ '^[A-Z]{3}$'::text)),
-    CONSTRAINT withdrawal_policy_max_valid CHECK (((maximum_amount_minor IS NULL) OR (maximum_amount_minor >= minimum_amount_minor))),
-    CONSTRAINT withdrawal_policy_min_positive CHECK ((minimum_amount_minor > 0))
-);
-
-
 --
 -- Name: withdrawals; Type: TABLE; Schema: withdrawal_capability; Owner: -
 --
@@ -2576,13 +2560,6 @@ ALTER TABLE ONLY wallet_capability.debits
 
 
 --
--- Name: policy policy_pkey; Type: CONSTRAINT; Schema: withdrawal_capability; Owner: -
---
-
-ALTER TABLE ONLY withdrawal_capability.policy
-    ADD CONSTRAINT policy_pkey PRIMARY KEY (singleton);
-
-
 --
 -- Name: withdrawals withdrawals_idempotency_key_key; Type: CONSTRAINT; Schema: withdrawal_capability; Owner: -
 --
@@ -3676,8 +3653,5 @@ VALUES (true, '00000000-0000-4000-8000-000000000001');
 
 INSERT INTO referral_capability.commission_policy (singleton, rates_basis_points)
 VALUES (true, '{}');
-
-INSERT INTO withdrawal_capability.policy (singleton)
-VALUES (true);
 
 -- End of canonical PostgreSQL baseline.

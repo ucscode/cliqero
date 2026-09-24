@@ -51,14 +51,17 @@ export interface WithdrawalPolicy {
   maximumAmount: Money | null;
   enabled: boolean;
 }
-export interface WithdrawalPolicyRepository {
+export interface WithdrawalPolicySource {
   getActive(): Promise<WithdrawalPolicy>;
 }
 export interface WithdrawalRepository {
   findById(id: string): Promise<Withdrawal | null>;
   findByIdForUpdate(id: string): Promise<Withdrawal | null>;
   findByIdempotencyKey(key: string): Promise<Withdrawal | null>;
-  listForAccount(accountId: string): Promise<readonly Withdrawal[]>;
+  listForAccount(
+    accountId: string,
+    page: { cursor?: string; limit: number },
+  ): Promise<{ items: readonly Withdrawal[]; nextCursor: string | null }>;
   listForOperator(filter?: {
     state?: WithdrawalState;
     limit?: number;

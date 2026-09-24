@@ -6,8 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import {
   ApiClientError,
   apiFetch,
-  formatMinorUsd,
-  parseUsdMinor,
+  formatMinorCurrency,
   type EarningsSummary,
   type Withdrawal,
   type WithdrawalPage,
@@ -21,36 +20,15 @@ import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { Label } from "../ui/label";
 import { Skeleton } from "../ui/skeleton";
-import { EmptyState } from "../empty-state";
 import { HoneypotField } from "../honeypot-field";
 import { Toast } from "../toast";
 import { Money } from "../money";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
+import { parseWithdrawalAmount, withdrawalRequestErrorField } from "./model";
+import { WithdrawalHistoryList } from "./history/list";
 
 const activeStates = new Set<Withdrawal["state"]>(["requested", "approved"]);
-
-function stateLabel(state: Withdrawal["state"]): string {
-  switch (state) {
-    case "requested":
-      return "Request received";
-    case "approved":
-      return "Approved · payment required";
-    case "completed":
-      return "Payment completed";
-    case "rejected":
-      return "Withdrawal rejected";
-    case "cancelled":
-      return "Withdrawal cancelled";
-    case "failed":
-      return "Payment failed";
-  }
-}
-
-function stateTone(state: Withdrawal["state"]): "neutral" | "accent" | "success" {
-  if (state === "completed") return "success";
-  if (state === "requested" || state === "approved") return "accent";
-  return "neutral";
-}
+export const WITHDRAWAL_HISTORY_PREVIEW_SIZE = 5;
 
 function availableEarnings(
   page: WithdrawalPage | null,
@@ -76,6 +54,9 @@ export function WithdrawalsPanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [destinationError, setDestinationError] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
   const requestSignature = useRef<string | null>(null);
@@ -87,7 +68,7 @@ export function WithdrawalsPanel() {
     try {
       const [nextPolicy, nextPage, nextEarnings, nextDestinations] = await Promise.all([
         apiFetch<WithdrawalPolicy>("/api/withdrawals/policy"),
-        apiFetch<WithdrawalPage>("/api/withdrawals"),
+        apiFetch<WithdrawalPage>(`/api/withdrawals?limit=${WITHDRAWAL_HISTORY_PREVIEW_SIZE}`),
         apiFetch<EarningsSummary>("/api/earnings"),
         apiFetch<WithdrawalDestination[]>("/api/withdrawal-destinations"),
       ]);
@@ -145,32 +126,39 @@ export function WithdrawalsPanel() {
     event.preventDefault();
     const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     setError(null);
+    setAmountError(null);
+    setDestinationError(null);
+    setRequestError(null);
     setSuccess(null);
     let amountMinor: string;
     try {
-      amountMinor = parseUsdMinor(amount);
+      amountMinor = parseWithdrawalAmount(amount, currency);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Enter a valid amount.");
+      setAmountError(cause instanceof Error ? cause.message : "Enter a valid amount.");
       return;
     }
     if (!policy?.enabled) {
-      setError("Withdrawals are currently unavailable.");
+      setRequestError("Withdrawals are currently unavailable.");
       return;
     }
     if (BigInt(amountMinor) < BigInt(policy.minimum_amount_minor)) {
-      setError(`The minimum withdrawal is ${formatMinorUsd(policy.minimum_amount_minor)}.`);
+      setAmountError(
+        `The minimum withdrawal is ${formatMinorCurrency(policy.minimum_amount_minor, currency)}.`,
+      );
       return;
     }
     if (policy.maximum_amount_minor && BigInt(amountMinor) > BigInt(policy.maximum_amount_minor)) {
-      setError(`The maximum withdrawal is ${formatMinorUsd(policy.maximum_amount_minor)}.`);
+      setAmountError(
+        `The maximum withdrawal is ${formatMinorCurrency(policy.maximum_amount_minor, currency)}.`,
+      );
       return;
     }
     if (BigInt(amountMinor) > BigInt(availableMinor)) {
-      setError("This amount is greater than your available earnings.");
+      setAmountError("This amount is greater than your available earnings.");
       return;
     }
     if (!destination.trim()) {
-      setError("Choose a saved withdrawal destination.");
+      setDestinationError("Choose a payout method.");
       return;
     }
     const signature = `${amountMinor}|${destination}`;
@@ -194,11 +182,18 @@ export function WithdrawalsPanel() {
         }),
       });
       setSuccess("Withdrawal request received. Payment follows operator review.");
+      setAmount("");
+      setDestination("");
+      requestSignature.current = null;
+      idempotencyKey.current = null;
       await load(true);
     } catch (cause) {
-      setError(
-        cause instanceof ApiClientError ? cause.message : "Withdrawal could not be created.",
-      );
+      const message =
+        cause instanceof ApiClientError ? cause.message : "Withdrawal could not be created.";
+      const field = withdrawalRequestErrorField(message);
+      if (field === "amount") setAmountError(message);
+      else if (field === "destination") setDestinationError(message);
+      else setRequestError(message);
     } finally {
       setSubmitting(false);
     }
@@ -277,11 +272,11 @@ export function WithdrawalsPanel() {
               <h3 className="my-2 text-2xl">
                 <Money minor={policy?.minimum_amount_minor ?? "0"} currency={currency} />
               </h3>
-              <p className="text-sm leading-relaxed text-slate-500">
-                {policy?.enabled
-                  ? "Policy supplied by Cliqero."
-                  : "Withdrawals are currently disabled."}
-              </p>
+              {!policy?.enabled && (
+                <p className="text-sm leading-relaxed text-slate-500">
+                  Withdrawals are currently disabled.
+                </p>
+              )}
             </Card>
           </div>
           <Card className="min-w-0 p-5">
@@ -292,38 +287,61 @@ export function WithdrawalsPanel() {
               </Badge>
             </div>
             <form className="grid max-w-2xl gap-3" onSubmit={submit}>
-              <Label htmlFor="withdrawal-amount">Amount (USD)</Label>
+              <Label htmlFor="withdrawal-amount">Amount ({currency})</Label>
               <Input
                 id="withdrawal-amount"
                 inputMode="decimal"
                 placeholder="0.00"
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setAmountError(null);
+                }}
                 disabled={!policy?.enabled || submitting}
+                aria-invalid={Boolean(amountError)}
+                aria-describedby={amountError ? "withdrawal-amount-error" : undefined}
               />
+              {amountError && (
+                <p className="text-sm text-red-700" id="withdrawal-amount-error" role="alert">
+                  {amountError}
+                </p>
+              )}
               <span className="text-xs text-slate-500">
-                Minimum {formatMinorUsd(policy?.minimum_amount_minor ?? "0")}
+                Minimum {formatMinorCurrency(policy?.minimum_amount_minor ?? "0", currency)}
                 {policy?.maximum_amount_minor
-                  ? ` · Maximum ${formatMinorUsd(policy.maximum_amount_minor)}`
+                  ? ` · Maximum ${formatMinorCurrency(policy.maximum_amount_minor, currency)}`
                   : ""}
               </span>
               {destinations.length ? (
                 <>
-                  <Label htmlFor="withdrawal-destination">Send to</Label>
+                  <Label htmlFor="withdrawal-destination">Payout method</Label>
                   <Select
                     id="withdrawal-destination"
                     value={destination}
-                    onChange={(event) => setDestination(event.target.value)}
+                    onChange={(event) => {
+                      setDestination(event.target.value);
+                      setDestinationError(null);
+                    }}
                     disabled={!policy?.enabled || submitting}
-                    required
+                    aria-invalid={Boolean(destinationError)}
+                    aria-describedby={destinationError ? "withdrawal-destination-error" : undefined}
                   >
-                    <option value="">Choose a saved destination</option>
+                    <option value="">Choose a payout method</option>
                     {destinations.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.name} — {item.method.display_name}
                       </option>
                     ))}
                   </Select>
+                  {destinationError && (
+                    <p
+                      className="text-sm text-red-700"
+                      id="withdrawal-destination-error"
+                      role="alert"
+                    >
+                      {destinationError}
+                    </p>
+                  )}
                 </>
               ) : (
                 <p className="text-sm text-slate-600">
@@ -336,6 +354,7 @@ export function WithdrawalsPanel() {
               >
                 {submitting ? "Submitting…" : "Request withdrawal"}
               </Button>
+              {requestError && <Toast>{requestError}</Toast>}
               {!destinations.length && (
                 <Button asChild variant="secondary">
                   <Link href="/dashboard/payout-methods/new">Add payout method</Link>
@@ -347,72 +366,17 @@ export function WithdrawalsPanel() {
           <Card className="min-w-0 p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h3>Withdrawal history</h3>
-              {page?.withdrawals.length ? (
-                <Badge variant="destructive">{page.withdrawals.length}</Badge>
-              ) : null}
+              <Link
+                className="text-sm font-semibold text-emerald-800 underline"
+                href="/dashboard/withdrawals/history"
+              >
+                View full history
+              </Link>
             </div>
-            {page?.withdrawals.length ? (
-              <div className="grid gap-2">
-                {page.withdrawals.map((withdrawal) => (
-                  <WithdrawalRow key={withdrawal.id} withdrawal={withdrawal} onCancel={cancel} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No withdrawals yet"
-                description="Your payout requests will appear here after you submit one."
-              />
-            )}
+            <WithdrawalHistoryList withdrawals={page?.withdrawals ?? []} onCancel={cancel} />
           </Card>
         </>
       )}
     </section>
-  );
-}
-
-function WithdrawalRow({
-  withdrawal,
-  onCancel,
-}: {
-  withdrawal: Withdrawal;
-  onCancel: (withdrawal: Withdrawal) => void;
-}) {
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-slate-200 py-4 last:border-0">
-      <div className="grid min-w-0 gap-1">
-        <strong>
-          <Money minor={withdrawal.amount_minor} currency={withdrawal.currency} />
-        </strong>
-        <span className="break-words text-sm text-slate-500">
-          {withdrawal.destination.method_name} · {withdrawal.destination.name}
-        </span>
-        <small className="text-xs text-slate-500">
-          {new Date(withdrawal.created_at).toLocaleDateString()}
-        </small>
-      </div>
-      <div className="grid justify-items-end gap-2">
-        <Badge
-          variant={
-            stateTone(withdrawal.state) === "success"
-              ? "default"
-              : stateTone(withdrawal.state) === "accent"
-                ? "destructive"
-                : "secondary"
-          }
-        >
-          {stateLabel(withdrawal.state)}
-        </Badge>
-        {withdrawal.reason && (
-          <span className="max-w-48 break-words text-right text-xs text-slate-500">
-            {withdrawal.reason}
-          </span>
-        )}
-        {withdrawal.state === "requested" && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => onCancel(withdrawal)}>
-            Cancel request
-          </Button>
-        )}
-      </div>
-    </div>
   );
 }

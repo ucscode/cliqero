@@ -3,13 +3,13 @@ import type { QueryExecutor } from "../shared/database";
 import type {
   Withdrawal,
   WithdrawalRepository,
-  WithdrawalPolicyRepository,
-  WithdrawalPolicy,
   WithdrawalState,
   DestinationField,
 } from "@/modules/withdrawal/withdrawal";
 interface Row {
   id: string;
+  cursor_id?: string;
+  cursor_created_at?: string;
   account_id: string;
   amount_minor: string;
   currency: string;
@@ -40,10 +40,29 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
   async findByIdempotencyKey(key: string) {
     return this.find("idempotency_key=$1", [key]);
   }
-  async listForAccount(accountId: string) {
-    return this.list("account_id=(select id from identity_capability.accounts where uuid=$1)", [
-      accountId,
-    ]);
+  async listForAccount(accountId: string, page: { cursor?: string; limit: number }) {
+    const cursor = decodeAccountCursor(page.cursor);
+    const rows = (
+      await this.sql.query<Row>(
+        `select w.uuid as id,w.id::text as cursor_id,w.created_at::text as cursor_created_at,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.idempotency_key,w.correlation_id,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) as completed_by,w.completed_at,w.created_at,w.updated_at
+          from withdrawal_capability.withdrawals w
+         where w.account_id=(select id from identity_capability.accounts where uuid=$1)
+           and ($2::timestamptz is null or (w.created_at,w.id)<($2::timestamptz,$3::bigint))
+         order by w.created_at desc,w.id desc limit $4`,
+        [accountId, cursor?.createdAt ?? null, cursor?.id ?? null, page.limit + 1],
+      )
+    ).rows;
+    const selected = rows.slice(0, page.limit);
+    return {
+      items: selected.map((row) => this.map(row)),
+      nextCursor:
+        rows.length > page.limit && selected.length
+          ? encodeAccountCursor(
+              selected[selected.length - 1].cursor_created_at!,
+              selected[selected.length - 1].cursor_id!,
+            )
+          : null,
+    };
   }
   async listForOperator(filter: { state?: WithdrawalState; limit?: number } = {}) {
     return this.list(
@@ -140,27 +159,27 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
     };
   }
 }
-export class PostgresWithdrawalPolicyRepository implements WithdrawalPolicyRepository {
-  constructor(private readonly sql: QueryExecutor) {}
-  async getActive(): Promise<WithdrawalPolicy> {
-    const row = (
-      await this.sql.query<{
-        minimum_amount_minor: string;
-        maximum_amount_minor: string | null;
-        currency: string;
-        enabled: boolean;
-      }>(
-        `select minimum_amount_minor,maximum_amount_minor,currency,enabled from withdrawal_capability.policy where singleton=true`,
-      )
-    ).rows[0];
-    if (!row) throw new Error("Withdrawal policy is not configured");
-    return {
-      minimumAmount: Money.of(BigInt(row.minimum_amount_minor), row.currency),
-      maximumAmount:
-        row.maximum_amount_minor === null
-          ? null
-          : Money.of(BigInt(row.maximum_amount_minor), row.currency),
-      enabled: row.enabled,
+
+function encodeAccountCursor(createdAt: string, id: string) {
+  return Buffer.from(JSON.stringify({ created_at: createdAt, id }), "utf8").toString("base64url");
+}
+
+function decodeAccountCursor(value?: string) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
+      created_at?: unknown;
+      id?: unknown;
     };
+    if (
+      typeof parsed.created_at !== "string" ||
+      typeof parsed.id !== "string" ||
+      !/^\d+$/.test(parsed.id)
+    )
+      throw new Error();
+    if (Number.isNaN(Date.parse(parsed.created_at))) throw new Error();
+    return { createdAt: parsed.created_at, id: parsed.id };
+  } catch {
+    throw new Error("Invalid withdrawal history cursor");
   }
 }

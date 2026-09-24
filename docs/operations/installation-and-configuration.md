@@ -177,7 +177,7 @@ is required.
 
 External payment providers are incoming-funding adapters. They add verified funds to the buyer's internal account value; they do not purchase listings or create entitlements directly.
 
-Inbound payment-provider implementations and configuration are optional/removable. Outbound withdrawal payments are sent outside Cliqero and require no provider configuration.
+Inbound payment-provider implementations and configuration are optional/removable. Outbound withdrawal payments are sent outside Cliqero and require no provider configuration. Withdrawal eligibility and amount boundaries are required in `config/modules/withdrawal/policy.yaml`; copy `policy.example.yaml` through the local configuration workflow. During development, the canonical baseline no longer creates a withdrawal policy table, so existing local databases must be reset and bootstrapped from `database/migrations/001_initial_schema.sql`.
 
 Use YAML block-style sequences and mappings. Avoid flow-style collections in maintained configuration files.
 

@@ -27,6 +27,7 @@ export type WithdrawalReservation = {
 
 export type WithdrawalPage = {
   withdrawals: Withdrawal[];
+  next_cursor: string | null;
   available_minor: string;
   reservations: WithdrawalReservation[];
 };

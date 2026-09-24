@@ -28,6 +28,7 @@ import { HierarchyPanel } from "../hierarchy/panel";
 import { ReferralsPanel } from "../referral/panel";
 import { EarningsPanel } from "../earnings-panel";
 import { WithdrawalsPanel } from "../withdrawal/panel";
+import { WithdrawalHistoryPanel } from "../withdrawal/history/panel";
 import { PayoutMethodsPanel } from "../withdrawal/payout-methods/panel";
 import { PayoutMethodFormPage } from "../withdrawal/payout-methods/form-page";
 import { SettingsPanel } from "../settings";
@@ -57,6 +58,7 @@ export function DashboardShell({
   fundingProvider,
   fundingAmount,
   fundingHistoryPage = false,
+  withdrawalHistoryPage = false,
   payoutMethodFormMode,
   payoutDestinationId,
 }: {
@@ -64,6 +66,7 @@ export function DashboardShell({
   fundingProvider?: string;
   fundingAmount?: string;
   fundingHistoryPage?: boolean;
+  withdrawalHistoryPage?: boolean;
   payoutMethodFormMode?: "create" | "edit";
   payoutDestinationId?: string;
 }) {
@@ -76,9 +79,11 @@ export function DashboardShell({
   const params = useSearchParams();
   const section = payoutMethodFormMode
     ? "payout-methods"
-    : dedicatedWalletFunding || fundingHistoryPage
-      ? "wallet"
-      : (params.get("section") ?? (params.get("buy") ? "checkout" : "overview"));
+    : withdrawalHistoryPage
+      ? "withdrawals"
+      : dedicatedWalletFunding || fundingHistoryPage
+        ? "wallet"
+        : (params.get("section") ?? (params.get("buy") ? "checkout" : "overview"));
   const buy = params.get("buy");
   const checkoutId = params.get("checkout") ?? undefined;
   const fundingId = params.get("funding") ?? undefined;
@@ -227,19 +232,23 @@ export function DashboardShell({
         ? "Funding history"
         : section === "wallet" && dedicatedWalletFunding
           ? "Fund wallet"
-          : section === "withdrawals"
-            ? "Withdrawals"
-            : section === "payout-methods"
-              ? payoutMethodFormMode === "create"
-                ? "Add payout method"
-                : payoutMethodFormMode === "edit"
-                  ? "Edit payout method"
-                  : "Payout Methods"
-              : section === "settings"
-                ? "Settings"
-                : dashboardSectionTitle(section);
+          : withdrawalHistoryPage
+            ? "Withdrawal history"
+            : section === "withdrawals"
+              ? "Withdrawals"
+              : section === "payout-methods"
+                ? payoutMethodFormMode === "create"
+                  ? "Add payout method"
+                  : payoutMethodFormMode === "edit"
+                    ? "Edit payout method"
+                    : "Payout Methods"
+                : section === "settings"
+                  ? "Settings"
+                  : dashboardSectionTitle(section);
   const displayUsername = profile?.username ?? canonicalSession.account.username;
-  const content = fundingHistoryPage ? (
+  const content = withdrawalHistoryPage ? (
+    <WithdrawalHistoryPanel />
+  ) : fundingHistoryPage ? (
     <FundingHistoryPanel />
   ) : section === "wallet" ? (
     <WalletPanel

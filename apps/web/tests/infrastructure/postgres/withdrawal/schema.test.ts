@@ -22,6 +22,13 @@ describe("canonical withdrawal schema", () => {
     expect(schema).not.toContain("payout_executions");
   });
 
+  it("keeps withdrawal policy in configuration rather than the database", () => {
+    expect(schema).not.toContain("withdrawal_capability.policy");
+    expect(schema).not.toContain("withdrawal_policy_min_positive");
+    expect(schema).toContain("CREATE TABLE withdrawal_capability.withdrawals");
+    expect(schema).toContain("CREATE TABLE withdrawal_capability.destinations");
+  });
+
   it("stores owned destinations and immutable withdrawal snapshots without free-form fields", () => {
     expect(schema).toContain("CREATE TABLE withdrawal_capability.destinations");
     expect(schema).toContain("destinations_account_fk FOREIGN KEY (account_id)");

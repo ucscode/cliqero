@@ -3,7 +3,10 @@ import { WithdrawalService } from "@/application/withdrawal/service";
 import { Money } from "@/modules/money/money";
 import type { Withdrawal } from "@/modules/withdrawal/withdrawal";
 
-function fixture(state: Withdrawal["state"] = "approved") {
+function fixture(
+  state: Withdrawal["state"] = "approved",
+  limits: { minimum: bigint; maximum: bigint | null } = { minimum: 1n, maximum: null },
+) {
   const withdrawal: Withdrawal = {
     id: "withdrawal-1",
     accountId: "account-1",
@@ -32,7 +35,7 @@ function fixture(state: Withdrawal["state"] = "approved") {
       findById: async () => withdrawal,
       findByIdForUpdate: async () => withdrawal,
       findByIdempotencyKey: async () => null,
-      listForAccount: async () => [],
+      listForAccount: async () => ({ items: [], nextCursor: null }),
       listForOperator: async () => [],
       create: async () => undefined,
       transition: async () => undefined,
@@ -40,8 +43,8 @@ function fixture(state: Withdrawal["state"] = "approved") {
     },
     {
       getActive: async () => ({
-        minimumAmount: Money.of(1n, "USD"),
-        maximumAmount: null,
+        minimumAmount: Money.of(limits.minimum, "USD"),
+        maximumAmount: limits.maximum === null ? null : Money.of(limits.maximum, "USD"),
         enabled: true,
       }),
     },
@@ -137,5 +140,32 @@ describe("WithdrawalService manual completion", () => {
       kind: "released",
       correlationId: withdrawal.correlationId,
     });
+  });
+});
+
+describe("WithdrawalService policy enforcement", () => {
+  it("enforces configured minimum and maximum amounts server-side", async () => {
+    const belowMinimum = fixture("requested", { minimum: 1000n, maximum: 5000n });
+    await expect(
+      belowMinimum.service.request({
+        accountId: "account-1",
+        amountMinor: 999n,
+        currency: "USD",
+        destinationId: "destination-1",
+        idempotencyKey: "below-minimum",
+        correlationId: "correlation",
+      }),
+    ).rejects.toThrow("below the minimum");
+    const aboveMaximum = fixture("requested", { minimum: 1000n, maximum: 5000n });
+    await expect(
+      aboveMaximum.service.request({
+        accountId: "account-1",
+        amountMinor: 5001n,
+        currency: "USD",
+        destinationId: "destination-1",
+        idempotencyKey: "above-maximum",
+        correlationId: "correlation",
+      }),
+    ).rejects.toThrow("exceeds the maximum");
   });
 });

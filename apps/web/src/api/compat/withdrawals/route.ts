@@ -42,8 +42,19 @@ export async function GET(request: Request) {
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   try {
     const container = getContainer();
+    const search = new URL(request.url).searchParams;
+    const query = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(50).default(20),
+        cursor: z.string().max(512).optional(),
+      })
+      .safeParse({
+        limit: search.get("limit") ?? undefined,
+        cursor: search.get("cursor") ?? undefined,
+      });
+    if (!query.success) return Response.json(validationErrorPayload(query.error), { status: 400 });
     const [withdrawals, reservations, policy] = await Promise.all([
-      container.withdrawals.list(principal.accountId),
+      container.withdrawals.list(principal.accountId, query.data),
       container.fundsReservation.summarize(principal.accountId),
       container.withdrawalPolicy.getActive(),
     ]);
@@ -52,7 +63,8 @@ export async function GET(request: Request) {
       policy.minimumAmount.currency,
     );
     return Response.json({
-      withdrawals: withdrawals.map(presentWithdrawal),
+      withdrawals: withdrawals.items.map(presentWithdrawal),
+      next_cursor: withdrawals.nextCursor,
       available_minor: availableMinor.toString(),
       reservations: reservations.map((reservation) => ({
         currency: reservation.currency,
