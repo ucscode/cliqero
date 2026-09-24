@@ -161,7 +161,7 @@ export function EarningsHighlight({
           Earned
         </span>
       </div>
-      <p className="relative mt-8 text-5xl font-bold tracking-tight text-slate-950">
+      <p className="relative mt-8 text-4xl font-bold tracking-tight text-slate-950">
         <Money minor={available?.amount_minor ?? "0"} currency={available?.currency ?? "USD"} />
       </p>
       <p className="relative mt-3 max-w-md text-sm leading-relaxed text-slate-600">

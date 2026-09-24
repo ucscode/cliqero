@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ApiClientError,
   apiFetch,
@@ -27,7 +27,6 @@ import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { parseWithdrawalAmount, withdrawalRequestErrorField } from "./model";
 import { WithdrawalHistoryList } from "./history/list";
 
-const activeStates = new Set<Withdrawal["state"]>(["requested", "approved"]);
 export const WITHDRAWAL_HISTORY_PREVIEW_SIZE = 5;
 
 function availableEarnings(
@@ -95,33 +94,6 @@ export function WithdrawalsPanel() {
   const reservedMinor =
     page?.reservations.find((reservation) => reservation.currency === currency)?.reserved_minor ??
     "0";
-  const activeWithdrawals = useMemo(
-    () => (page?.withdrawals ?? []).filter((withdrawal) => activeStates.has(withdrawal.state)),
-    [page],
-  );
-
-  useEffect(() => {
-    if (!activeWithdrawals.length) return;
-    let attempts = 0;
-    let timer: number | undefined;
-    let disposed = false;
-    const poll = async () => {
-      if (disposed) return;
-      if (document.visibilityState === "hidden") {
-        timer = window.setTimeout(() => void poll(), 5000);
-        return;
-      }
-      attempts += 1;
-      await load(true);
-      if (!disposed && attempts < 12) timer = window.setTimeout(() => void poll(), 5000);
-    };
-    timer = window.setTimeout(() => void poll(), 5000);
-    return () => {
-      disposed = true;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [activeWithdrawals.length, load]);
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");

@@ -54,4 +54,32 @@ describe("withdrawal request UI contract", () => {
     expect(failureHandler).not.toContain("setAmount(");
     expect(failureHandler).not.toContain("setDestination(");
   });
+
+  it("loads initially and refreshes only after explicit or successful user actions", () => {
+    expect(source).toContain("void load();");
+    expect(source).toContain("onClick={() => void load(true)}");
+
+    const requestCall = source.indexOf('await apiFetch<Withdrawal>("/api/withdrawals"');
+    const requestSuccess = source.indexOf("await load(true);", requestCall);
+    expect(requestSuccess).toBeGreaterThan(requestCall);
+
+    const cancelStart = source.indexOf("async function cancel(");
+    const cancelEnd = source.indexOf("return (", cancelStart);
+    const cancelHandler = source.slice(cancelStart, cancelEnd);
+    expect(cancelHandler).toContain('method: "PATCH"');
+    expect(cancelHandler).toContain("await load(true);");
+  });
+
+  it("does not automatically poll for requested or approved withdrawals", () => {
+    expect(source).not.toContain("activeStates");
+    expect(source).not.toContain("activeWithdrawals");
+    expect(source).not.toContain("setTimeout");
+    expect(source).not.toContain("visibilityState");
+  });
+
+  it("keeps a disabled policy idle without recurring requests", () => {
+    expect(source).toContain("disabled={!policy?.enabled || submitting}");
+    expect(source).toContain("Withdrawals are currently disabled.");
+    expect(source).not.toContain("setTimeout");
+  });
 });
