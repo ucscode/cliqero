@@ -146,4 +146,45 @@ describe("account projection pagination", () => {
     expect(calls[1].values[1]).toBe("2026-01-02T00:00:00.000Z");
     expect(calls[1].values[2]).toBe("entry-1");
   });
+
+  it("keeps referral level and commercial detail out of the customer earnings projection", async () => {
+    let query = "";
+    const service = new AccountProjectionService({
+      query: async <T extends object>(sql: string) => {
+        query = sql;
+        return result<T>([
+          {
+            id: "entry-privacy",
+            purchase_id: "purchase-compatibility-id",
+            entry_type: "purchase-earnings",
+            direction: "credit",
+            amount_minor: "120",
+            currency: "USD",
+            recipient_role: "referral",
+            balance_state: "available",
+            created_at: "2026-01-02T00:00:00.000Z",
+            referral_level: 3,
+            listing_title_snapshot: "Private listing title",
+          },
+        ] as T[]);
+      },
+    });
+
+    const projection = await service.earningEntries("account", { limit: 10 });
+
+    expect(query).not.toContain("referral_level");
+    expect(projection.items[0]).toEqual({
+      id: "entry-privacy",
+      purchase_id: "purchase-compatibility-id",
+      entry_type: "purchase-earnings",
+      direction: "credit",
+      amount_minor: "120",
+      currency: "USD",
+      recipient_role: "referral",
+      balance_state: "available",
+      created_at: "2026-01-02T00:00:00.000Z",
+    });
+    expect(projection.items[0]).not.toHaveProperty("referral_level");
+    expect(projection.items[0]).not.toHaveProperty("listing_title_snapshot");
+  });
 });

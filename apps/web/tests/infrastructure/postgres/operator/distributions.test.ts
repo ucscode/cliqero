@@ -150,7 +150,11 @@ describe("operator distribution and earnings read models", () => {
     await expect(service.list({ limit: 25 })).resolves.toMatchObject({
       totals: { pendingMinor: "700", availableMinor: "0" },
       items: [
-        expect.objectContaining({ balanceState: "pending", distributionId: ids.distribution }),
+        expect.objectContaining({
+          balanceState: "pending",
+          distributionId: ids.distribution,
+          level: 1,
+        }),
       ],
     });
   });

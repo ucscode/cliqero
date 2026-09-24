@@ -111,7 +111,17 @@ export class AccountProjectionService {
       ).rows,
       visible = rows.slice(0, input.limit);
     return {
-      items: visible.map((row) => ({ ...row, amount_minor: String(row.amount_minor) })),
+      items: visible.map((row) => ({
+        id: row.id,
+        purchase_id: row.purchase_id,
+        entry_type: row.entry_type,
+        direction: row.direction,
+        amount_minor: String(row.amount_minor),
+        currency: row.currency,
+        recipient_role: row.recipient_role,
+        balance_state: row.balance_state,
+        created_at: row.created_at,
+      })),
       nextCursor:
         rows.length > input.limit
           ? encodeCursor(visible.at(-1).created_at, visible.at(-1).id)

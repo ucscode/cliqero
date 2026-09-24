@@ -24,6 +24,28 @@ function label(value: string) {
   return value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+export function customerEarningLabel(
+  entry: Pick<EarningsEntry, "entry_type" | "direction" | "recipient_role">,
+) {
+  if (entry.entry_type === "purchase-earnings" && entry.direction === "credit") {
+    if (entry.recipient_role === "referral") return "Referral commission";
+    if (entry.recipient_role === "seller") return "Sale proceeds";
+  }
+  if (entry.entry_type === "purchase-reversal" && entry.direction === "debit") {
+    if (entry.recipient_role === "referral") return "Commission reversal";
+    if (entry.recipient_role === "seller") return "Sale reversal";
+  }
+  return "Earnings adjustment";
+}
+
+export function customerEarningAmount(entry: Pick<EarningsEntry, "direction" | "amount_minor">) {
+  const amount = BigInt(entry.amount_minor);
+  return {
+    sign: entry.direction === "debit" ? "-" : "+",
+    minor: (amount < 0n ? -amount : amount).toString(),
+  };
+}
+
 export function earningsEntriesUrl(cursor?: string) {
   const params = new URLSearchParams({ limit: String(EARNINGS_PAGE_SIZE) });
   if (cursor) params.set("cursor", cursor);
@@ -232,12 +254,12 @@ export function EarningsActivity({
 }
 
 function EarningRow({ entry }: { entry: EarningsEntry }) {
-  const signedMinor = entry.direction === "debit" ? `-${entry.amount_minor}` : entry.amount_minor;
+  const amount = customerEarningAmount(entry);
   const tone = entry.balance_state === "available" ? "success" : "accent";
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-slate-200 py-3 last:border-0">
       <div className="grid min-w-0 gap-1">
-        <strong>{label(entry.entry_type)}</strong>
+        <strong>{customerEarningLabel(entry)}</strong>
         <span className="text-xs text-slate-500">
           {label(entry.balance_state)} · {new Date(entry.created_at).toLocaleDateString()}
         </span>
@@ -246,7 +268,10 @@ function EarningRow({ entry }: { entry: EarningsEntry }) {
         <Badge variant={tone === "success" ? "default" : "destructive"}>
           {label(entry.balance_state)}
         </Badge>
-        <Money minor={signedMinor} currency={entry.currency} />
+        <span className="inline-flex items-baseline gap-0.5">
+          {amount.sign}
+          <Money minor={amount.minor} currency={entry.currency} />
+        </span>
       </div>
     </div>
   );

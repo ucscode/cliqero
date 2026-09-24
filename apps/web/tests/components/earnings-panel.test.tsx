@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  customerEarningAmount,
   EarningsActivity,
   EarningsHighlight,
   earningsEntriesUrl,
@@ -28,6 +29,8 @@ const entries = {
       recipient_role: "referral",
       balance_state: "available",
       created_at: "2026-01-02T00:00:00.000Z",
+      referral_level: 2,
+      listing_title_snapshot: "Secret product title",
     },
     {
       id: "entry-2",
@@ -40,11 +43,59 @@ const entries = {
       balance_state: "available",
       created_at: "2026-01-01T00:00:00.000Z",
     },
+    {
+      id: "entry-3",
+      purchase_id: "purchase-reversal-uuid",
+      entry_type: "purchase-reversal",
+      direction: "debit" as const,
+      amount_minor: "310",
+      currency: "USD",
+      recipient_role: "referral",
+      balance_state: "available",
+      created_at: "2025-12-31T00:00:00.000Z",
+    },
+    {
+      id: "entry-4",
+      purchase_id: "purchase-seller-reversal-uuid",
+      entry_type: "purchase-reversal",
+      direction: "debit" as const,
+      amount_minor: "310",
+      currency: "USD",
+      recipient_role: "seller",
+      balance_state: "available",
+      created_at: "2025-12-30T00:00:00.000Z",
+    },
+    {
+      id: "entry-5",
+      purchase_id: null,
+      entry_type: "legacy-adjustment",
+      direction: "credit" as const,
+      amount_minor: "50",
+      currency: "USD",
+      recipient_role: "platform",
+      balance_state: "pending",
+      created_at: "2025-12-29T00:00:00.000Z",
+    },
   ],
   nextCursor: "next-page-cursor",
 };
 
 describe("earnings panel presentation", () => {
+  it("uses ledger direction for one visible sign without double-negating debits", () => {
+    expect(customerEarningAmount({ direction: "credit", amount_minor: "310" })).toEqual({
+      sign: "+",
+      minor: "310",
+    });
+    expect(customerEarningAmount({ direction: "debit", amount_minor: "310" })).toEqual({
+      sign: "-",
+      minor: "310",
+    });
+    expect(customerEarningAmount({ direction: "debit", amount_minor: "-310" })).toEqual({
+      sign: "-",
+      minor: "310",
+    });
+  });
+
   it("highlights the withdrawable amount using its projected currency", () => {
     const output = renderToStaticMarkup(
       createElement(EarningsHighlight, {
@@ -152,7 +203,7 @@ describe("earnings panel presentation", () => {
     expect(output).not.toContain("$8.00");
   });
 
-  it("keeps activity calm and does not expose purchase UUIDs", () => {
+  it("uses clear ledger descriptions, signed amounts, and no purchase or product details", () => {
     const output = renderToStaticMarkup(
       createElement(EarningsActivity, {
         entries,
@@ -165,9 +216,24 @@ describe("earnings panel presentation", () => {
     expect(output).toContain("Earnings activity");
     expect(output).not.toContain("Purchase purchase-secret-uuid");
     expect(output).not.toContain("Purchase purchase-seller-uuid");
-    expect(output).not.toContain("bg-red-700");
-    expect(output).toContain("$3.10");
-    expect(output).toContain("$6.20");
+    expect(output).not.toContain("Purchase purchase-reversal-uuid");
+    expect(output).not.toContain("Purchase purchase-seller-reversal-uuid");
+    const text = output.replace(/<[^>]*>/g, "");
+    expect(text).toContain("Available");
+    expect(text).toContain("Pending");
+    expect(text).toContain("Referral commission");
+    expect(text).toContain("Sale proceeds");
+    expect(text).toContain("Commission reversal");
+    expect(text).toContain("Sale reversal");
+    expect(text).toContain("Earnings adjustment");
+    expect(text).toContain("+$3.10");
+    expect(text).toContain("+$6.20");
+    expect(text).toContain("-$3.10");
+    expect(text).not.toContain("purchase-earnings");
+    expect(text).not.toContain("purchase-reversal");
+    expect(text).not.toContain("Level 2");
+    expect(text).not.toContain("referral_level");
+    expect(text).not.toContain("Secret product title");
     expect(output).toContain("Next");
   });
 
