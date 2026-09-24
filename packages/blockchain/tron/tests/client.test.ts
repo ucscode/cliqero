@@ -1,9 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
+import bs58check from "bs58check";
 import { normalizeTronAddress, TronGridClient } from "../src";
 
 describe("TRON protocol client", () => {
   it("normalizes hexadecimal address forms without applying funding policy", () => {
-    expect(normalizeTronAddress("0x" + "a".repeat(40))).toBe("41" + "a".repeat(40));
+    const address = "a".repeat(40);
+    const canonical = `41${address}`;
+    expect(normalizeTronAddress(`0x${address}`)).toBe(canonical);
+    expect(normalizeTronAddress(`0x${"f".repeat(24)}${address}`)).toBe(canonical);
+    expect(normalizeTronAddress(canonical)).toBe(canonical);
+    expect(normalizeTronAddress(`${"f".repeat(24)}${address}`)).toBe(canonical);
+  });
+
+  it("normalizes valid TRON Base58Check and retains invalid input", () => {
+    const payload = Buffer.from(`41${"ab".repeat(20)}`, "hex");
+    const base58 = bs58check.encode(payload);
+    expect(normalizeTronAddress(base58)).toBe(payload.toString("hex"));
+    expect(normalizeTronAddress("  T-not-valid!  ")).toBe("T-not-valid!");
+    expect(normalizeTronAddress(bs58check.encode(Buffer.alloc(21, 0x42)))).toBe(
+      bs58check.encode(Buffer.alloc(21, 0x42)),
+    );
+    expect(normalizeTronAddress(bs58check.encode(Buffer.from([0x41, 0x01])))).toBe(
+      bs58check.encode(Buffer.from([0x41, 0x01])),
+    );
   });
 
   it("retrieves transaction, events, info, and latest block facts", async () => {

@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { parse as parseCsvSync } from "csv-parse/sync";
+import { stringify as stringifyCsvSync } from "csv-stringify/sync";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 import type { Account } from "@/modules/identity/account";
@@ -374,74 +376,46 @@ const columns = [
   "media",
 ] as const;
 function writeCsv(records: ListingTransferRecord[]) {
-  return (
-    [
-      columns.join(","),
-      ...records.map((record) =>
-        columns
-          .map((column) =>
-            csvCell(
-              column === "metadata" || column === "media"
-                ? JSON.stringify(record[column])
-                : String(record[column] ?? ""),
-            ),
-          )
-          .join(","),
-      ),
-    ].join("\n") + "\n"
+  const rows = records.map((record) =>
+    columns.map((column) => {
+      const value =
+        column === "metadata" || column === "media"
+          ? JSON.stringify(record[column])
+          : String(record[column] ?? "");
+      return /^[=+\-@]/.test(value) ? `'${value}` : value;
+    }),
   );
-}
-function csvCell(value: string) {
-  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
-  return `"${safe.replaceAll('"', '""')}"`;
+  return stringifyCsvSync([columns, ...rows], { quoted: true, record_delimiter: "\n" });
 }
 function parseCsv(body: string) {
-  const rows: string[][] = [];
-  let row: string[] = [],
-    cell = "",
-    quoted = false;
-  const push = () => {
-    row.push(cell.replace(/\r$/, "").replace(/^'(?=[=+\-@])/, ""));
-    cell = "";
-  };
-  for (let i = 0; i < body.length; i++) {
-    const c = body[i];
-    if (quoted) {
-      if (c === '"' && body[i + 1] === '"') {
-        cell += '"';
-        i++;
-      } else if (c === '"') quoted = false;
-      else cell += c;
-    } else if (c === '"') quoted = true;
-    else if (c === ",") push();
-    else if (c === "\n") {
-      push();
-      rows.push(row);
-      row = [];
-    } else cell += c;
-    if (rows.length > 1001 || cell.length > 1_000_000)
-      throw new Error("CSV input exceeds parser limits");
-  }
-  if (quoted) throw new Error("Malformed CSV quotation");
-  if (cell || row.length) {
-    push();
-    rows.push(row);
-  }
+  const rows = parseCsvSync(body, {
+    skip_empty_lines: true,
+    max_record_size: 5 * 1024 * 1024,
+  }) as string[][];
   const header = rows.shift();
-  if (!header || columns.some((column, index) => header[index] !== column))
+  if (
+    !header ||
+    header.length !== columns.length ||
+    columns.some((column, index) => header[index] !== column)
+  )
     throw new Error("CSV header is invalid");
+  if (rows.length > 1000 || rows.some((values) => values.some((value) => value.length > 1_000_000)))
+    throw new Error("CSV input exceeds parser limits");
   return rows
     .filter((values) => values.some(Boolean))
     .map((values) =>
       Object.fromEntries(
-        columns.map((column, index) => [
-          column,
-          column === "metadata" || column === "media"
-            ? JSON.parse(values[index] || (column === "media" ? "[]" : "{}"))
-            : column === "id" || column === "retry_identity" || column === "external_key"
-              ? values[index] || undefined
-              : values[index],
-        ]),
+        columns.map((column, index) => {
+          const value = values[index]?.replace(/^'(?=[=+\-@])/, "") ?? "";
+          return [
+            column,
+            column === "metadata" || column === "media"
+              ? JSON.parse(value || (column === "media" ? "[]" : "{}"))
+              : column === "id" || column === "retry_identity" || column === "external_key"
+                ? value || undefined
+                : value,
+          ];
+        }),
       ),
     );
 }

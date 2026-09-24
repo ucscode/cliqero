@@ -1,4 +1,5 @@
 import type { ExchangeRateProvider, ExchangeRateQuote } from "@/modules/money/exchange";
+import { isLosslessNumber, parse as parseLosslessJson } from "lossless-json";
 export type FrankfurterHttpClient = (input: string | URL, init?: RequestInit) => Promise<Response>;
 export class FrankfurterProvider implements ExchangeRateProvider {
   constructor(
@@ -13,7 +14,7 @@ export class FrankfurterProvider implements ExchangeRateProvider {
     const raw = await response.text();
     let value: unknown;
     try {
-      value = JSON.parse(raw);
+      value = parseLosslessJson(raw);
     } catch {
       throw new Error("Frankfurter response is invalid JSON");
     }
@@ -24,9 +25,10 @@ export class FrankfurterProvider implements ExchangeRateProvider {
       !/^\d{4}-\d{2}-\d{2}$/.test(value.date)
     )
       throw new Error("Frankfurter response schema is invalid");
-    const rateText = extractRate(raw, to);
-    if (!rateText || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(rateText) || rateText === "0")
-      throw new Error("Frankfurter rate is invalid");
+    const rates = isRecord(value.rates) ? value.rates : undefined;
+    const rate = rates?.[to];
+    const rateText = isLosslessNumber(rate) ? rate.toString() : null;
+    if (!isPositiveDecimal(rateText)) throw new Error("Frankfurter rate is invalid");
     const observedAt = new Date(`${value.date}T00:00:00.000Z`);
     if (Number.isNaN(observedAt.getTime())) throw new Error("Frankfurter date is invalid");
     return {
@@ -43,7 +45,6 @@ export class FrankfurterProvider implements ExchangeRateProvider {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
-function extractRate(raw: string, target: string): string | null {
-  const match = raw.match(new RegExp(`"${target}"\\s*:\\s*(\\d+(?:\\.\\d+)?)`));
-  return match?.[1] ?? null;
+function isPositiveDecimal(value: string | null): value is string {
+  return !!value && /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) && /[1-9]/.test(value);
 }

@@ -1,7 +1,7 @@
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import http from "node:http";
 import https from "node:https";
+import ipaddr from "ipaddr.js";
 import { inspectImage, MAX_IMAGE_BYTES } from "@/modules/listing/media/image";
 export async function fetchRemoteImage(
   source: string,
@@ -92,41 +92,46 @@ export async function fetchRemoteImage(
   });
 }
 export function isForbiddenAddress(address: string) {
-  const value = address.toLowerCase();
-  if (isIP(value) === 4) {
-    const parts = value.split(".").map(Number),
-      n = ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
-    return ranges4.some(([base, bits]) => n >>> (32 - bits) === base >>> (32 - bits));
-  }
-  if (isIP(value) === 6)
-    return (
-      value === "::" ||
-      value === "::1" ||
-      value.startsWith("fc") ||
-      value.startsWith("fd") ||
-      value.startsWith("fe8") ||
-      value.startsWith("fe9") ||
-      value.startsWith("fea") ||
-      value.startsWith("feb") ||
-      value.startsWith("ff") ||
-      value.startsWith("2001:db8:") ||
-      value.startsWith("::ffff:")
-    );
-  return true;
+  if (!ipaddr.isValid(address)) return true;
+  const parsed = ipaddr.parse(address);
+  const deniedRanges =
+    parsed.kind() === "ipv4"
+      ? [
+          "unspecified",
+          "private",
+          "carrierGradeNat",
+          "loopback",
+          "linkLocal",
+          "reserved",
+          "benchmarking",
+          "multicast",
+          "broadcast",
+        ]
+      : [
+          "unspecified",
+          "loopback",
+          "uniqueLocal",
+          "linkLocal",
+          "multicast",
+          "reserved",
+          "ipv4Mapped",
+        ];
+  if (deniedRanges.includes(parsed.range())) return true;
+  return parsed.kind() === "ipv4" && forbiddenIpv4Cidrs.some((range) => parsed.match(range));
 }
-const ranges4: [number, number][] = [
-  [0x00000000, 8],
-  [0x0a000000, 8],
-  [0x64400000, 10],
-  [0x7f000000, 8],
-  [0xa9fe0000, 16],
-  [0xac100000, 12],
-  [0xc0000000, 24],
-  [0xc0000200, 24],
-  [0xc0a80000, 16],
-  [0xc6120000, 15],
-  [0xc6336400, 24],
-  [0xcb007100, 24],
-  [0xe0000000, 4],
-  [0xf0000000, 4],
-];
+const forbiddenIpv4Cidrs = [
+  "0.0.0.0/8",
+  "10.0.0.0/8",
+  "100.64.0.0/10",
+  "127.0.0.0/8",
+  "169.254.0.0/16",
+  "172.16.0.0/12",
+  "192.0.0.0/24",
+  "192.0.2.0/24",
+  "192.168.0.0/16",
+  "198.18.0.0/15",
+  "198.51.100.0/24",
+  "203.0.113.0/24",
+  "224.0.0.0/4",
+  "240.0.0.0/4",
+].map((cidr) => ipaddr.parseCIDR(cidr));

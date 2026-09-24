@@ -6,17 +6,10 @@ import {
 } from "@/modules/storage/object-storage";
 import type { ListingMedia } from "@/modules/listing/media/media";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing/media";
+import { fixturePng } from "@/infrastructure/postgres/seed/fixture-media";
 
 const listingId = "00000000-0000-4000-8000-000000000001";
 const owner = new Account("00000000-0000-4000-8000-000000000002", "owner", "NG");
-
-function png() {
-  const bytes = new Uint8Array(24);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  bytes.set([0, 0, 2, 128], 16);
-  bytes.set([0, 0, 1, 224], 20);
-  return bytes;
-}
 
 function storageProvider(name: string, visibility: "public" | "private"): ObjectStorageProvider {
   return {
@@ -59,7 +52,7 @@ describe("listing media storage instance selection", () => {
     );
 
     const media = await service.create(owner, listingId, {
-      bytes: png(),
+      bytes: fixturePng(35, 120, 95),
       mimeType: "image/png",
     });
 
