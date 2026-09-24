@@ -170,12 +170,12 @@ describe("WithdrawalMethodRegistry", () => {
   it(
     "loads the commented bank and USDT example methods from the standard configuration path",
     () => {
-    const path = resolve(process.cwd(), "../../config/modules/withdrawal/methods.example.yaml");
-    const registry = WithdrawalMethodRegistry.load(path);
-    expect(registry.listForAccount({ country: "NG" }).map((method) => method.id)).toEqual([
-      "bank_ng",
-      "usdt_trc20",
-    ]);
+      const path = resolve(process.cwd(), "../../config/modules/withdrawal/methods.example.yaml");
+      const registry = WithdrawalMethodRegistry.load(path);
+      expect(registry.listForAccount({ country: "NG" }).map((method) => method.id)).toEqual([
+        "bank_ng",
+        "usdt_trc20",
+      ]);
       expect(registry.find("usdt_trc20")?.fields[1]).toMatchObject({
         name: "network",
         type: "fixed",

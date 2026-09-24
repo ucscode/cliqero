@@ -124,32 +124,32 @@ describe("WithdrawalDestinationService", () => {
   it(
     "rebuilds metadata on edit, preserves an old withdrawal snapshot, and archives without deletion",
     async () => {
-    const { service, destinationRepository, rows } = fixture();
-    const created = await service.create("owner", {
-      method: "bank_ng",
-      name: "Primary",
-      values: { bank: "GTBank", account: "0123456789" },
-    });
-    const snapshot = await service.resolveForWithdrawal("owner", created.id);
-    const updated = await service.update("owner", created.id, {
-      name: "New primary",
-      values: { bank: "Access", account: "9999999999" },
-    });
-    expect(updated.fields[0]).toMatchObject({
-      label: "Bank",
-      value: "Access",
-      type: "text",
-      copyable: true,
-    });
-    expect(snapshot.fields[1].value).toBe("0123456789");
-    expect((await service.resolveForWithdrawal("owner", created.id)).fields[1].value).toBe(
-      "9999999999",
-    );
-    await service.update("owner", created.id, { status: "archived" });
-    expect(rows.has(created.id)).toBe(true);
-    expect(destinationRepository.update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "archived" }),
-    );
+      const { service, destinationRepository, rows } = fixture();
+      const created = await service.create("owner", {
+        method: "bank_ng",
+        name: "Primary",
+        values: { bank: "GTBank", account: "0123456789" },
+      });
+      const snapshot = await service.resolveForWithdrawal("owner", created.id);
+      const updated = await service.update("owner", created.id, {
+        name: "New primary",
+        values: { bank: "Access", account: "9999999999" },
+      });
+      expect(updated.fields[0]).toMatchObject({
+        label: "Bank",
+        value: "Access",
+        type: "text",
+        copyable: true,
+      });
+      expect(snapshot.fields[1].value).toBe("0123456789");
+      expect((await service.resolveForWithdrawal("owner", created.id)).fields[1].value).toBe(
+        "9999999999",
+      );
+      await service.update("owner", created.id, { status: "archived" });
+      expect(rows.has(created.id)).toBe(true);
+      expect(destinationRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "archived" }),
+      );
       await expect(service.resolveForWithdrawal("owner", created.id)).rejects.toThrow("archived");
     },
   );

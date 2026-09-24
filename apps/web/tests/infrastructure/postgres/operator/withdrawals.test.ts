@@ -5,10 +5,10 @@ describe("operator withdrawal projection", () => {
   it(
     "keeps list identity concise and exposes complete destination snapshots in detail",
     async () => {
-    const sql = {
-      query: async () => {
-        return {
-          rows: [
+      const sql = {
+        query: async () => {
+          return {
+            rows: [
             {
               id: "00000000-0000-4000-8000-000000000001",
               account_id: "00000000-0000-4000-8000-000000000002",
@@ -42,21 +42,21 @@ describe("operator withdrawal projection", () => {
               reservation_currency: "USD",
               reservation_state: "reserved",
             },
-          ],
-        };
-      },
-    } as any;
-    const item = await new OperatorWithdrawalService(sql).get(
-      "00000000-0000-4000-8000-000000000001",
-    );
-    expect(item.destination).toMatchObject({
-      method: "bank_ng",
-      methodName: "Bank account",
-      name: "Primary",
-      savedDestinationId: "00000000-0000-4000-8000-000000000003",
-      fields: [{ name: "account_number", value: "0123456789", copyable: true }],
-    });
-    expect(item.reservation).toMatchObject({ state: "reserved", amountMinor: "4000" });
+            ],
+          };
+        },
+      } as any;
+      const item = await new OperatorWithdrawalService(sql).get(
+        "00000000-0000-4000-8000-000000000001",
+      );
+      expect(item.destination).toMatchObject({
+        method: "bank_ng",
+        methodName: "Bank account",
+        name: "Primary",
+        savedDestinationId: "00000000-0000-4000-8000-000000000003",
+        fields: [{ name: "account_number", value: "0123456789", copyable: true }],
+      });
+      expect(item.reservation).toMatchObject({ state: "reserved", amountMinor: "4000" });
       expect(item).toMatchObject({
         externalReference: "bank-transfer-123",
         completionNote: "Sent manually",
