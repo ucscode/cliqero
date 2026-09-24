@@ -19,7 +19,7 @@ and `enum` rules. Select options are ordered `{ key, value }` entries, where
 the key is submitted and the value is the human-facing label.
 
 Editable fields may also define an `attributes` mapping for additional form
-attributes such as `rows`, `autocomplete`, `placeholder`, `aria-*`, or
+attributes such as `rows`, `autoComplete`, `placeholder`, `aria-*`, or
 `data-*`. Cliqero-owned properties such as `name`, `type`, `required`,
 `value`, `id`, `list`, and `pattern` are filtered out of this mapping,
 as are event-style `on*` attributes, so attributes cannot override field
