@@ -30,4 +30,22 @@ describe("PostgresListingRepository descriptions", () => {
     expect(calls[0]?.values).toContain("Detailed Markdown content");
     expect(calls[1]?.sql).toContain("title||' '||short_description||' '||long_description");
   });
+
+  it("scopes external-key lookups to the supplied seller", async () => {
+    let query: { sql: string; values: readonly unknown[] } | undefined;
+    const repository = new PostgresListingRepository({
+      query: async <T extends object>(sql: string, values: readonly unknown[] = []) => {
+        query = { sql, values };
+        return { rows: [] as T[], rowCount: 0 };
+      },
+    });
+
+    await repository.findByExternalKey("seller-uuid", "shared-key");
+
+    expect(query?.sql).toContain(
+      "where l.seller_id=(select id from identity_capability.accounts where uuid=$1) and l.external_key=$2",
+    );
+    expect(query?.values).toEqual(["seller-uuid", "shared-key"]);
+    expect(repository).not.toHaveProperty("findAnyByExternalKey");
+  });
 });

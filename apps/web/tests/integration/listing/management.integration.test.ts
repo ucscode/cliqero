@@ -1,11 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import type { ObjectStorageProvider } from "@/modules/storage/object-storage";
-import {
-  ListingTransferService,
-  parseTransfer,
-  serializeTransfer,
-} from "@/application/listing/transfer";
+import { ListingTransferService, serializeTransfer } from "@/application/listing/transfer";
 const url = process.env.TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
 const png = new Uint8Array(
@@ -565,6 +561,161 @@ suite("listing management and media", () => {
       ).toEqual([[0, "New cover"]]);
       expect(reconciled.some((item) => item.state === "deletion_pending")).toBe(true);
     });
+
+  it("allows sellers to share external keys and keeps owner imports seller-scoped", async () => {
+    const { owner, other } = await accounts(),
+      source = await app.listingService.create(owner, {
+        title: "Seller A source",
+        shortDescription: "Source summary",
+        longDescription: "Source details",
+        priceMinor: "100",
+        currency: "USD",
+        destination: "https://example.com/source",
+        externalKey: "shared-external-key",
+      }),
+      collision = await app.listingService.create(other, {
+        title: "Seller B listing",
+        shortDescription: "Other summary",
+        longDescription: "Other details",
+        priceMinor: "200",
+        currency: "USD",
+        destination: "https://example.com/other",
+        externalKey: "shared-external-key",
+      });
+
+    expect(await app.listingService.findByExternalKey(owner, "shared-external-key")).toMatchObject({
+      id: source.id,
+    });
+    expect(await app.listingService.findByExternalKey(other, "shared-external-key")).toMatchObject({
+      id: collision.id,
+    });
+
+    const [exported] = await app.listingTransfer.export(owner);
+    const imported = await app.listingTransfer.import(other, {
+      format: "json",
+      mode: "upsert",
+      body: JSON.stringify([{ ...exported, id: undefined, retry_identity: undefined }]),
+    });
+
+    expect(imported).toMatchObject({ created: 0, updated: 1, failed: 0 });
+    expect(imported.records[0]?.listing_id).toBe(collision.id);
+    expect((await app.listings.findById(source.id))?.title).toBe("Seller A source");
+    expect((await app.listings.findById(collision.id))?.title).toBe("Seller A source");
+  });
+
+  it("uses catalogue UUID identity before external keys and scopes key-only matching to the actor", async () => {
+    const { owner, other } = await accounts(),
+      first = await app.listingService.create(owner, {
+        title: "First collision",
+        shortDescription: "First summary",
+        longDescription: "First details",
+        priceMinor: "100",
+        currency: "USD",
+        destination: "https://example.com/first",
+        externalKey: "catalogue-shared-key",
+      }),
+      second = await app.listingService.create(other, {
+        title: "UUID target",
+        shortDescription: "Second summary",
+        longDescription: "Second details",
+        priceMinor: "200",
+        currency: "USD",
+        destination: "https://example.com/second",
+        externalKey: "catalogue-shared-key",
+      });
+    const catalogueRecord = {
+      id: second.id,
+      external_key: "catalogue-shared-key",
+      title: "Updated by UUID",
+      short_description: "Updated summary",
+      long_description: "Updated details",
+      price_minor: "300",
+      currency: "USD",
+      destination: "https://example.com/updated",
+      metadata: {},
+      state: "draft",
+      media: [],
+    };
+
+    const byUuid = await app.listingTransfer.importCatalogue(owner, {
+      format: "json",
+      mode: "upsert",
+      body: JSON.stringify([catalogueRecord]),
+    });
+
+    expect(byUuid).toMatchObject({ created: 0, updated: 1, failed: 0 });
+    expect(byUuid.records[0]?.listing_id).toBe(second.id);
+    expect((await app.listings.findById(first.id))?.title).toBe("First collision");
+    expect((await app.listings.findById(second.id))?.title).toBe("Updated by UUID");
+
+    const actorOwned = await app.listingService.create(owner, {
+      title: "Actor-owned key",
+      shortDescription: "Actor summary",
+      longDescription: "Actor details",
+      priceMinor: "400",
+      currency: "USD",
+      destination: "https://example.com/actor",
+      externalKey: "actor-only-key",
+    });
+    await app.listingService.create(other, {
+      title: "Other actor-owned key",
+      shortDescription: "Other actor summary",
+      longDescription: "Other actor details",
+      priceMinor: "500",
+      currency: "USD",
+      destination: "https://example.com/other-actor",
+      externalKey: "actor-only-key",
+    });
+    const externalOnly = await app.listingTransfer.importCatalogue(owner, {
+      format: "json",
+      mode: "upsert",
+      body: JSON.stringify([
+        {
+          ...catalogueRecord,
+          id: undefined,
+          title: "Updated by scoped key",
+          external_key: "actor-only-key",
+        },
+      ]),
+    });
+
+    expect(externalOnly).toMatchObject({ created: 0, updated: 1, failed: 0 });
+    expect(externalOnly.records[0]?.listing_id).toBe(actorOwned.id);
+    expect((await app.listings.findById(actorOwned.id))?.title).toBe("Updated by scoped key");
+    expect((await app.listingService.findByExternalKey(other, "actor-only-key"))?.title).toBe(
+      "Other actor-owned key",
+    );
+
+    const otherOnlyListing = await app.listingService.create(other, {
+      title: "Key on another seller only",
+      shortDescription: "Other seller summary",
+      longDescription: "Other seller details",
+      priceMinor: "600",
+      currency: "USD",
+      destination: "https://example.com/other-only",
+      externalKey: "other-only-key",
+    });
+
+    const otherOnly = await app.listingTransfer.importCatalogue(owner, {
+      format: "json",
+      mode: "upsert",
+      body: JSON.stringify([
+        {
+          ...catalogueRecord,
+          id: undefined,
+          title: "New actor copy",
+          external_key: "other-only-key",
+        },
+      ]),
+    });
+    expect(otherOnly).toMatchObject({ created: 0, updated: 0, failed: 1 });
+    expect(otherOnly.records[0]?.status).toBe("failed");
+    expect(await app.listingService.findByExternalKey(owner, "other-only-key")).toBeNull();
+    expect((await app.listings.findById(otherOnlyListing.id))?.title).toBe(
+      "Key on another seller only",
+    );
+    expect((await app.listings.findById(second.id))?.title).toBe("Updated by UUID");
+  });
 
   it("isolates invalid records and owner-scoped upserts while preserving resource management", async () => {
     const { owner, other } = await accounts();

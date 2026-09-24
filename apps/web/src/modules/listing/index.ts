@@ -179,7 +179,6 @@ function ensurePublishedShortDescription(value: string) {
 export interface ListingRepository {
   findById(id: Id): Promise<Listing | null>;
   findByExternalKey(sellerId: Id, key: string): Promise<Listing | null>;
-  findAnyByExternalKey?(key: string): Promise<Listing | null>;
   query(input: {
     sellerId?: Id;
     publicOnly?: boolean;

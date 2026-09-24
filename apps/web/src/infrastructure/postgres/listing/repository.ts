@@ -56,15 +56,6 @@ export class PostgresListingRepository implements ListingRepository {
     ).rows[0];
     return row ? this.restore(row) : null;
   }
-  async findAnyByExternalKey(key: string) {
-    const row = (
-      await this.sql.query<ListingRow>(
-        `select l.uuid as id,seller.uuid as seller_id,l.title,l.short_description,l.long_description,l.price_minor,l.price_currency,l.destination_url,l.metadata,l.state,l.external_key,l.featured_position from listing_capability.listings l join identity_capability.accounts seller on seller.id=l.seller_id where l.external_key=$1`,
-        [key],
-      )
-    ).rows[0];
-    return row ? this.restore(row) : null;
-  }
   async query(input: {
     sellerId?: string;
     publicOnly?: boolean;

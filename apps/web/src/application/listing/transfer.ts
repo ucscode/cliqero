@@ -275,19 +275,26 @@ export class ListingTransferService {
     mode: "create" | "upsert",
     catalogue = false,
   ) {
+    const id = record.retry_identity?.slice("listing:".length) ?? record.id;
+    if (catalogue && id) {
+      try {
+        return await this.listings.getCatalogue(id);
+      } catch {
+        if (mode === "upsert" || record.retry_identity)
+          throw new Error(
+            "Import identity does not belong to the authenticated owner or no longer exists",
+          );
+      }
+      return null;
+    }
     if (record.external_key) {
-      const value = catalogue
-        ? await this.listings.findCatalogueByExternalKey(owner, record.external_key)
-        : await this.listings.findByExternalKey(owner, record.external_key);
+      const value = await this.listings.findByExternalKey(owner, record.external_key);
       if (value) return value;
     }
-    const id = record.retry_identity?.slice("listing:".length) ?? record.id;
     if (id) {
       try {
-        return catalogue
-          ? await this.listings.getCatalogue(id)
-          : await this.listings.getOwner(owner, id);
-      } catch (error) {
+        return await this.listings.getOwner(owner, id);
+      } catch {
         if (mode === "upsert" || record.retry_identity)
           throw new Error(
             "Import identity does not belong to the authenticated owner or no longer exists",

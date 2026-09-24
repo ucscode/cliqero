@@ -245,11 +245,6 @@ export class ListingService {
   findByExternalKey(actor: Account, key: string) {
     return this.listings.findByExternalKey(actor.id, key);
   }
-  findCatalogueByExternalKey(actor: Account, key: string) {
-    return this.listings.findAnyByExternalKey
-      ? this.listings.findAnyByExternalKey(key)
-      : this.listings.findByExternalKey(actor.id, key);
-  }
   async getPublic(id: Id) {
     const listing = await this.listings.findById(id);
     return listing?.state === "published" ? listing : null;
