@@ -18,14 +18,55 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiClientError ? error.message : fallback;
 }
 
+export async function saveProfileSettings({
+  profile,
+  country,
+  emailInput,
+  saveProfile,
+  requestEmailChange,
+}: {
+  profile: Profile;
+  country: string;
+  emailInput: string;
+  saveProfile: (country: string | null) => Promise<Profile>;
+  requestEmailChange: (email: string) => Promise<void>;
+}) {
+  const proposedEmail = emailInput.trim();
+  const emailChanged = proposedEmail.toLowerCase() !== profile.email.trim().toLowerCase();
+  const updatedProfile = await saveProfile(country || null);
+
+  if (!emailChanged) {
+    return {
+      profile: updatedProfile,
+      emailInput: updatedProfile.email,
+      message: "Profile saved.",
+      error: null,
+    };
+  }
+
+  try {
+    await requestEmailChange(proposedEmail);
+    return {
+      profile: updatedProfile,
+      emailInput: updatedProfile.email,
+      message: "Profile saved. If the email address can be used, check it for a verification link.",
+      error: null,
+    };
+  } catch {
+    return {
+      profile: updatedProfile,
+      emailInput,
+      message: "Profile saved.",
+      error:
+        "Your profile was saved, but we couldn’t request email verification. Please try again.",
+    };
+  }
+}
+
 export function ProfileSettings() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [country, setCountry] = useState("");
-  const [emailChangeOpen, setEmailChangeOpen] = useState(false);
-  const [newEmail, setNewEmail] = useState("");
-  const [emailChangeBusy, setEmailChangeBusy] = useState(false);
-  const [emailChangeMessage, setEmailChangeMessage] = useState<string | null>(null);
-  const [emailChangeError, setEmailChangeError] = useState<string | null>(null);
+  const [emailInput, setEmailInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -38,6 +79,7 @@ export function ProfileSettings() {
       const value = await apiFetch<Profile>("/api/me/profile");
       setProfile(value);
       setCountry(value.country ?? "");
+      setEmailInput(value.email);
     } catch (cause) {
       setError(errorMessage(cause, "We couldn’t load your profile."));
     } finally {
@@ -51,22 +93,38 @@ export function ProfileSettings() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!profile || busy) return;
     const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const value = await apiFetch<Profile>("/api/me/profile", {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+      const result = await saveProfileSettings({
+        profile,
+        country,
+        emailInput,
+        saveProfile: (nextCountry) =>
+          apiFetch<Profile>("/api/me/profile", {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+            },
+            body: JSON.stringify({ country: nextCountry }),
+          }),
+        requestEmailChange: async (newEmail) => {
+          const response = await authClient.changeEmail({
+            newEmail,
+            callbackURL: `${window.location.origin}/email-verified`,
+          });
+          if (response.error) throw response.error;
         },
-        body: JSON.stringify({ country: country || null }),
       });
-      setProfile(value);
-      setCountry(value.country ?? "");
-      setMessage("Profile saved.");
+      setProfile(result.profile);
+      setCountry(result.profile.country ?? "");
+      setEmailInput(result.emailInput);
+      setMessage(result.message);
+      setError(result.error);
     } catch (cause) {
       if (cause instanceof ApiClientError) {
         const presented = presentFormApiError(cause, []);
@@ -74,36 +132,6 @@ export function ProfileSettings() {
       } else setError("We couldn’t save your profile.");
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function requestEmailChange(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!profile || emailChangeBusy) return;
-    setEmailChangeBusy(true);
-    setEmailChangeError(null);
-    setEmailChangeMessage(null);
-    const proposedEmail = newEmail.trim();
-    if (proposedEmail.toLowerCase() === profile.email.toLowerCase()) {
-      setEmailChangeError("Enter an email address different from your current one.");
-      setEmailChangeBusy(false);
-      return;
-    }
-    try {
-      const result = await authClient.changeEmail({
-        newEmail: proposedEmail,
-        callbackURL: `${window.location.origin}/email-verified`,
-      });
-      if (result.error) throw result.error;
-      setEmailChangeMessage(`Verification email sent to ${proposedEmail}.`);
-      setEmailChangeOpen(false);
-      setNewEmail("");
-    } catch (cause) {
-      setEmailChangeError(
-        cause instanceof Error ? cause.message : "We couldn’t send the verification email.",
-      );
-    } finally {
-      setEmailChangeBusy(false);
     }
   }
 
@@ -127,52 +155,27 @@ export function ProfileSettings() {
       {message && <Toast tone="success">{message}</Toast>}
       <form id="settings-profile-form" className="grid max-w-2xl gap-3" onSubmit={save}>
         <Label htmlFor="settings-username">Username</Label>
-        <Input id="settings-username" value={profile.username} readOnly />
+        <Input id="settings-username" value={profile.username} disabled />
         <CountrySelect
           id="settings-country"
           value={country}
           onChange={setCountry}
           required={false}
         />
-        <HoneypotField />
-      </form>
-      <div className="grid max-w-2xl gap-3">
         <Label htmlFor="settings-email">Email</Label>
-        <Input id="settings-email" value={profile.email} readOnly />
-        <Button
-          type="button"
-          variant="secondary"
-          className="w-fit"
-          onClick={() => {
-            setEmailChangeOpen((open) => !open);
-            setEmailChangeError(null);
-            setEmailChangeMessage(null);
-          }}
-        >
-          {emailChangeOpen ? "Cancel email change" : "Change email"}
+        <Input
+          id="settings-email"
+          type="email"
+          autoComplete="email"
+          required
+          value={emailInput}
+          onChange={(event) => setEmailInput(event.target.value)}
+        />
+        <HoneypotField />
+        <Button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save profile"}
         </Button>
-        {emailChangeMessage && <Toast tone="success">{emailChangeMessage}</Toast>}
-        {emailChangeError && <Toast>{emailChangeError}</Toast>}
-        {emailChangeOpen && (
-          <form className="grid gap-3" onSubmit={requestEmailChange}>
-            <Label htmlFor="settings-new-email">New email</Label>
-            <Input
-              id="settings-new-email"
-              type="email"
-              autoComplete="email"
-              required
-              value={newEmail}
-              onChange={(event) => setNewEmail(event.target.value)}
-            />
-            <Button type="submit" disabled={emailChangeBusy}>
-              {emailChangeBusy ? "Sending…" : "Send verification"}
-            </Button>
-          </form>
-        )}
-      </div>
-      <Button type="submit" form="settings-profile-form" disabled={busy}>
-        {busy ? "Saving…" : "Save profile"}
-      </Button>
+      </form>
     </Card>
   );
 }

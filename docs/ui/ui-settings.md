@@ -4,14 +4,16 @@ Customer Settings contains one Profile surface.
 
 ## Profile
 
-The profile displays the account username as read-only. Country is ordinary
-self-service profile information and can be selected or cleared from the
-country dropdown. Saving profile details updates country only; controlled
+The username is displayed as a disabled field in normal Settings. Country is
+ordinary self-service profile information and can be selected or cleared from
+the country dropdown. Saving profile details updates country only; controlled
 application workflows may manage username changes separately.
 
-The current email is shown read-only. A customer can request an email change by
-entering a new address. A verification link is sent to that address, and the
-current email remains in effect until the new address is verified.
+Email is editable directly in the Profile form. Save profile requests an email
+change through Better Auth only when the trimmed address differs from the
+current canonical email. The feedback is intentionally neutral about whether
+the address can be used. The current email remains canonical until the new
+address is verified.
 
 ## Integrations
 

@@ -58,6 +58,14 @@ describe("customer profile update boundary", () => {
     expect(state.update).not.toHaveBeenCalled();
   });
 
+  it("rejects email mutation because canonical email belongs to authentication", async () => {
+    const response = await patch({ email: "new@example.com" });
+
+    expect(response.status).toBe(400);
+    expect(state.update).not.toHaveBeenCalled();
+    expect(state.profile.email).toBe("member@example.test");
+  });
+
   it("accepts only country changes, including clearing the optional country", async () => {
     const changed = await patch({ country: "GH" });
     expect(changed.status).toBe(200);

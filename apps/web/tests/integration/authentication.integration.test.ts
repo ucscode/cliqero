@@ -249,6 +249,76 @@ suite("Better Auth and Cliqero identity boundary", () => {
     expect((await app.profiles.get(account.id)).email).toBe(proposedEmail);
   });
 
+  it("keeps duplicate-email change requests privacy-preserving without sending verification", async () => {
+    const currentEmail = "email-duplicate-current@example.com";
+    const existingEmail = "email-duplicate-existing@example.com";
+    const account = await app.authentication.register({
+      email: currentEmail,
+      username: "emailduplicatecurrent",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await app.authentication.register({
+      email: existingEmail,
+      username: "emailduplicateexisting",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const signIn = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: currentEmail, password: "correct-horse-battery" }),
+      }),
+    );
+    const cookie = signIn.headers.get("set-cookie")!.split(";")[0];
+    emailDelivery.messages.length = 0;
+
+    const response = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/change-email", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ newEmail: existingEmail }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: true });
+    expect(emailDelivery.messages).toEqual([]);
+    expect((await app.profiles.get(account.id)).email).toBe(currentEmail);
+    expect(
+      (
+        await app.database.query<{ email: string }>(
+          `select email from better_auth."user" where email in ($1,$2) order by email`,
+          [currentEmail, existingEmail],
+        )
+      ).rows,
+    ).toEqual([{ email: currentEmail }, { email: existingEmail }]);
+  });
+
+  it("continues to resend verification for the current canonical email", async () => {
+    const email = "verification-resend-current@example.com";
+    await app.authentication.register({
+      email,
+      username: "verificationresend",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    emailDelivery.messages.length = 0;
+
+    const response = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/send-verification-email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, callbackURL: "http://localhost:3000/email-verified" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(emailDelivery.messages).toHaveLength(1);
+    expect(emailDelivery.messages[0]).toMatchObject({ kind: "verification", email });
+  });
+
   it("resets a credential without requiring the previous password", async () => {
     const email = "console-reset@example.com";
     const account = await app.authentication.register({
