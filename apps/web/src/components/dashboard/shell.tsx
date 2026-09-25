@@ -35,7 +35,7 @@ import { SettingsPanel } from "../settings";
 import { BrandLink } from "../brand-identity";
 import { CheckoutFlow } from "../checkout/flow";
 import { DashboardOverview } from "./overview";
-import { dashboardSectionTitle, DashboardNavigation } from "./navigation";
+import { dashboardSectionTitle, DashboardNavigation, resolveDashboardSection } from "./navigation";
 import { DashboardSignOut, EmailVerificationNotice } from "./account-controls";
 import {
   Sidebar,
@@ -77,13 +77,12 @@ export function DashboardShell({
   const lastSessionRefreshAt = useRef(0);
   const invalidationStarted = useRef(false);
   const params = useSearchParams();
-  const section = payoutMethodFormMode
-    ? "payout-methods"
-    : withdrawalHistoryPage
-      ? "withdrawals"
-      : dedicatedWalletFunding || fundingHistoryPage
-        ? "wallet"
-        : (params.get("section") ?? (params.get("buy") ? "checkout" : "overview"));
+  const section = resolveDashboardSection(params.get("section"), Boolean(params.get("buy")), {
+    payoutMethodForm: Boolean(payoutMethodFormMode),
+    withdrawalHistory: withdrawalHistoryPage,
+    walletFunding: dedicatedWalletFunding,
+    fundingHistory: fundingHistoryPage,
+  });
   const buy = params.get("buy");
   const checkoutId = params.get("checkout") ?? undefined;
   const fundingId = params.get("funding") ?? undefined;

@@ -114,7 +114,9 @@ export function ReferralsPanel() {
       <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Referrals</p>
-          <h2 id="referrals-heading">Your referrals</h2>
+          <h2 id="referrals-heading" className="text-2xl font-semibold tracking-tight">
+            Your referrals
+          </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Browse the accounts in your referral network by level. Downlines shows each account’s
             direct children.

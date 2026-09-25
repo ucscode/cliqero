@@ -77,7 +77,10 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
       <div className="flex flex-col gap-5 border-b border-slate-200 pb-8 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="eyebrow">Catalogue</p>
-          <h1 id="catalogue-heading" className="!mb-0 !text-4xl sm:!text-5xl">
+          <h1
+            id="catalogue-heading"
+            className="mb-0 text-4xl font-semibold tracking-tight sm:text-5xl"
+          >
             Explore useful things.
           </h1>
         </div>
@@ -164,7 +167,10 @@ export function StorefrontFallback() {
       <div className="flex flex-col gap-5 border-b border-slate-200 pb-8 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="eyebrow">Catalogue</p>
-          <h1 id="catalogue-heading" className="!mb-0 !text-4xl sm:!text-5xl">
+          <h1
+            id="catalogue-heading"
+            className="mb-0 text-4xl font-semibold tracking-tight sm:text-5xl"
+          >
             Explore useful things.
           </h1>
         </div>

@@ -147,7 +147,7 @@ export function ProfileSettings() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="eyebrow">Profile</p>
-          <h3>Your public account details</h3>
+          <h3 className="text-lg font-semibold tracking-tight">Your public account details</h3>
         </div>
         <Badge variant="default">Cliqero identity</Badge>
       </div>

@@ -110,7 +110,9 @@ export function PurchasesPanel() {
       <div className="mb-1 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="eyebrow">Your collection</p>
-          <h2 id="purchases-heading">Purchases</h2>
+          <h2 id="purchases-heading" className="text-2xl font-semibold tracking-tight">
+            Purchases
+          </h2>
         </div>
         <Button variant="ghost" onClick={() => void load(true)} disabled={refreshing}>
           Refresh
@@ -128,7 +130,7 @@ export function PurchasesPanel() {
               <div className="flex flex-wrap justify-between gap-4">
                 <div>
                   <p className="eyebrow">{new Date(purchase.created_at).toLocaleDateString()}</p>
-                  <h3>{purchase.title}</h3>
+                  <h3 className="text-lg font-semibold tracking-tight">{purchase.title}</h3>
                   <p className="m-0 text-sm text-slate-600">{purchaseCardDescription(purchase)}</p>
                   <p className="m-0 text-sm text-slate-500">{accessLabel(purchase)}</p>
                 </div>

@@ -231,7 +231,9 @@ export function HierarchyGraph({
       <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row">
         <div>
           <p className="eyebrow">Network explorer</p>
-          <h3>{operatorMode ? "Explore the referral network" : "Explore your referral network"}</h3>
+          <h3 className="text-lg font-semibold tracking-tight">
+            {operatorMode ? "Explore the referral network" : "Explore your referral network"}
+          </h3>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             This window shows up to {tree.windowDepth} generations.{" "}
             {operatorMode

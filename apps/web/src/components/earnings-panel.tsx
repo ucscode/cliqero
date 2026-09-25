@@ -106,7 +106,9 @@ export function EarningsPanel() {
       <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Earnings</p>
-          <h2 id="earnings-heading">Earnings</h2>
+          <h2 id="earnings-heading" className="text-2xl font-semibold tracking-tight">
+            Earnings
+          </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Seller and referral earnings from completed purchases. Pending earnings become available
             only when the settlement process says they are ready.
@@ -146,7 +148,7 @@ export function EarningsPanel() {
           <Card className="p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h3>Ready to withdraw?</h3>
+                <h3 className="text-lg font-semibold tracking-tight">Ready to withdraw?</h3>
                 <p className="text-sm leading-relaxed text-slate-500">
                   Only available earnings can be requested for payout.
                 </p>
@@ -211,7 +213,7 @@ export function EarningsActivity({
 }) {
   return (
     <Card className="p-5">
-      <h3>Earnings activity</h3>
+      <h3 className="text-lg font-semibold tracking-tight">Earnings activity</h3>
       {entries?.items.length ? (
         <>
           <div className="grid">

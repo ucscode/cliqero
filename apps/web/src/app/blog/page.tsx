@@ -34,7 +34,7 @@ export function BlogIndex({ category, tag, cursor, trail }: BlogIndexProps = {})
             <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
               {siteConfig.name} Blog
             </p>
-            <h1 className="mt-2 !text-5xl !leading-tight !tracking-tight text-slate-900 sm:!text-6xl">
+            <h1 className="mt-2 text-5xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-6xl">
               Ideas for buying, access and referrals
             </h1>
           </div>

@@ -49,7 +49,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           {post.category?.name ?? "Cliqero Journal"}
           {post.publishedAt && ` · ${post.publishedAt.toLocaleDateString("en-US")}`}
         </p>
-        <h1 className="mt-3 !text-4xl !leading-tight !tracking-tight text-slate-900 sm:!text-5xl">
+        <h1 className="mt-3 text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">
           {post.title}
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">{post.excerpt}</p>

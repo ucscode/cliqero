@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import {
   dashboardSectionTitle,
   nextNavigationGroupOpen,
+  resolveDashboardSection,
   resolveNavigationGroupOpen,
 } from "@/components/dashboard/navigation";
 
@@ -11,8 +12,71 @@ const source = readFileSync(
   resolve(process.cwd(), "src/components/dashboard/navigation.tsx"),
   "utf8",
 );
+const shellSource = readFileSync(
+  resolve(process.cwd(), "src/components/dashboard/shell.tsx"),
+  "utf8",
+);
 
 describe("dashboard navigation", () => {
+  it("resolves only supported customer sections and keeps their titles aligned", () => {
+    const sections = [
+      "overview",
+      "wallet",
+      "purchases",
+      "promote",
+      "hierarchy",
+      "referrals",
+      "earnings",
+      "withdrawals",
+      "payout-methods",
+      "settings",
+    ];
+
+    const titles = [
+      "Overview",
+      "Wallet",
+      "Purchases",
+      "Promote",
+      "Hierarchy",
+      "Referrals",
+      "Earnings",
+      "Withdrawals",
+      "Payout Methods",
+      "Settings",
+    ];
+    for (const [index, section] of sections.entries()) {
+      expect(resolveDashboardSection(section, false)).toBe(section);
+      expect(dashboardSectionTitle(section)).toBe(titles[index]);
+    }
+    for (const unknown of ["profile", "whatever"]) {
+      const resolved = resolveDashboardSection(unknown, false);
+      expect(resolved).toBe("overview");
+      expect(dashboardSectionTitle(resolved)).toBe("Overview");
+    }
+  });
+
+  it("keeps checkout continuation and dedicated route modes ahead of query sections", () => {
+    expect(resolveDashboardSection(null, true)).toBe("checkout");
+    expect(resolveDashboardSection("wallet", true)).toBe("wallet");
+    expect(resolveDashboardSection("profile", true)).toBe("overview");
+    expect(resolveDashboardSection("profile", true, { walletFunding: true })).toBe("wallet");
+    expect(resolveDashboardSection("profile", true, { fundingHistory: true })).toBe("wallet");
+    expect(resolveDashboardSection("profile", true, { withdrawalHistory: true })).toBe(
+      "withdrawals",
+    );
+    expect(resolveDashboardSection("profile", true, { payoutMethodForm: true })).toBe(
+      "payout-methods",
+    );
+  });
+
+  it("uses the resolved section for both the dashboard title and rendered panel", () => {
+    expect(shellSource).toContain("const section = resolveDashboardSection(");
+    expect(shellSource).toContain("dashboardSectionTitle(section)");
+    expect(shellSource).toContain('section === "settings" ? (');
+    expect(shellSource).toContain("<DashboardOverview profile={profile} />");
+    expect(shellSource).not.toContain('params.get("section") ??');
+  });
+
   it("exposes Promote, Hierarchy, and Referrals as separate sections", () => {
     expect(source).toContain('label: "Promote"');
     expect(source).toContain('label: "Hierarchy"');

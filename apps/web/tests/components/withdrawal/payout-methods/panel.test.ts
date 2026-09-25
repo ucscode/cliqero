@@ -53,7 +53,9 @@ describe("Payout Methods UI contract", () => {
     const savedName = panelSource.indexOf("{destination.name}", cardStart);
     expect(methodName).toBeGreaterThan(cardStart);
     expect(methodName).toBeLessThan(savedName);
-    expect(panelSource).toContain('className="mt-1 break-words"');
+    expect(panelSource).toContain(
+      'className="mt-1 break-words text-lg font-semibold tracking-tight"',
+    );
     expect(panelSource).toContain("flex items-start justify-between gap-3");
     expect(panelSource).toContain("flex shrink-0 items-start gap-2");
     expect(panelSource).toContain("Unavailable for new withdrawals");

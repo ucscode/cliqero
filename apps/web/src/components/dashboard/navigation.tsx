@@ -41,8 +41,38 @@ const referralNavigation = navigation.filter((item) =>
   ["promote", "hierarchy", "referrals"].includes(item.section),
 );
 
+const dashboardSections = new Set([
+  "overview",
+  "wallet",
+  "purchases",
+  "promote",
+  "hierarchy",
+  "referrals",
+  "earnings",
+  "withdrawals",
+  "payout-methods",
+  "settings",
+]);
+
+export function resolveDashboardSection(
+  section: string | null,
+  hasBuy: boolean,
+  mode: {
+    payoutMethodForm?: boolean;
+    withdrawalHistory?: boolean;
+    walletFunding?: boolean;
+    fundingHistory?: boolean;
+  } = {},
+) {
+  if (mode.payoutMethodForm) return "payout-methods";
+  if (mode.withdrawalHistory) return "withdrawals";
+  if (mode.walletFunding || mode.fundingHistory) return "wallet";
+  if (section === null) return hasBuy ? "checkout" : "overview";
+  return dashboardSections.has(section) ? section : "overview";
+}
+
 export function dashboardSectionTitle(section: string) {
-  return navigation.find((item) => item.section === section)?.label ?? "Dashboard";
+  return navigation.find((item) => item.section === section)?.label ?? "Overview";
 }
 
 export function resolveNavigationGroupOpen(active: boolean, manualOpen: boolean | null) {

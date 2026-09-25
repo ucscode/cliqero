@@ -46,7 +46,7 @@ export function ListingReviewSection({
       data-testid="listing-reviews"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 id="reviews-heading" className="!mb-0 !text-3xl">
+        <h2 id="reviews-heading" className="mb-0 text-3xl font-semibold tracking-tight">
           Reviews
         </h2>
         <p className="flex items-center gap-1 text-slate-600">
@@ -187,7 +187,10 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
               {category}
             </Badge>
           )}
-          <h1 id="listing-title" className="!mb-4 !text-4xl !leading-tight sm:!text-5xl">
+          <h1
+            id="listing-title"
+            className="mb-4 text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"
+          >
             {currentListing.title}
           </h1>
           {approvedRating && (
@@ -225,7 +228,10 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
           className="mx-auto mt-16 max-w-3xl border-t border-slate-200 pt-10"
           aria-labelledby="about-listing"
         >
-          <h2 id="about-listing" className="!mb-6 !text-3xl !leading-tight">
+          <h2
+            id="about-listing"
+            className="mb-6 text-3xl font-semibold leading-tight tracking-tight"
+          >
             About this listing
           </h2>
           <ListingMarkdown content={listingDetailDescription(currentListing)} />

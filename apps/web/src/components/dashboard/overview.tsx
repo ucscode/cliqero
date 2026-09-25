@@ -74,7 +74,9 @@ export function DashboardOverview({
       <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="eyebrow">{siteConfig.name} dashboard</p>
-          <h2>Keep exploring, {profile?.username ?? "there"}.</h2>
+          <h2 className="my-2 text-xl font-semibold tracking-tight">
+            Keep exploring, {profile?.username ?? "there"}.
+          </h2>
           <p>Your wallet and purchases are ready when you are.</p>
         </div>
         <Button asChild>

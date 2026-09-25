@@ -39,7 +39,7 @@ export function ListingCard({
             {listing.metadata.category}
           </p>
         )}
-        <h3 className="!mb-0 line-clamp-2 break-words !text-lg">
+        <h3 className="mb-0 line-clamp-2 break-words text-lg font-semibold tracking-tight">
           <Link href={`/listings/${listing.id}`}>{listing.title}</Link>
         </h3>
         {reviewsVisible && (

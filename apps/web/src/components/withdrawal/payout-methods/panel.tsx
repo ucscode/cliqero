@@ -96,7 +96,9 @@ export function PayoutMethodsPanel() {
                         </span>
                       )}
                     </div>
-                    <h3 className="mt-1 break-words">{destination.name}</h3>
+                    <h3 className="mt-1 break-words text-lg font-semibold tracking-tight">
+                      {destination.name}
+                    </h3>
                   </div>
                   <div className="flex shrink-0 items-start gap-2">
                     <Button asChild variant="secondary" disabled={!destination.method.available}>

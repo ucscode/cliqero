@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { authClient, authDisplayName } from "@/lib/auth-client";
+import { useEffect, useState } from "react";
+import { authClient } from "@/lib/auth-client";
+import { fetchCanonicalApplicationSession } from "@/lib/application-session";
 import { ChevronDown, Menu } from "lucide-react";
 import {
   DropdownMenu,
@@ -15,10 +17,37 @@ import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "../ui
 import { siteConfig } from "@/config/site";
 import { BrandIdentity, BrandLink } from "../brand-identity";
 
+type CanonicalHeaderIdentity = { userId: string; username: string };
+
+export function canonicalHeaderAccountLabel(
+  userId: string | undefined,
+  identity: CanonicalHeaderIdentity | null,
+) {
+  return userId && identity?.userId === userId ? identity.username : "Account";
+}
+
 export function SiteHeader() {
   const router = useRouter();
   const session = authClient.useSession();
   const user = session.data?.user;
+  const [canonicalIdentity, setCanonicalIdentity] = useState<CanonicalHeaderIdentity | null>(null);
+  const accountLabel = canonicalHeaderAccountLabel(user?.id, canonicalIdentity);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    void fetchCanonicalApplicationSession()
+      .then((value) => {
+        if (!cancelled) setCanonicalIdentity({ userId: user.id, username: value.account.username });
+      })
+      .catch(() => {
+        if (!cancelled) setCanonicalIdentity(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
   async function logout() {
     await authClient.signOut();
     router.refresh();
@@ -38,7 +67,6 @@ export function SiteHeader() {
           <Link href="/blog">Blog</Link>
           <Link href="/about">About</Link>
           <Link href="/promote">Promote</Link>
-          {user && <Link href="/dashboard">Dashboard</Link>}
         </nav>
         <div className="ml-auto hidden items-center gap-3 md:flex">
           {session.isPending ? (
@@ -53,7 +81,7 @@ export function SiteHeader() {
                   className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium hover:bg-slate-100"
                   aria-label="Open account menu"
                 >
-                  {authDisplayName(user)}
+                  {accountLabel}
                   <ChevronDown className="h-4 w-4" aria-hidden="true" />
                 </button>
               </DropdownMenuTrigger>
@@ -62,7 +90,7 @@ export function SiteHeader() {
                   <Link href="/dashboard">Dashboard</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard?section=profile">Profile</Link>
+                  <Link href="/dashboard?section=settings">Settings</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => void logout()}>Sign out</DropdownMenuItem>
               </DropdownMenuContent>
@@ -114,6 +142,9 @@ export function SiteHeader() {
               <div className="mt-4 grid gap-1 border-t border-slate-200 pt-4">
                 {user ? (
                   <>
+                    <p className="px-3 pb-2 text-sm text-slate-500" aria-label="Signed in account">
+                      {accountLabel}
+                    </p>
                     <SheetClose asChild>
                       <Link className="rounded-md px-3 py-2 hover:bg-slate-100" href="/dashboard">
                         Dashboard
@@ -122,9 +153,9 @@ export function SiteHeader() {
                     <SheetClose asChild>
                       <Link
                         className="rounded-md px-3 py-2 hover:bg-slate-100"
-                        href="/dashboard?section=profile"
+                        href="/dashboard?section=settings"
                       >
-                        Profile
+                        Settings
                       </Link>
                     </SheetClose>
                     <SheetClose asChild>

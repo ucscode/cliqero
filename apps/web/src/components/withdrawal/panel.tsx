@@ -176,7 +176,9 @@ export function WithdrawalsPanel() {
       <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Withdrawals</p>
-          <h2 id="withdrawals-heading">Move available earnings</h2>
+          <h2 id="withdrawals-heading" className="text-2xl font-semibold tracking-tight">
+            Move available earnings
+          </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Request a withdrawal from your available earnings. Your buyer wallet remains separate.
           </p>
@@ -203,7 +205,7 @@ export function WithdrawalsPanel() {
           <div className="grid gap-4 md:grid-cols-3">
             <Card className="min-w-0 p-5">
               <p className="eyebrow">Available earnings</p>
-              <h3 className="my-2 text-2xl">
+              <h3 className="my-2 text-2xl font-semibold tracking-tight">
                 <Money minor={availableMinor} currency={currency} />
               </h3>
               <Link
@@ -215,7 +217,7 @@ export function WithdrawalsPanel() {
             </Card>
             <Card className="min-w-0 p-5">
               <p className="eyebrow">Reserved in withdrawals</p>
-              <h3 className="my-2 text-2xl">
+              <h3 className="my-2 text-2xl font-semibold tracking-tight">
                 <Money minor={reservedMinor} currency={currency} />
               </h3>
               <p className="text-sm leading-relaxed text-slate-500">
@@ -224,7 +226,7 @@ export function WithdrawalsPanel() {
             </Card>
             <Card className="min-w-0 p-5">
               <p className="eyebrow">Minimum request</p>
-              <h3 className="my-2 text-2xl">
+              <h3 className="my-2 text-2xl font-semibold tracking-tight">
                 <Money minor={policy?.minimum_amount_minor ?? "0"} currency={currency} />
               </h3>
               {!policy?.enabled && (
@@ -236,7 +238,7 @@ export function WithdrawalsPanel() {
           </div>
           <Card className="min-w-0 p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h3>Request a withdrawal</h3>
+              <h3 className="text-lg font-semibold tracking-tight">Request a withdrawal</h3>
               <Badge variant={policy?.enabled ? "default" : "secondary"}>
                 {policy?.enabled ? "Available" : "Disabled"}
               </Badge>
@@ -320,7 +322,7 @@ export function WithdrawalsPanel() {
           </Card>
           <Card className="min-w-0 p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h3>Withdrawal history</h3>
+              <h3 className="text-lg font-semibold tracking-tight">Withdrawal history</h3>
               <Link
                 className="text-sm font-semibold text-emerald-800 underline"
                 href="/dashboard/withdrawals/history"

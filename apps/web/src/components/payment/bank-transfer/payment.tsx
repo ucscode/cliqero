@@ -200,7 +200,7 @@ export function BankTransferPayment(props: PaymentProviderProps) {
       {evidenceAllowed && (
         <form className="grid gap-3 border-t border-slate-200 pt-4" onSubmit={submitEvidence}>
           <div>
-            <h3>Submit transfer evidence</h3>
+            <h3 className="text-lg font-semibold tracking-tight">Submit transfer evidence</h3>
             <p className="text-sm text-slate-600">
               Add a transfer reference or proof file. You can include an optional note for the
               reviewer. Evidence helps the operator reconcile your transfer; it does not confirm or

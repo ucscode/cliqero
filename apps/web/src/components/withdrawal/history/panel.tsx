@@ -75,7 +75,9 @@ export function WithdrawalHistoryPanel() {
     <section className="grid gap-4" aria-labelledby="withdrawal-history-heading">
       <div>
         <p className="eyebrow">Withdrawals</p>
-        <h2 id="withdrawal-history-heading">Withdrawal history</h2>
+        <h2 id="withdrawal-history-heading" className="text-2xl font-semibold tracking-tight">
+          Withdrawal history
+        </h2>
         <Link
           className="mt-2 inline-block text-sm font-semibold text-emerald-800 underline"
           href="/dashboard?section=withdrawals"

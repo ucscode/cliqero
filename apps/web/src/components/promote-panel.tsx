@@ -38,7 +38,9 @@ export function PromotePanel() {
     <section className="grid gap-6" aria-labelledby="promote-heading">
       <div>
         <p className="eyebrow">Promote</p>
-        <h2 id="promote-heading">Share useful opportunities</h2>
+        <h2 id="promote-heading" className="text-2xl font-semibold tracking-tight">
+          Share useful opportunities
+        </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
           Invite people to Cliqero or share catalogue listings you genuinely recommend. A qualifying
           purchase may create referral earnings; a visit alone never guarantees a commission.

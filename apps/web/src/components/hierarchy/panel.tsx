@@ -151,7 +151,9 @@ export function HierarchyPanel() {
       <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Hierarchy</p>
-          <h2 id="hierarchy-heading">Your referral hierarchy</h2>
+          <h2 id="hierarchy-heading" className="text-2xl font-semibold tracking-tight">
+            Your referral hierarchy
+          </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Explore your authorized account hierarchy visually. Financial information for other
             accounts is never shown here.

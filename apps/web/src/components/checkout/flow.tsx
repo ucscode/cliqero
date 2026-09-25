@@ -317,7 +317,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
       </Card>
       <Card className="grid gap-4 p-5">
         <p className="eyebrow">Checkout</p>
-        <h2>{listing.title}</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">{listing.title}</h2>
         <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
         {!started ? (
           <>

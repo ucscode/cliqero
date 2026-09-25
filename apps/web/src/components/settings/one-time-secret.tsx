@@ -27,7 +27,7 @@ export function OneTimeSecret({
       role="status"
     >
       <p className="eyebrow">Shown once</p>
-      <h3>{title}</h3>
+      <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
       <p className="text-sm leading-relaxed text-slate-600">
         Copy this value now. It will not be recoverable after you dismiss this message.
       </p>

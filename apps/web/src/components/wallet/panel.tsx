@@ -468,7 +468,7 @@ export function WalletPanel({
           </Card>
           <Card className="p-6 sm:p-8">
             <p className="eyebrow">In progress</p>
-            <h3>Pending wallet credit</h3>
+            <h3 className="text-lg font-semibold tracking-tight">Pending wallet credit</h3>
             <div className="my-3 text-2xl font-semibold tracking-tight">
               {summaryLoading ? (
                 <Skeleton className="inline-block h-8 w-24 align-middle" />
@@ -487,7 +487,7 @@ export function WalletPanel({
         <Card className="flex items-center gap-3 p-5" aria-live="polite">
           <LoaderCircle className="h-5 w-5 animate-spin text-emerald-700" aria-hidden="true" />
           <div>
-            <h2>Loading funding status</h2>
+            <h2 className="text-lg font-semibold tracking-tight">Loading funding status</h2>
             <p className="text-sm text-slate-600">Retrieving the saved funding attempt…</p>
           </div>
         </Card>
@@ -520,7 +520,9 @@ export function WalletPanel({
         <Card className="flex flex-wrap items-center justify-between gap-4 border-emerald-200 bg-emerald-50/60 p-5">
           <div className="grid gap-1">
             <p className="eyebrow">Payments in progress</p>
-            <h2>{activeFundings.length} active payments</h2>
+            <h2 className="text-lg font-semibold tracking-tight">
+              {activeFundings.length} active payments
+            </h2>
             <p className="text-sm text-slate-600">Resume a saved payment or review its status.</p>
           </div>
           <Button asChild variant="secondary">
@@ -534,7 +536,9 @@ export function WalletPanel({
           <div className="mb-1 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="eyebrow">Your money movement</p>
-              <h2 id="wallet-history-heading">Wallet activity</h2>
+              <h2 id="wallet-history-heading" className="text-2xl font-semibold tracking-tight">
+                Wallet activity
+              </h2>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="ghost">
@@ -597,7 +601,7 @@ export function WalletPanel({
         <Card className="grid gap-4 p-6 sm:p-8" id="wallet-funding" tabIndex={-1}>
           <div className="grid gap-2">
             <p className="eyebrow">Wallet funding</p>
-            <h2>Invalid funding preparation</h2>
+            <h2 className="text-lg font-semibold tracking-tight">Invalid funding preparation</h2>
             <p className="text-sm text-slate-600">
               The amount is missing or invalid. Return to funding entry to choose it again.
             </p>
@@ -615,7 +619,7 @@ export function WalletPanel({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="eyebrow">Wallet funding</p>
-                <h2>Fund your Cliqero wallet</h2>
+                <h2 className="text-2xl font-semibold tracking-tight">Fund your Cliqero wallet</h2>
               </div>
               <div className="flex flex-wrap gap-2">
                 {returnTo && (

@@ -16,7 +16,7 @@ export function FeaturedStorefront({ reviewsVisible }: { reviewsVisible: boolean
       <div className="mb-7 flex items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Selected catalogue</p>
-          <h2 id="featured-listings" className="!mb-0 !text-3xl">
+          <h2 id="featured-listings" className="mb-0 text-3xl font-semibold tracking-tight">
             Featured listings
           </h2>
         </div>

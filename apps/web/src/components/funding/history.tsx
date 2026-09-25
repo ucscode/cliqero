@@ -69,7 +69,7 @@ export function FundingHistoryPanel() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="eyebrow">Wallet funding</p>
-          <h2>Funding history</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Funding history</h2>
         </div>
         <label className="grid gap-1 text-sm">
           <span className="text-slate-600">Filter by status</span>

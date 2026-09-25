@@ -144,7 +144,7 @@ export function IntegrationSettings() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="eyebrow">Integrations</p>
-            <h3>Connected access tools</h3>
+            <h3 className="text-lg font-semibold tracking-tight">Connected access tools</h3>
           </div>
           <Button variant="secondary" onClick={() => void load()}>
             Refresh
@@ -212,7 +212,7 @@ export function IntegrationSettings() {
       {listings.length > 0 && (
         <Card className="grid gap-4 p-5">
           <p className="eyebrow">Add integration</p>
-          <h3>Connect a listing access tool</h3>
+          <h3 className="text-lg font-semibold tracking-tight">Connect a listing access tool</h3>
           <form className="grid max-w-2xl gap-3" onSubmit={create}>
             <label htmlFor="integration-name">Name</label>
             <Input

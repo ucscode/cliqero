@@ -301,7 +301,7 @@ export function PaymentComponent({
           <p className="eyebrow">Payment method</p>
           <p className="font-semibold">{funding.provider_display_name ?? "Payment provider"}</p>
           <p className="eyebrow mt-3">Status</p>
-          <h2>{statePresentation.label}</h2>
+          <h2 className="text-xl font-semibold tracking-tight">{statePresentation.label}</h2>
         </div>
         <Badge
           variant={statePresentation.tone === "danger" ? "destructive" : "secondary"}
