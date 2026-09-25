@@ -46,6 +46,12 @@ export function customerEarningAmount(entry: Pick<EarningsEntry, "direction" | "
   };
 }
 
+export function customerEarningBadgeVariant(state: EarningsEntry["balance_state"]) {
+  if (state === "available") return "default" as const;
+  if (state === "pending") return "warning" as const;
+  return "secondary" as const;
+}
+
 export function earningsEntriesUrl(cursor?: string) {
   const params = new URLSearchParams({ limit: String(EARNINGS_PAGE_SIZE) });
   if (cursor) params.set("cursor", cursor);
@@ -248,7 +254,7 @@ export function EarningsActivity({
       ) : (
         <EmptyState
           title="No earnings yet"
-          description="Qualifying referral commissions will be recorded here as immutable ledger entries."
+          description="Earnings from qualifying sales and referrals will appear here."
         />
       )}
     </Card>
@@ -257,7 +263,7 @@ export function EarningsActivity({
 
 function EarningRow({ entry }: { entry: EarningsEntry }) {
   const amount = customerEarningAmount(entry);
-  const tone = entry.balance_state === "available" ? "success" : "accent";
+  const variant = customerEarningBadgeVariant(entry.balance_state);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-slate-200 py-3 last:border-0">
       <div className="grid min-w-0 gap-1">
@@ -267,9 +273,7 @@ function EarningRow({ entry }: { entry: EarningsEntry }) {
         </span>
       </div>
       <div className="grid justify-items-end gap-1 whitespace-nowrap">
-        <Badge variant={tone === "success" ? "default" : "destructive"}>
-          {label(entry.balance_state)}
-        </Badge>
+        <Badge variant={variant}>{label(entry.balance_state)}</Badge>
         <span className="inline-flex items-baseline gap-0.5">
           {amount.sign}
           <Money minor={amount.minor} currency={entry.currency} />

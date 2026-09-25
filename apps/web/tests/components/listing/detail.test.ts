@@ -59,4 +59,11 @@ describe("listing detail review visibility", () => {
     expect(output).not.toContain("No reviews yet.");
     expect(output).not.toContain("Review body");
   });
+
+  it("includes the shared site footer on the public listing detail route", () => {
+    const route = readFileSync(resolve(process.cwd(), "src/app/listings/[id]/page.tsx"), "utf8");
+    expect(route).toContain('import { SiteFooter } from "@/components/site/footer"');
+    expect(route).toContain("<SiteFooter />");
+    expect(route.indexOf("<ListingDetail")).toBeLessThan(route.indexOf("<SiteFooter />"));
+  });
 });

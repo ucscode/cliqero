@@ -18,8 +18,8 @@ export default async function EmailVerifiedPage({
           : `Your ${siteConfig.name} email is verified. You can continue using your account.`
       }
     >
-      <Link className="text-emerald-700 underline" href="/login">
-        Return to sign in
+      <Link className="text-emerald-700 underline" href="/dashboard">
+        {status === "error" ? "Return to your account" : "Continue to your account"}
       </Link>
     </AuthShell>
   );

@@ -24,10 +24,14 @@ describe("customer withdrawal history page", () => {
   });
 
   it("preserves cancellation and status/reason display through the shared history list", () => {
+    expect(source).not.toContain("window.confirm");
     expect(source).toContain('method: "PATCH"');
     expect(source).toContain('JSON.stringify({ status: "cancelled" })');
+    expect(source).toContain("Cancel withdrawal request?");
+    expect(source).toContain("Keep request");
+    expect(source).toContain("onCancel={setWithdrawalToCancel}");
     expect(source).toContain(
-      "<WithdrawalHistoryList withdrawals={page?.withdrawals ?? []} onCancel={cancel} />",
+      "<WithdrawalHistoryList\n            withdrawals={page?.withdrawals ?? []}\n            onCancel={setWithdrawalToCancel}\n          />",
     );
   });
 });

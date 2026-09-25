@@ -1,13 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ApiClientError, apiFetch, type Withdrawal, type WithdrawalPage } from "@/lib/api-client";
+import {
+  ApiClientError,
+  apiFetch,
+  formatMinorCurrency,
+  type Withdrawal,
+  type WithdrawalPage,
+} from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toast } from "@/components/toast";
 import { WithdrawalHistoryList } from "./list";
+import { ActionLock } from "../action-lock";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/dialog";
 
 const WITHDRAWAL_HISTORY_PAGE_SIZE = 25;
 
@@ -17,6 +25,9 @@ export function WithdrawalHistoryPanel() {
   const [previousCursors, setPreviousCursors] = useState<(string | null)[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [withdrawalToCancel, setWithdrawalToCancel] = useState<Withdrawal | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const cancellationLock = useRef(new ActionLock());
 
   const load = useCallback(async (nextCursor: string | null = null) => {
     setLoading(true);
@@ -44,20 +55,27 @@ export function WithdrawalHistoryPanel() {
     void load();
   }, [load]);
 
-  async function cancel(withdrawal: Withdrawal) {
-    if (!window.confirm("Cancel this withdrawal request?")) return;
-    try {
-      await apiFetch<Withdrawal>(`/api/withdrawals/${withdrawal.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "cancelled" }),
-      });
-      await load(cursor);
-    } catch (cause) {
-      setError(
-        cause instanceof ApiClientError ? cause.message : "Withdrawal could not be cancelled.",
-      );
-    }
+  async function confirmCancellation() {
+    const withdrawal = withdrawalToCancel;
+    if (!withdrawal) return;
+    await cancellationLock.current.run(async () => {
+      setCancelling(true);
+      try {
+        await apiFetch<Withdrawal>(`/api/withdrawals/${withdrawal.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: "cancelled" }),
+        });
+        setWithdrawalToCancel(null);
+        await load(cursor);
+      } catch (cause) {
+        setError(
+          cause instanceof ApiClientError ? cause.message : "Withdrawal could not be cancelled.",
+        );
+      } finally {
+        setCancelling(false);
+      }
+    });
   }
 
   async function next() {
@@ -90,7 +108,10 @@ export function WithdrawalHistoryPanel() {
         {loading && !page ? (
           <Skeleton className="h-64 w-full" aria-label="Loading withdrawal history" />
         ) : (
-          <WithdrawalHistoryList withdrawals={page?.withdrawals ?? []} onCancel={cancel} />
+          <WithdrawalHistoryList
+            withdrawals={page?.withdrawals ?? []}
+            onCancel={setWithdrawalToCancel}
+          />
         )}
         <div className="mt-4 flex justify-between gap-3">
           <Button
@@ -109,6 +130,44 @@ export function WithdrawalHistoryPanel() {
           </Button>
         </div>
       </Card>
+      <Dialog
+        open={Boolean(withdrawalToCancel)}
+        onOpenChange={(open) => {
+          if (!open && !cancelling) setWithdrawalToCancel(null);
+        }}
+      >
+        <DialogContent aria-describedby="withdrawal-history-cancel-description">
+          <DialogHeader>
+            <DialogTitle>Cancel withdrawal request?</DialogTitle>
+            {withdrawalToCancel && (
+              <p id="withdrawal-history-cancel-description" className="text-sm text-slate-600">
+                Cancel the{" "}
+                {formatMinorCurrency(withdrawalToCancel.amount_minor, withdrawalToCancel.currency)}
+                request to {withdrawalToCancel.destination.name}?
+              </p>
+            )}
+          </DialogHeader>
+          {error && <Toast>{error}</Toast>}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setWithdrawalToCancel(null)}
+              disabled={cancelling}
+            >
+              Keep request
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmCancellation()}
+              disabled={cancelling}
+            >
+              {cancelling ? "Cancelling…" : "Cancel withdrawal"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

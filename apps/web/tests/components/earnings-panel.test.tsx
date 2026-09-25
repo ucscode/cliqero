@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   customerEarningAmount,
+  customerEarningBadgeVariant,
   EarningsActivity,
   EarningsHighlight,
   earningsEntriesUrl,
@@ -81,6 +82,11 @@ const entries = {
 };
 
 describe("earnings panel presentation", () => {
+  it("uses positive, warning, and neutral treatments for available, pending, and other balances", () => {
+    expect(customerEarningBadgeVariant("available")).toBe("default");
+    expect(customerEarningBadgeVariant("pending")).toBe("warning");
+    expect(customerEarningBadgeVariant("reversed")).toBe("secondary");
+  });
   it("uses ledger direction for one visible sign without double-negating debits", () => {
     expect(customerEarningAmount({ direction: "credit", amount_minor: "310" })).toEqual({
       sign: "+",
@@ -248,6 +254,9 @@ describe("earnings panel presentation", () => {
     );
 
     expect(output).toContain("No earnings yet");
+    expect(output).toContain("Earnings from qualifying sales and referrals will appear here.");
+    expect(output).not.toContain("referral commissions");
+    expect(output).not.toContain("referral levels");
   });
 
   it("supports returning to an older page", () => {

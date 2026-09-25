@@ -3,7 +3,6 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiClientError, presentFormApiError, apiFetch, type Profile } from "@/lib/api-client";
 import { authClient } from "@/lib/auth-client";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
@@ -144,13 +143,6 @@ export function ProfileSettings() {
     );
   return (
     <Card className="grid gap-5 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="eyebrow">Profile</p>
-          <h3 className="text-lg font-semibold tracking-tight">Your public account details</h3>
-        </div>
-        <Badge variant="default">Cliqero identity</Badge>
-      </div>
       {error && <Toast>{error}</Toast>}
       {message && <Toast tone="success">{message}</Toast>}
       <form id="settings-profile-form" className="grid max-w-2xl gap-3" onSubmit={save}>

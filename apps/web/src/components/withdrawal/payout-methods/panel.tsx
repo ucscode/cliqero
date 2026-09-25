@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
 import type { WithdrawalDestination, WithdrawalMethod } from "@/lib/api-client";
+import { ActionLock } from "../action-lock";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/dialog";
 import { EmptyState } from "../../empty-state";
 import { Skeleton } from "../../ui/skeleton";
 import { Toast } from "../../toast";
@@ -16,6 +18,11 @@ export function PayoutMethodsPanel() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [destinationToArchive, setDestinationToArchive] = useState<WithdrawalDestination | null>(
+    null,
+  );
+  const [archiving, setArchiving] = useState(false);
+  const archiveLock = useRef(new ActionLock());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,19 +47,26 @@ export function PayoutMethodsPanel() {
     void load();
   }, [load]);
 
-  async function archiveDestination(destination: WithdrawalDestination) {
-    if (!window.confirm(`Remove “${destination.name}” from payout methods?`)) return;
-    setError(null);
-    try {
-      await apiFetch(`/api/withdrawal-destinations/${destination.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "archived" }),
-      });
-      await load();
-    } catch {
-      setError("This payout method could not be removed. Please try again.");
-    }
+  async function confirmArchive() {
+    const destination = destinationToArchive;
+    if (!destination) return;
+    await archiveLock.current.run(async () => {
+      setArchiving(true);
+      setError(null);
+      try {
+        await apiFetch(`/api/withdrawal-destinations/${destination.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: "archived" }),
+        });
+        setDestinationToArchive(null);
+        await load();
+      } catch {
+        setError("This payout method could not be removed. Please try again.");
+      } finally {
+        setArchiving(false);
+      }
+    });
   }
 
   return (
@@ -111,7 +125,7 @@ export function PayoutMethodsPanel() {
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => void archiveDestination(destination)}
+                      onClick={() => setDestinationToArchive(destination)}
                     >
                       Remove
                     </Button>
@@ -151,6 +165,42 @@ export function PayoutMethodsPanel() {
           </div>
         </Card>
       )}
+      <Dialog
+        open={Boolean(destinationToArchive)}
+        onOpenChange={(open) => {
+          if (!open && !archiving) setDestinationToArchive(null);
+        }}
+      >
+        <DialogContent aria-describedby="payout-method-remove-description">
+          <DialogHeader>
+            <DialogTitle>Remove payout method?</DialogTitle>
+            {destinationToArchive && (
+              <p id="payout-method-remove-description" className="text-sm text-slate-600">
+                Remove “{destinationToArchive.name}” from your payout methods?
+              </p>
+            )}
+          </DialogHeader>
+          {error && <Toast>{error}</Toast>}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setDestinationToArchive(null)}
+              disabled={archiving}
+            >
+              Keep payout method
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmArchive()}
+              disabled={archiving}
+            >
+              {archiving ? "Removing…" : "Remove"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

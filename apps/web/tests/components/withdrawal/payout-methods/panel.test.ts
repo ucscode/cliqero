@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { vi } from "vitest";
+import { ActionLock } from "@/components/withdrawal/action-lock";
 
 const panelSource = readFileSync(
   resolve(process.cwd(), "src/components/withdrawal/payout-methods/panel.tsx"),
@@ -30,15 +32,32 @@ describe("Payout Methods UI contract", () => {
     expect(panelSource).not.toContain("/archive");
   });
 
-  it("uses dedicated add/edit pages and keeps removal as an archive PATCH", () => {
+  it("uses a destructive confirmation dialog and keeps removal as an archive PATCH", () => {
     expect(panelSource).toContain('href="/dashboard/payout-methods/new"');
     expect(panelSource).toContain(
       "/dashboard/payout-methods/${encodeURIComponent(destination.id)}/edit",
     );
-    expect(panelSource).not.toContain("Dialog");
+    expect(panelSource).not.toContain("window.confirm");
+    expect(panelSource).toContain("<Dialog");
+    expect(panelSource).toContain("Remove payout method?");
+    expect(panelSource).toContain("Keep payout method");
+    expect(panelSource).toContain("onClick={() => setDestinationToArchive(null)}");
+    expect(panelSource).toContain('variant="destructive"');
+    expect(panelSource).toContain("onClick={() => setDestinationToArchive(destination)}");
     expect(panelSource).not.toContain("image_url");
     expect(panelSource).toContain('method: "PATCH"');
     expect(panelSource).toContain('status: "archived"');
+  });
+
+  it("does not issue the archive action before confirmation and prevents duplicate submission", async () => {
+    const lock = new ActionLock();
+    const archive = vi.fn(async () => undefined);
+
+    expect(archive).not.toHaveBeenCalled();
+    expect(panelSource).toContain('body: JSON.stringify({ status: "archived" })');
+    await lock.run(archive);
+    expect(archive).toHaveBeenCalledOnce();
+    expect(panelSource).toContain("disabled={archiving}");
   });
 
   it("hides server-owned fields and does not offer customer copy actions", () => {

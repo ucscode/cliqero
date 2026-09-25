@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { WITHDRAWAL_HISTORY_PREVIEW_SIZE } from "@/components/withdrawal/panel";
+import { ActionLock } from "@/components/withdrawal/action-lock";
 
 const source = readFileSync(resolve(process.cwd(), "src/components/withdrawal/panel.tsx"), "utf8");
 
@@ -24,7 +25,7 @@ describe("withdrawal request UI contract", () => {
   it("uses general available-earnings wording and safe destination identity in history", () => {
     expect(source).toContain("available earnings");
     expect(source).toContain(
-      "<WithdrawalHistoryList withdrawals={page?.withdrawals ?? []} onCancel={cancel} />",
+      "<WithdrawalHistoryList\n              withdrawals={page?.withdrawals ?? []}\n              onCancel={setWithdrawalToCancel}\n            />",
     );
     expect(source).not.toContain("settled referral earnings");
     expect(source).not.toContain("Policy supplied by Cliqero");
@@ -63,11 +64,39 @@ describe("withdrawal request UI contract", () => {
     const requestSuccess = source.indexOf("await load(true);", requestCall);
     expect(requestSuccess).toBeGreaterThan(requestCall);
 
-    const cancelStart = source.indexOf("async function cancel(");
+    const cancelStart = source.indexOf("async function confirmCancellation()");
     const cancelEnd = source.indexOf("return (", cancelStart);
     const cancelHandler = source.slice(cancelStart, cancelEnd);
     expect(cancelHandler).toContain('method: "PATCH"');
     expect(cancelHandler).toContain("await load(true);");
+    expect(cancelHandler).toContain('JSON.stringify({ status: "cancelled" })');
+  });
+
+  it("opens a confirmation dialog instead of calling the cancellation API from the row action", () => {
+    expect(source).not.toContain("window.confirm");
+    expect(source).toContain("onCancel={setWithdrawalToCancel}");
+    expect(source).toContain("Cancel withdrawal request?");
+    expect(source).toContain("Keep request");
+    expect(source).toContain('variant="destructive"');
+    expect(source).toContain("onClick={() => setWithdrawalToCancel(null)}");
+  });
+
+  it("runs the confirmed cancellation only once while the action is pending", async () => {
+    const lock = new ActionLock();
+    let release!: () => void;
+    const request = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+
+    const first = lock.run(request);
+    expect(request).toHaveBeenCalledOnce();
+    await expect(lock.run(request)).resolves.toBe(false);
+    expect(request).toHaveBeenCalledOnce();
+    release();
+    await expect(first).resolves.toBe(true);
   });
 
   it("does not automatically poll for requested or approved withdrawals", () => {

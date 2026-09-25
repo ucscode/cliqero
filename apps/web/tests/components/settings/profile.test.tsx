@@ -15,7 +15,12 @@ describe("customer profile settings", () => {
   it("renders a single profile surface without a one-item tab bar or technical settings", () => {
     const html = renderToStaticMarkup(<SettingsPanel />);
 
-    expect(html).toContain("Your Cliqero account");
+    expect(html).toContain("Your account");
+    expect(html).toContain("Keep your account details up to date.");
+    expect(html).not.toContain("Cliqero identity");
+    expect(html).not.toContain("Your public account details");
+    expect(profileSource).not.toContain("Cliqero identity");
+    expect(profileSource).not.toContain("Your public account details");
     expect(html).not.toContain("Settings sections");
     expect(html).not.toContain("API keys");
     expect(html).not.toContain("Better Auth");
@@ -24,6 +29,7 @@ describe("customer profile settings", () => {
     expect(profileSource).toMatch(/id="settings-username"[\s\S]*?disabled/);
     expect(profileSource).not.toMatch(/id="settings-username"[^\n]*readOnly/);
     expect(profileSource).toContain('id="settings-email"');
+    expect(profileSource).toContain('id="settings-country"');
     expect(profileSource).toContain('type="email"');
     expect(profileSource).toContain("value={emailInput}");
     expect(profileSource).toContain("onChange={(event) => setEmailInput(event.target.value)}");

@@ -1,4 +1,5 @@
 import { SiteHeader } from "@/components/site/header";
+import { SiteFooter } from "@/components/site/footer";
 import { ListingDetail } from "@/components/listing/detail";
 import { loadStorefrontConfiguration } from "@/config/storefront";
 
@@ -9,6 +10,7 @@ export default async function PublicListingPage({ params }: { params: Promise<{ 
     <>
       <SiteHeader />
       <ListingDetail id={id} reviewsVisible={storefrontConfig.reviews.visible} />
+      <SiteFooter />
     </>
   );
 }
