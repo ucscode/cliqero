@@ -85,6 +85,45 @@ suite("Better Auth and Cliqero identity boundary", () => {
     });
   });
 
+  it("dispatches application signup mail as signup verification", async () => {
+    emailDelivery.messages.length = 0;
+    const email = "signup-verification-purpose@example.com";
+
+    await app.authentication.register({
+      email,
+      username: "signuppurpose",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+
+    expect(emailDelivery.messages).toHaveLength(1);
+    expect(emailDelivery.messages[0]).toMatchObject({
+      kind: "signup-verification",
+      email,
+    });
+
+    emailDelivery.messages.length = 0;
+    const routeEmail = "signup-route-purpose@example.com";
+    const response = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "",
+          email: routeEmail,
+          password: "correct-horse-battery",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(emailDelivery.messages).toHaveLength(1);
+    expect(emailDelivery.messages[0]).toMatchObject({
+      kind: "signup-verification",
+      email: routeEmail,
+    });
+  });
+
   it("requires country during registration", async () => {
     await expect(
       app.authentication.register({
@@ -226,7 +265,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
     expect(request.status).toBe(200);
     expect(await request.json()).toMatchObject({ status: true });
     expect(emailDelivery.messages).toHaveLength(1);
-    expect(emailDelivery.messages[0]).toMatchObject({ kind: "verification", email: proposedEmail });
+    expect(emailDelivery.messages[0]).toMatchObject({ kind: "email-change", email: proposedEmail });
     expect((await app.profiles.get(account.id)).email).toBe(currentEmail);
     expect(
       (
@@ -352,9 +391,12 @@ suite("Better Auth and Cliqero identity boundary", () => {
       password: "password-before-reset",
       country: "NG",
     });
+    emailDelivery.messages.length = 0;
     await app.authentication.auth.api.requestPasswordReset({
       body: { email, redirectTo: "http://localhost:3000/reset-password" },
     });
+    expect(emailDelivery.messages).toHaveLength(1);
+    expect(emailDelivery.messages[0]).toMatchObject({ kind: "reset", email });
     const verification = (
       await app.database.query<{ identifier: string }>(
         `select identifier from better_auth.verification where identifier like 'reset-password:%'`,

@@ -4,7 +4,7 @@ import { bearer } from "better-auth/plugins/bearer";
 import { nextCookies } from "better-auth/next-js";
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type { AuthenticationGateway, AuthSession } from "@/application/identity/contracts";
-import { sendAuthEmail, type AuthEmail } from "@/lib/email";
+import { sendAuthEmail, type AuthEmail, type AuthenticationEmailPurpose } from "@/lib/email";
 import { siteConfig } from "@/config/site";
 import { getOptionalSocialProviders } from "@/config/auth";
 import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
@@ -21,10 +21,21 @@ function requiredSecret(): string {
 }
 
 async function deliverAuthenticationEmail(
-  kind: "verification" | "reset",
+  purpose: AuthenticationEmailPurpose,
   message: { user: { email: string; name?: string | null }; url: string; token: string },
 ): Promise<void> {
-  await sendAuthEmail(kind, message);
+  await sendAuthEmail(purpose, message);
+}
+
+function verificationEmailPurpose(request?: Request): Exclude<AuthenticationEmailPurpose, "reset"> {
+  // Cliqero's trusted registration service calls signUpEmail through auth.api,
+  // which has no originating Request. That is the only no-request signup path.
+  if (!request) return "signup-verification";
+
+  const path = new URL(request.url).pathname.replace(/\/$/, "");
+  if (path.endsWith("/sign-up/email")) return "signup-verification";
+  if (path.endsWith("/change-email")) return "email-change";
+  return "verification";
 }
 
 // The concrete option object is intentionally assembled from environment
@@ -95,8 +106,8 @@ export class BetterAuthBoundary implements AuthenticationGateway {
         sendResetPassword: (message: AuthEmail) => deliverAuthenticationEmail("reset", message),
       },
       emailVerification: {
-        sendVerificationEmail: (message: AuthEmail) =>
-          deliverAuthenticationEmail("verification", message),
+        sendVerificationEmail: (message: AuthEmail, request?: Request) =>
+          deliverAuthenticationEmail(verificationEmailPurpose(request), message),
         sendOnSignUp: true,
       },
       account: {

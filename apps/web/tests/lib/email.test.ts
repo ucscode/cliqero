@@ -17,13 +17,45 @@ describe("authentication email content", () => {
     expect(message.html).toContain("http://localhost/reset-password/token");
   });
 
-  it("creates a verification message instead of a bare link", () => {
+  it("creates signup-specific verification content", () => {
+    const message = authenticationEmailContent(
+      "signup-verification",
+      "http://localhost/verify-email?token=x",
+    );
+    expect(message.subject).toBe("Verify your Cliqero email");
+    expect(message.text).toContain("finish setting up");
+    expect(message.text).toMatch(/if you did not create this account/i);
+    expect(message.html).toContain("Verify email");
+  });
+
+  it("creates email-change content without signup wording", () => {
+    const message = authenticationEmailContent(
+      "email-change",
+      "http://localhost/verify-email?token=x",
+    );
+
+    expect(message.subject).toBe("Confirm your new Cliqero email");
+    expect(message.html).toContain("<h1");
+    expect(message.html).toContain("Confirm your new email");
+    expect(message.text).toContain("You requested to use this email address");
+    expect(message.html).toContain("You requested to use this email address");
+    expect(message.text).toContain("Your current email will remain unchanged.");
+    expect(message.html).toContain("Your current email will remain unchanged.");
+    expect(message.html).toContain(">Confirm email</a>");
+    expect(message.text).not.toContain("finish setting up");
+    expect(message.html).not.toContain("finish setting up");
+    expect(message.text).not.toContain("did not create this account");
+    expect(message.html).not.toContain("did not create this account");
+  });
+
+  it("keeps ordinary verification content distinct from both signup and email change", () => {
     const message = authenticationEmailContent(
       "verification",
       "http://localhost/verify-email?token=x",
     );
-    expect(message.subject).toContain("Verify");
-    expect(message.text).toContain("finish setting up");
-    expect(message.html).toContain("Verify email");
+
+    expect(message.text).toContain("Verify your email address for your Cliqero account.");
+    expect(message.text).not.toContain("finish setting up");
+    expect(message.text).not.toContain("email change");
   });
 });
