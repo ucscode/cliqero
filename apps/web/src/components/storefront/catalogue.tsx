@@ -12,6 +12,13 @@ import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
 import { HoneypotField } from "../honeypot-field";
 import { LoadingGrid, ListingGrid } from "./grid";
+import {
+  listingPageRequestFailed,
+  listingPageRequestForKey,
+  listingPageRequestStarted,
+  listingPageRequestSucceeded,
+  type ListingPageRequestState,
+} from "./request-state";
 
 const sortOptions = [
   ["newest", "Newest"],
@@ -30,8 +37,11 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
   const cursor = searchParams.get("cursor") ?? "";
   const trail = searchParams.get("trail")?.split(",").filter(Boolean) ?? [];
   const [draft, setDraft] = useState(query);
-  const [page, setPage] = useState<ListingPage | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [request, setRequest] = useState<ListingPageRequestState>(() =>
+    listingPageRequestStarted(""),
+  );
+  const [retryVersion, setRetryVersion] = useState(0);
+  const requestKey = JSON.stringify([query, sort, cursor]);
   useEffect(() => {
     // The address bar is the catalogue state authority after navigation.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -39,24 +49,31 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
   }, [query]);
   useEffect(() => {
     let active = true;
+    // The address bar is the catalogue state authority after navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRequest(listingPageRequestStarted(requestKey));
     const params = new URLSearchParams();
     if (query) params.set("search", query);
     if (sort !== "newest") params.set("sort", sort);
     if (cursor) params.set("cursor", cursor);
     void apiFetch<ListingPage>(`/api/listings?${params}`)
       .then((result) => {
-        if (active) setPage(result);
+        if (active) setRequest(listingPageRequestSucceeded(requestKey, result));
       })
       .catch((cause: unknown) => {
         if (active)
-          setError(
-            cause instanceof ApiClientError ? cause.message : "We couldn't load the catalogue.",
+          setRequest(
+            listingPageRequestFailed(
+              requestKey,
+              cause instanceof ApiClientError ? cause.message : "We couldn't load the catalogue.",
+            ),
           );
       });
     return () => {
       active = false;
     };
-  }, [query, sort, cursor]);
+  }, [query, sort, cursor, requestKey, retryVersion]);
+  const currentRequest = listingPageRequestForKey(request, requestKey);
   function navigate(next: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(next)) {
@@ -66,8 +83,11 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
     router.push(`${pathname}?${params}`);
   }
   function next() {
-    if (!page?.next_cursor) return;
-    navigate({ cursor: page.next_cursor, trail: cursor ? [...trail, cursor].join(",") : null });
+    if (!currentRequest.page?.next_cursor) return;
+    navigate({
+      cursor: currentRequest.page.next_cursor,
+      trail: cursor ? [...trail, cursor].join(",") : null,
+    });
   }
   function previous() {
     navigate({ cursor: trail.at(-1) ?? null, trail: trail.slice(0, -1).join(",") || null });
@@ -126,12 +146,24 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
           ))}
         </Select>
       </div>
-      {error && <Toast>{error}</Toast>}
-      {!page ? (
+      {currentRequest.status === "loading" ? (
         <LoadingGrid />
-      ) : page.items.length ? (
+      ) : currentRequest.status === "error" ? (
+        <div className="grid justify-items-start gap-3">
+          <Toast>{currentRequest.error}</Toast>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setRequest(listingPageRequestStarted(requestKey));
+              setRetryVersion((version) => version + 1);
+            }}
+          >
+            Try again
+          </Button>
+        </div>
+      ) : currentRequest.page?.items.length ? (
         <>
-          <ListingGrid listings={page.items} reviewsVisible={reviewsVisible} />
+          <ListingGrid listings={currentRequest.page.items} reviewsVisible={reviewsVisible} />
           <nav
             className="flex items-center justify-between border-t border-slate-200 pt-6"
             aria-label="Catalogue pages"
@@ -141,7 +173,7 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
               Previous
             </Button>
             <span className="text-sm text-slate-600">Page {trail.length + (cursor ? 2 : 1)}</span>
-            <Button variant="secondary" disabled={!page.next_cursor} onClick={next}>
+            <Button variant="secondary" disabled={!currentRequest.page.next_cursor} onClick={next}>
               Next
               <ArrowRight className="ml-1 h-4 w-4" />
             </Button>

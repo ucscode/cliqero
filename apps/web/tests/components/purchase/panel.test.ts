@@ -1,9 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
+  PurchaseRefreshBudget,
   purchaseActions,
+  purchaseAccessLabel,
   purchaseCardDescription,
+  purchaseNeedsBackgroundRefresh,
   purchaseStatusPresentation,
 } from "@/components/purchase/panel";
+
+const accessPurchase = {
+  id: "purchase-1",
+  checkout_id: null,
+  listing_id: "listing-1",
+  title: "Listing",
+  short_description: "",
+  long_description: "",
+  amount_minor: "100",
+  currency: "USD",
+  state: "paid" as const,
+  created_at: "2026-09-01T00:00:00.000Z",
+  entitlement_state: null as "active" | "consumed" | "revoked" | "expired" | null,
+  entitlement_expires_at: null as string | null,
+  access_available: false,
+};
 
 describe("purchase status presentation", () => {
   it.each([
@@ -57,5 +76,61 @@ describe("purchase status presentation", () => {
         short_description: "Original purchased summary",
       }),
     ).toBe("Original purchased summary");
+  });
+});
+
+describe("purchase access presentation and refresh eligibility", () => {
+  it.each([
+    [{ ...accessPurchase, access_available: true }, "Ready to access"],
+    [{ ...accessPurchase, entitlement_state: "consumed" as const }, "Used"],
+    [{ ...accessPurchase, entitlement_state: "expired" as const }, "Access expired"],
+    [{ ...accessPurchase, entitlement_state: "revoked" as const }, "Access revoked"],
+    [
+      {
+        ...accessPurchase,
+        entitlement_state: "active" as const,
+        entitlement_expires_at: "2026-09-01T00:00:00.000Z",
+      },
+      "Access expired",
+    ],
+    [accessPurchase, "Access is being prepared"],
+    [{ ...accessPurchase, state: "pending" as const }, "Complete payment to access"],
+  ])("maps entitlement and purchase state to customer copy", (purchase, expected) => {
+    expect(purchaseAccessLabel(purchase, Date.parse("2026-09-10T00:00:00.000Z"))).toBe(expected);
+  });
+
+  it.each(["consumed", "expired", "revoked"] as const)(
+    "does not background-refresh terminal %s access",
+    (entitlement_state) => {
+      expect(
+        purchaseNeedsBackgroundRefresh({
+          state: "completed",
+          entitlement_state,
+        }),
+      ).toBe(false);
+    },
+  );
+
+  it("refreshes pending payment or paid purchases while access is being prepared", () => {
+    expect(purchaseNeedsBackgroundRefresh({ state: "pending", entitlement_state: null })).toBe(
+      true,
+    );
+    expect(purchaseNeedsBackgroundRefresh({ state: "paid", entitlement_state: null })).toBe(true);
+    expect(
+      purchaseNeedsBackgroundRefresh({ state: "completed", entitlement_state: "active" }),
+    ).toBe(false);
+  });
+
+  it("keeps the retry budget exhausted across refreshed purchase arrays", () => {
+    const budget = new PurchaseRefreshBudget(6);
+    const pending = [{ state: "pending" as const, entitlement_state: null }];
+
+    for (let refresh = 0; refresh < 8; refresh += 1) {
+      expect(pending.some(purchaseNeedsBackgroundRefresh)).toBe(true);
+      if (budget.hasRemaining) expect(budget.consume()).toBe(true);
+    }
+
+    expect(budget.hasRemaining).toBe(false);
+    expect(budget.consume()).toBe(false);
   });
 });

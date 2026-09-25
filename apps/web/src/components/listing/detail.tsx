@@ -21,8 +21,8 @@ import { TextLink } from "../text-link";
 import { ListingReviews } from "./reviews";
 import { Star } from "lucide-react";
 
-export function shouldRenderListingReviews(reviewsVisible: boolean, rating: Listing["rating"]) {
-  return reviewsVisible && (rating?.count ?? 0) > 0;
+export function shouldRenderListingReviews(reviewsVisible: boolean) {
+  return reviewsVisible;
 }
 
 export function listingDetailDescription(listing: Pick<Listing, "long_description">) {
@@ -38,7 +38,8 @@ export function ListingReviewSection({
   rating: Listing["rating"];
   children?: ReactNode;
 }) {
-  if (!shouldRenderListingReviews(reviewsVisible, rating) || !rating) return null;
+  if (!shouldRenderListingReviews(reviewsVisible)) return null;
+  const hasReviews = (rating?.count ?? 0) > 0;
   return (
     <section
       className="mx-auto mt-14 max-w-3xl border-t border-slate-200 pt-10"
@@ -49,13 +50,17 @@ export function ListingReviewSection({
         <h2 id="reviews-heading" className="mb-0 text-3xl font-semibold tracking-tight">
           Reviews
         </h2>
-        <p className="flex items-center gap-1 text-slate-600">
-          <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
-          <span aria-label={`${rating.average} out of 5 from ${rating.count} reviews`}>
-            {rating.average.toFixed(1)} · {rating.count} {rating.count === 1 ? "review" : "reviews"}
-          </span>
-        </p>
+        {hasReviews && rating && (
+          <p className="flex items-center gap-1 text-slate-600">
+            <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
+            <span aria-label={`${rating.average} out of 5 from ${rating.count} reviews`}>
+              {rating.average.toFixed(1)} · {rating.count}{" "}
+              {rating.count === 1 ? "review" : "reviews"}
+            </span>
+          </p>
+        )}
       </div>
+      {!hasReviews && <p className="text-sm text-slate-600">No reviews yet.</p>}
       {children}
     </section>
   );
@@ -111,7 +116,7 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
     typeof currentListing.metadata.category === "string" && currentListing.metadata.category.trim()
       ? currentListing.metadata.category
       : null;
-  const hasApprovedReviews = shouldRenderListingReviews(reviewsVisible, currentListing.rating);
+  const hasApprovedReviews = (currentListing.rating?.count ?? 0) > 0;
   const approvedRating = hasApprovedReviews ? currentListing.rating! : null;
   function buy() {
     if (!session.data?.user) {

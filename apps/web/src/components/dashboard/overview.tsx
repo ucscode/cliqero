@@ -58,17 +58,7 @@ export function DashboardOverview({
           <OverviewEarningsCard earnings={earnings} />
         </Card>
         <Card className="p-5">
-          <p className="eyebrow">Purchases</p>
-          <h2 className="my-2 text-3xl font-semibold tracking-tight">
-            {purchases?.items.length ?? "—"}
-          </h2>
-          <p className="text-sm text-slate-500">Recent purchases in your collection.</p>
-          <Link
-            className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
-            href="/dashboard?section=purchases"
-          >
-            View purchases <ArrowUpRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
-          </Link>
+          <OverviewPurchasesCard purchases={purchases} />
         </Card>
       </div>
       <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -84,6 +74,32 @@ export function DashboardOverview({
         </Button>
       </Card>
     </div>
+  );
+}
+
+export function OverviewPurchasesCard({ purchases }: { purchases: PurchasePage | null }) {
+  const latest = purchases?.items[0];
+  return (
+    <>
+      <p className="eyebrow">Purchases</p>
+      <h2 className="my-2 text-2xl font-semibold tracking-tight">Your collection</h2>
+      {latest ? (
+        <p className="text-sm text-slate-600">
+          Latest: <span className="font-medium">{latest.title}</span> ·{" "}
+          {new Date(latest.created_at).toLocaleDateString()}
+        </p>
+      ) : (
+        <p className="text-sm text-slate-500">
+          {purchases ? "No purchases yet." : "Recent purchases are unavailable."}
+        </p>
+      )}
+      <Link
+        className="text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+        href="/dashboard?section=purchases"
+      >
+        View purchases <ArrowUpRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
+      </Link>
+    </>
   );
 }
 

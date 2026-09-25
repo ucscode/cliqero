@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, ApiClientError, type Purchase, type PurchasePage } from "@/lib/api-client";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -41,11 +41,46 @@ export function purchaseCardDescription(purchase: Pick<Purchase, "short_descript
   return purchase.short_description;
 }
 
-function accessLabel(purchase: Purchase): string {
+export function purchaseAccessLabel(purchase: Purchase, now = Date.now()): string {
   if (purchase.access_available) return "Ready to access";
+  if (purchase.entitlement_state === "consumed") return "Used";
+  if (purchase.entitlement_state === "expired") return "Access expired";
+  if (purchase.entitlement_state === "revoked") return "Access revoked";
+  if (
+    purchase.entitlement_state === "active" &&
+    purchase.entitlement_expires_at !== null &&
+    Date.parse(purchase.entitlement_expires_at) <= now
+  )
+    return "Access expired";
   if (purchase.state === "paid" || purchase.state === "completed")
-    return purchase.entitlement_state === "revoked" ? "Access revoked" : "Access is being prepared";
+    return "Access is being prepared";
   return "Complete payment to access";
+}
+
+export function purchaseNeedsBackgroundRefresh(
+  purchase: Pick<Purchase, "state" | "entitlement_state">,
+): boolean {
+  return (
+    purchase.state === "pending" ||
+    ((purchase.state === "paid" || purchase.state === "completed") &&
+      purchase.entitlement_state === null)
+  );
+}
+
+export class PurchaseRefreshBudget {
+  private attempts = 0;
+
+  constructor(private readonly maximumAttempts: number) {}
+
+  consume(): boolean {
+    if (this.attempts >= this.maximumAttempts) return false;
+    this.attempts += 1;
+    return true;
+  }
+
+  get hasRemaining(): boolean {
+    return this.attempts < this.maximumAttempts;
+  }
 }
 
 function checkoutHref(purchase: Pick<Purchase, "listing_id" | "checkout_id">): string {
@@ -59,6 +94,7 @@ export function PurchasesPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const refreshBudget = useRef(new PurchaseRefreshBudget(6));
 
   const load = useCallback(async (background = false) => {
     if (background) setRefreshing(true);
@@ -84,12 +120,14 @@ export function PurchasesPanel() {
   }, [load]);
 
   useEffect(() => {
-    if (!purchases.some((purchase) => purchase.state === "pending" || !purchase.access_available))
+    if (!purchases.some(purchaseNeedsBackgroundRefresh) || !refreshBudget.current.hasRemaining)
       return;
-    let attempts = 0;
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "hidden" || attempts >= 6) return;
-      attempts += 1;
+      if (document.visibilityState === "hidden") return;
+      if (!refreshBudget.current.consume()) {
+        window.clearInterval(timer);
+        return;
+      }
       void load(true);
     }, 7000);
     return () => window.clearInterval(timer);
@@ -132,7 +170,7 @@ export function PurchasesPanel() {
                   <p className="eyebrow">{new Date(purchase.created_at).toLocaleDateString()}</p>
                   <h3 className="text-lg font-semibold tracking-tight">{purchase.title}</h3>
                   <p className="m-0 text-sm text-slate-600">{purchaseCardDescription(purchase)}</p>
-                  <p className="m-0 text-sm text-slate-500">{accessLabel(purchase)}</p>
+                  <p className="m-0 text-sm text-slate-500">{purchaseAccessLabel(purchase)}</p>
                 </div>
                 <div className="grid content-start justify-items-end gap-2 whitespace-nowrap">
                   <Money minor={purchase.amount_minor} currency={purchase.currency} />
@@ -157,7 +195,7 @@ export function PurchasesPanel() {
                     className="inline-flex min-h-10 items-center text-sm text-slate-500"
                     aria-live="polite"
                   >
-                    {accessLabel(purchase)}
+                    {purchaseAccessLabel(purchase)}
                   </span>
                 )}
               </div>
