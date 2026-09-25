@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shouldPollFundingSettlement } from "@/components/payment/shared/status";
 import {
   activeFundingAction,
   bankStatusFieldRows,
@@ -373,6 +374,79 @@ describe("customer-facing funding presentation", () => {
     );
   });
 
+  it("polls confirmed funding until wallet credit availability and refreshes the wallet", async () => {
+    expect(shouldPollFundingSettlement({ state: "confirmed", wallet_credit_state: null })).toBe(
+      true,
+    );
+    expect(
+      shouldPollFundingSettlement({ state: "confirmed", wallet_credit_state: "pending" }),
+    ).toBe(true);
+    expect(
+      shouldPollFundingSettlement({ state: "confirmed", wallet_credit_state: "available" }),
+    ).toBe(false);
+    expect(
+      shouldPollFundingSettlement({ state: "verification_pending", wallet_credit_state: null }),
+    ).toBe(false);
+
+    const callbacks: Array<() => void> = [];
+    const scheduledDelays: number[] = [];
+    const timers = {
+      setTimeout: (handler: () => void, delay: number) => {
+        callbacks.push(handler);
+        scheduledDelays.push(delay);
+        return callbacks.length - 1;
+      },
+      clearTimeout: () => undefined,
+    };
+    const requests: string[] = [];
+    const walletRefreshes: string[] = [];
+    const observed: FundingStatus[] = [];
+    let responseCount = 0;
+    const stop = createFundingStatusPoller({
+      initialFunding: { state: "confirmed", wallet_credit_state: null },
+      getStatus: async () => {
+        requests.push("GET /api/wallet/fund/funding-1");
+        responseCount += 1;
+        return {
+          id: "funding-1",
+          provider: "development",
+          state: "confirmed",
+          wallet_credit_state: responseCount === 1 ? "pending" : "available",
+        } as FundingStatus;
+      },
+      onStatus: async (latest) => {
+        observed.push(latest);
+        walletRefreshes.push("GET /api/wallet");
+        await Promise.resolve();
+      },
+      timers,
+      isVisible: () => true,
+      shouldContinue: shouldPollFundingSettlement,
+      getPollInterval: () => FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS,
+    });
+
+    callbacks.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(observed[0]?.wallet_credit_state).toBe("pending");
+    expect(walletRefreshes).toEqual(["GET /api/wallet"]);
+    expect(scheduledDelays).toEqual([
+      FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
+      FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS,
+    ]);
+
+    callbacks.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(observed.at(-1)?.wallet_credit_state).toBe("available");
+    expect(walletRefreshes).toEqual(["GET /api/wallet", "GET /api/wallet"]);
+    expect(requests).toEqual(["GET /api/wallet/fund/funding-1", "GET /api/wallet/fund/funding-1"]);
+    expect(scheduledDelays).toHaveLength(2);
+    stop();
+  });
+
   it("polls status with GET semantics and applies a pending-to-confirmed response", async () => {
     const callbacks: Array<() => void> = [];
     const scheduledDelays: number[] = [];
@@ -404,7 +478,9 @@ describe("customer-facing funding presentation", () => {
         responseCount += 1;
         return (responseCount === 1 ? pending : confirmed) as FundingStatus;
       },
-      onStatus: (latest) => observed.push(latest),
+      onStatus: (latest) => {
+        observed.push(latest);
+      },
       timers,
       isVisible: () => true,
       shouldContinue: shouldPollDirectTrc20Funding,

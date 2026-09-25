@@ -75,6 +75,13 @@ type FundingStatusPollerTimers = {
   clearTimeout: (handle: number) => void;
 };
 
+type FundingPollingState = Pick<FundingStatus, "state"> &
+  Partial<Pick<FundingStatus, "wallet_credit_state">>;
+
+export function shouldPollFundingSettlement(funding: FundingPollingState) {
+  return funding.state === "confirmed" && funding.wallet_credit_state !== "available";
+}
+
 export function createFundingStatusPoller({
   initialFunding,
   getStatus,
@@ -85,14 +92,14 @@ export function createFundingStatusPoller({
   shouldContinue = (funding) => funding.state === "verification_pending",
   getPollInterval = () => FUNDING_STATUS_POLL_INTERVAL_MS,
 }: {
-  initialFunding: Pick<FundingStatus, "state">;
+  initialFunding: FundingPollingState;
   getStatus: () => Promise<FundingStatus>;
-  onStatus: (funding: FundingStatus) => void;
+  onStatus: (funding: FundingStatus) => void | Promise<void>;
   onError?: (error: unknown) => void;
   timers: FundingStatusPollerTimers;
   isVisible?: () => boolean;
-  shouldContinue?: (funding: Pick<FundingStatus, "state">) => boolean;
-  getPollInterval?: (funding: Pick<FundingStatus, "state">) => number;
+  shouldContinue?: (funding: FundingPollingState) => boolean;
+  getPollInterval?: (funding: FundingPollingState) => number;
 }) {
   let currentFunding = initialFunding;
   let disposed = false;
@@ -119,7 +126,7 @@ export function createFundingStatusPoller({
       const latest = await getStatus();
       if (disposed) return;
       currentFunding = latest;
-      onStatus(latest);
+      await onStatus(latest);
       if (!shouldContinue(latest)) return;
     } catch (error) {
       if (!disposed) onError?.(error);
@@ -148,7 +155,7 @@ function useProviderStatusPolling({
   getPollInterval,
 }: {
   funding: FundingStatus;
-  shouldContinue: (funding: Pick<FundingStatus, "state">) => boolean;
+  shouldContinue: (funding: FundingPollingState) => boolean;
   onStatus: (funding: FundingStatus) => void;
   onConfirmed: () => void;
   onError: () => void;
@@ -156,11 +163,13 @@ function useProviderStatusPolling({
 }) {
   const fundingId = funding.id;
   const fundingState = funding.state;
+  const walletCreditState = funding.wallet_credit_state;
   useEffect(() => {
     if (!shouldContinue({ state: fundingState })) return;
     return createFundingStatusPoller({
       initialFunding: {
         state: fundingState,
+        wallet_credit_state: walletCreditState,
       },
       getStatus: () => apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`),
       onStatus: (latest) => {
@@ -175,7 +184,54 @@ function useProviderStatusPolling({
         clearTimeout: (handle) => window.clearTimeout(handle),
       },
     });
-  }, [fundingId, fundingState, getPollInterval, onConfirmed, onError, onStatus, shouldContinue]);
+  }, [
+    fundingId,
+    fundingState,
+    walletCreditState,
+    getPollInterval,
+    onConfirmed,
+    onError,
+    onStatus,
+    shouldContinue,
+  ]);
+}
+
+export function FundingSettlementPolling({
+  funding,
+  onStatus,
+  refreshWallet,
+  onError,
+}: {
+  funding: FundingStatus;
+  onStatus: (funding: FundingStatus) => void;
+  refreshWallet: () => Promise<void>;
+  onError: () => void;
+}) {
+  const fundingId = funding.id;
+  const fundingState = funding.state;
+  const walletCreditState = funding.wallet_credit_state;
+  useEffect(() => {
+    if (
+      !shouldPollFundingSettlement({ state: fundingState, wallet_credit_state: walletCreditState })
+    )
+      return;
+    return createFundingStatusPoller({
+      initialFunding: { state: fundingState, wallet_credit_state: walletCreditState },
+      getStatus: () => apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`),
+      onStatus: async (latest) => {
+        onStatus(latest);
+        await refreshWallet();
+      },
+      onError,
+      shouldContinue: shouldPollFundingSettlement,
+      getPollInterval: () => FUNDING_STATUS_POLL_VERIFICATION_INTERVAL_MS,
+      timers: {
+        setTimeout: (handler, delay) => window.setTimeout(handler, delay),
+        clearTimeout: (handle) => window.clearTimeout(handle),
+      },
+    });
+  }, [fundingId, fundingState, walletCreditState, onError, onStatus, refreshWallet]);
+  return null;
 }
 
 export function verificationObservationHeading(verification: FundingStatus["verification"]) {

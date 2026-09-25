@@ -46,6 +46,7 @@ export type WalletTransaction =
 export interface WalletRepository {
   summary(accountId: Id, options?: { forUpdate?: boolean }): Promise<WalletSummary>;
   findCreditByFunding(fundingId: Id): Promise<WalletCredit | null>;
+  findFundingCreditWork(limit?: number): Promise<readonly { id: Id }[]>;
   findPendingCredits(limit?: number): Promise<readonly WalletCredit[]>;
   createCredit(credit: WalletCredit): Promise<void>;
   makeCreditAvailable(id: Id): Promise<void>;

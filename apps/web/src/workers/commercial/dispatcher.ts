@@ -47,7 +47,7 @@ export class CommercialWorkflowDispatcher {
     );
     processed += await this.family(
       "wallet-credit",
-      () => this.app.funding.findWork("confirmed"),
+      () => this.app.walletRepository.findFundingCreditWork(),
       (item) => this.app.walletCredit.process(item.id),
     );
     processed += await this.family(

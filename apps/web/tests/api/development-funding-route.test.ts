@@ -40,6 +40,7 @@ function configure(account: typeof sessionAccount | null, funding: any) {
     },
     funding: { findById: vi.fn(async () => funding) },
     fundingVerification: { process: vi.fn(async () => ({ ...funding, state: "confirmed" })) },
+    walletCredit: { process: vi.fn(async () => ({ id: "unexpected-credit" })) },
   };
 }
 
@@ -87,6 +88,7 @@ describe("development funding verification boundary", () => {
     configure(sessionAccount, funding);
     expect(developmentFundingVerificationEnabled()).toBe(true);
     expect((await POST(request())).status).toBe(200);
+    expect(fixtures.container.walletCredit.process).not.toHaveBeenCalled();
 
     vi.stubEnv("NODE_ENV", "production");
     expect(developmentFundingVerificationEnabled()).toBe(false);

@@ -37,6 +37,7 @@ function configure(state: string, providerName = "paystack") {
     principalResolver: { resolve: vi.fn(async () => ({ account })) },
     funding: { findById: vi.fn(async () => funding) },
     fundingInitialization: { process },
+    walletRepository: { findCreditByFunding: vi.fn(async () => null) },
   };
   return { funding, process };
 }

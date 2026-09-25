@@ -34,6 +34,21 @@ export class PostgresWalletRepository implements WalletRepository {
     ).rows[0];
     return r ? this.credit(r) : null;
   }
+  async findFundingCreditWork(limit = 50) {
+    return (
+      await this.sql.query<{ id: string }>(
+        `select f.uuid as id
+           from funding_capability.funding_transactions f
+          where f.state='confirmed'
+            and not exists (
+              select 1 from wallet_capability.credits c where c.funding_id=f.id
+            )
+          order by f.updated_at,f.id
+          limit $1`,
+        [Math.max(1, Math.min(limit, 50))],
+      )
+    ).rows;
+  }
   async findPendingCredits(limit = 50) {
     return (
       await this.sql.query<any>(

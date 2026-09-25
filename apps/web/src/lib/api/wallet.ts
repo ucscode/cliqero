@@ -73,6 +73,7 @@ export type FundingStatus = {
     | "cancelled"
     | "expired"
     | "reconciliation_pending";
+  wallet_credit_state: "pending" | "available" | null;
   provider: string;
   provider_display_name: string;
   customer_action: string | null;

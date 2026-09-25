@@ -12,7 +12,12 @@ import { projectVerificationObservation } from "@/modules/funding/funding";
 const fundingId = "00000000-0000-4000-8000-000000000010";
 const account = { id: "00000000-0000-4000-8000-000000000001" };
 
-function configure(owner = account.id, state = "awaiting_payment", providerName = "development") {
+function configure(
+  owner = account.id,
+  state = "awaiting_payment",
+  providerName = "development",
+  walletCredit: { state: "pending" | "available" } | null = null,
+) {
   fixtures.container = {
     principalResolver: {
       resolve: vi.fn(async () => ({
@@ -70,6 +75,7 @@ function configure(owner = account.id, state = "awaiting_payment", providerName 
       })),
     },
     providers: { displayName: vi.fn(() => "Development") },
+    walletRepository: { findCreditByFunding: vi.fn(async () => walletCredit) },
   };
 }
 
@@ -100,6 +106,7 @@ describe("wallet funding status projection", () => {
     expect(body).toMatchObject({
       id: fundingId,
       state: "awaiting_payment",
+      wallet_credit_state: null,
       provider_display_name: "Development",
       funding_reference: "dev-reference",
       provider_transaction_id: null,
@@ -139,6 +146,22 @@ describe("wallet funding status projection", () => {
       expires_at: "2026-09-11T14:00:00.000Z",
     });
     expect(JSON.stringify(body)).not.toContain("private-rate-source");
+  });
+
+  it("projects wallet-credit settlement state without exposing storage identifiers", async () => {
+    for (const [credit, state] of [
+      [null, null],
+      [{ state: "pending" }, "pending"],
+      [{ state: "available" }, "available"],
+    ] as const) {
+      configure(account.id, "confirmed", "development", credit);
+      const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
+        params: Promise.resolve({ id: fundingId }),
+      });
+      const body = await response.json();
+      expect(body.wallet_credit_state).toBe(state);
+      expect(body).not.toHaveProperty("wallet_credit_id");
+    }
   });
 
   it("projects the persisted bank snapshot before provider initialization", async () => {

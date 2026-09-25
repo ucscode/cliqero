@@ -40,7 +40,7 @@ export class WalletCreditProcessor {
     });
   }
   async runBatch() {
-    for (const f of await this.funding.findWork("confirmed")) await this.process(f.id);
+    for (const funding of await this.wallet.findFundingCreditWork()) await this.process(funding.id);
   }
 }
 export class WalletAvailabilityProcessor {

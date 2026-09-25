@@ -42,6 +42,7 @@ export async function projectFundingStatus(
     typeof container.bankTransferEvidence?.findForFunding === "function"
       ? await container.bankTransferEvidence.findForFunding(accountId, funding.id)
       : null;
+  const walletCredit = await container.walletRepository.findCreditByFunding(funding.id);
   return {
     id: funding.id,
     state: funding.state,
@@ -97,6 +98,7 @@ export async function projectFundingStatus(
     error_message: customerFailureMessage(funding),
     verification: projectVerificationObservation(funding.providerInitialization?.verification),
     confirmed_at: funding.confirmedAt?.toISOString() ?? null,
+    wallet_credit_state: walletCredit?.state ?? null,
     evidence: evidence
       ? {
           id: evidence.id,

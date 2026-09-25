@@ -145,6 +145,25 @@ describe("Postgres wallet and funding projections", () => {
     expect(query).toHaveBeenCalledWith(expect.stringContaining("limit $2"), [accountId, 50]);
   });
 
+  it("discovers only confirmed funding that has no wallet credit before applying the batch limit", async () => {
+    const fundingId = "00000000-0000-4000-8000-000000000099";
+    const query = vi.fn(async (statement: string, values: unknown[]) => {
+      expect(statement).toMatch(/state\s*=\s*'confirmed'[\s\S]*not exists/i);
+      expect(values).toEqual([50]);
+      return { rows: [{ id: fundingId }] };
+    });
+    const repository = new PostgresWalletRepository({ query } as never);
+
+    await expect(repository.findFundingCreditWork(500)).resolves.toEqual([{ id: fundingId }]);
+
+    expect(query).toHaveBeenCalledWith(
+      expect.stringMatching(/state\s*=\s*'confirmed'[\s\S]*not exists/i),
+      [50],
+    );
+    expect(query.mock.calls[0]?.[0]).toContain("wallet_capability.credits");
+    expect(query.mock.calls[0]?.[0]).toContain("limit $1");
+  });
+
   it("projects the persisted provider reference for funding-credit activity", async () => {
     const query = vi.fn<(statement: string, values: unknown[]) => Promise<{ rows: unknown[] }>>(
       async () => ({

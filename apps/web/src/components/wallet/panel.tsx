@@ -40,6 +40,7 @@ import {
 } from "../payment/shared/preparation";
 import { LoaderCircle } from "lucide-react";
 import { PaymentProviderComponent } from "../payment/provider";
+import { FundingSettlementPolling } from "../payment/shared/status";
 
 export {
   createFundingStatusPoller,
@@ -209,6 +210,11 @@ export function WalletPanel({
       setRefreshing(false);
     },
     [showActivity],
+  );
+  const refreshWalletSummary = useCallback(() => loadWallet(true), [loadWallet]);
+  const handleSettlementPollingError = useCallback(
+    () => setProviderError("Wallet settlement is still processing. Retrying…"),
+    [],
   );
   const handleFundingConfirmed = useCallback(() => {
     void loadWallet(true);
@@ -488,18 +494,26 @@ export function WalletPanel({
       )}
 
       {funding && (
-        <PaymentProviderComponent
-          funding={funding}
-          returnTo={returnTo}
-          refreshing={refreshing}
-          submitting={submitting}
-          onRefresh={() => void refreshFunding()}
-          onCancel={() => void cancelFunding()}
-          onFundingChange={applyFundingStatus}
-          onConfirmed={handleFundingConfirmed}
-          onError={setProviderError}
-          providerError={providerError}
-        />
+        <>
+          <FundingSettlementPolling
+            funding={funding}
+            onStatus={applyFundingStatus}
+            refreshWallet={refreshWalletSummary}
+            onError={handleSettlementPollingError}
+          />
+          <PaymentProviderComponent
+            funding={funding}
+            returnTo={returnTo}
+            refreshing={refreshing}
+            submitting={submitting}
+            onRefresh={() => void refreshFunding()}
+            onCancel={() => void cancelFunding()}
+            onFundingChange={applyFundingStatus}
+            onConfirmed={handleFundingConfirmed}
+            onError={setProviderError}
+            providerError={providerError}
+          />
+        </>
       )}
 
       {!fundingPage && activeFundings.length > 0 && (

@@ -20,7 +20,10 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
         process: processing("expiry"),
       },
       walletCredit: { process: processing("wallet-credit") },
-      walletRepository: { findPendingCredits: async () => items("credit") },
+      walletRepository: {
+        findFundingCreditWork: async () => items("funding"),
+        findPendingCredits: async () => items("credit"),
+      },
       walletAvailability: { process: processing("wallet-availability") },
       purchases: {
         findCompletedWithoutEntitlement: async () => items("entitlement"),
