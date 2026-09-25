@@ -14,23 +14,22 @@ export default function PromotePage() {
       <section>
         <h2 className="text-2xl font-semibold text-slate-900">How it works</h2>
         <p className="mt-2">
-          Eligible members share deterministic attributed URLs for catalogue listings. When a
-          referred buyer completes a valid purchase, the existing commission policy may create an
-          earnings entry.
+          Some catalogue products can be shared using referral links. You may earn a commission when
+          someone makes a qualifying purchase through your link.
         </p>
       </section>
       <section>
         <h2 className="text-2xl font-semibold text-slate-900">What it is not</h2>
         <p className="mt-2">
-          Clicks and page views do not create commissions. There are no recruitment fees, and
-          ordinary members do not create catalogue listings.
+          Clicks alone do not earn commission. Sharing products is optional, and members do not
+          create catalogue listings.
         </p>
       </section>
       <section>
         <h2 className="text-2xl font-semibold text-slate-900">Get started</h2>
         <p className="mt-2">
-          Create an account, explore the catalogue, and use the Promote tools when a listing is
-          eligible. Earnings move through the normal pending and settlement lifecycle.
+          Browse the catalogue and share eligible products if you choose. You can use Cliqero
+          without promoting anything.
         </p>
       </section>
     </PublicPage>

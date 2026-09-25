@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { SiteHeader } from "@/components/site/header";
 import { FeaturedStorefront } from "@/components/storefront";
 import { SiteFooter } from "@/components/site/footer";
+import { Button } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
 import { loadStorefrontConfiguration } from "@/config/storefront";
 
@@ -21,6 +23,9 @@ export default function Home() {
             Explore digital products from the {siteConfig.name} catalogue, choose what fits what you
             need, and keep access to your purchases in one account.
           </p>
+          <Button asChild className="mt-6">
+            <Link href="/catalogue">Browse catalogue</Link>
+          </Button>
         </section>
         <FeaturedStorefront reviewsVisible={storefrontConfig.reviews.visible} />
       </main>

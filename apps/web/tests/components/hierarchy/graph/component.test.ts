@@ -22,6 +22,16 @@ describe("hierarchy graph interaction contract", () => {
     expect(source).not.toContain("Dragging is visual only");
   });
 
+  it("uses customer-friendly network wording and preserves operator terminology", () => {
+    expect(source).toContain("Showing up to ${tree.windowDepth} levels of your network.");
+    expect(source).toContain("Choose someone in your network to keep exploring.");
+    expect(source).toContain(
+      'operatorMode ? "Referral hierarchy graph" : "Referral network graph"',
+    );
+    expect(source).toContain("Rebase onto any account to inspect another branch.");
+    expect(source).not.toContain("authorized network");
+  });
+
   it("does not render the removed graph-level parent banner or action", () => {
     expect(source).not.toContain("Parent context");
     expect(source).not.toContain("Navigation stops at your account.");

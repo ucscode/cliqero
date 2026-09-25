@@ -202,9 +202,9 @@ export function BankTransferPayment(props: PaymentProviderProps) {
           <div>
             <h3 className="text-lg font-semibold tracking-tight">Submit transfer evidence</h3>
             <p className="text-sm text-slate-600">
-              Add a transfer reference or proof file. You can include an optional note for the
-              reviewer. Evidence helps the operator reconcile your transfer; it does not confirm or
-              credit your wallet automatically.
+              Add a transfer reference or proof file. You can include an optional note for our
+              review team. This helps us review your transfer, but it does not confirm payment or
+              add funds to your wallet.
             </p>
           </div>
           <div className="grid gap-1">
@@ -238,7 +238,7 @@ export function BankTransferPayment(props: PaymentProviderProps) {
               onChange={(event) => setCustomerNote(event.target.value)}
               maxLength={2000}
               disabled={submitting}
-              placeholder="Optional note for the operator"
+              placeholder="Optional note for our review team"
             />
           </div>
           <Button type="submit" variant="secondary" disabled={submitting}>

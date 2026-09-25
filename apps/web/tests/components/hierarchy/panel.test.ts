@@ -15,6 +15,14 @@ describe("hierarchy panel composition", () => {
     expect(source).not.toContain("Network context");
   });
 
+  it("uses customer network language without changing hierarchy internals", () => {
+    expect(source).toContain("Your referral network");
+    expect(source).toContain("Explore people in your referral network.");
+    expect(source).toContain("fetchHierarchyTree(rootId, apiFetch)");
+    expect(source).not.toContain("authorized account hierarchy");
+    expect(source).not.toContain("Your referral hierarchy");
+  });
+
   it("keeps hierarchy rebasing independent from the full panel load", () => {
     expect(source).toContain('const [initialRootParam] = useState(() => params.get("root"))');
     expect(source).toContain("void loadPanel(initialRootParam)");

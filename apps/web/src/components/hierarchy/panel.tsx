@@ -150,13 +150,13 @@ export function HierarchyPanel() {
     <section className="grid gap-4" aria-labelledby="hierarchy-heading">
       <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Hierarchy</p>
+          <p className="eyebrow">Network</p>
           <h2 id="hierarchy-heading" className="text-2xl font-semibold tracking-tight">
-            Your referral hierarchy
+            Your referral network
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-            Explore your authorized account hierarchy visually. Financial information for other
-            accounts is never shown here.
+            Explore people in your referral network. Financial information about other accounts is
+            never shown here.
           </p>
         </div>
         <Button
@@ -177,7 +177,7 @@ export function HierarchyPanel() {
         </Toast>
       )}
       {loading ? (
-        <div className="grid gap-4" aria-label="Loading hierarchy">
+        <div className="grid gap-4" aria-label="Loading network">
           <Skeleton className="h-[520px] w-full" />
         </div>
       ) : tree && selfAccountId ? (
@@ -197,7 +197,7 @@ export function HierarchyPanel() {
           )}
         </>
       ) : (
-        <EmptyState title="Hierarchy unavailable" description="Try refreshing your hierarchy." />
+        <EmptyState title="Network unavailable" description="Try refreshing the network." />
       )}
     </section>
   );

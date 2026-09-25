@@ -51,8 +51,8 @@ export function PromotePanel() {
         <CardHeader>
           <CardTitle>Invite people to Cliqero</CardTitle>
           <p className="text-sm text-slate-500">
-            Anyone who creates an account while your referral attribution is active becomes part of
-            your referral network.
+            People who join Cliqero through your invitation may become part of your referral
+            network.
           </p>
         </CardHeader>
         <CardContent>
@@ -67,7 +67,7 @@ export function PromotePanel() {
         <CardHeader>
           <CardTitle>Promote catalogue listings</CardTitle>
           <p className="text-sm text-slate-500">
-            Browse eligible listings and share a listing-specific referral URL.
+            Browse eligible listings and share their referral links.
           </p>
         </CardHeader>
         <CardContent>

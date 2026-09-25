@@ -37,7 +37,7 @@ describe("dashboard navigation", () => {
       "Wallet",
       "Purchases",
       "Promote",
-      "Hierarchy",
+      "Network",
       "Referrals",
       "Earnings",
       "Withdrawals",
@@ -77,14 +77,20 @@ describe("dashboard navigation", () => {
     expect(shellSource).not.toContain('params.get("section") ??');
   });
 
-  it("exposes Promote, Hierarchy, and Referrals as separate sections", () => {
+  it("exposes Promote, Network, and Referrals as separate sections", () => {
     expect(source).toContain('label: "Promote"');
-    expect(source).toContain('label: "Hierarchy"');
+    expect(source).toContain('label: "Network"');
     expect(source).toContain('label: "Referrals"');
     expect(source).toContain("/dashboard?section=promote");
     expect(source).toContain("/dashboard?section=hierarchy");
     expect(source).toContain("/dashboard?section=referrals");
-    expect(dashboardSectionTitle("hierarchy")).toBe("Hierarchy");
+    expect(dashboardSectionTitle("hierarchy")).toBe("Network");
+    const referralsGroup = source.slice(
+      source.indexOf("const referralNavigation ="),
+      source.indexOf("const dashboardSections ="),
+    );
+    expect(referralsGroup).toContain('["promote", "hierarchy", "referrals"]');
+    expect(source).toContain('href: "/dashboard?section=hierarchy", section: "hierarchy"');
   });
 
   it("uses Payout Methods in the Money navigation", () => {

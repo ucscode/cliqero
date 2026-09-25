@@ -56,6 +56,11 @@ describe("withdrawal request UI contract", () => {
     expect(failureHandler).not.toContain("setDestination(");
   });
 
+  it("confirms a withdrawal request without exposing internal reviewer roles", () => {
+    expect(source).toContain("Withdrawal request received. We’ll update its status after review.");
+    expect(source).not.toContain("Payment follows operator review");
+  });
+
   it("loads initially and refreshes only after explicit or successful user actions", () => {
     expect(source).toContain("void load();");
     expect(source).toContain("onClick={() => void load(true)}");

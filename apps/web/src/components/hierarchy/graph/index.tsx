@@ -235,10 +235,12 @@ export function HierarchyGraph({
             {operatorMode ? "Explore the referral network" : "Explore your referral network"}
           </h3>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-            This window shows up to {tree.windowDepth} generations.{" "}
+            {operatorMode
+              ? `This window shows up to ${tree.windowDepth} generations. `
+              : `Showing up to ${tree.windowDepth} levels of your network. `}
             {operatorMode
               ? "Rebase onto any account to inspect another branch."
-              : "Rebase onto a descendant to keep exploring your authorized network."}
+              : "Choose someone in your network to keep exploring."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -251,7 +253,7 @@ export function HierarchyGraph({
       </div>
       <div
         className="h-[min(640px,68vh)] min-h-[440px] overflow-hidden rounded-xl border border-slate-200 bg-[#f8fbf7]"
-        aria-label="Referral hierarchy graph"
+        aria-label={operatorMode ? "Referral hierarchy graph" : "Referral network graph"}
       >
         <ReactFlow
           key={tree.root}

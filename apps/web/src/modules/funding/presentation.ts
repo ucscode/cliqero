@@ -12,7 +12,7 @@ export const fundingStatePresentation: Record<
   initialization_pending: { label: "Preparing payment", tone: "info" },
   initializing: { label: "Preparing payment", tone: "info" },
   awaiting_payment: { label: "Awaiting payment", tone: "warning" },
-  verification_pending: { label: "Verifying payment", tone: "info" },
+  verification_pending: { label: "Checking payment", tone: "info" },
   confirmed: { label: "Payment confirmed", tone: "success" },
   failed: { label: "Payment unsuccessful", tone: "danger" },
   blocked: { label: "Payment cannot continue", tone: "danger" },

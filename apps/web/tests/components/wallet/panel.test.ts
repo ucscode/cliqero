@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { shouldPollFundingSettlement } from "@/components/payment/shared/status";
 import {
   activeFundingAction,
@@ -54,6 +56,11 @@ import {
   shouldPrepareFunding,
 } from "@/components/payment/shared/preparation";
 
+const walletPanelSource = readFileSync(
+  resolve(process.cwd(), "src/components/wallet/panel.tsx"),
+  "utf8",
+);
+
 describe("bank-transfer evidence visibility", () => {
   it.each([
     ["bank_transfer", "initialization_pending", true],
@@ -73,6 +80,24 @@ describe("bank-transfer evidence visibility", () => {
         state,
       } as Pick<FundingStatus, "provider" | "state">),
     ).toBe(expected);
+  });
+});
+
+describe("wallet customer copy", () => {
+  it("describes wallet availability without internal processing terminology", () => {
+    expect(walletPanelSource).toContain("Ready to spend on catalogue purchases.");
+    expect(walletPanelSource).toContain(
+      "Pending funds become available when payment processing is complete.",
+    );
+    expect(walletPanelSource).toContain("Your wallet balance is still updating. Retrying…");
+    expect(walletPanelSource).toContain("Enter the amount to add in USD.");
+    expect(walletPanelSource).toContain("Getting payment details…");
+    expect(walletPanelSource).toContain("Loading your saved payment…");
+    expect(walletPanelSource).toContain("Funding details unavailable");
+    expect(walletPanelSource).not.toContain("Loading provider quote");
+    expect(walletPanelSource).not.toContain("availability processing");
+    expect(walletPanelSource).not.toContain("canonical USD");
+    expect(walletPanelSource).not.toContain("Wallet settlement is still processing");
   });
 });
 
@@ -323,7 +348,7 @@ describe("customer-facing funding presentation", () => {
         expires_at: null,
         error_message: null,
       }),
-    ).toBe("This payment session has expired. Start a new funding attempt.");
+    ).toBe("This payment session has expired. Start a new payment.");
   });
 
   it("renders every configured bank field, including opaque instructions", () => {

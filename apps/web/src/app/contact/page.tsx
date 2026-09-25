@@ -21,8 +21,8 @@ export default function Contact() {
           >
             {siteConfig.supportEmail}
           </a>{" "}
-          with your account username and a clear description of the issue. Never send a password,
-          API key or payment secret.
+          with your account username and a clear description of the issue. Never send your password
+          or payment secrets.
         </p>
       </section>
     </PublicPage>

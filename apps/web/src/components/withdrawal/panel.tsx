@@ -141,7 +141,7 @@ export function WithdrawalsPanel() {
           destination_id: destination,
         }),
       });
-      setSuccess("Withdrawal request received. Payment follows operator review.");
+      setSuccess("Withdrawal request received. We’ll update its status after review.");
       setAmount("");
       setDestination("");
       requestSignature.current = null;

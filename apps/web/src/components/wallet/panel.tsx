@@ -213,7 +213,7 @@ export function WalletPanel({
   );
   const refreshWalletSummary = useCallback(() => loadWallet(true), [loadWallet]);
   const handleSettlementPollingError = useCallback(
-    () => setProviderError("Wallet settlement is still processing. Retrying…"),
+    () => setProviderError("Your wallet balance is still updating. Retrying…"),
     [],
   );
   const handleFundingConfirmed = useCallback(() => {
@@ -321,7 +321,9 @@ export function WalletPanel({
         if (!active) return;
         setPreparation(null);
         setPreparationError(
-          cause instanceof ApiClientError ? cause.message : "Provider preparation is unavailable.",
+          cause instanceof ApiClientError
+            ? cause.message
+            : "We couldn’t set up this payment method.",
         );
       });
     return () => {
@@ -461,7 +463,7 @@ export function WalletPanel({
                 "Unavailable"
               )}
             </div>
-            <p className="text-sm text-slate-500">Ready for one-listing purchases.</p>
+            <p className="text-sm text-slate-500">Ready to spend on catalogue purchases.</p>
             <Button asChild>
               <Link href="/dashboard/wallet/fund">Fund wallet</Link>
             </Button>
@@ -478,7 +480,7 @@ export function WalletPanel({
                 "Unavailable"
               )}
             </div>
-            <p>Pending credits become spendable only after availability processing.</p>
+            <p>Pending funds become available when payment processing is complete.</p>
           </Card>
         </section>
       )}
@@ -487,8 +489,8 @@ export function WalletPanel({
         <Card className="flex items-center gap-3 p-5" aria-live="polite">
           <LoaderCircle className="h-5 w-5 animate-spin text-emerald-700" aria-hidden="true" />
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">Loading funding status</h2>
-            <p className="text-sm text-slate-600">Retrieving the saved funding attempt…</p>
+            <h2 className="text-lg font-semibold tracking-tight">Loading payment status</h2>
+            <p className="text-sm text-slate-600">Loading your saved payment…</p>
           </div>
         </Card>
       )}
@@ -601,9 +603,9 @@ export function WalletPanel({
         <Card className="grid gap-4 p-6 sm:p-8" id="wallet-funding" tabIndex={-1}>
           <div className="grid gap-2">
             <p className="eyebrow">Wallet funding</p>
-            <h2 className="text-lg font-semibold tracking-tight">Invalid funding preparation</h2>
+            <h2 className="text-lg font-semibold tracking-tight">Funding details unavailable</h2>
             <p className="text-sm text-slate-600">
-              The amount is missing or invalid. Return to funding entry to choose it again.
+              The amount is missing or invalid. Go back and choose an amount to continue.
             </p>
           </div>
           <Button asChild>
@@ -641,8 +643,8 @@ export function WalletPanel({
             <form className="grid gap-3" onSubmit={submitFunding}>
               <p>
                 {providerPreparation
-                  ? "Review the provider details before continuing. Your wallet credit becomes available after verification."
-                  : "Enter the amount to add in canonical USD. It becomes available after verification."}
+                  ? "Review the payment details before continuing. Funds become available after payment is confirmed."
+                  : "Enter the amount to add in USD. Funds become available after payment is confirmed."}
               </p>
               {providerPreparation ? (
                 <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -735,7 +737,7 @@ export function WalletPanel({
               )}
               {providerPreparation && preparationLoading && (
                 <p className="text-sm text-slate-600" role="status">
-                  Loading provider quote…
+                  Getting payment details…
                 </p>
               )}
               {providerPreparation && preparationError && <Toast>{preparationError}</Toast>}

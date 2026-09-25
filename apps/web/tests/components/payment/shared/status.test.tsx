@@ -8,7 +8,7 @@ vi.mock("@/lib/api-client", () => ({
   formatExchangeRate: vi.fn(),
 }));
 
-import { initializeFundingStatus } from "@/components/payment/shared/status";
+import { fundingStatusMessage, initializeFundingStatus } from "@/components/payment/shared/status";
 
 describe("payment status initialization", () => {
   beforeEach(() => {
@@ -49,5 +49,50 @@ describe("payment status initialization", () => {
 
     await expect(initializeFundingStatus("funding-1")).rejects.toBe(initializationError);
     expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("customer-facing funding status copy", () => {
+  it("uses clear payment progress and confirmation messages", () => {
+    expect(
+      fundingStatusMessage({
+        provider: "paystack",
+        state: "verification_pending",
+        expires_at: null,
+        error_message: null,
+      }),
+    ).toBe("Your payment is being verified.");
+    expect(
+      fundingStatusMessage({
+        provider: "paystack",
+        state: "confirmed",
+        expires_at: null,
+        error_message: null,
+      }),
+    ).toBe("Payment confirmed. Your wallet balance will update when processing is complete.");
+    expect(
+      fundingStatusMessage({
+        provider: "paystack",
+        state: "expired",
+        expires_at: null,
+        error_message: null,
+      }),
+    ).toBe("This payment session has expired. Start a new payment.");
+    expect(
+      fundingStatusMessage({
+        provider: "paystack",
+        state: "failed",
+        expires_at: null,
+        error_message: null,
+      }),
+    ).toBe("We couldn’t complete this payment. You can try again.");
+    expect(
+      fundingStatusMessage({
+        provider: "paystack",
+        state: "cancelled",
+        expires_at: null,
+        error_message: null,
+      }),
+    ).toBe("This payment was cancelled.");
   });
 });

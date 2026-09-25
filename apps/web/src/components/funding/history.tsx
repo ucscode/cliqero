@@ -80,16 +80,16 @@ export function FundingHistoryPanel() {
           >
             <option value="">All funding</option>
             <option value="active">Payments in progress</option>
-            <option value="initialization_pending">Preparing</option>
-            <option value="initializing">Initializing</option>
+            <option value="initialization_pending">Preparing payment</option>
+            <option value="initializing">Preparing payment</option>
             <option value="awaiting_payment">Awaiting payment</option>
-            <option value="verification_pending">Verification pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="failed">Failed</option>
-            <option value="blocked">Blocked</option>
+            <option value="verification_pending">Checking payment</option>
+            <option value="confirmed">Payment confirmed</option>
+            <option value="failed">Payment unsuccessful</option>
+            <option value="blocked">Payment cannot continue</option>
             <option value="cancelled">Cancelled</option>
             <option value="expired">Expired</option>
-            <option value="reconciliation_pending">Reconciliation pending</option>
+            <option value="reconciliation_pending">Payment under review</option>
           </select>
         </label>
       </div>
@@ -97,7 +97,7 @@ export function FundingHistoryPanel() {
       {loading && items.length === 0 ? (
         <Skeleton className="h-48 w-full" />
       ) : items.length === 0 ? (
-        <Card className="p-6 text-sm text-slate-600">No funding attempts match this filter.</Card>
+        <Card className="p-6 text-sm text-slate-600">No payments match this filter.</Card>
       ) : (
         <div className="grid gap-2">
           {items.map((item) => (

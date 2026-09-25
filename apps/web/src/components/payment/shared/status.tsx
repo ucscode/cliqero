@@ -42,21 +42,17 @@ export function fundingStatusMessage(
   if (funding.state === "initializing") return "Contacting payment provider.";
   if (funding.state === "awaiting_payment") {
     if (funding.expires_at && Date.parse(funding.expires_at) <= now)
-      return "This provider payment session has expired. Start a new funding attempt.";
+      return "This payment session has expired. Start a new payment.";
     return "Complete the payment to continue.";
   }
   if (funding.state === "verification_pending")
     return funding.verification ? null : "Your payment is being verified.";
-  if (funding.state === "expired")
-    return "This payment session has expired. Start a new funding attempt.";
+  if (funding.state === "expired") return "This payment session has expired. Start a new payment.";
   if (funding.state === "failed" || funding.state === "blocked")
-    return (
-      funding.error_message ??
-      "This funding attempt could not be completed. You can start a new attempt."
-    );
-  if (funding.state === "cancelled") return "This funding attempt was cancelled.";
+    return funding.error_message ?? "We couldn’t complete this payment. You can try again.";
+  if (funding.state === "cancelled") return "This payment was cancelled.";
   if (funding.state === "confirmed")
-    return "Your funding is confirmed. Wallet availability will update as the credit settles.";
+    return "Payment confirmed. Your wallet balance will update when processing is complete.";
   return null;
 }
 
@@ -375,7 +371,7 @@ export function PaymentComponent({
         )}
         {funding.state === "initialization_pending" || funding.state === "awaiting_payment" ? (
           <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>
-            Cancel funding
+            Cancel payment
           </Button>
         ) : null}
         {(funding.state === "blocked" ||
@@ -383,7 +379,7 @@ export function PaymentComponent({
           funding.state === "expired") && (
           <Button asChild variant="secondary">
             <a href={canonicalWalletFundingUrl(returnTo ?? "/dashboard/wallet/fund")}>
-              Start a new funding attempt
+              Try payment again
             </a>
           </Button>
         )}

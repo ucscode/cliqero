@@ -16,4 +16,11 @@ describe("Promote panel account invitation", () => {
     expect(source).not.toContain("cliqero_referrer");
     expect(source).not.toContain("accountReferralSource");
   });
+
+  it("describes invitations and eligible listing links in customer language", () => {
+    expect(source).toContain("People who join Cliqero through your invitation");
+    expect(source).toContain("share their referral links");
+    expect(source).not.toContain("referral attribution is active");
+    expect(source).not.toContain("listing-specific referral URL");
+  });
 });
