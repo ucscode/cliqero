@@ -33,29 +33,38 @@ describe("customer typography ownership", () => {
     expect(styles).not.toMatch(/\n(?:h1|h2|h3)\s*\{/);
   });
 
-  it("uses the larger scale only for public page titles", () => {
+  it("uses text-5xl on mobile and text-6xl above mobile for shared public titles", () => {
     expect(readSource("src/components/informational-content-page.tsx")).toContain(
       "text-5xl font-semibold tracking-tight text-slate-900 sm:text-6xl",
     );
     expect(readSource("src/components/public-page.tsx")).toContain(
       "text-5xl font-semibold tracking-tight text-slate-900 sm:text-6xl",
     );
+    for (const path of [
+      "src/components/informational-content-page.tsx",
+      "src/components/public-page.tsx",
+    ]) {
+      expect(readSource(path)).toContain("text-5xl");
+      expect(readSource(path)).toContain("sm:text-6xl");
+    }
   });
 
-  it("uses the same larger title scale in loaded and fallback catalogue views", () => {
+  it("uses the responsive title scale in loaded and fallback catalogue views", () => {
     expect(
       catalogue.match(/className="mb-0 text-5xl font-semibold tracking-tight sm:text-6xl"/g),
     ).toHaveLength(2);
   });
 
-  it("increases the homepage hero while retaining its width and text hierarchy", () => {
+  it("uses the responsive title scale for the homepage hero while retaining its width and hierarchy", () => {
     expect(readSource("src/app/page.tsx")).toContain(
       "mt-2 max-w-2xl text-5xl font-semibold tracking-tight text-slate-900 sm:text-6xl",
     );
   });
 
-  it("increases only the dashboard shell title, not inner dashboard headings", () => {
-    expect(dashboard).toContain("text-4xl font-semibold tracking-tight sm:text-5xl");
+  it("uses the responsive title scale only for the dashboard shell title, not inner headings", () => {
+    expect(dashboard).toContain("mb-0 text-5xl font-semibold tracking-tight sm:text-6xl");
+    expect(dashboard).not.toContain("text-4xl sm:text-5xl");
+    expect(dashboard).not.toContain("text-4xl font-semibold tracking-tight sm:text-5xl");
     expect(overview).toContain(
       'className="my-2 text-2xl font-semibold tracking-tight">Your collection',
     );

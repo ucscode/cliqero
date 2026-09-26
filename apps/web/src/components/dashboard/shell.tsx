@@ -311,7 +311,7 @@ export function DashboardShell({
               <SidebarTrigger aria-label="Open dashboard navigation" />
               <div>
                 <p className="eyebrow">Your space</p>
-                <h1 className="mb-0 text-4xl font-semibold tracking-tight sm:text-5xl">{title}</h1>
+                <h1 className="mb-0 text-5xl font-semibold tracking-tight sm:text-6xl">{title}</h1>
               </div>
               <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-900">
