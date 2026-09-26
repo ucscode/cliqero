@@ -1,4 +1,5 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
+import { PublicApplicationError } from "@/kernel/errors";
 
 type Cursor = { createdAt: string; id: string };
 
@@ -21,7 +22,7 @@ function decodeCursor(value: string | undefined): Cursor | null {
     if (Number.isNaN(date.valueOf())) throw new Error();
     return { createdAt: date.toISOString(), id: parsed.id };
   } catch {
-    throw new Error("Invalid pagination cursor");
+    throw new PublicApplicationError("Invalid pagination cursor", "invalid_cursor", 400);
   }
 }
 
@@ -88,7 +89,7 @@ export class OperatorAccountService {
         [accountId],
       )
     ).rows[0];
-    if (!row) throw new Error("Account not found");
+    if (!row) throw new PublicApplicationError("Account not found", "not_found", 404);
     const audit = (
       await this.sql.query<any>(
         `select actor.uuid actor_id,previous_state->>'parent_account_id' previous_parent_id,

@@ -13,6 +13,7 @@ import type { FundingRepository, FundingTransaction } from "@/modules/funding/fu
 import { isVerificationResolved } from "@/modules/funding/funding";
 import type { FundingVerificationProcessor } from "./verification";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
+import { PublicApplicationError } from "@/kernel/errors";
 
 export class FundingService {
   constructor(
@@ -198,9 +199,14 @@ export class FundingService {
   async cancel(input: { accountId: string; fundingId: string }) {
     return this.uow.transaction(async () => {
       const funding = await this.funding.findById(input.fundingId, { forUpdate: true });
-      if (!funding || funding.accountId !== input.accountId) throw new Error("Funding not found");
+      if (!funding || funding.accountId !== input.accountId)
+        throw new PublicApplicationError("Funding not found", "not_found", 404);
       if (funding.state !== "initialization_pending" && funding.state !== "awaiting_payment")
-        throw new Error("Funding cannot be cancelled in its current state");
+        throw new PublicApplicationError(
+          "Funding cannot be cancelled in its current state",
+          "funding_state_conflict",
+          409,
+        );
       const previousState = funding.state;
       funding.state = "cancelled";
       funding.initializationClaimedAt = undefined;
@@ -213,21 +219,35 @@ export class FundingService {
   async submitProviderRequest(input: { accountId: string; fundingId: string; payload: unknown }) {
     const persisted = await this.uow.transaction(async () => {
       const funding = await this.funding.findById(input.fundingId, { forUpdate: true });
-      if (!funding || funding.accountId !== input.accountId) throw new Error("Funding not found");
+      if (!funding || funding.accountId !== input.accountId)
+        throw new PublicApplicationError("Funding not found", "not_found", 404);
       const directTrc20Submission = isRetryableDirectTrc20Funding(funding);
       if (funding.providerName === "usdt_trc20" && !directTrc20Submission)
-        throw new Error("Funding is not available for provider interaction");
+        throw new PublicApplicationError(
+          "Funding is not available for provider interaction",
+          "funding_state_conflict",
+          409,
+        );
       if (
         !directTrc20Submission &&
         funding.state !== "awaiting_payment" &&
         funding.state !== "verification_pending"
       )
-        throw new Error("Funding is not available for provider interaction");
+        throw new PublicApplicationError(
+          "Funding is not available for provider interaction",
+          "funding_state_conflict",
+          409,
+        );
       return funding;
     });
     if (!this.verification) throw new Error("Funding verification is unavailable");
     const provider = this.providers.get(persisted.providerName);
-    if (!provider.handleRequest) throw new Error("Payment provider does not accept this request");
+    if (!provider.handleRequest)
+      throw new PublicApplicationError(
+        "Payment provider does not accept this request",
+        "provider_request_unsupported",
+        400,
+      );
     const context: ProviderRequestContext = {
       accountId: persisted.accountId,
       fundingId: persisted.id,

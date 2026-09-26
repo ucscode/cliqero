@@ -15,6 +15,17 @@ const site = loadSiteConfiguration();
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingIncludes: {
+    "/docs/assets/[asset]": [
+      "../../node_modules/swagger-ui-dist/absolute-path.js",
+      "../../node_modules/swagger-ui-dist/index.js",
+      "../../node_modules/swagger-ui-dist/package.json",
+      "../../node_modules/swagger-ui-dist/swagger-ui-bundle.js",
+      "../../node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js",
+      "../../node_modules/swagger-ui-dist/swagger-ui.css",
+    ],
+  },
+  serverExternalPackages: ["swagger-ui-dist"],
   poweredByHeader: false,
   // TypeScript 5.9 exposes the compiler API used by Next's stable checker;
   // avoid the experimental CLI parser in Next 16.3 during production builds.

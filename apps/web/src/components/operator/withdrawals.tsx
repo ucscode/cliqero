@@ -278,7 +278,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
                       displayValue={field.displayValue}
                     />
                   ) : (
-                    field.displayValue ?? field.value
+                    (field.displayValue ?? field.value)
                   )}
                 </dd>
               </div>

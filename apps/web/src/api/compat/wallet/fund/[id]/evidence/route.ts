@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { authenticatedAccount, apiError } from "../../../../http";
 import { getContainer } from "@/infrastructure/container";
+import { PublicApplicationError } from "@/kernel/errors";
 
 const schema = z
   .object({
@@ -22,13 +23,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const form = await request.formData();
     const file = form.get("proof_file");
-    if (file !== null && !(file instanceof File)) throw new Error("Evidence file is invalid");
+    if (file !== null && !(file instanceof File))
+      throw new PublicApplicationError("Evidence file is invalid", "invalid_evidence", 400);
     const body = schema.parse({
       transfer_reference: form.get("transfer_reference"),
       customer_note: form.get("customer_note"),
     });
     if (!body.transfer_reference && !(file instanceof File))
-      throw new Error("Add a transfer reference or proof file before submitting.");
+      throw new PublicApplicationError(
+        "Add a transfer reference or proof file before submitting.",
+        "evidence_required",
+        400,
+      );
     const evidence = await getContainer().bankTransferEvidence.submit(account.id, id, {
       transferReference: body.transfer_reference,
       customerNote: body.customer_note,

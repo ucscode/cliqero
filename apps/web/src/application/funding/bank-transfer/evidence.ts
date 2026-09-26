@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
+import { PublicApplicationError } from "@/kernel/errors";
 import type { AuditRecorder } from "@/application/shared/audit";
 import type { FundingRepository } from "@/modules/funding/funding";
 import type { ObjectStorageRegistry, StoredObject } from "@/modules/storage/object-storage";
@@ -73,14 +74,20 @@ export class BankTransferEvidenceService {
     const customerNote = clean(input.customerNote, 2000);
     const proofFile = input.proofFile ? validateProofFile(input.proofFile) : undefined;
     if (!transferReference && !proofFile)
-      throw new Error("Add a transfer reference or proof file before submitting.");
+      throw new PublicApplicationError(
+        "Add a transfer reference or proof file before submitting.",
+        "evidence_required",
+        400,
+      );
 
     let stored: StoredObject | undefined;
     try {
       return await this.uow.transaction(async () => {
         const current = await this.funding.findById(fundingId, { forUpdate: true });
-        if (!current || current.accountId !== accountId) throw new Error("Funding not found");
-        if (current.providerName !== "bank_transfer") throw new Error("Funding provider mismatch");
+        if (!current || current.accountId !== accountId)
+          throw new PublicApplicationError("Funding not found", "not_found", 404);
+        if (current.providerName !== "bank_transfer")
+          throw new PublicApplicationError("Funding provider mismatch", "provider_mismatch", 400);
         const existing = await this.evidence.findForFunding(accountId, fundingId);
         if (existing) return existing;
         if (
@@ -89,7 +96,11 @@ export class BankTransferEvidenceService {
           current.state !== "awaiting_payment" &&
           current.state !== "verification_pending"
         )
-          throw new Error("Funding is not available for evidence");
+          throw new PublicApplicationError(
+            "Funding is not available for evidence",
+            "funding_state_conflict",
+            409,
+          );
 
         if (proofFile) {
           if (!this.storage || !this.storageInstanceName)
@@ -148,11 +159,20 @@ export class BankTransferEvidenceService {
 }
 
 export function validateProofFile(file: BankTransferProofFile) {
-  if (!proofMimeTypes.has(file.mimeType)) throw new Error("Unsupported evidence file type");
+  if (!proofMimeTypes.has(file.mimeType))
+    throw new PublicApplicationError("Unsupported evidence file type", "invalid_evidence", 400);
   if (file.bytes.byteLength === 0 || file.bytes.byteLength > BANK_TRANSFER_PROOF_MAX_BYTES)
-    throw new Error("Evidence file must be between 1 byte and 10 MB");
+    throw new PublicApplicationError(
+      "Evidence file must be between 1 byte and 10 MB",
+      "invalid_evidence",
+      400,
+    );
   if (!matchesFileSignature(file.bytes, file.mimeType))
-    throw new Error("Evidence file content does not match its declared type");
+    throw new PublicApplicationError(
+      "Evidence file content does not match its declared type",
+      "invalid_evidence",
+      400,
+    );
   return file;
 }
 
@@ -189,6 +209,7 @@ function safeFilename(value?: string) {
 function clean(value: string | undefined, max: number) {
   const normalized = value?.trim();
   if (!normalized) return undefined;
-  if (normalized.length > max) throw new Error("Evidence field is too long");
+  if (normalized.length > max)
+    throw new PublicApplicationError("Evidence field is too long", "invalid_evidence", 400);
   return normalized;
 }

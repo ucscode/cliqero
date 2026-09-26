@@ -1,5 +1,5 @@
 import { logDevelopmentError } from "@/infrastructure/development-log";
-import { publicErrorPayload, validationErrorPayload } from "../error";
+import { apiErrorResult, publicErrorPayload, validationErrorPayload } from "../error";
 import type { ApiContext } from "./context";
 
 export function domainError(c: ApiContext, error: unknown): never {
@@ -21,27 +21,6 @@ export function domainError(c: ApiContext, error: unknown): never {
       publicError.status as 400 | 401 | 403 | 404 | 409 | 429 | 500,
     ) as never;
   if (validation) return c.json(validation, 400) as never;
-  const message = error instanceof Error ? error.message : "Request failed";
-  const status =
-    message === "Forbidden"
-      ? 403
-      : message.toLowerCase().includes("not found")
-        ? 404
-        : message.toLowerCase().includes("already")
-          ? 409
-          : 400;
-  return c.json(
-    {
-      error: message,
-      code:
-        status === 403
-          ? "forbidden"
-          : status === 404
-            ? "not_found"
-            : status === 409
-              ? "conflict"
-              : "invalid_request",
-    },
-    status,
-  ) as never;
+  const result = apiErrorResult(error);
+  return c.json(result.payload, result.status) as never;
 }

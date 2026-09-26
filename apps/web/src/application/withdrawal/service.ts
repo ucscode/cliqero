@@ -30,7 +30,10 @@ export class WithdrawalService {
     idempotencyKey: string;
     correlationId: string;
   }): Promise<Withdrawal> {
-    const existing = await this.withdrawals.findByIdempotencyKey(input.idempotencyKey);
+    const existing = await this.withdrawals.findByIdempotencyKey(
+      input.accountId,
+      input.idempotencyKey,
+    );
     if (existing) return this.resolveIdempotent(existing, input);
     const policy = await this.policy.getActive();
     if (!policy.enabled) throw new Error("Withdrawals are disabled");
@@ -40,8 +43,11 @@ export class WithdrawalService {
       throw new Error("Withdrawal amount is below the minimum");
     if (policy.maximumAmount && input.amountMinor > policy.maximumAmount.minorAmount)
       throw new Error("Withdrawal amount exceeds the maximum");
-    return this.persistence.withIdempotencyLock(input.idempotencyKey, async () => {
-      const prior = await this.withdrawals.findByIdempotencyKey(input.idempotencyKey);
+    return this.persistence.withIdempotencyLock(input.accountId, input.idempotencyKey, async () => {
+      const prior = await this.withdrawals.findByIdempotencyKey(
+        input.accountId,
+        input.idempotencyKey,
+      );
       if (prior) return this.resolveIdempotent(prior, input);
       const destination = await this.destinations.resolveForWithdrawal(
         input.accountId,

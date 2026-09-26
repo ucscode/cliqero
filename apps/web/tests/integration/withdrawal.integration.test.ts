@@ -96,6 +96,72 @@ suite("withdrawal lifecycle", () => {
     ).resolves.toMatchObject({ id: first.id });
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(8000n);
   });
+  it("rejects forged over-balance amounts without partially committing withdrawal work", async () => {
+    const { seller, destinationId } = await setup();
+
+    await expect(
+      app.withdrawals.request({
+        accountId: seller.id,
+        amountMinor: 10001n,
+        currency: "USD",
+        destinationId,
+        idempotencyKey: "forged-over-balance",
+        correlationId: newId(),
+      }),
+    ).rejects.toThrow("Insufficient available funds");
+
+    const withdrawalCount = await app.database.query<{ count: string }>(
+      `select count(*)::text as count from withdrawal_capability.withdrawals where account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [seller.id],
+    );
+    const reservationCount = await app.database.query<{ count: string }>(
+      `select count(*)::text as count from ledger_capability.withdrawal_reservations where account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [seller.id],
+    );
+    const outboxCount = await app.database.query<{ count: string }>(
+      `select count(*)::text as count from kernel.outbox_events where event_name='withdrawal.requested' and payload->>'accountId'=$1`,
+      [seller.id],
+    );
+    expect(withdrawalCount.rows[0]?.count).toBe("0");
+    expect(reservationCount.rows[0]?.count).toBe("0");
+    expect(outboxCount.rows[0]?.count).toBe("0");
+  });
+  it("rejects another account's destination and scopes idempotency keys per account", async () => {
+    const first = await setup();
+    const second = await setup();
+
+    await expect(
+      app.withdrawals.request({
+        accountId: second.seller.id,
+        amountMinor: 1000n,
+        currency: "USD",
+        destinationId: first.destinationId,
+        idempotencyKey: "foreign-destination",
+        correlationId: newId(),
+      }),
+    ).rejects.toThrow("Withdrawal destination not found");
+
+    const firstWithdrawal = await app.withdrawals.request({
+      accountId: first.seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationId: first.destinationId,
+      idempotencyKey: "same-key-different-accounts",
+      correlationId: newId(),
+    });
+    const secondWithdrawal = await app.withdrawals.request({
+      accountId: second.seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationId: second.destinationId,
+      idempotencyKey: "same-key-different-accounts",
+      correlationId: newId(),
+    });
+
+    expect(firstWithdrawal.id).not.toBe(secondWithdrawal.id);
+    expect(firstWithdrawal.accountId).toBe(first.seller.id);
+    expect(secondWithdrawal.accountId).toBe(second.seller.id);
+  });
   it("paginates account history by stable keyset without overlap and remains account-scoped", async () => {
     const { seller, buyer, destinationId } = await setup();
     for (let index = 0; index < 3; index += 1) {

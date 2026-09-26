@@ -1,6 +1,7 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import { hasCapability, type Capability } from "@/modules/identity/capabilities";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
+import { PublicApplicationError } from "@/kernel/errors";
 
 export class PostgresOperatorAuthorizationService implements OperatorAuthorizationService {
   constructor(private readonly sql: QueryExecutor) {}
@@ -17,6 +18,7 @@ export class PostgresOperatorAuthorizationService implements OperatorAuthorizati
   }
 
   async requireCapability(accountId: string, capability: Capability): Promise<void> {
-    if (!(await this.hasCapability(accountId, capability))) throw new Error("Forbidden");
+    if (!(await this.hasCapability(accountId, capability)))
+      throw new PublicApplicationError("Forbidden", "forbidden", 403);
   }
 }

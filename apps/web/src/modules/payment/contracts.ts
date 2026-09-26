@@ -1,4 +1,5 @@
 import type { Id } from "@/kernel/ids";
+import { PublicApplicationError } from "@/kernel/errors";
 import type { Money } from "@/modules/money/money";
 import type { CurrencyMappingConfig } from "@/modules/money/country-currency";
 
@@ -232,7 +233,11 @@ export abstract class AbstractPaymentProvider implements PaymentProvider {
   async handleRequest(_input: unknown, _context: ProviderRequestContext): Promise<PaymentResult> {
     void _input;
     void _context;
-    throw new Error(`Payment provider does not accept customer requests: ${this.name}`);
+    throw new PublicApplicationError(
+      `Payment provider does not accept customer requests: ${this.name}`,
+      "provider_request_unsupported",
+      400,
+    );
   }
 }
 

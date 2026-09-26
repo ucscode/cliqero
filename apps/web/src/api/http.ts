@@ -1,7 +1,7 @@
 import type { Account } from "@/modules/identity/account";
 import type { ApiPrincipal } from "@/modules/identity/api/principal";
 import { getContainer } from "@/infrastructure/container";
-import { publicErrorPayload, validationErrorPayload } from "./error";
+import { apiErrorResult, publicErrorPayload, validationErrorPayload } from "./error";
 import { logDevelopmentError } from "@/infrastructure/development-log";
 
 /** Shared authentication boundary for capability routes migrating to Hono. */
@@ -50,17 +50,6 @@ export function apiError(error: unknown, request?: Request): Response {
   });
   if (publicError) return Response.json(publicError.payload, { status: publicError.status });
   if (validation) return Response.json(validation, { status: 400 });
-  const message = error instanceof Error ? error.message : "Request failed";
-  const status =
-    message === "Forbidden"
-      ? 403
-      : message.includes("not found")
-        ? 404
-        : message.includes("credentials") || message.includes("Unauthorized")
-          ? 401
-          : message.includes("already processing") ||
-              message.includes("idempotency key already used")
-            ? 409
-            : 400;
-  return Response.json({ error: message }, { status });
+  const result = apiErrorResult(error);
+  return Response.json(result.payload, { status: result.status });
 }

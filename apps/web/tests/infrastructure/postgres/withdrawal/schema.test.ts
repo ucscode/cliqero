@@ -41,4 +41,13 @@ describe("canonical withdrawal schema", () => {
     expect(schema).not.toContain("destination_type text NOT NULL");
     expect(schema).not.toContain("destination_reference text NOT NULL");
   });
+
+  it("uniquely scopes withdrawal idempotency keys to their account", () => {
+    expect(schema).toContain(
+      "ADD CONSTRAINT withdrawals_account_idempotency_key_key UNIQUE (account_id, idempotency_key)",
+    );
+    expect(schema).not.toMatch(
+      /ADD CONSTRAINT withdrawals_idempotency_key_key UNIQUE \(idempotency_key\)/,
+    );
+  });
 });

@@ -1,6 +1,7 @@
 import { authenticatedAccount, apiError } from "../../../../http";
 import { getContainer } from "@/infrastructure/container";
 import { projectVerificationObservation } from "@/modules/funding/funding";
+import { PublicApplicationError } from "@/kernel/errors";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const account = await authenticatedAccount(request);
@@ -11,7 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       fundingId: (await params).id,
       payload: await request.json(),
     });
-    if (!funding) throw new Error("Funding not found");
+    if (!funding) throw new PublicApplicationError("Funding not found", "not_found", 404);
     return Response.json(
       {
         id: funding.id,

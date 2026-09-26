@@ -1,5 +1,5 @@
 import { getContainer } from "@/infrastructure/container";
-import { siteConfig } from "@/config/site";
+import { fundingStatusUrl } from "@/application/funding/paystack/callback-url";
 
 export const runtime = "nodejs";
 function page(title: string, message: string, status = 200) {
@@ -7,12 +7,6 @@ function page(title: string, message: string, status = 200) {
     `<!doctype html><html><head><title>${title}</title></head><body><main><h1>${title}</h1><p>${message}</p></main></body></html>`,
     { status, headers: { "content-type": "text/html; charset=utf-8" } },
   );
-}
-
-export function fundingStatusUrl(fundingId: string) {
-  const url = new URL("/dashboard/wallet/fund", siteConfig.url);
-  url.searchParams.set("funding", fundingId);
-  return url;
 }
 
 function redirectToFunding(fundingId: string) {

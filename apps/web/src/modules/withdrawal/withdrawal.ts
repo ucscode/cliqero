@@ -57,7 +57,7 @@ export interface WithdrawalPolicySource {
 export interface WithdrawalRepository {
   findById(id: string): Promise<Withdrawal | null>;
   findByIdForUpdate(id: string): Promise<Withdrawal | null>;
-  findByIdempotencyKey(key: string): Promise<Withdrawal | null>;
+  findByIdempotencyKey(accountId: string, key: string): Promise<Withdrawal | null>;
   listForAccount(
     accountId: string,
     page: { cursor?: string; limit: number },

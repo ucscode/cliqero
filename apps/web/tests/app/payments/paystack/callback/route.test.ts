@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fundingStatusUrl, GET } from "@/app/payments/paystack/callback/route";
+import { fundingStatusUrl } from "@/application/funding/paystack/callback-url";
+import { GET } from "@/app/payments/paystack/callback/route";
 
 const funding = {
   id: "11111111-1111-4111-8111-111111111111",

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createApiApp } from "@/api/hono";
-import { authorizeLegacyRequest, getLegacyRouteAccess } from "@/api/legacy-dispatch";
+import {
+  authorizeLegacyRequest,
+  getLegacyRouteAccess,
+  legacyApiPaths,
+  legacyRouteAccessForPattern,
+} from "@/api/legacy-dispatch";
 
 function appWith(
   principal: any = null,
@@ -902,6 +907,51 @@ describe("Hono API foundation", () => {
       operatorScope!,
     );
     expect(normalKey?.status).toBe(403);
+
+    const lowScopeKey = { ...operatorKey, scopes: new Set<string>(["wallet:read"]) };
+    const settlementRequest = new Request("http://localhost/api/operator/settlement", {
+      method: "POST",
+    });
+    const actualDispatch = await appWith(lowScopeKey).fetch(settlementRequest);
+    expect(actualDispatch.status).toBe(403);
+    expect(authorizeLegacyRequest(settlementRequest, operatorKey, operatorScope!)).toBeNull();
+    const browserSession = {
+      ...operatorKey,
+      kind: "user_session" as const,
+      capabilities: ["finance.manage"],
+      scopes: new Set<string>(),
+    };
+    expect(authorizeLegacyRequest(settlementRequest, browserSession, operatorScope!)).toBeNull();
+
+    const futureOperatorAccess = legacyRouteAccessForPattern("/api/operator/unclassified", "POST");
+    expect(futureOperatorAccess).toEqual({
+      mode: "account",
+      scope: "operations:manage",
+      capability: "system.root",
+    });
+    expect(
+      authorizeLegacyRequest(
+        new Request("http://localhost/api/operator/unclassified", { method: "POST" }),
+        { ...operatorKey, capabilities: ["finance.manage"] },
+        futureOperatorAccess,
+      )?.status,
+    ).toBe(403);
+
+    for (const route of legacyApiPaths.filter((entry) => entry.path.startsWith("/api/operator/"))) {
+      for (const method of route.methods) {
+        expect(method.access.mode, `${method.method} ${route.path} requires an account`).toBe(
+          "account",
+        );
+        expect(
+          method.access.capability,
+          `${method.method} ${route.path} requires capability`,
+        ).toBeTruthy();
+        expect(
+          method.access.scope,
+          `${method.method} ${route.path} requires API scope`,
+        ).toBeTruthy();
+      }
+    }
     expect(getLegacyRouteAccess("/api/operator/paystack/events", "GET")).toEqual({
       mode: "account",
       scope: "operations:manage",

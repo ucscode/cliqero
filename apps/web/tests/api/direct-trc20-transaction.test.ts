@@ -8,6 +8,7 @@ vi.mock("@/infrastructure/container", () => ({
 
 import { POST } from "@/api/compat/wallet/fund/[id]/transaction/route";
 import { InvalidDirectTrc20TransactionError } from "@/providers/payment/direct-trc20/errors";
+import { PublicApplicationError } from "@/kernel/errors";
 
 const fundingId = "00000000-0000-4000-8000-000000000010";
 const account = { id: "00000000-0000-4000-8000-000000000001" };
@@ -58,7 +59,7 @@ describe("Direct USDT TRC20 transaction submission API", () => {
 
   it("returns not-found for an unknown funding", async () => {
     const submitProviderRequest = vi.fn(async () => {
-      throw new Error("Funding not found");
+      throw new PublicApplicationError("Funding not found", "not_found", 404);
     });
     configure(submitProviderRequest);
 
@@ -109,7 +110,11 @@ describe("Direct USDT TRC20 transaction submission API", () => {
 
   it("returns a customer-safe error for non-TRC20 funding", async () => {
     const submitProviderRequest = vi.fn(async () => {
-      throw new Error("Transaction hash is not supported for this funding method");
+      throw new PublicApplicationError(
+        "Transaction hash is not supported for this funding method",
+        "provider_request_unsupported",
+        400,
+      );
     });
     configure(submitProviderRequest);
 

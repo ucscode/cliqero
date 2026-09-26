@@ -174,6 +174,7 @@ describe("bank-transfer evidence API", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: "Add a transfer reference or proof file before submitting.",
+      code: "evidence_required",
     });
     expect(submit).not.toHaveBeenCalled();
   });

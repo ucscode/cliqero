@@ -2565,7 +2565,7 @@ ALTER TABLE ONLY wallet_capability.debits
 --
 
 ALTER TABLE ONLY withdrawal_capability.withdrawals
-    ADD CONSTRAINT withdrawals_idempotency_key_key UNIQUE (idempotency_key);
+    ADD CONSTRAINT withdrawals_account_idempotency_key_key UNIQUE (account_id, idempotency_key);
 
 
 --

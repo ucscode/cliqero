@@ -27,7 +27,7 @@ const sessionOnlyPaths = new Set([
   "/api/me/profile",
 ]);
 
-function routeAccess(pattern: string, method: string): LegacyRouteAccess {
+export function legacyRouteAccessForPattern(pattern: string, method: string): LegacyRouteAccess {
   if (pattern === "/api/accounts") return { mode: "anonymous", apiKey: "reject" };
   if (pattern === "/api/password-reset" || pattern === "/api/password-reset/request")
     return { mode: "anonymous", apiKey: "reject" };
@@ -58,7 +58,9 @@ function routeAccess(pattern: string, method: string): LegacyRouteAccess {
   if (pattern.startsWith("/api/operator/distribution-policy"))
     return { mode: "account", scope: "operations:manage", capability: "finance.read" };
   if (pattern.startsWith("/api/operator/"))
-    return { mode: "account", scope: "operations:manage", capability: "finance.read" };
+    // Unknown operator endpoints fail closed until their specific capability
+    // and delegated API scope are deliberately assigned above.
+    return { mode: "account", scope: "operations:manage", capability: "system.root" };
   if (pattern === "/api/listings/:id/referral-url")
     return { mode: "session_only", apiKey: "reject" };
   if (pattern === "/api/listings" || pattern === "/api/listings/:id")
@@ -133,12 +135,13 @@ export const legacyApiPaths = legacyRoutes.map(({ pattern, module }) => ({
   path: pattern.replace(/:([A-Za-z]+)/g, "{$1}"),
   methods: Object.keys(module)
     .filter((key) => ["GET", "POST", "PATCH", "PUT", "DELETE"].includes(key))
-    .map((method) => ({ method, access: routeAccess(pattern, method) })),
+    .map((method) => ({ method, access: legacyRouteAccessForPattern(pattern, method) })),
 }));
 
 export function getLegacyRouteAccess(pathname: string, method: string): LegacyRouteAccess | null {
   for (const route of legacyRoutes)
-    if (matchRoute(route.pattern, pathname)) return routeAccess(route.pattern, method);
+    if (matchRoute(route.pattern, pathname))
+      return legacyRouteAccessForPattern(route.pattern, method);
   return null;
 }
 
@@ -192,7 +195,7 @@ export async function dispatchLegacyApi(
   for (const route of legacyRoutes) {
     const params = matchRoute(route.pattern, pathname);
     if (!params) continue;
-    const access = routeAccess(route.pattern, request.method);
+    const access = legacyRouteAccessForPattern(route.pattern, request.method);
     const handler = route.module[request.method] as Handler | undefined;
     if (!handler)
       return Response.json(

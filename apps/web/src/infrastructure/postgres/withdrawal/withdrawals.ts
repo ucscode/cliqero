@@ -37,8 +37,11 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
   async findByIdForUpdate(id: string) {
     return this.find("w.uuid=$1", [id], true);
   }
-  async findByIdempotencyKey(key: string) {
-    return this.find("idempotency_key=$1", [key]);
+  async findByIdempotencyKey(accountId: string, key: string) {
+    return this.find(
+      "w.account_id=(select id from identity_capability.accounts where uuid=$1) and w.idempotency_key=$2",
+      [accountId, key],
+    );
   }
   async listForAccount(accountId: string, page: { cursor?: string; limit: number }) {
     const cursor = decodeAccountCursor(page.cursor);

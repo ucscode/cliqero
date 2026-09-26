@@ -66,7 +66,7 @@ function fixture(
       hasCapability: async () => false,
       requireCapability,
     },
-    { withIdempotencyLock: async (_key, operation) => operation() },
+    { withIdempotencyLock: async (_accountId, _key, operation) => operation() },
     { resolveForWithdrawal: async () => withdrawal.destination } as any,
   );
   return { service, withdrawal, complete, releaseOrComplete, append, requireCapability };

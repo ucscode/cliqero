@@ -4,6 +4,8 @@ import { usernameSchema } from "@/modules/identity/username";
 import { validationErrorPayload } from "@/api/error";
 import { apiError } from "@/api/http";
 import { PublicApplicationError } from "@/kernel/errors";
+import { Hono } from "hono";
+import { domainError } from "@/api/shared/error";
 
 describe("validation error payload", () => {
   it("returns a stable human-readable field error rather than Zod issue JSON", async () => {
@@ -42,6 +44,34 @@ describe("public application errors", () => {
       error: "That username is already taken.",
       code: "username_taken",
       fields: { username: "That username is already taken." },
+    });
+  });
+
+  it("sanitizes unexpected compatibility API errors to a generic 500", async () => {
+    const message = "connection to postgres host db.internal failed: password leaked";
+    const response = apiError(new Error(message));
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({
+      error: "Internal server error",
+      code: "internal_error",
+    });
+    expect(JSON.stringify(body)).not.toContain(message);
+  });
+
+  it("uses the same sanitized boundary for Hono API errors", async () => {
+    const app = new Hono();
+    app.onError((error, context) => domainError(context as never, error));
+    app.get("/failure", () => {
+      throw new Error("internal provider endpoint token=do-not-disclose");
+    });
+
+    const response = await app.request("/failure");
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "Internal server error",
+      code: "internal_error",
     });
   });
 });
