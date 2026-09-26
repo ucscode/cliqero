@@ -347,6 +347,9 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:read",
     });
+    expect(paths["/api/operator/treasury"].get.description).toBe(
+      "Authentication: an authenticated Cliqero account or API key. Required API-key scope: `treasury:read`.",
+    );
     expect(paths["/api/operator/treasury/entries"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:manage",

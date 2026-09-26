@@ -1,7 +1,71 @@
 import { describe, expect, it, vi } from "vitest";
+import { applyOpenApiMetadata, type OpenApiDocument } from "@/api/openapi/metadata";
 import { swaggerUiCredential, swaggerUiHtml, swaggerUiResponse } from "@/api/openapi/swagger-ui";
 
 describe("Swagger UI documentation", () => {
+  it("composes access metadata once when legacy and route metadata both classify an operation", () => {
+    const document: OpenApiDocument = {
+      paths: {
+        "/business": { get: { description: "Business description." } },
+        "/unclassified-description": { get: {} },
+        "/anonymous": { get: {} },
+        "/session": { get: {} },
+      },
+    };
+
+    applyOpenApiMetadata(
+      document,
+      [
+        {
+          path: "/business",
+          methods: [{ method: "GET", access: { mode: "account", scope: "treasury:read" } }],
+        },
+      ],
+      [
+        [
+          { path: "/business", method: "GET", mode: "account", scope: "treasury:read" },
+          { path: "/unclassified-description", method: "GET", mode: "account" },
+          { path: "/anonymous", method: "GET", mode: "anonymous" },
+          { path: "/session", method: "GET", mode: "session_only" },
+        ],
+        [{ path: "/business", method: "GET", mode: "account", scope: "treasury:read" }],
+      ],
+    );
+
+    expect(document.paths["/business"].get.description).toBe(
+      "Business description.\n\nAuthentication: an authenticated Cliqero account or API key. Required API-key scope: `treasury:read`.",
+    );
+    expect(document.paths["/business"].get.security).toEqual([{ CliqeroApiKey: [] }]);
+    expect(document.paths["/business"].get["x-required-api-scope"]).toBe("treasury:read");
+    expect(document.paths["/unclassified-description"].get.description).toBe(
+      "Authentication: an authenticated Cliqero account or API key.",
+    );
+    expect(document.paths["/anonymous"].get.description).toBeUndefined();
+    expect(document.paths["/anonymous"].get.security).toBeUndefined();
+    expect(document.paths["/session"].get.description).toBeUndefined();
+    expect(document.paths["/session"].get.security).toBeUndefined();
+  });
+
+  it("replaces stale generated scope notes instead of accumulating them", () => {
+    const document: OpenApiDocument = {
+      paths: { "/scoped": { get: { description: "Business description." } } },
+    };
+    applyOpenApiMetadata(
+      document,
+      [],
+      [
+        [{ path: "/scoped", method: "GET", mode: "account", scope: "treasury:read" }],
+        [{ path: "/scoped", method: "GET", mode: "account", scope: "treasury:manage" }],
+        [{ path: "/scoped", method: "GET", mode: "account", scope: "treasury:manage" }],
+      ],
+    );
+
+    expect(document.paths["/scoped"].get.description).toBe(
+      "Business description.\n\nAuthentication: an authenticated Cliqero account or API key. Required API-key scope: `treasury:manage`.",
+    );
+    expect(document.paths["/scoped"].get["x-required-api-scope"]).toBe("treasury:manage");
+  });
+
   it("uses the same protected OpenAPI key without exposing it in the UI document", () => {
     const secret = "openapi-private-test-key";
     const access = { environment: "production", key: secret } as const;

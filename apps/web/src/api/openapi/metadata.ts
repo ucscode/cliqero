@@ -34,19 +34,36 @@ const errorResponse = {
   },
 };
 
+type AccessMetadataBase = { description?: string; security?: unknown };
+const accessMetadataBases = new WeakMap<OpenApiOperation, AccessMetadataBase>();
+
 function setAccess(operation: OpenApiOperation, mode: string, scope?: string) {
+  if (!accessMetadataBases.has(operation)) {
+    accessMetadataBases.set(operation, {
+      description: typeof operation.description === "string" ? operation.description : undefined,
+      security: operation.security,
+    });
+  }
+  const base = accessMetadataBases.get(operation)!;
+
   operation["x-authentication-mode"] = mode;
   if (scope) operation["x-required-api-scope"] = scope;
+  else delete operation["x-required-api-scope"];
 
-  if (mode !== "account") return;
+  if (mode !== "account") {
+    if (base.security === undefined) delete operation.security;
+    else operation.security = base.security;
+    if (base.description === undefined) delete operation.description;
+    else operation.description = base.description;
+    return;
+  }
 
   operation.security = [{ CliqeroApiKey: [] }];
   const notes = [
     "Authentication: an authenticated Cliqero account or API key.",
     ...(scope ? [`Required API-key scope: \`${scope}\`.`] : []),
   ].join(" ");
-  const description = typeof operation.description === "string" ? operation.description : "";
-  operation.description = description ? `${description}\n\n${notes}` : notes;
+  operation.description = base.description ? `${base.description}\n\n${notes}` : notes;
 }
 
 /** Adds compatibility and capability metadata without capability policy in the API composition root. */
