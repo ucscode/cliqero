@@ -16,7 +16,7 @@ export default function Home() {
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
             Digital products, one catalogue
           </p>
-          <h1 className="mt-2 max-w-2xl text-4xl font-semibold tracking-tight text-slate-900">
+          <h1 className="mt-2 max-w-2xl text-5xl font-semibold tracking-tight text-slate-900 sm:text-6xl">
             Find something useful. Make it yours.
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-slate-600">

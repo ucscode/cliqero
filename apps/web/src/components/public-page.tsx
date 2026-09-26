@@ -14,7 +14,9 @@ export function PublicPage({
     <>
       <SiteHeader />
       <main className="mx-auto max-w-4xl px-4 py-12 sm:px-8">
-        <h1 className="text-4xl font-semibold tracking-tight text-slate-900">{title}</h1>
+        <h1 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-6xl">
+          {title}
+        </h1>
         <p className="mt-4 text-lg text-slate-600">{intro}</p>
         <div className="mt-10 space-y-8 text-slate-700">{children}</div>
       </main>

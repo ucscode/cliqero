@@ -99,7 +99,7 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
           <p className="eyebrow">Catalogue</p>
           <h1
             id="catalogue-heading"
-            className="mb-0 text-4xl font-semibold tracking-tight sm:text-5xl"
+            className="mb-0 text-5xl font-semibold tracking-tight sm:text-6xl"
           >
             Explore useful things.
           </h1>
@@ -201,7 +201,7 @@ export function StorefrontFallback() {
           <p className="eyebrow">Catalogue</p>
           <h1
             id="catalogue-heading"
-            className="mb-0 text-4xl font-semibold tracking-tight sm:text-5xl"
+            className="mb-0 text-5xl font-semibold tracking-tight sm:text-6xl"
           >
             Explore useful things.
           </h1>
