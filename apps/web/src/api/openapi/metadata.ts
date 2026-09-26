@@ -8,13 +8,17 @@ export type OpenApiDocument = {
 };
 export type LegacyRoute = {
   path: string;
-  methods: readonly { method: string; access: { mode: string; scope?: string } }[];
+  methods: readonly {
+    method: string;
+    access: { mode: string; scope?: string; apiKey?: "allow" | "reject" };
+  }[];
 };
 export type OpenApiMetadataEntry = {
   path: string;
   method: string;
   mode: string;
   scope?: string;
+  apiKey?: "allow" | "reject";
 };
 
 const response = {
@@ -33,6 +37,18 @@ const errorResponse = (description: string) => ({
     },
   },
 });
+
+const authenticationResponsesByMode: Record<string, readonly string[]> = {
+  anonymous: [],
+  account: ["401", "403"],
+  session_only: ["401", "403"],
+  integration_credential: ["401"],
+  deny: ["403"],
+};
+const authorizationResponseDescriptions: Record<string, string> = {
+  "401": "Authentication required",
+  "403": "Insufficient permissions",
+};
 
 type AccessMetadataBase = { security?: unknown };
 const accessMetadataBases = new WeakMap<OpenApiOperation, AccessMetadataBase>();
@@ -58,11 +74,20 @@ function setAccess(operation: OpenApiOperation, mode: string, scope?: string) {
   operation.security = [{ CliqeroApiKey: [] }];
 }
 
+function addAuthenticationResponses(
+  operation: OpenApiOperation,
+  access: { mode: string; apiKey?: "allow" | "reject" },
+) {
+  const responses = (operation.responses ??= {}) as Record<string, unknown>;
+  const statuses =
+    access.mode === "anonymous" && access.apiKey === "reject"
+      ? ["403"]
+      : (authenticationResponsesByMode[access.mode] ?? []);
+  for (const status of statuses)
+    responses[status] ??= errorResponse(authorizationResponseDescriptions[status]);
+}
+
 function normalizeAuthorizationResponses(document: OpenApiDocument) {
-  const descriptions = {
-    "401": "Authentication required",
-    "403": "Insufficient permissions",
-  };
   const genericDescriptions = new Set([
     "Request error",
     "Unauthorized",
@@ -75,7 +100,7 @@ function normalizeAuthorizationResponses(document: OpenApiDocument) {
       const responses = operation.responses;
       if (!responses || typeof responses !== "object") continue;
 
-      for (const [status, description] of Object.entries(descriptions)) {
+      for (const [status, description] of Object.entries(authorizationResponseDescriptions)) {
         const response = (responses as Record<string, unknown>)[status];
         if (!response || typeof response !== "object") continue;
         const responseObject = response as Record<string, unknown>;
@@ -112,19 +137,21 @@ export function applyOpenApiMetadata(
         responses: {
           "200": response,
           "400": errorResponse("Request error"),
-          "401": errorResponse("Authentication required"),
-          "403": errorResponse("Insufficient permissions"),
           "404": errorResponse("Request error"),
         },
       });
       setAccess(operation, routeMethod.access.mode, routeMethod.access.scope);
+      addAuthenticationResponses(operation, routeMethod.access);
     }
   }
 
   for (const contribution of contributions)
     for (const entry of contribution) {
       const operation = document.paths[entry.path]?.[entry.method.toLowerCase()];
-      if (operation) setAccess(operation, entry.mode, entry.scope);
+      if (operation) {
+        setAccess(operation, entry.mode, entry.scope);
+        addAuthenticationResponses(operation, entry);
+      }
     }
 
   normalizeAuthorizationResponses(document);

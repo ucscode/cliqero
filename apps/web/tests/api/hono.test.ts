@@ -383,9 +383,28 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "session_only",
     });
     expect(paths["/api/me/profile"].get.security).toBeUndefined();
-    expect(paths["/api/listings"].get.responses["403"].description).toBe(
+    expect(paths["/api/me/profile"].get.responses["401"].description).toBe(
+      "Authentication required",
+    );
+    expect(paths["/api/me/profile"].get.responses["403"].description).toBe(
       "Insufficient permissions",
     );
+    expect(paths["/api/listings"].get["x-authentication-mode"]).toBe("anonymous");
+    expect(paths["/api/listings"].get.security).toBeUndefined();
+    expect(paths["/api/listings"].get.responses["401"]).toBeUndefined();
+    expect(paths["/api/listings"].get.responses["403"]).toBeUndefined();
+    expect(paths["/api/accounts"].post["x-authentication-mode"]).toBe("anonymous");
+    expect(paths["/api/accounts"].post.responses["401"]).toBeUndefined();
+    expect(paths["/api/accounts"].post.responses["403"].description).toBe(
+      "Insufficient permissions",
+    );
+    expect(paths["/api/access/verify"].post).toMatchObject({
+      "x-authentication-mode": "integration_credential",
+    });
+    expect(paths["/api/access/verify"].post.responses["401"].description).toBe(
+      "Authentication required",
+    );
+    expect(paths["/api/access/verify"].post.responses["403"]).toBeUndefined();
   });
   it("keeps development schema discovery convenient with or without a key", async () => {
     expect((await appWith().fetch(new Request("http://localhost/api/openapi.json"))).status).toBe(

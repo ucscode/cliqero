@@ -91,6 +91,79 @@ describe("Swagger UI documentation", () => {
     );
   });
 
+  it("generates authentication responses according to each legacy access mode", () => {
+    const document: OpenApiDocument = { paths: {} };
+    applyOpenApiMetadata(
+      document,
+      [
+        { path: "/public", methods: [{ method: "GET", access: { mode: "anonymous" } }] },
+        {
+          path: "/public-key-reject",
+          methods: [{ method: "GET", access: { mode: "anonymous", apiKey: "reject" } }],
+        },
+        { path: "/account", methods: [{ method: "GET", access: { mode: "account" } }] },
+        {
+          path: "/session",
+          methods: [{ method: "GET", access: { mode: "session_only" } }],
+        },
+        {
+          path: "/integration",
+          methods: [{ method: "GET", access: { mode: "integration_credential" } }],
+        },
+        { path: "/denied", methods: [{ method: "GET", access: { mode: "deny" } }] },
+      ],
+      [],
+    );
+
+    const responses = (path: string) =>
+      document.paths[path].get.responses as Record<string, { description: string }>;
+    expect(responses("/public")).not.toHaveProperty("401");
+    expect(responses("/public")).not.toHaveProperty("403");
+    expect(document.paths["/public"].get.security).toBeUndefined();
+    expect(responses("/public-key-reject")).not.toHaveProperty("401");
+    expect(responses("/public-key-reject")["403"].description).toBe("Insufficient permissions");
+
+    expect(responses("/account")["401"].description).toBe("Authentication required");
+    expect(responses("/account")["403"].description).toBe("Insufficient permissions");
+    expect(document.paths["/account"].get.security).toEqual([{ CliqeroApiKey: [] }]);
+
+    expect(responses("/session")["401"].description).toBe("Authentication required");
+    expect(responses("/session")["403"].description).toBe("Insufficient permissions");
+    expect(document.paths["/session"].get.security).toBeUndefined();
+
+    expect(responses("/integration")["401"].description).toBe("Authentication required");
+    expect(responses("/integration")).not.toHaveProperty("403");
+
+    expect(responses("/denied")).not.toHaveProperty("401");
+    expect(responses("/denied")["403"].description).toBe("Insufficient permissions");
+    expect(document.paths["/denied"].get.security).toBeUndefined();
+  });
+
+  it("preserves specific explicit authentication response descriptions", () => {
+    const document: OpenApiDocument = {
+      paths: {
+        "/specific": {
+          get: {
+            responses: {
+              "401": { description: "Integration credential is invalid or expired" },
+              "403": { description: "Credential is not permitted for this resource" },
+            },
+          },
+        },
+      },
+    };
+    applyOpenApiMetadata(
+      document,
+      [],
+      [[{ path: "/specific", method: "GET", mode: "integration_credential" }]],
+    );
+
+    expect(document.paths["/specific"].get.responses).toMatchObject({
+      "401": { description: "Integration credential is invalid or expired" },
+      "403": { description: "Credential is not permitted for this resource" },
+    });
+  });
+
   it("uses the same protected OpenAPI key without exposing it in the UI document", () => {
     const secret = "openapi-private-test-key";
     const access = { environment: "production", key: secret } as const;
