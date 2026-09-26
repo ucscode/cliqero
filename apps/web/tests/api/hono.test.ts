@@ -453,6 +453,9 @@ describe("Hono API foundation", () => {
     const app = appWith();
     expect((await app.fetch(new Request("http://localhost/api/hierarchy/tree"))).status).toBe(401);
     expect(
+      (await app.fetch(new Request("http://localhost/api/hierarchy/search?q=al"))).status,
+    ).toBe(401);
+    expect(
       (await app.fetch(new Request("http://localhost/api/hierarchy/descendants?level=1"))).status,
     ).toBe(401);
     expect((await app.fetch(new Request("http://localhost/api/hierarchy/levels"))).status).toBe(
@@ -465,6 +468,18 @@ describe("Hono API foundation", () => {
       capabilities: [],
       scopes: new Set<string>(),
     };
+    const searchResponse = await appWith(principal).fetch(
+      new Request("http://localhost/api/hierarchy/search?q=al&limit=10"),
+    );
+    expect(searchResponse.status).toBe(200);
+    expect(await searchResponse.json()).toEqual({ items: [] });
+    expect(
+      (
+        await appWith(principal).fetch(
+          new Request("http://localhost/api/hierarchy/search?q=a&limit=10"),
+        )
+      ).status,
+    ).toBe(200);
     expect(
       (
         await appWith(principal).fetch(

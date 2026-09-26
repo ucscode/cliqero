@@ -204,8 +204,14 @@ export class PostgresHierarchyReader implements HierarchyReader {
   async search(query: string, scopeRoot: string | null, limit: number) {
     const params: unknown[] = [query, limit];
     let scope = "";
+    let matching =
+      "(a.uuid::text=$1 or a.username ilike '%'||$1||'%' or a.email ilike '%'||$1||'%')";
     if (scopeRoot) {
+      params[0] = query.toLowerCase().replace(/[\\%_]/g, "\\$&");
       params.push(scopeRoot);
+      // Customer network search is username-prefix based so PostgreSQL can use
+      // the accounts_username_pattern_idx instead of scanning every profile.
+      matching = "a.username like $1||'%' escape E'\\\\'";
       scope = `and a.id in (
         with recursive tree(id,path) as (
           select (select id from identity_capability.accounts where uuid=$3),array[(select id from identity_capability.accounts where uuid=$3)]
@@ -220,7 +226,7 @@ export class PostgresHierarchyReader implements HierarchyReader {
     const rows = await this.sql.query<any>(
       `select a.uuid id,a.username,a.display_name
          from identity_capability.account_profiles a
-        where (a.uuid::text=$1 or a.username ilike '%'||$1||'%' or a.email ilike '%'||$1||'%')
+        where ${matching}
           ${scope}
         order by a.username limit $2`,
       params,

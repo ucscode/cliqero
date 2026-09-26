@@ -11,9 +11,11 @@ import {
 import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { Skeleton } from "../ui/skeleton";
 import { HierarchyGraph } from "./graph";
 import { mergeHierarchyChildren } from "./graph/model";
+import { HierarchySearchController, moveHierarchySearchSelection } from "./search";
 import {
   fetchHierarchyTree,
   hierarchyRootFromUrl,
@@ -31,9 +33,30 @@ export function HierarchyPanel() {
   const [loadingChildren, setLoadingChildren] = useState<string | null>(null);
   const [hierarchyLoading, setHierarchyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchItems, setSearchItems] = useState<
+    Array<{ id: string; username: string; displayName: string | null }>
+  >([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchCompleted, setSearchCompleted] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
   const hierarchyLoadingRef = useRef(false);
   const retryRootRef = useRef<string | null | undefined>(undefined);
   const lastSuccessfulUrlRef = useRef<string | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchControllerRef = useRef<HierarchySearchController | null>(null);
+  if (searchControllerRef.current == null) {
+    searchControllerRef.current = new HierarchySearchController((path, signal) =>
+      apiFetch<{ items: Array<{ id: string; username: string; displayName: string | null }> }>(
+        path,
+        {
+          signal,
+        },
+      ),
+    );
+  }
 
   const loadPanel = useCallback(async (rootId: string | null) => {
     setLoading(true);
@@ -60,6 +83,26 @@ export function HierarchyPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPanel(initialRootParam);
   }, [initialRootParam, loadPanel]);
+
+  useEffect(() => {
+    const controller = searchControllerRef.current!;
+    controller.schedule(searchQuery, (state) => {
+      setSearchLoading(state.status === "loading");
+      setSearchCompleted(state.status === "success");
+      setSearchItems(state.status === "success" ? state.items : []);
+      setSearchError(state.status === "error" ? state.message : null);
+      setActiveSearchIndex(-1);
+    });
+    return () => controller.cancel();
+  }, [searchQuery]);
+
+  useEffect(() => {
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (!searchContainerRef.current?.contains(event.target as Node)) setSearchOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, []);
 
   const refreshPanel = useCallback(() => {
     void loadPanel(hierarchyRootFromUrl(window.location.href));
@@ -146,6 +189,20 @@ export function HierarchyPanel() {
     refreshPanel();
   }, [refreshPanel, rebaseHierarchy]);
 
+  const selectSearchResult = useCallback(
+    (id: string) => {
+      setSearchOpen(false);
+      setSearchQuery("");
+      setSearchItems([]);
+      setSearchCompleted(false);
+      openRoot(id);
+    },
+    [openRoot],
+  );
+
+  const viewingOtherRoot = Boolean(tree && selfAccountId && tree.root !== selfAccountId);
+  const rootUsername = tree?.nodes.find((node) => node.id === tree.root)?.username;
+
   return (
     <section className="grid gap-4" aria-labelledby="hierarchy-heading">
       <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
@@ -168,6 +225,115 @@ export function HierarchyPanel() {
           {loading ? "Refreshing…" : "Refresh"}
         </Button>
       </div>
+      <div className="grid gap-2 sm:max-w-md" ref={searchContainerRef}>
+        <label htmlFor="hierarchy-search" className="text-sm font-medium text-slate-700">
+          Search your network by username
+        </label>
+        <div className="relative">
+          <Input
+            id="hierarchy-search"
+            type="search"
+            maxLength={100}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-busy={searchLoading}
+            aria-expanded={searchOpen && searchQuery.trim().length >= 2}
+            aria-controls="hierarchy-search-results"
+            aria-activedescendant={
+              activeSearchIndex >= 0 ? `hierarchy-search-option-${activeSearchIndex}` : undefined
+            }
+            placeholder="Search your network by username"
+            value={searchQuery}
+            onFocus={() => {
+              if (searchQuery.trim().length >= 2) setSearchOpen(true);
+            }}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setSearchOpen(event.target.value.trim().length >= 2);
+              setSearchItems([]);
+              setSearchCompleted(false);
+              setSearchError(null);
+              setSearchLoading(false);
+              setActiveSearchIndex(-1);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setSearchOpen(false);
+                return;
+              }
+              if (!searchOpen || searchItems.length === 0) return;
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setActiveSearchIndex((index) =>
+                  moveHierarchySearchSelection(index, 1, searchItems.length),
+                );
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setActiveSearchIndex((index) =>
+                  moveHierarchySearchSelection(index, -1, searchItems.length),
+                );
+              } else if (event.key === "Enter" && activeSearchIndex >= 0) {
+                event.preventDefault();
+                const item = searchItems[activeSearchIndex];
+                if (item) selectSearchResult(item.id);
+              }
+            }}
+          />
+          {searchOpen && searchQuery.trim().length >= 2 && (
+            <div
+              id="hierarchy-search-results"
+              role="listbox"
+              aria-label="Network search results"
+              className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+            >
+              {searchLoading && (
+                <p className="px-3 py-2 text-sm text-slate-500" role="status">
+                  Searching…
+                </p>
+              )}
+              {!searchLoading && searchCompleted && searchItems.length === 0 && (
+                <p className="px-3 py-2 text-sm text-slate-500">No user found in your network</p>
+              )}
+              {searchItems.map((item, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  id={`hierarchy-search-option-${index}`}
+                  aria-selected={activeSearchIndex === index}
+                  key={item.id}
+                  className={`flex w-full flex-col items-start px-3 py-2 text-left ${
+                    activeSearchIndex === index ? "bg-emerald-50" : "hover:bg-slate-50"
+                  }`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActiveSearchIndex(index)}
+                  onClick={() => selectSearchResult(item.id)}
+                >
+                  <span className="text-sm font-medium text-slate-900">{item.username}</span>
+                  {item.displayName && (
+                    <span className="text-xs text-slate-500">{item.displayName}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {searchError && (
+          <p className="text-sm text-red-700" role="alert">
+            {searchError}
+          </p>
+        )}
+      </div>
+      {viewingOtherRoot && (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+          <span>
+            Viewing tree from:{" "}
+            <strong className="font-semibold text-slate-900">{rootUsername}</strong>
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={resetRoot}>
+            Back to my network
+          </Button>
+        </div>
+      )}
       {error && (
         <Toast>
           <span>{error}</span>

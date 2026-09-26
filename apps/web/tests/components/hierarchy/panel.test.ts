@@ -29,4 +29,32 @@ describe("hierarchy panel composition", () => {
     expect(source).toContain("rebaseHierarchy(hierarchyRootFromUrl(window.location.href), false)");
     expect(source).not.toContain("router.push");
   });
+
+  it("integrates username search with the existing root navigation and preserves the graph", () => {
+    expect(source).toContain('placeholder="Search your network by username"');
+    expect(source).toContain("HierarchySearchController");
+    expect(source).toContain("selectSearchResult(item.id)");
+    expect(source).toContain("setSearchOpen(false);");
+    expect(source).toContain('setSearchQuery("")');
+    expect(source).toContain("openRoot(id)");
+    expect(source).toContain("Viewing tree from:");
+    expect(source).toContain("Back to my network");
+    expect(source).toContain("onResetRoot={resetRoot}");
+    expect(source).toContain("runHierarchyRebase(() => fetchHierarchyTree(rootId, apiFetch)");
+    expect(source).toContain("onError: (cause) => {");
+  });
+
+  it("keeps search results private and accessible without displaying email", () => {
+    expect(source).toContain(
+      'className="text-sm font-medium text-slate-900">{item.username}</span>',
+    );
+    expect(source).toContain("{item.displayName}");
+    expect(source).not.toContain("item.email");
+    expect(source).toContain('event.key === "ArrowDown"');
+    expect(source).toContain('event.key === "ArrowUp"');
+    expect(source).toContain('event.key === "Enter"');
+    expect(source).toContain('event.key === "Escape"');
+    expect(source).toContain('document.addEventListener("pointerdown", closeOnOutsidePointer)');
+    expect(source).toContain("No user found in your network");
+  });
 });

@@ -2671,6 +2671,13 @@ CREATE INDEX funding_nowpayments_expiry_idx ON funding_capability.funding_transa
 CREATE INDEX accounts_created_idx ON identity_capability.accounts USING btree (created_at DESC, id DESC);
 
 
+-- Name: accounts_username_pattern_idx; Type: INDEX; Schema: identity_capability; Owner: -
+--
+
+-- Supports case-normalized username prefix lookup in customer network search.
+CREATE INDEX accounts_username_pattern_idx ON identity_capability.accounts USING btree (username text_pattern_ops);
+
+
 --
 -- Name: api_keys_account_idx; Type: INDEX; Schema: identity_capability; Owner: -
 --

@@ -236,13 +236,43 @@ suite("headless API principal and hierarchy read model", () => {
   });
   it("searches only the authorized descendant closure for normal users", async () => {
     const root = await account("searchroot"),
-      child = await account("searchchild"),
-      other = await account("searchother");
+      child = await account("search_child"),
+      other = await account("searchother"),
+      secondChild = await account("search_child");
     await app.referralGraphService.establish(child.id, root.id);
+    await app.referralGraphService.establish(secondChild.id, root.id);
     expect(
-      (await app.hierarchy.search(root.id, child.username, false, 20)).map((x) => x.id),
+      (await app.hierarchy.search(root.id, child.username.slice(0, -1), false, 20)).map(
+        (x) => x.id,
+      ),
     ).toContain(child.id);
     expect(await app.hierarchy.search(root.id, other.username, false, 20)).toEqual([]);
+    const limited = await app.hierarchy.search(root.id, "search_child", false, 1);
+    expect(limited).toHaveLength(1);
+    expect([child.id, secondChild.id]).toContain(limited[0]?.id);
+
+    const customerApi = createApiApp({
+      ...app,
+      principalResolver: {
+        resolve: async () => ({
+          accountId: root.id,
+          account: root,
+          kind: "user_session" as const,
+          capabilities: [],
+          scopes: new Set<string>(),
+        }),
+      },
+    } as any);
+    const response = await customerApi.fetch(
+      new Request("http://localhost/api/hierarchy/search?q=search_child&limit=1"),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).items).toHaveLength(1);
+    const forgedRoot = await customerApi.fetch(
+      new Request(`http://localhost/api/hierarchy/tree?root=${other.id}`),
+    );
+    expect(forgedRoot.status).toBe(403);
+
     const operator = await account("searchoperator");
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
