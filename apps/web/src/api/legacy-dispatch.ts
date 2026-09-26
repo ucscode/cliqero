@@ -6,7 +6,8 @@ import { hasCapability } from "@/modules/identity/capabilities";
 
 type RouteContext = { params: Promise<Record<string, string>> };
 type Handler = (request: Request, context?: RouteContext) => Response | Promise<Response>;
-export type LegacyAuthMode = "anonymous" | "account" | "session_only" | "integration_credential";
+export type LegacyAuthMode =
+  "anonymous" | "account" | "session_only" | "integration_credential" | "deny";
 export type LegacyRouteAccess = {
   mode: LegacyAuthMode;
   scope?: ApiScope;
@@ -58,9 +59,9 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
   if (pattern.startsWith("/api/operator/distribution-policy"))
     return { mode: "account", scope: "operations:manage", capability: "finance.read" };
   if (pattern.startsWith("/api/operator/"))
-    // Unknown operator endpoints fail closed until their specific capability
-    // and delegated API scope are deliberately assigned above.
-    return { mode: "account", scope: "operations:manage", capability: "system.root" };
+    // Unknown operator endpoints remain inaccessible until deliberately
+    // classified above; no account capability or API-key scope can bypass it.
+    return { mode: "deny" };
   if (pattern === "/api/listings/:id/referral-url")
     return { mode: "session_only", apiKey: "reject" };
   if (pattern === "/api/listings" || pattern === "/api/listings/:id")
@@ -158,6 +159,7 @@ export function authorizeLegacyRequest(
   principal: ApiPrincipal | null,
   access: LegacyRouteAccess,
 ): Response | null {
+  if (access.mode === "deny") return forbidden();
   if (
     access.mode !== "integration_credential" &&
     request.headers.has("authorization") &&

@@ -924,22 +924,37 @@ describe("Hono API foundation", () => {
     expect(authorizeLegacyRequest(settlementRequest, browserSession, operatorScope!)).toBeNull();
 
     const futureOperatorAccess = legacyRouteAccessForPattern("/api/operator/unclassified", "POST");
-    expect(futureOperatorAccess).toEqual({
-      mode: "account",
-      scope: "operations:manage",
-      capability: "system.root",
+    expect(futureOperatorAccess).toEqual({ mode: "deny" });
+    const unclassifiedRequest = new Request("http://localhost/api/operator/unclassified", {
+      method: "POST",
     });
-    expect(
-      authorizeLegacyRequest(
-        new Request("http://localhost/api/operator/unclassified", { method: "POST" }),
-        { ...operatorKey, capabilities: ["finance.manage"] },
-        futureOperatorAccess,
-      )?.status,
-    ).toBe(403);
+    const unclassifiedPrincipals = [
+      null,
+      { ...operatorKey, capabilities: [], scopes: new Set<string>() },
+      {
+        ...operatorKey,
+        kind: "user_session" as const,
+        capabilities: ["finance.manage"],
+        scopes: new Set<string>(),
+      },
+      {
+        ...operatorKey,
+        kind: "user_session" as const,
+        capabilities: ["system.root"],
+        scopes: new Set<string>(),
+      },
+      { ...operatorKey, scopes: new Set<string>() },
+      { ...operatorKey, scopes: new Set<string>(["operations:manage"]) },
+    ];
+    for (const principal of unclassifiedPrincipals) {
+      expect(
+        authorizeLegacyRequest(unclassifiedRequest, principal, futureOperatorAccess)?.status,
+      ).toBe(403);
+    }
 
     for (const route of legacyApiPaths.filter((entry) => entry.path.startsWith("/api/operator/"))) {
       for (const method of route.methods) {
-        expect(method.access.mode, `${method.method} ${route.path} requires an account`).toBe(
+        expect(method.access.mode, `${method.method} ${route.path} is explicitly classified`).toBe(
           "account",
         );
         expect(
