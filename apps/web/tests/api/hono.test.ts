@@ -279,13 +279,14 @@ describe("Hono API foundation", () => {
     expect(paths["/api/hierarchy/children/{parentId}"]).toBeDefined();
     expect(paths["/api/listings"]).toBeDefined();
     expect(paths["/api/wallet"]).toBeDefined();
+    expect(paths["/api/openapi.json"]).toBeUndefined();
     expect(paths["/api/wallet/fund/{id}/transaction"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "wallet:fund",
       security: [{ CliqeroApiKey: [] }],
     });
-    expect(paths["/api/wallet/fund/{id}/transaction"].post.description).toContain(
-      "Required API-key scope: `wallet:fund`.",
+    expect(paths["/api/wallet/fund/{id}/transaction"].post.description ?? "").not.toContain(
+      "Authentication:",
     );
     expect(paths["/api/operator/treasury/entries"]).toBeDefined();
     expect(paths["/api/api-keys"]).toBeUndefined();
@@ -347,9 +348,7 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:read",
     });
-    expect(paths["/api/operator/treasury"].get.description).toBe(
-      "Authentication: an authenticated Cliqero account or API key. Required API-key scope: `treasury:read`.",
-    );
+    expect(paths["/api/operator/treasury"].get.description ?? "").not.toContain("Authentication:");
     expect(paths["/api/operator/treasury/entries"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:manage",
@@ -367,6 +366,15 @@ describe("Hono API foundation", () => {
       "x-required-api-scope": "wallet:read",
       security: [{ CliqeroApiKey: [] }],
     });
+    expect(paths["/api/wallet"].get.description ?? "").not.toContain("Authentication:");
+    expect(paths["/api/wallet"].get.responses["401"]).toMatchObject({
+      description: "Authentication required",
+      content: { "application/json": { schema: { required: ["error"] } } },
+    });
+    expect(paths["/api/wallet"].get.responses["403"]).toMatchObject({
+      description: "Insufficient permissions",
+      content: { "application/json": { schema: { required: ["error"] } } },
+    });
     expect(paths["/api/me/session"].get).toMatchObject({
       "x-authentication-mode": "session",
     });
@@ -375,6 +383,9 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "session_only",
     });
     expect(paths["/api/me/profile"].get.security).toBeUndefined();
+    expect(paths["/api/listings"].get.responses["403"].description).toBe(
+      "Insufficient permissions",
+    );
   });
   it("keeps development schema discovery convenient with or without a key", async () => {
     expect((await appWith().fetch(new Request("http://localhost/api/openapi.json"))).status).toBe(

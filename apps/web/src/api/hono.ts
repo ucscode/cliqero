@@ -76,6 +76,7 @@ export function createApiApp(
         operatorTreasuryOpenApiMetadata,
         operatorWithdrawalOpenApiMetadata,
       ]);
+      delete document.paths["/api/openapi.json"];
       return c.json(document, 200) as never;
     },
   );

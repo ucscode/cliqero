@@ -21,8 +21,8 @@ const response = {
   description: "Application API response",
   content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
 };
-const errorResponse = {
-  description: "Request error",
+const errorResponse = (description: string) => ({
+  description,
   content: {
     "application/json": {
       schema: {
@@ -32,15 +32,14 @@ const errorResponse = {
       },
     },
   },
-};
+});
 
-type AccessMetadataBase = { description?: string; security?: unknown };
+type AccessMetadataBase = { security?: unknown };
 const accessMetadataBases = new WeakMap<OpenApiOperation, AccessMetadataBase>();
 
 function setAccess(operation: OpenApiOperation, mode: string, scope?: string) {
   if (!accessMetadataBases.has(operation)) {
     accessMetadataBases.set(operation, {
-      description: typeof operation.description === "string" ? operation.description : undefined,
       security: operation.security,
     });
   }
@@ -53,17 +52,40 @@ function setAccess(operation: OpenApiOperation, mode: string, scope?: string) {
   if (mode !== "account") {
     if (base.security === undefined) delete operation.security;
     else operation.security = base.security;
-    if (base.description === undefined) delete operation.description;
-    else operation.description = base.description;
     return;
   }
 
   operation.security = [{ CliqeroApiKey: [] }];
-  const notes = [
-    "Authentication: an authenticated Cliqero account or API key.",
-    ...(scope ? [`Required API-key scope: \`${scope}\`.`] : []),
-  ].join(" ");
-  operation.description = base.description ? `${base.description}\n\n${notes}` : notes;
+}
+
+function normalizeAuthorizationResponses(document: OpenApiDocument) {
+  const descriptions = {
+    "401": "Authentication required",
+    "403": "Insufficient permissions",
+  };
+  const genericDescriptions = new Set([
+    "Request error",
+    "Unauthorized",
+    "Forbidden",
+    "Not authorized",
+  ]);
+
+  for (const path of Object.values(document.paths))
+    for (const operation of Object.values(path)) {
+      const responses = operation.responses;
+      if (!responses || typeof responses !== "object") continue;
+
+      for (const [status, description] of Object.entries(descriptions)) {
+        const response = (responses as Record<string, unknown>)[status];
+        if (!response || typeof response !== "object") continue;
+        const responseObject = response as Record<string, unknown>;
+        if (
+          typeof responseObject.description !== "string" ||
+          genericDescriptions.has(responseObject.description)
+        )
+          responseObject.description = description;
+      }
+    }
 }
 
 /** Adds compatibility and capability metadata without capability policy in the API composition root. */
@@ -79,7 +101,7 @@ export function applyOpenApiMetadata(
     scheme: "bearer",
     bearerFormat: "Cliqero API Key",
     description:
-      "Use an existing Cliqero API key. Requests send it as Authorization: Bearer <key>; required scopes are listed on each operation.",
+      "Use an existing Cliqero API key as Authorization: Bearer <key>. Operations may require different scopes; each required scope is exposed through x-required-api-scope.",
   };
 
   for (const route of legacyRoutes) {
@@ -89,10 +111,10 @@ export function applyOpenApiMetadata(
       const operation = (path[method] ??= {
         responses: {
           "200": response,
-          "400": errorResponse,
-          "401": errorResponse,
-          "403": errorResponse,
-          "404": errorResponse,
+          "400": errorResponse("Request error"),
+          "401": errorResponse("Authentication required"),
+          "403": errorResponse("Insufficient permissions"),
+          "404": errorResponse("Request error"),
         },
       });
       setAccess(operation, routeMethod.access.mode, routeMethod.access.scope);
@@ -104,4 +126,6 @@ export function applyOpenApiMetadata(
       const operation = document.paths[entry.path]?.[entry.method.toLowerCase()];
       if (operation) setAccess(operation, entry.mode, entry.scope);
     }
+
+  normalizeAuthorizationResponses(document);
 }

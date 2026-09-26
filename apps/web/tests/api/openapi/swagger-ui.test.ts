@@ -32,14 +32,11 @@ describe("Swagger UI documentation", () => {
       ],
     );
 
-    expect(document.paths["/business"].get.description).toBe(
-      "Business description.\n\nAuthentication: an authenticated Cliqero account or API key. Required API-key scope: `treasury:read`.",
-    );
+    expect(document.paths["/business"].get.description).toBe("Business description.");
+    expect(document.paths["/business"].get.description).not.toContain("Authentication:");
     expect(document.paths["/business"].get.security).toEqual([{ CliqeroApiKey: [] }]);
     expect(document.paths["/business"].get["x-required-api-scope"]).toBe("treasury:read");
-    expect(document.paths["/unclassified-description"].get.description).toBe(
-      "Authentication: an authenticated Cliqero account or API key.",
-    );
+    expect(document.paths["/unclassified-description"].get.description).toBeUndefined();
     expect(document.paths["/anonymous"].get.description).toBeUndefined();
     expect(document.paths["/anonymous"].get.security).toBeUndefined();
     expect(document.paths["/session"].get.description).toBeUndefined();
@@ -60,10 +57,38 @@ describe("Swagger UI documentation", () => {
       ],
     );
 
-    expect(document.paths["/scoped"].get.description).toBe(
-      "Business description.\n\nAuthentication: an authenticated Cliqero account or API key. Required API-key scope: `treasury:manage`.",
-    );
+    expect(document.paths["/scoped"].get.description).toBe("Business description.");
+    expect(document.paths["/scoped"].get.description).not.toContain("Authentication:");
     expect(document.paths["/scoped"].get["x-required-api-scope"]).toBe("treasury:manage");
+  });
+
+  it("documents generated authentication errors distinctly and preserves the public error schema", () => {
+    const document: OpenApiDocument = { paths: {} };
+    applyOpenApiMetadata(
+      document,
+      [
+        {
+          path: "/compat",
+          methods: [{ method: "GET", access: { mode: "account", scope: "wallet:read" } }],
+        },
+      ],
+      [],
+    );
+
+    const responses = document.paths["/compat"].get.responses as Record<
+      string,
+      { description: string; content: Record<string, { schema: Record<string, unknown> }> }
+    >;
+    expect(responses["401"].description).toBe("Authentication required");
+    expect(responses["403"].description).toBe("Insufficient permissions");
+    expect(responses["401"].content["application/json"].schema).toMatchObject({
+      type: "object",
+      required: ["error"],
+      properties: { error: { type: "string" }, code: { type: "string" } },
+    });
+    expect(responses["403"].content["application/json"].schema).toEqual(
+      responses["401"].content["application/json"].schema,
+    );
   });
 
   it("uses the same protected OpenAPI key without exposing it in the UI document", () => {
@@ -110,6 +135,7 @@ describe("Swagger UI documentation", () => {
     expect(html).toContain("swagger-ui-bundle.js");
     expect(html).toContain('"CliqeroApiKey"');
     expect(html).toContain('"security":[{"CliqeroApiKey":[]}]');
+    expect(html).toContain("presets: [SwaggerUIBundle.presets.apis]");
   });
 
   it("authorizes the docs request before loading the canonical schema server-side", async () => {
