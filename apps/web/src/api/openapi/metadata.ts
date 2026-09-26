@@ -1,5 +1,11 @@
 type OpenApiOperation = Record<string, unknown>;
-export type OpenApiDocument = { paths: Record<string, Record<string, OpenApiOperation>> };
+export type OpenApiDocument = {
+  paths: Record<string, Record<string, OpenApiOperation>>;
+  components?: {
+    securitySchemes?: Record<string, Record<string, string>>;
+    [key: string]: unknown;
+  };
+};
 export type LegacyRoute = {
   path: string;
   methods: readonly { method: string; access: { mode: string; scope?: string } }[];
@@ -31,6 +37,16 @@ const errorResponse = {
 function setAccess(operation: OpenApiOperation, mode: string, scope?: string) {
   operation["x-authentication-mode"] = mode;
   if (scope) operation["x-required-api-scope"] = scope;
+
+  if (mode !== "account") return;
+
+  operation.security = [{ CliqeroApiKey: [] }];
+  const notes = [
+    "Authentication: an authenticated Cliqero account or API key.",
+    ...(scope ? [`Required API-key scope: \`${scope}\`.`] : []),
+  ].join(" ");
+  const description = typeof operation.description === "string" ? operation.description : "";
+  operation.description = description ? `${description}\n\n${notes}` : notes;
 }
 
 /** Adds compatibility and capability metadata without capability policy in the API composition root. */
@@ -39,13 +55,21 @@ export function applyOpenApiMetadata(
   legacyRoutes: readonly LegacyRoute[],
   contributions: readonly (readonly OpenApiMetadataEntry[])[],
 ) {
+  document.components ??= {};
+  document.components.securitySchemes ??= {};
+  document.components.securitySchemes.CliqeroApiKey = {
+    type: "http",
+    scheme: "bearer",
+    bearerFormat: "Cliqero API Key",
+    description:
+      "Use an existing Cliqero API key. Requests send it as Authorization: Bearer <key>; required scopes are listed on each operation.",
+  };
+
   for (const route of legacyRoutes) {
     const path = (document.paths[route.path] ??= {});
     for (const routeMethod of route.methods) {
       const method = routeMethod.method.toLowerCase();
-      path[method] ??= {
-        "x-authentication-mode": routeMethod.access.mode,
-        ...(routeMethod.access.scope ? { "x-required-api-scope": routeMethod.access.scope } : {}),
+      const operation = (path[method] ??= {
         responses: {
           "200": response,
           "400": errorResponse,
@@ -53,7 +77,8 @@ export function applyOpenApiMetadata(
           "403": errorResponse,
           "404": errorResponse,
         },
-      };
+      });
+      setAccess(operation, routeMethod.access.mode, routeMethod.access.scope);
     }
   }
 

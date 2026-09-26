@@ -266,19 +266,27 @@ describe("Hono API foundation", () => {
   it("serves an OpenAPI document", async () => {
     const response = await appWith().fetch(new Request("http://localhost/api/openapi.json"));
     expect(response.status).toBe(200);
-    const paths = (await response.json()).paths;
+    const document = await response.json();
+    const paths = document.paths;
+    expect(document.components.securitySchemes.CliqeroApiKey).toMatchObject({
+      type: "http",
+      scheme: "bearer",
+      bearerFormat: "Cliqero API Key",
+    });
     expect(paths["/api/hierarchy/tree"]).toBeDefined();
     expect(paths["/api/hierarchy/levels"]).toBeDefined();
     expect(paths["/api/hierarchy/descendants"]).toBeDefined();
     expect(paths["/api/hierarchy/children/{parentId}"]).toBeDefined();
     expect(paths["/api/listings"]).toBeDefined();
     expect(paths["/api/wallet"]).toBeDefined();
-    expect(paths["/api/wallet/fund/{id}/transaction"]).toMatchObject({
-      post: expect.objectContaining({
-        "x-authentication-mode": "account",
-        "x-required-api-scope": "wallet:fund",
-      }),
+    expect(paths["/api/wallet/fund/{id}/transaction"].post).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "wallet:fund",
+      security: [{ CliqeroApiKey: [] }],
     });
+    expect(paths["/api/wallet/fund/{id}/transaction"].post.description).toContain(
+      "Required API-key scope: `wallet:fund`.",
+    );
     expect(paths["/api/operator/treasury/entries"]).toBeDefined();
     expect(paths["/api/api-keys"]).toBeUndefined();
     expect(paths["/api/operator/accounts/{accountId}/api-keys"]).toBeDefined();
@@ -350,10 +358,20 @@ describe("Hono API foundation", () => {
     expect(paths["/api/listings"].get).toMatchObject({
       "x-authentication-mode": "anonymous",
     });
+    expect(paths["/api/listings"].get.security).toBeUndefined();
     expect(paths["/api/wallet"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "wallet:read",
+      security: [{ CliqeroApiKey: [] }],
     });
+    expect(paths["/api/me/session"].get).toMatchObject({
+      "x-authentication-mode": "session",
+    });
+    expect(paths["/api/me/session"].get.security).toBeUndefined();
+    expect(paths["/api/me/profile"].get).toMatchObject({
+      "x-authentication-mode": "session_only",
+    });
+    expect(paths["/api/me/profile"].get.security).toBeUndefined();
   });
   it("keeps development schema discovery convenient with or without a key", async () => {
     expect((await appWith().fetch(new Request("http://localhost/api/openapi.json"))).status).toBe(

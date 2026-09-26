@@ -25,9 +25,27 @@ describe("Swagger UI documentation", () => {
 
   it("keeps development docs open and safely embeds the generated spec", () => {
     expect(swaggerUiCredential({ environment: "development", key: null }, null)).toBe("");
-    const html = swaggerUiHtml({ description: "</script><script>alert(1)</script>" });
+    const html = swaggerUiHtml({
+      openapi: "3.0.0",
+      components: {
+        securitySchemes: {
+          CliqeroApiKey: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "Cliqero API Key",
+          },
+        },
+      },
+      paths: {
+        "/api/wallet": { get: { security: [{ CliqeroApiKey: [] }] } },
+      },
+      description: "</script><script>alert(1)</script>",
+    });
     expect(html).toContain("\\u003c/script\\u003e");
     expect(html).not.toContain("</script><script>alert(1)</script>");
+    expect(html).toContain("swagger-ui-bundle.js");
+    expect(html).toContain('"CliqeroApiKey"');
+    expect(html).toContain('"security":[{"CliqeroApiKey":[]}]');
   });
 
   it("authorizes the docs request before loading the canonical schema server-side", async () => {
