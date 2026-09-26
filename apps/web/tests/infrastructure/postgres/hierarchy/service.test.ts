@@ -18,9 +18,13 @@ describe("Postgres hierarchy username search", () => {
       { id: "account-id", username: "alpha_one", displayName: "Alpha One" },
     ]);
     const [statement, values] = calls[0]!;
-    expect(statement).toContain("a.username like $1||'%' escape E'\\\\'");
-    expect(statement).toContain("with recursive tree(id,path)");
-    expect(statement).toContain("order by a.username limit $2");
+    expect(statement).toContain("candidate.username like $1||'%' escape E'\\\\'");
+    expect(statement).toContain("with recursive requester(id) as materialized");
+    expect(statement).toContain("with recursive ancestors(id,path)");
+    expect(statement).toContain("referral.child_account_id=ancestors.id");
+    expect(statement).toContain("order by candidate.username\n           limit $2");
+    expect(statement).not.toContain("with recursive tree(id,path)");
+    expect(statement).toContain("join identity_capability.account_profiles profile");
     expect(statement).not.toContain("a.email");
     expect(values).toEqual(["alpha", 10, "requester-id"]);
 

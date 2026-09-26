@@ -203,34 +203,51 @@ export class PostgresHierarchyReader implements HierarchyReader {
 
   async search(query: string, scopeRoot: string | null, limit: number) {
     const params: unknown[] = [query, limit];
-    let scope = "";
-    let matching =
-      "(a.uuid::text=$1 or a.username ilike '%'||$1||'%' or a.email ilike '%'||$1||'%')";
+    let statement: string;
     if (scopeRoot) {
       params[0] = query.toLowerCase().replace(/[\\%_]/g, "\\$&");
       params.push(scopeRoot);
-      // Customer network search is username-prefix based so PostgreSQL can use
-      // the accounts_username_pattern_idx instead of scanning every profile.
-      matching = "a.username like $1||'%' escape E'\\\\'";
-      scope = `and a.id in (
-        with recursive tree(id,path) as (
-          select (select id from identity_capability.accounts where uuid=$3),array[(select id from identity_capability.accounts where uuid=$3)]
-          union all
-          select ar.child_account_id,tree.path||ar.child_account_id
-            from tree
-            join referral_capability.account_referrals ar on ar.parent_account_id=tree.id
-           where not ar.child_account_id=any(tree.path)
-        ) select id from tree
-      )`;
-    }
-    const rows = await this.sql.query<any>(
-      `select a.uuid id,a.username,a.display_name
+      // Check each indexed username candidate by walking its parent chain. This
+      // avoids materializing the requester's entire descendant network for each
+      // typeahead query, while keeping both candidate selection and scope
+      // authorization in PostgreSQL. LIMIT is applied only after authorization.
+      statement = `with recursive requester(id) as materialized (
+          select id from identity_capability.accounts where uuid=$3
+        ), authorized(id,username) as (
+          select candidate.id,candidate.username
+            from identity_capability.accounts candidate
+            cross join requester
+           where candidate.username like $1||'%' escape E'\\\\'
+             and (
+               candidate.id=requester.id
+               or exists (
+                 with recursive ancestors(id,path) as (
+                   select candidate.id,array[candidate.id]
+                   union all
+                   select referral.parent_account_id,ancestors.path||referral.parent_account_id
+                     from ancestors
+                     join referral_capability.account_referrals referral
+                       on referral.child_account_id=ancestors.id
+                    where ancestors.id<>requester.id
+                      and not referral.parent_account_id=any(ancestors.path)
+                 )
+                 select 1 from ancestors where id=requester.id
+               )
+             )
+           order by candidate.username
+           limit $2
+        )
+        select profile.uuid id,profile.username,profile.display_name
+          from authorized
+          join identity_capability.account_profiles profile on profile.id=authorized.id
+         order by authorized.username`;
+    } else {
+      statement = `select a.uuid id,a.username,a.display_name
          from identity_capability.account_profiles a
-        where ${matching}
-          ${scope}
-        order by a.username limit $2`,
-      params,
-    );
+        where (a.uuid::text=$1 or a.username ilike '%'||$1||'%' or a.email ilike '%'||$1||'%')
+        order by a.username limit $2`;
+    }
+    const rows = await this.sql.query<any>(statement, params);
     return rows.rows.map((row) => ({
       id: row.id,
       username: row.username,

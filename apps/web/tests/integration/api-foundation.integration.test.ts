@@ -236,8 +236,9 @@ suite("headless API principal and hierarchy read model", () => {
   });
   it("searches only the authorized descendant closure for normal users", async () => {
     const root = await account("searchroot"),
-      child = await account("search_child"),
       other = await account("searchother"),
+      earlierUnrelatedMatch = await account("search_child"),
+      child = await account("search_child"),
       secondChild = await account("search_child");
     await app.referralGraphService.establish(child.id, root.id);
     await app.referralGraphService.establish(secondChild.id, root.id);
@@ -247,6 +248,26 @@ suite("headless API principal and hierarchy read model", () => {
       ),
     ).toContain(child.id);
     expect(await app.hierarchy.search(root.id, other.username, false, 20)).toEqual([]);
+    expect(await app.hierarchy.search(root.id, `${other.username}@example.com`, false, 20)).toEqual(
+      [],
+    );
+    expect(await app.hierarchy.search(root.id, earlierUnrelatedMatch.username, false, 20)).toEqual(
+      [],
+    );
+    expect(
+      (await app.hierarchy.search(root.id, root.username, false, 20)).map((item) => item.id),
+    ).toContain(root.id);
+
+    const literalUnderscore = await account("literal_"),
+      wildcardLookalike = await account("literalX");
+    await app.referralGraphService.establish(literalUnderscore.id, root.id);
+    await app.referralGraphService.establish(wildcardLookalike.id, root.id);
+    expect(
+      (await app.hierarchy.search(root.id, "literal_", false, 20)).map((item) => item.id),
+    ).toEqual([literalUnderscore.id]);
+
+    // The unrelated match sorts before authorized candidates. LIMIT must be
+    // applied after the server-side membership check, not to global candidates.
     const limited = await app.hierarchy.search(root.id, "search_child", false, 1);
     expect(limited).toHaveLength(1);
     expect([child.id, secondChild.id]).toContain(limited[0]?.id);
@@ -267,7 +288,9 @@ suite("headless API principal and hierarchy read model", () => {
       new Request("http://localhost/api/hierarchy/search?q=search_child&limit=1"),
     );
     expect(response.status).toBe(200);
-    expect((await response.json()).items).toHaveLength(1);
+    const responseBody = await response.json();
+    expect(responseBody.items).toHaveLength(1);
+    expect(responseBody.items[0]).not.toHaveProperty("email");
     const forgedRoot = await customerApi.fetch(
       new Request(`http://localhost/api/hierarchy/tree?root=${other.id}`),
     );
