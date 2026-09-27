@@ -19,6 +19,20 @@ import {
   type Capability,
 } from "@/modules/identity/capabilities";
 import { API_SCOPE_METADATA } from "@/modules/identity/api/scopes";
+import {
+  OperatorActionCell,
+  OperatorPrimaryCell,
+  OperatorSecondaryText,
+  OperatorValueCell,
+} from "./ui/data-cells";
+import { OperatorEmptyState } from "./ui/empty-state";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorLoadingState } from "./ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { OperatorPagination } from "./ui/pagination";
+import { OperatorSection } from "./ui/section";
+import { OperatorTableSurface } from "./ui/table-surface";
+import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -26,6 +40,7 @@ import { HoneypotField } from "../honeypot-field";
 import { Input } from "../ui/input";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Toast } from "../toast";
 
 function message(error: unknown) {
@@ -61,96 +76,170 @@ export function OperatorUsersList() {
   }, []);
 
   return (
-    <div className="operator-users-page">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Account operations</p>
-          <h2 id="operator-users-heading">Users</h2>
-          <p className="panel-intro">
-            Search safe account projections and inspect referral context.
-          </p>
-        </div>
-      </div>
-      <Card className="operator-users-toolbar">
-        <form
-          className="catalogue-filters"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void load();
-          }}
-        >
-          <label>
-            Search accounts
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Username, email, or account ID"
-            />
-          </label>
-          <Button type="submit" variant="secondary" disabled={loading}>
-            {loading ? "Searching…" : "Search"}
-          </Button>
-          <HoneypotField />
-        </form>
-      </Card>
-      {error && <Toast>{error}</Toast>}
-      {loading ? (
-        <div className="operator-users-list" aria-label="Loading users">
-          {[1, 2, 3].map((item) => (
-            <Card key={item}>
-              <Skeleton className="catalogue-skeleton" />
-            </Card>
-          ))}
-        </div>
-      ) : page?.items.length ? (
-        <>
-          <div className="operator-users-list">
-            {page.items.map((account) => (
-              <AccountRow account={account} key={account.id} />
-            ))}
-          </div>
-          {page.nextCursor && (
-            <Button variant="secondary" onClick={() => void load(page.nextCursor)}>
-              Next page
-            </Button>
-          )}
-        </>
-      ) : (
-        <Card>
-          <EmptyState
-            title="No accounts found"
-            description="Try a different username, email, or account ID."
-          />
-        </Card>
-      )}
-    </div>
+    <OperatorUsersListView
+      page={page}
+      search={search}
+      loading={loading}
+      error={error}
+      onSearchChange={setSearch}
+      onSearch={(event) => {
+        event.preventDefault();
+        void load();
+      }}
+      onRetry={() => void load()}
+      onNext={() => page?.nextCursor && void load(page.nextCursor)}
+    />
   );
 }
 
-function AccountRow({ account }: { account: OperatorAccountSummary }) {
+export function OperatorUsersListView({
+  page,
+  search,
+  loading,
+  error,
+  onSearchChange,
+  onSearch,
+  onRetry,
+  onNext,
+}: {
+  page: OperatorAccountPage | null;
+  search: string;
+  loading: boolean;
+  error: string | null;
+  onSearchChange: (value: string) => void;
+  onSearch: (event: FormEvent<HTMLFormElement>) => void;
+  onRetry: () => void;
+  onNext: () => void;
+}) {
   return (
-    <Card className="operator-user-row">
-      <div className="identity-row">
-        <span className="identity-avatar">
-          {(account.displayName || account.username).slice(0, 1).toUpperCase()}
-        </span>
-        <div className="operator-user-identity">
-          <Link href={`/operator/users/${account.id}`}>
-            <strong>{account.displayName || account.username}</strong>
-          </Link>
-          <span>@{account.username}</span>
-          <small>{account.email ?? "No authentication email"}</small>
-        </div>
-      </div>
-      <div className="operator-user-meta">
-        <Badge variant="secondary">Account</Badge>
-        <span>{account.directReferralCount} direct referrals</span>
-        <span>{account.country || "Country not set"}</span>
-      </div>
-      <Button asChild variant="ghost">
-        <Link href={`/operator/network?root=${account.id}`}>View network</Link>
-      </Button>
-    </Card>
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Account operations"
+        title="Users"
+        description="Search safe account projections and inspect referral context."
+      />
+      <OperatorToolbar
+        className="max-w-4xl"
+        onSubmit={onSearch}
+        actions={
+          <>
+            <Button type="submit" variant="secondary" disabled={loading}>
+              {loading ? "Searching…" : "Search"}
+            </Button>
+            <HoneypotField />
+          </>
+        }
+      >
+        <OperatorFilterField label="Search accounts" htmlFor="operator-user-search">
+          <Input
+            id="operator-user-search"
+            name="search"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Username, email, or account ID"
+          />
+        </OperatorFilterField>
+      </OperatorToolbar>
+      <OperatorSection title="Users">
+        {error && <OperatorErrorState message={error} retry={onRetry} />}
+        {loading ? (
+          <OperatorLoadingState variant="table" rows={5} columns={5} label="Loading users" />
+        ) : page?.items.length ? (
+          <OperatorTableSurface
+            footer={
+              page.nextCursor ? (
+                <OperatorPagination
+                  hasPrevious={false}
+                  hasNext
+                  onPrevious={() => undefined}
+                  onNext={onNext}
+                  summary={`Showing ${page.items.length} users`}
+                />
+              ) : undefined
+            }
+          >
+            <Table className="min-w-[760px]">
+              <TableHeader>
+                <TableRow className="border-slate-200 bg-slate-50 hover:bg-slate-50">
+                  <TableHead scope="col" className="px-4 text-xs uppercase tracking-wider">
+                    User
+                  </TableHead>
+                  <TableHead scope="col" className="px-4 text-xs uppercase tracking-wider">
+                    Email
+                  </TableHead>
+                  <TableHead
+                    scope="col"
+                    className="px-4 text-right text-xs uppercase tracking-wider"
+                  >
+                    Direct referrals
+                  </TableHead>
+                  <TableHead scope="col" className="px-4 text-xs uppercase tracking-wider">
+                    Country
+                  </TableHead>
+                  <TableHead
+                    scope="col"
+                    className="px-4 text-right text-xs uppercase tracking-wider"
+                  >
+                    Action
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {page.items.map((account) => (
+                  <TableRow key={account.id} className="border-slate-200 bg-white">
+                    <TableCell className="max-w-64 px-4 py-3">
+                      <OperatorPrimaryCell
+                        title={
+                          <Link
+                            href={`/operator/users/${account.id}`}
+                            className="rounded-sm hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                          >
+                            @{account.username}
+                          </Link>
+                        }
+                        subtitle={
+                          account.displayName && account.displayName !== account.username
+                            ? account.displayName
+                            : undefined
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <OperatorSecondaryText className="break-all">
+                        {account.email ?? "No authentication email"}
+                      </OperatorSecondaryText>
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <OperatorValueCell>{account.directReferralCount}</OperatorValueCell>
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <OperatorSecondaryText>{account.country || "—"}</OperatorSecondaryText>
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <OperatorActionCell>
+                        <Button asChild size="sm" variant="ghost">
+                          <Link
+                            href={`/operator/network?root=${account.id}`}
+                            aria-label={`View @${account.username}'s network`}
+                          >
+                            View network
+                          </Link>
+                        </Button>
+                      </OperatorActionCell>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </OperatorTableSurface>
+        ) : !error ? (
+          <OperatorEmptyState
+            title="No users found"
+            description="Try a different username, email, or account ID."
+          />
+        ) : null}
+      </OperatorSection>
+    </OperatorPage>
   );
 }
 
