@@ -97,6 +97,7 @@ export interface HierarchyReader {
     query: string,
     scopeRoot: string | null,
     limit: number,
+    exact?: boolean,
   ): Promise<Array<{ id: string; username: string; displayName: string | null }>>;
 }
 
@@ -183,8 +184,8 @@ export class HierarchyService {
     return { levels: await this.reader.availableLevels(root) };
   }
 
-  search(requester: string, q: string, admin: boolean, limit: number) {
-    return this.reader.search(q, admin ? null : requester, limit);
+  search(requester: string, q: string, admin: boolean, limit: number, exact = false) {
+    return this.reader.search(q, admin ? null : requester, limit, exact);
   }
 
   private async assertRoot(requester: string, root: string, admin: boolean) {

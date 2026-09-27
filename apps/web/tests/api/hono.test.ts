@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApiApp } from "@/api/hono";
 import {
   authorizeLegacyRequest,
@@ -13,6 +13,7 @@ function appWith(
     environment: "development",
     key: null,
   },
+  hierarchySearch: (...args: any[]) => Promise<unknown[]> = async () => [],
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
   return createApiApp(
@@ -38,7 +39,7 @@ function appWith(
         }),
         descendants: async () => ({ items: [], nextCursor: null }),
         availableLevels: async () => ({ levels: [] }),
-        search: async () => [],
+        search: hierarchySearch,
       },
       apiKeys: { create: async () => ({}), list: async () => [], revoke: async () => {} },
       operatorApiKeys: {
@@ -494,6 +495,27 @@ describe("Hono API foundation", () => {
         )
       ).status,
     ).toBe(400);
+  });
+  it("accepts exact username lookup through the existing scoped hierarchy route", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session",
+      capabilities: [],
+      scopes: new Set<string>(),
+    };
+    const hierarchySearch = vi.fn(async () => [
+      { id: "account-id", username: "alpha_one", displayName: "Alpha" },
+    ]);
+    const response = await appWith(principal, undefined, hierarchySearch).fetch(
+      new Request("http://localhost/api/hierarchy/search?q=alpha_one&exact=true&limit=1"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      items: [{ id: "account-id", username: "alpha_one", displayName: "Alpha" }],
+    });
+    expect(hierarchySearch).toHaveBeenCalledWith(principal.accountId, "alpha_one", false, 1, true);
   });
   it("exposes safe current capabilities and protects the operator overview by capability and scope", async () => {
     const ordinary = {

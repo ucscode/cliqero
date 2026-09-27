@@ -44,4 +44,24 @@ describe("Postgres hierarchy username search", () => {
     expect(calls[0]?.[0]).toContain("a.email ilike '%'||$1||'%'");
     expect(calls[0]?.[1]).toEqual(["operator", 25]);
   });
+
+  it("uses indexed exact username lookup before checking customer ancestry", async () => {
+    const calls: Array<[string, readonly unknown[] | undefined]> = [];
+    const query = vi.fn(async (statement: string, values?: readonly unknown[]) => {
+      calls.push([statement, values]);
+      return { rows: [], rowCount: 0 };
+    });
+    const reader = new PostgresHierarchyReader({ query } as unknown as QueryExecutor);
+
+    await reader.search(" Alpha_One ", "requester-id", 1, true);
+
+    const [statement, values] = calls[0]!;
+    expect(statement).toContain("where username=$1");
+    expect(statement).toContain("with recursive requester(id) as materialized");
+    expect(statement).toContain("with recursive ancestors(id,path)");
+    expect(statement).toContain("select 1 from ancestors where id=requester.id");
+    expect(statement).not.toContain("ilike");
+    expect(statement).not.toContain("email");
+    expect(values).toEqual(["alpha_one", "requester-id"]);
+  });
 });

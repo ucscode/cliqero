@@ -191,6 +191,7 @@ export function registerHierarchyRoutes(app: OpenAPIHono<Env>, container: Applic
   const searchQuery = z.object({
     q: z.string().min(1).max(100),
     limit: z.coerce.number().int().min(1).max(50).default(25),
+    exact: z.enum(["true", "false"]).default("false"),
   });
   app.openapi(
     createRoute({
@@ -229,7 +230,13 @@ export function registerHierarchyRoutes(app: OpenAPIHono<Env>, container: Applic
       const admin =
         hasCapability(p.capabilities, "hierarchy.manage") &&
         (p.kind === "user_session" || p.scopes.has("hierarchy:admin"));
-      const items = await container.hierarchy.search(p.accountId, q.q, admin, q.limit);
+      const items = await container.hierarchy.search(
+        p.accountId,
+        q.q,
+        admin,
+        q.limit,
+        q.exact === "true",
+      );
       return c.json({ items }, 200);
     },
   );

@@ -88,4 +88,24 @@ describe("hierarchy visualization configuration", () => {
     ).rejects.toThrow("Forbidden");
     expect(descendants).not.toHaveBeenCalled();
   });
+
+  it("keeps exact-search scope on the application service boundary", async () => {
+    const search = vi.fn(async () => []);
+    const service = new HierarchyService({
+      exists: async () => true,
+      isDescendantOrSelf: async () => true,
+      tree: async () => ({ nodes: [], edges: [] }),
+      parent: async () => null,
+      children: async () => ({ parentId: "root", items: [], nextCursor: null }),
+      availableLevels: async () => [1],
+      descendants: async () => ({ items: [], nextCursor: null }),
+      search,
+    });
+
+    await service.search("requester", "Alpha_One", false, 1, true);
+    expect(search).toHaveBeenCalledWith("Alpha_One", "requester", 1, true);
+
+    await service.search("operator", "person", true, 25);
+    expect(search).toHaveBeenLastCalledWith("person", null, 25, false);
+  });
 });

@@ -257,6 +257,23 @@ suite("headless API principal and hierarchy read model", () => {
     expect(
       (await app.hierarchy.search(root.id, root.username, false, 20)).map((item) => item.id),
     ).toContain(root.id);
+    const exactChild = await app.hierarchy.search(
+      root.id,
+      child.username.toUpperCase(),
+      false,
+      1,
+      true,
+    );
+    expect(exactChild.map((item) => item.id)).toEqual([child.id]);
+    await expect(app.hierarchy.search(root.id, other.username, false, 1, true)).resolves.toEqual(
+      [],
+    );
+    await expect(
+      app.hierarchy.search(root.id, "missing_network_user", false, 1, true),
+    ).resolves.toEqual([]);
+    await expect(
+      app.hierarchy.search(root.id, root.username, false, 1, true),
+    ).resolves.toHaveLength(1);
 
     const literalUnderscore = await account("literal_"),
       wildcardLookalike = await account("literalX");
@@ -291,6 +308,21 @@ suite("headless API principal and hierarchy read model", () => {
     const responseBody = await response.json();
     expect(responseBody.items).toHaveLength(1);
     expect(responseBody.items[0]).not.toHaveProperty("email");
+    const outsideResponse = await customerApi.fetch(
+      new Request(
+        `http://localhost/api/hierarchy/search?q=${encodeURIComponent(other.username)}&exact=true&limit=1`,
+      ),
+    );
+    const nonexistentResponse = await customerApi.fetch(
+      new Request(
+        "http://localhost/api/hierarchy/search?q=missing_network_user&exact=true&limit=1",
+      ),
+    );
+    expect(outsideResponse.status).toBe(200);
+    expect(nonexistentResponse.status).toBe(200);
+    const outsideBody = await outsideResponse.json();
+    expect(outsideBody).toEqual(await nonexistentResponse.json());
+    expect(outsideBody).toEqual({ items: [] });
     const forgedRoot = await customerApi.fetch(
       new Request(`http://localhost/api/hierarchy/tree?root=${other.id}`),
     );

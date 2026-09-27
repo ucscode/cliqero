@@ -30,13 +30,14 @@ describe("hierarchy panel composition", () => {
     expect(source).not.toContain("router.push");
   });
 
-  it("integrates username search with the existing root navigation and preserves the graph", () => {
+  it("submits a manual username form and integrates exact matches with root navigation", () => {
+    expect(source).toContain(
+      '<form className="grid gap-2 sm:max-w-md" onSubmit={submitUsernameSearch}>',
+    );
     expect(source).toContain('placeholder="Search your network by username"');
-    expect(source).toContain("HierarchySearchController");
-    expect(source).toContain("selectSearchResult(item.id)");
-    expect(source).toContain("setSearchOpen(false);");
+    expect(source).toContain('type="submit"');
     expect(source).toContain('setSearchQuery("")');
-    expect(source).toContain("openRoot(id)");
+    expect(source).toContain("rebaseHierarchy(match.id, true)");
     expect(source).toContain("Viewing tree from:");
     expect(source).toContain("Back to my network");
     expect(source).toContain("onResetRoot={resetRoot}");
@@ -44,17 +45,16 @@ describe("hierarchy panel composition", () => {
     expect(source).toContain("onError: (cause) => {");
   });
 
-  it("keeps search results private and accessible without displaying email", () => {
-    expect(source).toContain(
-      'className="text-sm font-medium text-slate-900">{item.username}</span>',
-    );
-    expect(source).toContain("{item.displayName}");
-    expect(source).not.toContain("item.email");
-    expect(source).toContain('event.key === "ArrowDown"');
-    expect(source).toContain('event.key === "ArrowUp"');
-    expect(source).toContain('event.key === "Enter"');
-    expect(source).toContain('event.key === "Escape"');
-    expect(source).toContain('document.addEventListener("pointerdown", closeOnOutsidePointer)');
-    expect(source).toContain("No user found in your network");
+  it("has no autocomplete or request-on-input behavior and announces outcomes accessibly", () => {
+    expect(source).not.toContain("HierarchySearchController");
+    expect(source).not.toContain('role="combobox"');
+    expect(source).not.toContain('role="listbox"');
+    expect(source).not.toContain('role="option"');
+    expect(source).not.toContain("setTimeout");
+    expect(source).not.toContain("searchClientRef.current!.find(event.target.value)");
+    expect(source).toContain('role="status" aria-live="polite"');
+    expect(source).toContain("User not found in your network.");
+    expect(source).toContain("We couldn’t search your network. Please try again.");
+    expect(source).toContain("Enter a username to search.");
   });
 });

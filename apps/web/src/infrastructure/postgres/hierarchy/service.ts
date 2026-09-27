@@ -201,16 +201,52 @@ export class PostgresHierarchyReader implements HierarchyReader {
     };
   }
 
-  async search(query: string, scopeRoot: string | null, limit: number) {
-    const params: unknown[] = [query, limit];
+  async search(query: string, scopeRoot: string | null, limit: number, exact = false) {
+    const normalizedQuery = query.trim().toLowerCase();
+    const params: unknown[] = [normalizedQuery, limit];
     let statement: string;
-    if (scopeRoot) {
-      params[0] = query.toLowerCase().replace(/[\\%_]/g, "\\$&");
+    if (exact) {
+      params.splice(1, 1);
+      if (scopeRoot) {
+        params.push(scopeRoot);
+        // Username equality uses accounts_username_unique; only then is the
+        // candidate's ancestry checked against the requester's network.
+        statement = `with recursive requester(id) as materialized (
+            select id from identity_capability.accounts where uuid=$2
+          ), candidate(id,username) as materialized (
+            select id,username from identity_capability.accounts where username=$1
+          )
+          select profile.uuid id,profile.username,profile.display_name
+            from candidate
+            cross join requester
+            join identity_capability.account_profiles profile on profile.id=candidate.id
+           where candidate.id=requester.id
+              or exists (
+                with recursive ancestors(id,path) as (
+                  select candidate.id,array[candidate.id]
+                  union all
+                  select referral.parent_account_id,ancestors.path||referral.parent_account_id
+                    from ancestors
+                    join referral_capability.account_referrals referral
+                      on referral.child_account_id=ancestors.id
+                   where ancestors.id<>requester.id
+                     and not referral.parent_account_id=any(ancestors.path)
+                )
+                select 1 from ancestors where id=requester.id
+              )`;
+      } else {
+        statement = `select profile.uuid id,profile.username,profile.display_name
+           from identity_capability.accounts account
+           join identity_capability.account_profiles profile on profile.id=account.id
+          where account.username=$1`;
+      }
+    } else if (scopeRoot) {
+      params[0] = normalizedQuery.replace(/[\\%_]/g, "\\$&");
       params.push(scopeRoot);
       // Check each indexed username candidate by walking its parent chain. This
       // avoids materializing the requester's entire descendant network for each
-      // typeahead query, while keeping both candidate selection and scope
-      // authorization in PostgreSQL. LIMIT is applied only after authorization.
+      // prefix query, while keeping candidate selection and scope authorization
+      // in PostgreSQL. LIMIT is applied only after authorization.
       statement = `with recursive requester(id) as materialized (
           select id from identity_capability.accounts where uuid=$3
         ), authorized(id,username) as (
@@ -246,6 +282,7 @@ export class PostgresHierarchyReader implements HierarchyReader {
          from identity_capability.account_profiles a
         where (a.uuid::text=$1 or a.username ilike '%'||$1||'%' or a.email ilike '%'||$1||'%')
         order by a.username limit $2`;
+      params[0] = query;
     }
     const rows = await this.sql.query<any>(statement, params);
     return rows.rows.map((row) => ({
