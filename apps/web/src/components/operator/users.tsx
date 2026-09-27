@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   apiFetch,
   ApiClientError,
@@ -33,6 +34,8 @@ import { OperatorPagination } from "./ui/pagination";
 import { OperatorSection } from "./ui/section";
 import { OperatorTableSurface } from "./ui/table-surface";
 import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
+import { OperatorActionsMenu } from "./ui/actions-menu";
+import { CursorHistory } from "./ui/cursor-history";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -42,27 +45,55 @@ import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Toast } from "../toast";
+import { CountrySelect } from "../country-select";
+import { Label } from "../ui/label";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The account service is temporarily unavailable.";
 }
 
-export function OperatorUsersList() {
+export function operatorUserRowActions(account: OperatorAccountSummary, canManage: boolean) {
+  return [
+    { type: "link" as const, label: "View account", href: `/operator/users/${account.id}` },
+    ...(canManage
+      ? [
+          {
+            type: "link" as const,
+            label: "Edit account",
+            href: `/operator/users/${account.id}/edit`,
+          },
+        ]
+      : []),
+    {
+      type: "link" as const,
+      label: "View network",
+      href: `/operator/network?root=${account.id}`,
+    },
+  ];
+}
+
+export function OperatorUsersList({ canManage = false }: { canManage?: boolean }) {
   const [page, setPage] = useState<OperatorAccountPage | null>(null);
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [cursorHistory, setCursorHistory] = useState(() => CursorHistory.firstPage());
+  const navigationPending = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(cursor?: string | null) {
+  async function load(cursor: string | null = null, searchValue = appliedSearch) {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ limit: "25" });
-      if (search.trim()) params.set("search", search.trim());
+      if (searchValue) params.set("search", searchValue);
       if (cursor) params.set("cursor", cursor);
-      setPage(await apiFetch<OperatorAccountPage>(`/api/operator/accounts?${params}`));
+      const result = await apiFetch<OperatorAccountPage>(`/api/operator/accounts?${params}`);
+      setPage(result);
+      return result;
     } catch (cause) {
       setError(message(cause));
+      return null;
     } finally {
       setLoading(false);
     }
@@ -81,13 +112,43 @@ export function OperatorUsersList() {
       search={search}
       loading={loading}
       error={error}
+      canManage={canManage}
       onSearchChange={setSearch}
       onSearch={(event) => {
         event.preventDefault();
-        void load();
+        const submittedSearch = search.trim();
+        void load(null, submittedSearch).then((result) => {
+          if (result) {
+            setAppliedSearch(submittedSearch);
+            setCursorHistory(CursorHistory.firstPage());
+          }
+        });
       }}
-      onRetry={() => void load()}
-      onNext={() => page?.nextCursor && void load(page.nextCursor)}
+      onRetry={() => void load(cursorHistory.current)}
+      hasPrevious={cursorHistory.hasPrevious}
+      onPrevious={() => {
+        if (loading || navigationPending.current || !cursorHistory.hasPrevious) return;
+        navigationPending.current = true;
+        void load(cursorHistory.previous)
+          .then((result) => {
+            if (result) setCursorHistory((history) => history.afterPrevious());
+          })
+          .finally(() => {
+            navigationPending.current = false;
+          });
+      }}
+      onNext={() => {
+        const nextCursor = page?.nextCursor;
+        if (loading || navigationPending.current || !nextCursor) return;
+        navigationPending.current = true;
+        void load(nextCursor)
+          .then((result) => {
+            if (result) setCursorHistory((history) => history.afterNext(nextCursor));
+          })
+          .finally(() => {
+            navigationPending.current = false;
+          });
+      }}
     />
   );
 }
@@ -97,18 +158,24 @@ export function OperatorUsersListView({
   search,
   loading,
   error,
+  canManage,
   onSearchChange,
   onSearch,
   onRetry,
+  hasPrevious,
+  onPrevious,
   onNext,
 }: {
   page: OperatorAccountPage | null;
   search: string;
   loading: boolean;
   error: string | null;
+  canManage?: boolean;
   onSearchChange: (value: string) => void;
   onSearch: (event: FormEvent<HTMLFormElement>) => void;
   onRetry: () => void;
+  hasPrevious: boolean;
+  onPrevious: () => void;
   onNext: () => void;
 }) {
   return (
@@ -117,6 +184,13 @@ export function OperatorUsersListView({
         eyebrow="Account operations"
         title="Users"
         description="Search safe account projections and inspect referral context."
+        actions={
+          canManage ? (
+            <Button asChild size="sm">
+              <Link href="/operator/users/new">Add user</Link>
+            </Button>
+          ) : undefined
+        }
       />
       <OperatorToolbar
         className="max-w-4xl"
@@ -147,11 +221,11 @@ export function OperatorUsersListView({
         ) : page?.items.length ? (
           <OperatorTableSurface
             footer={
-              page.nextCursor ? (
+              page.nextCursor || hasPrevious ? (
                 <OperatorPagination
-                  hasPrevious={false}
-                  hasNext
-                  onPrevious={() => undefined}
+                  hasPrevious={hasPrevious && !loading}
+                  hasNext={Boolean(page.nextCursor) && !loading}
+                  onPrevious={onPrevious}
                   onNext={onNext}
                   summary={`Showing ${page.items.length} users`}
                 />
@@ -217,14 +291,10 @@ export function OperatorUsersListView({
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       <OperatorActionCell>
-                        <Button asChild size="sm" variant="ghost">
-                          <Link
-                            href={`/operator/network?root=${account.id}`}
-                            aria-label={`View @${account.username}'s network`}
-                          >
-                            View network
-                          </Link>
-                        </Button>
+                        <OperatorActionsMenu
+                          label={`Actions for @${account.username}`}
+                          actions={operatorUserRowActions(account, Boolean(canManage))}
+                        />
                       </OperatorActionCell>
                     </TableCell>
                   </TableRow>
@@ -630,6 +700,219 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
         </Card>
       )}
     </div>
+  );
+}
+
+export function OperatorUserFormFields({
+  create,
+  username,
+  email,
+  country,
+  onUsernameChange,
+  onEmailChange,
+  onCountryChange,
+}: {
+  create: boolean;
+  username: string;
+  email: string;
+  country: string;
+  onUsernameChange: (value: string) => void;
+  onEmailChange: (value: string) => void;
+  onCountryChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-2">
+        <Label htmlFor="operator-account-username">Username</Label>
+        <Input
+          id="operator-account-username"
+          autoComplete="off"
+          required
+          minLength={3}
+          maxLength={32}
+          value={username}
+          onChange={(event) => onUsernameChange(event.target.value)}
+        />
+      </div>
+      {create ? (
+        <div className="grid gap-2">
+          <Label htmlFor="operator-account-email">Email</Label>
+          <Input
+            id="operator-account-email"
+            type="email"
+            autoComplete="email"
+            required
+            maxLength={254}
+            value={email}
+            onChange={(event) => onEmailChange(event.target.value)}
+          />
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          <Label htmlFor="operator-account-email">Email (managed by account holder)</Label>
+          <Input id="operator-account-email" value={email} readOnly disabled />
+        </div>
+      )}
+      <CountrySelect
+        id="operator-account-country"
+        value={country}
+        onChange={onCountryChange}
+        required={false}
+      />
+    </div>
+  );
+}
+
+export function OperatorUserForm({ accountId }: { accountId?: string }) {
+  const router = useRouter();
+  const create = !accountId;
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [country, setCountry] = useState("");
+  const [loading, setLoading] = useState(!create);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!accountId) return;
+    let active = true;
+    void apiFetch<OperatorAccountDetail>(`/api/operator/accounts/${accountId}`)
+      .then((account) => {
+        if (!active) return;
+        setUsername(account.username);
+        setEmail(account.email ?? "");
+        setCountry(account.country ?? "");
+      })
+      .catch((cause) => {
+        if (active) setError(message(cause));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [accountId]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      if (create) {
+        const result = await apiFetch<{
+          account: OperatorAccountDetail;
+          passwordSetupEmailRequested: boolean;
+        }>("/api/operator/accounts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            username: username.trim(),
+            ...(country ? { country } : {}),
+          }),
+        });
+        setCreatedAccountId(result.account.id);
+        setSuccess(
+          result.passwordSetupEmailRequested
+            ? "Account created. A password setup link was requested for the account email."
+            : "Account created. Password setup email could not be requested; the account holder can use Forgot password.",
+        );
+      } else {
+        const account = await apiFetch<OperatorAccountDetail>(
+          `/api/operator/accounts/${accountId}`,
+          {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ username: username.trim(), country: country || null }),
+          },
+        );
+        router.push(`/operator/users/${account.id}`);
+        router.refresh();
+      }
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <OperatorPage className="max-w-4xl">
+      <OperatorPageHeader
+        eyebrow="Account operations"
+        title={create ? "Add user" : "Edit account"}
+        description={
+          create
+            ? "Create an account without handling or storing its password."
+            : "Update the account username or country. Email and referral relationships are managed separately."
+        }
+        actions={
+          <Button asChild variant="secondary" size="sm">
+            <Link href={accountId ? `/operator/users/${accountId}` : "/operator/users"}>
+              Back to {accountId ? "account" : "users"}
+            </Link>
+          </Button>
+        }
+      />
+      <OperatorSection title={create ? "Account details" : "Editable profile fields"}>
+        {error && <OperatorErrorState message={error} />}
+        {success && (
+          <Toast tone="success">
+            <p>{success}</p>
+            {createdAccountId && (
+              <Link
+                className="mt-2 inline-block font-medium underline"
+                href={`/operator/users/${createdAccountId}`}
+              >
+                View account
+              </Link>
+            )}
+          </Toast>
+        )}
+        {loading ? (
+          <OperatorLoadingState variant="section" label="Loading account" />
+        ) : (
+          <Card className="p-5">
+            <form className="grid gap-5" onSubmit={(event) => void submit(event)}>
+              <OperatorUserFormFields
+                create={create}
+                username={username}
+                email={email}
+                country={country}
+                onUsernameChange={setUsername}
+                onEmailChange={setEmail}
+                onCountryChange={setCountry}
+              />
+              <p className="text-sm text-slate-600">
+                {create
+                  ? "The account holder sets their password using an email link. Parent assignment remains a separate hierarchy operation."
+                  : "Email changes require the account holder’s Better Auth verification flow. Parent assignment remains a separate hierarchy operation."}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={saving || loading}>
+                  {saving
+                    ? create
+                      ? "Creating…"
+                      : "Saving…"
+                    : create
+                      ? "Create user"
+                      : "Save changes"}
+                </Button>
+                <Button asChild type="button" variant="secondary">
+                  <Link href={accountId ? `/operator/users/${accountId}` : "/operator/users"}>
+                    Cancel
+                  </Link>
+                </Button>
+              </div>
+            </form>
+          </Card>
+        )}
+      </OperatorSection>
+    </OperatorPage>
   );
 }
 

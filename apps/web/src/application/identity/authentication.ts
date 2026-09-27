@@ -12,6 +12,7 @@ import type { AuthenticationGateway } from "./contracts";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { AccountReferralAttributionResolver } from "@/modules/referral/attribution";
 import type { ReferralParentAssigner } from "@/modules/referral/referral";
+import type { AuditRecorder } from "@/application/shared/audit";
 
 function normalizeCountry(country: string | null | undefined): string | null {
   if (country === undefined || country === null) return null;
@@ -32,6 +33,7 @@ export class AuthenticationService {
     private readonly uow: UnitOfWork,
     private readonly accountReferral?: AccountReferralAttributionResolver,
     private readonly referralParentAssigner?: ReferralParentAssigner,
+    private readonly audit?: AuditRecorder,
   ) {
     // Authentication remains an application workflow; the gateway and
     // persistence adapter are supplied by the composition root.
@@ -44,10 +46,43 @@ export class AuthenticationService {
     country?: string | null;
     accountReferralSource?: string;
   }): Promise<Account> {
+    return this.createAccount(input, true);
+  }
+
+  /** Creates an operator-provisioned account without weakening public signup requirements. */
+  async registerForOperator(
+    input: {
+      email: string;
+      username: string;
+      password: string;
+      country?: string | null;
+    },
+    actorId: string,
+  ): Promise<Account> {
+    return this.createAccount(input, false, actorId);
+  }
+
+  async requestPasswordSetup(email: string, redirectTo: string): Promise<void> {
+    await this.gateway.requestPasswordReset({ email: email.trim().toLowerCase(), redirectTo });
+  }
+
+  private async createAccount(
+    input: {
+      email: string;
+      username: string;
+      password: string;
+      country?: string | null;
+      accountReferralSource?: string;
+    },
+    countryRequired: boolean,
+    operatorActorId?: string,
+  ): Promise<Account> {
     assertPasswordMinimum(input.password);
     const email = input.email.trim().toLowerCase();
     const username = normalizeUsername(input.username);
-    const country = requireCountry(input.country);
+    const country = countryRequired
+      ? requireCountry(input.country)
+      : normalizeCountry(input.country);
     // A complete Cliqero identity always has a bridge row. An unlinked Better
     // Auth user is therefore an abandoned pre-provisioning artifact (for
     // example from an interrupted development attempt), never an OAuth user
@@ -70,6 +105,15 @@ export class AuthenticationService {
         if (!(await this.identity.linkCompletedAuthAccount(result.user.id, account.id)))
           throw new Error("Authentication onboarding state is invalid");
         await this.assignAccountReferral(account, input.accountReferralSource);
+        if (operatorActorId && this.audit)
+          await this.audit.record({
+            actorId: operatorActorId,
+            action: "operator.account_created",
+            subjectType: "account",
+            subjectId: account.id,
+            previousState: null,
+            newState: { username: account.username, country: account.country },
+          });
       });
       return account;
     } catch (error) {

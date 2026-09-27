@@ -12,6 +12,7 @@ describe("direct account capabilities", () => {
   it("uses one typed registry and rejects legacy capability values", () => {
     expect(CAPABILITIES).toContain("system.root");
     expect(CAPABILITIES).toContain("catalogue.manage");
+    expect(CAPABILITIES).toContain("accounts.manage");
     expect(isCapability("operator")).toBe(false);
     expect(isCapability("catalogue_manager")).toBe(false);
   });
@@ -45,6 +46,7 @@ describe("direct account capabilities", () => {
     expect(canAccessOperator(["capabilities.manage"])).toBe(false);
     expect(canAccessOperator(["api_keys.manage"])).toBe(false);
     expect(canAccessOperator(["system.root"])).toBe(true);
+    expect(canAccessOperator(["accounts.manage"])).toBe(true);
     expect(canAccessOperator(["reviews.moderate"])).toBe(true);
   });
 });

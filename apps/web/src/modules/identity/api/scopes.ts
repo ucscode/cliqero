@@ -20,6 +20,7 @@ export const API_SCOPES = [
   "treasury:read",
   "treasury:manage",
   "operations:manage",
+  "accounts:manage",
   "blog:read",
   "blog:write",
   "blog:publish",
@@ -36,6 +37,7 @@ export const apiScopeSchema = z.enum(API_SCOPES);
  */
 export const OPERATOR_SCOPE_CAPABILITIES: Partial<Record<ApiScope, readonly Capability[]>> = {
   "hierarchy:admin": ["hierarchy.manage"],
+  "accounts:manage": ["accounts.manage"],
   "api_keys:manage": ["api_keys.manage"],
   "catalogue:manage": ["catalogue.manage"],
   "withdrawals:manage": ["withdrawals.manage"],
@@ -121,6 +123,10 @@ export const API_SCOPE_METADATA = {
   "operations:manage": {
     label: "Financial operations",
     description: "Restricts this key to recognized financial operator requests.",
+  },
+  "accounts:manage": {
+    label: "Account management",
+    description: "Restricts this key to account creation and supported profile updates.",
   },
   "blog:read": {
     label: "Content reads",

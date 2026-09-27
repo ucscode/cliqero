@@ -156,6 +156,10 @@ export class BetterAuthBoundary implements AuthenticationGateway {
     return { user: { id: result.user.id }, token: result.token };
   }
 
+  async requestPasswordReset(input: { email: string; redirectTo: string }): Promise<void> {
+    await this.auth.api.requestPasswordReset({ body: input });
+  }
+
   async getSession(headers: Headers): Promise<AuthSession | null> {
     const result = await this.auth.api.getSession({ headers });
     return result?.user ? { user: { id: result.user.id }, token: result.session?.token } : null;

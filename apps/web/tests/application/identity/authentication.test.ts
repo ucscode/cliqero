@@ -38,6 +38,7 @@ function dependencies(
   const gateway: AuthenticationGateway = {
     signUpEmail: async () => ({ user: { id: "auth-user" }, token: "session-token" }),
     signInEmail: async () => ({ user: { id: "auth-user" }, token: "session-token" }),
+    requestPasswordReset: async () => undefined,
     getSession: async () => options.session ?? null,
     resetPassword: async () => undefined,
     hasPasswordCredential: async () => true,
@@ -64,6 +65,53 @@ describe("AuthenticationService application contracts", () => {
     expect(account.username).toBe("buyer_1");
     expect(account.country).toBe("NG");
     expect(accounts).toHaveLength(1);
+  });
+
+  it("supports operator provisioning without public country/password requirements and requests reset through the gateway", async () => {
+    const { accounts, service, gateway } = dependencies();
+    const reset = vi.spyOn(gateway, "requestPasswordReset");
+    const account = await service.registerForOperator(
+      {
+        email: " New@Example.Test ",
+        username: "new_user",
+        password: "generated-random-bootstrap-credential",
+      },
+      "actor-id",
+    );
+    await service.requestPasswordSetup(" New@Example.Test ", "https://example.test/reset-password");
+
+    expect(account.country).toBeNull();
+    expect(accounts).toHaveLength(1);
+    expect(reset).toHaveBeenCalledWith({
+      email: "new@example.test",
+      redirectTo: "https://example.test/reset-password",
+    });
+  });
+
+  it("records operator account creation inside the trusted identity transaction", async () => {
+    const { identity, gateway } = dependencies();
+    const record = vi.fn(async () => undefined);
+    const service = new AuthenticationService(
+      identity,
+      gateway,
+      { transaction: async (operation) => operation() },
+      undefined,
+      undefined,
+      { record },
+    );
+
+    const account = await service.registerForOperator(
+      { email: "created@example.test", username: "created", password: "random-bootstrap-pass" },
+      "actor-id",
+    );
+    expect(record).toHaveBeenCalledWith({
+      actorId: "actor-id",
+      action: "operator.account_created",
+      subjectType: "account",
+      subjectId: account.id,
+      previousState: null,
+      newState: { username: "created", country: null },
+    });
   });
 
   it("translates persistence duplicate errors without exposing database details", async () => {

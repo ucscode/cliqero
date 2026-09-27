@@ -1,19 +1,45 @@
 "use client";
 
+import { Fragment } from "react";
 import { MoreHorizontal } from "lucide-react";
+import Link from "next/link";
 import { Button } from "../../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../ui/dropdown-menu";
 
-export interface OperatorAction {
+type OperatorActionBase = {
   label: string;
-  onSelect: () => void;
   disabled?: boolean;
   destructive?: boolean;
+  separatorBefore?: boolean;
+};
+
+export type OperatorAction =
+  | (OperatorActionBase & { type: "link"; href: string })
+  | (OperatorActionBase & { type: "action"; onSelect: () => void });
+
+export function operatorActionMenuItem(action: OperatorAction) {
+  const className = action.destructive ? "text-red-700 focus:text-red-800" : undefined;
+  if (action.type === "link")
+    return (
+      <DropdownMenuItem disabled={action.disabled} asChild={!action.disabled} className={className}>
+        {action.disabled ? (
+          <span>{action.label}</span>
+        ) : (
+          <Link href={action.href}>{action.label}</Link>
+        )}
+      </DropdownMenuItem>
+    );
+  return (
+    <DropdownMenuItem disabled={action.disabled} onSelect={action.onSelect} className={className}>
+      {action.label}
+    </DropdownMenuItem>
+  );
 }
 
 export function OperatorActionsMenu({
@@ -32,14 +58,10 @@ export function OperatorActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {actions.map((action) => (
-          <DropdownMenuItem
-            key={action.label}
-            disabled={action.disabled}
-            onSelect={action.onSelect}
-            className={action.destructive ? "text-red-700 focus:text-red-800" : undefined}
-          >
-            {action.label}
-          </DropdownMenuItem>
+          <Fragment key={action.label}>
+            {action.separatorBefore && <DropdownMenuSeparator />}
+            {operatorActionMenuItem(action)}
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

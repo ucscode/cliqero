@@ -72,6 +72,7 @@ export function grantableScopes(value: ApiPrincipal): Set<string> {
     "withdrawals:create",
   ]);
   if (hasCapability(value.capabilities, "catalogue.manage")) allowed.add("catalogue:manage");
+  if (hasCapability(value.capabilities, "accounts.manage")) allowed.add("accounts:manage");
   if (hasCapability(value.capabilities, "hierarchy.manage")) allowed.add("hierarchy:admin");
   if (hasCapability(value.capabilities, "withdrawals.manage")) allowed.add("withdrawals:manage");
   if (hasCapability(value.capabilities, "treasury.manage")) {

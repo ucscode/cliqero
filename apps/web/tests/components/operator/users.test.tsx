@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { OperatorUsersListView } from "@/components/operator/users";
+import {
+  OperatorUserFormFields,
+  OperatorUsersListView,
+  operatorUserRowActions,
+} from "@/components/operator/users";
 import type { OperatorAccountPage } from "@/lib/api-client";
 
 const page: OperatorAccountPage = {
@@ -37,6 +41,8 @@ function renderUsers(overrides: Partial<Parameters<typeof OperatorUsersListView>
       onSearchChange={vi.fn()}
       onSearch={vi.fn()}
       onRetry={vi.fn()}
+      hasPrevious={false}
+      onPrevious={vi.fn()}
       onNext={vi.fn()}
       {...overrides}
     />,
@@ -71,8 +77,7 @@ describe("operator users list", () => {
     expect(html).toContain(">NG</span>");
     expect(html).toContain(">—</span>");
     expect(html).toContain('href="/operator/users/account-reviewer-three"');
-    expect(html).toContain('href="/operator/network?root=account-gamma-one"');
-    expect(html).toContain("View network");
+    expect(html).toContain('aria-label="Actions for @gamma_one"');
     expect(html).not.toContain("Country not set");
     expect(html).not.toContain("reviewer_threereviewer.three@example.test");
   });
@@ -86,6 +91,65 @@ describe("operator users list", () => {
     expect(html).toContain(">Next</button>");
     expect(html).not.toContain("Page 1");
     expect(html).not.toContain("1 2 3");
+  });
+
+  it("exposes real previous navigation only when cursor history has a prior page", () => {
+    const firstPage = renderUsers({ hasPrevious: false });
+    const laterPage = renderUsers({ hasPrevious: true, page: { ...page, nextCursor: null } });
+
+    expect(firstPage).toContain('aria-label="Operator result pages"');
+    expect(firstPage).toMatch(/<button[^>]*disabled=""[^>]*>Previous<\/button>/);
+    expect(laterPage).toContain('aria-label="Operator result pages"');
+    expect(laterPage).toContain(">Previous</button>");
+    expect(laterPage).toMatch(/<button[^>]*disabled=""[^>]*>Next<\/button>/);
+    expect(laterPage).not.toMatch(/<button[^>]*disabled=""[^>]*>Previous<\/button>/);
+  });
+
+  it("keeps email editable only for creation and excludes credentials and immutable fields", () => {
+    const callbacks = {
+      onUsernameChange: vi.fn(),
+      onEmailChange: vi.fn(),
+      onCountryChange: vi.fn(),
+    };
+    const create = renderToStaticMarkup(
+      <OperatorUserFormFields create username="" email="" country="" {...callbacks} />,
+    );
+    const edit = renderToStaticMarkup(
+      <OperatorUserFormFields
+        create={false}
+        username="alpha"
+        email="alpha@example.test"
+        country="NG"
+        {...callbacks}
+      />,
+    );
+
+    expect(create).toContain('type="email"');
+    expect(edit).toContain("Email (managed by account holder)");
+    expect(edit).toContain('readOnly=""');
+    expect(edit).toContain('disabled=""');
+    expect(create + edit).not.toContain('type="password"');
+    expect(edit).not.toContain('name="email"');
+  });
+
+  it("shows Create only with account-management authority and builds permitted row actions", () => {
+    const readOnlyHtml = renderUsers();
+    const managerHtml = renderUsers({ canManage: true });
+    const account = page.items[0];
+
+    expect(readOnlyHtml).not.toContain("Add user");
+    expect(managerHtml).toContain("Add user");
+    expect(
+      operatorUserRowActions(account, false).map((action) => [action.label, action.href]),
+    ).toEqual([
+      ["View account", "/operator/users/account-reviewer-three"],
+      ["View network", "/operator/network?root=account-reviewer-three"],
+    ]);
+    expect(operatorUserRowActions(account, true).map((action) => action.label)).toEqual([
+      "View account",
+      "Edit account",
+      "View network",
+    ]);
   });
 
   it("uses the shared table loading, empty, and retryable error states", () => {

@@ -103,7 +103,9 @@ export function OperatorShell({
       key: "users",
       href: "/operator/users",
       label: "Users",
-      visible: hasCapability(capabilities, "accounts.read"),
+      visible:
+        hasCapability(capabilities, "accounts.read") ||
+        hasCapability(capabilities, "accounts.manage"),
     },
     {
       key: "network",

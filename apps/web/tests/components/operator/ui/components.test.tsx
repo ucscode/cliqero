@@ -27,6 +27,7 @@ import {
   OperatorValueCell,
   operatorStatusTone,
 } from "@/components/operator/ui";
+import { operatorActionMenuItem } from "@/components/operator/ui/actions-menu";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 
@@ -160,12 +161,41 @@ describe("operator UI composition components", () => {
     const html = renderToStaticMarkup(
       <OperatorActionsMenu
         label="Actions for alpha_one"
-        actions={[{ label: "View account", onSelect: vi.fn() }]}
+        actions={[{ type: "action", label: "Refresh account", onSelect: vi.fn() }]}
       />,
     );
 
     expect(html).toContain('aria-label="Actions for alpha_one"');
     expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain('aria-expanded="false"');
+  });
+
+  it("renders link and callback actions with destructive and disabled semantics", () => {
+    const action = vi.fn();
+    const link = operatorActionMenuItem({
+      type: "link",
+      label: "Edit account",
+      href: "/operator/users/1/edit",
+    });
+    const destructive = operatorActionMenuItem({
+      type: "action",
+      label: "Deactivate",
+      destructive: true,
+      onSelect: action,
+    });
+    const disabled = operatorActionMenuItem({
+      type: "action",
+      label: "Unavailable",
+      disabled: true,
+      onSelect: action,
+    });
+
+    expect(link.props.asChild).toBe(true);
+    expect(link.props.children.props.href).toBe("/operator/users/1/edit");
+    expect(destructive.props.className).toContain("text-red-700");
+    destructive.props.onSelect();
+    expect(action).toHaveBeenCalledOnce();
+    expect(disabled.props.disabled).toBe(true);
   });
 
   it("composes a representative dense Users page without introducing a public route", () => {

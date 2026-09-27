@@ -3,6 +3,7 @@ import type { ApplicationContainer } from "@/infrastructure/container";
 import { requireCapabilityScope, requirePrincipal, type Env } from "../../../shared/context";
 import { domainError } from "../../../shared/error";
 import { errorSchema } from "../../../shared/schemas";
+import { usernameSchema } from "@/modules/identity/username";
 import { operatorAccountDetailSchema, operatorAccountSummarySchema } from "./contracts";
 
 export function registerOperatorAccountRoutes(
@@ -14,6 +15,86 @@ export function registerOperatorAccountRoutes(
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(25),
   });
+  const accountCreateBody = z
+    .object({
+      email: z.email().trim().max(254),
+      username: usernameSchema,
+      country: z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z]{2}$/)
+        .transform((value) => value.toUpperCase())
+        .optional(),
+    })
+    .strict();
+  const accountUpdateBody = z
+    .object({
+      username: usernameSchema.optional(),
+      country: z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z]{2}$/)
+        .transform((value) => value.toUpperCase())
+        .nullable()
+        .optional(),
+    })
+    .strict()
+    .refine((value) => value.username !== undefined || value.country !== undefined, {
+      message: "Provide at least one supported profile field.",
+    });
+
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/accounts",
+      request: { body: { content: { "application/json": { schema: accountCreateBody } } } },
+      responses: {
+        201: {
+          description: "Created account with password setup initiated by email",
+          content: {
+            "application/json": {
+              schema: z.object({
+                account: operatorAccountDetailSchema,
+                passwordSetupEmailRequested: z.boolean(),
+              }),
+            },
+          },
+        },
+        400: {
+          description: "Invalid account details",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Account management permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Username conflict",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "accounts.manage", "accounts:manage");
+      if (denied) return denied;
+      try {
+        const created = await container.operatorAccountManagement.create(
+          p.accountId,
+          c.req.valid("json"),
+        );
+        return c.json(created, 201);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+
   app.openapi(
     createRoute({
       method: "get",
@@ -84,6 +165,61 @@ export function registerOperatorAccountRoutes(
       if (denied) return denied;
       try {
         return c.json(await container.operatorAccounts.get(c.req.valid("param").accountId), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: "patch",
+      path: "/api/operator/accounts/{accountId}",
+      request: {
+        params: z.object({ accountId: z.string().uuid() }),
+        body: { content: { "application/json": { schema: accountUpdateBody } } },
+      },
+      responses: {
+        200: {
+          description: "Updated supported account profile fields",
+          content: { "application/json": { schema: operatorAccountDetailSchema } },
+        },
+        400: {
+          description: "Invalid account details",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Account management permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Account not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Username conflict",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "accounts.manage", "accounts:manage");
+      if (denied) return denied;
+      try {
+        return c.json(
+          await container.operatorAccountManagement.update(
+            p.accountId,
+            c.req.valid("param").accountId,
+            c.req.valid("json"),
+          ),
+          200,
+        );
       } catch (error) {
         return domainError(c, error);
       }

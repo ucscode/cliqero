@@ -105,6 +105,7 @@ import { HierarchyService } from "@/application/hierarchy";
 import { PostgresHierarchyReader } from "@/infrastructure/postgres/hierarchy/service";
 import { OperatorOverviewService } from "@/infrastructure/postgres/operator/overview";
 import { OperatorAccountService } from "@/infrastructure/postgres/operator/accounts";
+import { OperatorAccountManagementService } from "@/application/operator/accounts";
 import { CapabilityAdministrationService } from "@/application/identity/capability-administration";
 import { PostgresCapabilityAssignmentStore } from "@/infrastructure/postgres/identity/capability-administration";
 import { OperatorApiKeyService } from "@/application/operator/api-keys";
@@ -453,6 +454,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         database,
         accountReferralAttribution(),
         referralGraphService(),
+        auditRecorder(),
       ),
       {
         auth: betterAuth().auth,
@@ -562,6 +564,16 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const accountProjections = lazy(() => new AccountProjectionService(database));
   const operatorOverview = lazy(() => new OperatorOverviewService(database));
   const operatorAccounts = lazy(() => new OperatorAccountService(database));
+  const operatorAccountManagement = lazy(
+    () =>
+      new OperatorAccountManagementService(
+        authentication(),
+        profiles(),
+        operatorAccounts(),
+        auditRecorder(),
+        database,
+      ),
+  );
   const operatorDistributions = lazy(() => new OperatorDistributionService(database));
   const operatorEarnings = lazy(() => new OperatorEarningsService(database));
   const operatorWithdrawals = lazy(() => new OperatorWithdrawalService(database));
@@ -812,6 +824,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get operatorAccounts() {
       return operatorAccounts();
+    },
+    get operatorAccountManagement() {
+      return operatorAccountManagement();
     },
     get capabilityAdministration() {
       return capabilityAdministration();

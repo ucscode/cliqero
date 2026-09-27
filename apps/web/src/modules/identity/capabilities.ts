@@ -4,6 +4,7 @@ export const CAPABILITIES = [
   "catalogue.manage",
   "content.manage",
   "accounts.read",
+  "accounts.manage",
   "hierarchy.manage",
   "finance.read",
   "finance.manage",
@@ -32,6 +33,10 @@ export const CAPABILITY_METADATA = {
   "accounts.read": {
     label: "Account inspection",
     description: "Search and inspect account projections and identity context.",
+  },
+  "accounts.manage": {
+    label: "Account management",
+    description: "Create accounts and update supported profile fields.",
   },
   "hierarchy.manage": {
     label: "Hierarchy management",
@@ -72,6 +77,7 @@ export const OPERATOR_SECTION_CAPABILITIES = [
   "catalogue.manage",
   "content.manage",
   "accounts.read",
+  "accounts.manage",
   "hierarchy.manage",
   "finance.read",
   "finance.manage",

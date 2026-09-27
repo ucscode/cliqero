@@ -138,6 +138,95 @@ suite("Better Auth and Cliqero identity boundary", () => {
     });
   });
 
+  it("operator-provisions an account through Better Auth, sends password setup, and audits supported updates", async () => {
+    emailDelivery.messages.length = 0;
+    const actor = await app.authentication.register({
+      email: "operator-account-actor@example.test",
+      username: "operatoractor",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'accounts.manage')`,
+      [actor.id],
+    );
+
+    const created = await app.operatorAccountManagement.create(actor.id, {
+      email: "operator-created@example.test",
+      username: "operatorcreated",
+    });
+    expect(created).toMatchObject({
+      account: {
+        username: "operatorcreated",
+        email: "operator-created@example.test",
+        country: null,
+      },
+      passwordSetupEmailRequested: true,
+    });
+    expect(emailDelivery.messages.map(({ kind, email }) => ({ kind, email }))).toContainEqual({
+      kind: "reset",
+      email: "operator-created@example.test",
+    });
+
+    const updated = await app.operatorAccountManagement.update(actor.id, created.account.id, {
+      username: "operatorupdated",
+      country: "GH",
+    });
+    expect(updated).toMatchObject({ username: "operatorupdated", country: "GH" });
+    expect(
+      (
+        await app.database.query<{ action: string; previous_state: object; new_state: object }>(
+          `select action,previous_state,new_state from kernel.audit_records
+           where actor_id=(select id from identity_capability.accounts where uuid=$1)
+             and subject_id=$2 order by id`,
+          [actor.id, created.account.id],
+        )
+      ).rows,
+    ).toMatchObject([
+      {
+        action: "operator.account_created",
+        previous_state: null,
+        new_state: { username: "operatorcreated", country: null },
+      },
+      {
+        action: "operator.account_profile_updated",
+        previous_state: { username: "operatorcreated", country: null },
+        new_state: { username: "operatorupdated", country: "GH" },
+      },
+    ]);
+    expect(
+      (
+        await app.database.query<{ email: string; username: string; country: string }>(
+          `select profile.email,profile.username,profile.metadata->>'country' country
+           from identity_capability.account_profiles profile where profile.uuid=$1`,
+          [created.account.id],
+        )
+      ).rows[0],
+    ).toEqual({
+      email: "operator-created@example.test",
+      username: "operatorupdated",
+      country: "GH",
+    });
+
+    await expect(
+      app.operatorAccountManagement.create(actor.id, {
+        email: "duplicate-username@example.test",
+        username: "operatorupdated",
+      }),
+    ).rejects.toMatchObject({ code: "username_taken", status: 409 });
+    await expect(
+      app.operatorAccountManagement.create(actor.id, {
+        email: "operator-created@example.test",
+        username: "unique-new-name",
+      }),
+    ).rejects.toMatchObject({ code: "registration_failed" });
+    const createdIdentityCount = await app.database.query<{ count: number }>(
+      `select count(*)::int count from identity_capability.accounts where username in ('operatorupdated','unique-new-name')`,
+    );
+    expect(createdIdentityCount.rows[0].count).toBe(1);
+  });
+
   it("compensates a newly-created Better Auth identity when the username is already taken", async () => {
     await app.authentication.register({
       email: "first@example.com",

@@ -28,4 +28,16 @@ const DropdownMenuItem = ({
     {...props}
   />
 );
-export { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem };
+const DropdownMenuSeparator = ({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>) => (
+  <DropdownMenuPrimitive.Separator className={cn("my-1 h-px bg-slate-200", className)} {...props} />
+);
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+};

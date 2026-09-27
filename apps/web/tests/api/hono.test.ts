@@ -83,6 +83,35 @@ function appWith(
           latestParentReassignment: null,
         }),
       },
+      operatorAccountManagement: {
+        create: async (_actorId: string, input: any) => ({
+          account: {
+            id: "00000000-0000-4000-8000-000000000006",
+            username: input.username,
+            displayName: null,
+            email: input.email,
+            country: input.country ?? null,
+            createdAt: new Date().toISOString(),
+            directReferralCount: 0,
+            parent: null,
+            purchaseCount: 0,
+            latestParentReassignment: null,
+          },
+          passwordSetupEmailRequested: true,
+        }),
+        update: async (_actorId: string, accountId: string, input: any) => ({
+          id: accountId,
+          username: input.username ?? "sample",
+          displayName: null,
+          email: "sample@example.com",
+          country: input.country ?? null,
+          createdAt: new Date().toISOString(),
+          directReferralCount: 0,
+          parent: null,
+          purchaseCount: 0,
+          latestParentReassignment: null,
+        }),
+      },
       capabilityAdministration: {
         inspect: async (_actorId: string, accountId: string) => ({
           accountId,
@@ -299,7 +328,28 @@ describe("Hono API foundation", () => {
     expect(paths["/api/me/session"]).toBeDefined();
     expect(paths["/api/operator/overview"]).toBeDefined();
     expect(paths["/api/operator/accounts"]).toBeDefined();
-    expect(paths["/api/operator/accounts/{accountId}"]).toBeDefined();
+    expect(paths["/api/operator/accounts"].post).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "accounts:manage",
+      security: [{ CliqeroApiKey: [] }],
+      requestBody: expect.any(Object),
+    });
+    expect(paths["/api/operator/accounts/{accountId}"]).toMatchObject({
+      get: expect.any(Object),
+      patch: {
+        "x-authentication-mode": "account",
+        "x-required-api-scope": "accounts:manage",
+        security: [{ CliqeroApiKey: [] }],
+        requestBody: expect.any(Object),
+        responses: expect.objectContaining({
+          "400": expect.any(Object),
+          "401": expect.any(Object),
+          "403": expect.any(Object),
+          "404": expect.any(Object),
+          "409": expect.any(Object),
+        }),
+      },
+    });
     expect(paths["/api/operator/accounts/{accountId}/capabilities"]).toMatchObject({
       get: expect.any(Object),
       post: expect.any(Object),
@@ -1280,6 +1330,109 @@ describe("Hono API foundation", () => {
         }).fetch(new Request("http://localhost/api/operator/accounts"))
       ).status,
     ).toBe(403);
+  });
+  it("requires accounts.manage for account mutations and rejects mass-assignment fields", async () => {
+    const target = "00000000-0000-4000-8000-000000000007";
+    const base = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session" as const,
+      capabilities: [] as string[],
+      scopes: new Set<string>(),
+    };
+    const create = (principal: any, body: object) =>
+      appWith(principal).fetch(
+        new Request("http://localhost/api/operator/accounts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    const body = { email: "new@example.test", username: "new_user" };
+
+    expect((await create(null, body)).status).toBe(401);
+    expect((await create({ ...base, capabilities: ["accounts.read"] }, body)).status).toBe(403);
+    expect(
+      (
+        await create(
+          { ...base, capabilities: ["accounts.manage"] },
+          { ...body, password: "must-not-be-accepted" },
+        )
+      ).status,
+    ).toBe(400);
+    expect((await create({ ...base, capabilities: ["accounts.manage"] }, body)).status).toBe(201);
+    expect(
+      (await create({ ...base, kind: "api_key", capabilities: ["accounts.manage"] }, body)).status,
+    ).toBe(403);
+    expect(
+      (
+        await create(
+          {
+            ...base,
+            kind: "api_key",
+            capabilities: ["system.root"],
+            scopes: new Set<string>(),
+          },
+          body,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await create(
+          {
+            ...base,
+            kind: "api_key",
+            capabilities: ["accounts.manage"],
+            scopes: new Set(["accounts:manage"]),
+          },
+          body,
+        )
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await create(
+          {
+            ...base,
+            kind: "api_key",
+            capabilities: ["system.root"],
+            scopes: new Set(["accounts:manage"]),
+          },
+          body,
+        )
+      ).status,
+    ).toBe(201);
+
+    const update = (principal: any, value: object) =>
+      appWith(principal).fetch(
+        new Request(`http://localhost/api/operator/accounts/${target}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(value),
+        }),
+      );
+    expect(
+      (await update({ ...base, capabilities: ["accounts.read"] }, { country: "NG" })).status,
+    ).toBe(403);
+    expect(
+      (
+        await update(
+          { ...base, capabilities: ["accounts.manage"] },
+          { username: "changed", email: "spoof@example.test" },
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (await update({ ...base, capabilities: ["accounts.manage"] }, { country: "NG" })).status,
+    ).toBe(200);
+    expect(
+      (
+        await appWith({ ...base, capabilities: ["accounts.manage"] }).fetch(
+          new Request(`http://localhost/api/operator/accounts/${target}`, { method: "DELETE" }),
+        )
+      ).status,
+    ).toBe(404);
   });
   it("keeps capability administration session-only and explicit", async () => {
     const target = "00000000-0000-4000-8000-000000000002";

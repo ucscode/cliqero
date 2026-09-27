@@ -10,9 +10,14 @@ export type OperatorPageAccess = {
   email: string | null;
 };
 
-function capabilityForPath(pathname: string): Capability | null {
+export function capabilityForPath(pathname: string): Capability | null {
   if (pathname.startsWith("/operator/catalogue")) return "catalogue.manage";
   if (pathname.startsWith("/operator/blog")) return "content.manage";
+  if (
+    pathname.startsWith("/operator/users/new") ||
+    (pathname.startsWith("/operator/users/") && pathname.endsWith("/edit"))
+  )
+    return "accounts.manage";
   if (pathname.startsWith("/operator/users")) return "accounts.read";
   if (pathname.startsWith("/operator/network")) return "hierarchy.manage";
   if (pathname.startsWith("/operator/funding")) return "finance.read";

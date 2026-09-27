@@ -17,6 +17,45 @@ that authority implicitly. The capability panel shows only rows stored for the
 target account, while `system.root` is presented separately as master operator
 authority.
 
+## Account management
+
+Account inspection remains read-only under `accounts.read` and the existing
+`operations:manage` API-key scope. Account mutations require the separate
+`accounts.manage` capability; API keys additionally require
+`accounts:manage`. `system.root` inherits this recognized capability through the
+normal capability model. Account readers do not receive mutation authority.
+
+Supported management operations are:
+
+```text
+POST  /api/operator/accounts                 create an account
+PATCH /api/operator/accounts/{accountId}      update username and/or country
+```
+
+Creation goes through the existing authentication/identity workflow. The
+operator supplies email and username, with country optional. The service creates
+a cryptographically random bootstrap credential, never returns or stores it in
+plaintext, and requests a Better Auth password-reset email so the account holder
+chooses their own password. If that email request fails, account creation still
+completes and the API reports that the holder should use the normal Forgot
+password flow. Parent assignment and capability grants remain separate
+operations. Creation and profile updates are recorded in the append-only audit
+stream.
+
+Operator edits are limited to username and country. Email changes remain in the
+account holder's Better Auth verification flow; display-name editing and
+password resets are not operator profile fields. Username uniqueness is
+enforced by the domain and database. The list's Add user and Edit account
+actions are shown only to principals with account-management authority.
+
+There is deliberately no Delete or Deactivate action yet. Account rows are
+referenced by financial ledgers, purchases, referral relationships, audit
+records, API keys, and authentication links. The current identity/authentication
+model has no deactivation lifecycle enforced across sessions and API keys, so a
+UI-only status or hard delete would be unsafe. A future lifecycle feature must
+define and enforce those semantics server-side before adding a destructive row
+action.
+
 Capability changes use explicit, idempotent grant/revoke operations:
 
 ```text
