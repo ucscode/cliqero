@@ -2,92 +2,222 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { BlogEditor } from "../blog/editor";
 import { BlogMarkdown } from "../blog/markdown";
 import { apiFetch } from "@/lib/api-client";
 import { Button } from "../ui/button";
-import { Card } from "../ui/card";
 import { Input } from "../ui/input";
+import { Select } from "../ui/select";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
-import { Badge } from "../ui/badge";
-import { Alert } from "../ui/alert";
 import type { BlogPost } from "@/modules/blog/domain/blog";
 import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { CursorHistory } from "./ui/cursor-history";
+import { OperatorActionsMenu } from "./ui/actions-menu";
+import { OperatorActionCell, OperatorPrimaryCell, OperatorStatusCell } from "./ui/data-cells";
+import { OperatorEmptyState } from "./ui/empty-state";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorLoadingState } from "./ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { OperatorPagination } from "./ui/pagination";
+import { OperatorSection } from "./ui/section";
+import { OperatorTableSurface } from "./ui/table-surface";
+import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
 
 export function OperatorBlogList() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [cursorHistory, setCursorHistory] = useState(() => CursorHistory.firstPage());
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const retryCursor = useRef<string | null>(null);
+  async function load(cursor: string | null = null) {
+    retryCursor.current = cursor;
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ limit: "25" });
+      if (search.trim()) params.set("search", search.trim());
+      if (status) params.set("status", status);
+      if (cursor) params.set("cursor", cursor);
+      const result = await apiFetch<{ items: BlogPost[]; nextCursor: string | null }>(
+        `/api/operator/blog?${params}`,
+      );
+      setPosts(result.items);
+      setNextCursor(result.nextCursor);
+      if (!cursor) setCursorHistory(CursorHistory.firstPage());
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to load blog posts.");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
   useEffect(() => {
-    void apiFetch<{ items: BlogPost[] }>("/api/operator/blog?limit=50")
-      .then((p) => setPosts(p.items))
-      .catch((e) => setError(e instanceof Error ? e.message : "Unable to load blog posts."))
-      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  async function publication(post: BlogPost) {
+    try {
+      await apiFetch(
+        `/api/blog/posts/${post.id}/${post.status === "published" ? "unpublish" : "publish"}`,
+        { method: "POST" },
+      );
+      await load(cursorHistory.current);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to update publication.");
+    }
+  }
+  async function remove(post: BlogPost) {
+    if (!window.confirm(`Delete “${post.title}”?`)) return;
+    try {
+      await apiFetch(`/api/blog/posts/${post.id}`, { method: "DELETE" });
+      await load(cursorHistory.current);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to delete post.");
+    }
+  }
+  async function previousPage() {
+    if (!cursorHistory.hasPrevious || loading) return;
+    if (await load(cursorHistory.previous)) setCursorHistory((current) => current.afterPrevious());
+  }
+  async function nextPage() {
+    if (!nextCursor || loading) return;
+    if (await load(nextCursor)) setCursorHistory((current) => current.afterNext(nextCursor));
+  }
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Blog</h2>
-          <p className="text-sm text-slate-600">Manage drafts and published articles.</p>
-        </div>
-        <Button asChild>
-          <Link href="/operator/blog/new">New post</Link>
-        </Button>
-      </div>
-      {error && <Alert className="border-red-200 bg-red-50 text-red-800">{error}</Alert>}
-      {loading ? (
-        <p>Loading posts…</p>
-      ) : posts.length ? (
-        <div className="overflow-x-auto rounded-lg border bg-white">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b bg-slate-50">
-                <th className="p-3">Title</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Updated</th>
-                <th className="p-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {posts.map((post) => (
-                <tr className="border-b last:border-0" key={post.id}>
-                  <td className="p-3">
-                    <Link
-                      className="font-medium text-emerald-700 underline"
-                      href={`/operator/blog/${post.id}`}
-                    >
-                      {post.title}
-                    </Link>
-                    <p className="text-xs text-slate-500">/{post.slug}</p>
-                  </td>
-                  <td className="p-3">
-                    <Badge variant={post.status === "published" ? "default" : "secondary"}>
-                      {post.status}
-                    </Badge>
-                  </td>
-                  <td className="p-3 text-slate-600">
-                    {new Date(post.updatedAt).toLocaleString()}
-                  </td>
-                  <td className="p-3">
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`/operator/blog/${post.id}`}>Edit</Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <Card className="p-6">
-          <p className="text-slate-600">No posts yet.</p>
-        </Card>
-      )}
-    </div>
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Content operations"
+        title="Blog"
+        description="Manage Markdown drafts and published articles."
+        actions={
+          <Button asChild>
+            <Link href="/operator/blog/new">New article</Link>
+          </Button>
+        }
+      />
+      <OperatorToolbar
+        onSubmit={(event) => {
+          event.preventDefault();
+          void load(null);
+        }}
+        actions={
+          <Button type="submit" variant="secondary" disabled={loading}>
+            Apply
+          </Button>
+        }
+      >
+        <OperatorFilterField label="Search" htmlFor="blog-search">
+          <Input
+            id="blog-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Title, excerpt, or slug"
+          />
+        </OperatorFilterField>
+        <OperatorFilterField label="Status" htmlFor="blog-status">
+          <Select
+            id="blog-status"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+          >
+            <option value="">All articles</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+          </Select>
+        </OperatorFilterField>
+      </OperatorToolbar>
+      {error && <OperatorErrorState message={error} retry={() => void load(retryCursor.current)} />}
+      <OperatorSection title="Articles">
+        {loading && posts.length === 0 ? (
+          <OperatorLoadingState variant="table" columns={4} />
+        ) : posts.length ? (
+          <OperatorTableSurface
+            footer={
+              <OperatorPagination
+                hasPrevious={cursorHistory.hasPrevious && !loading}
+                hasNext={Boolean(nextCursor) && !loading}
+                onPrevious={() => void previousPage()}
+                onNext={() => void nextPage()}
+              />
+            }
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Article</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Updated</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {posts.map((post) => (
+                  <TableRow key={post.id}>
+                    <TableCell>
+                      <OperatorPrimaryCell
+                        title={<Link href={`/operator/blog/${post.id}`}>{post.title}</Link>}
+                        subtitle={`/${post.slug}`}
+                      />
+                    </TableCell>
+                    <TableCell>{post.category?.name ?? "—"}</TableCell>
+                    <TableCell>
+                      <OperatorStatusCell status={post.status} />
+                    </TableCell>
+                    <TableCell>{new Date(post.updatedAt).toLocaleString()}</TableCell>
+                    <TableCell>
+                      <OperatorActionCell>
+                        <OperatorActionsMenu
+                          actions={[
+                            {
+                              type: "link",
+                              label: "View / edit",
+                              href: `/operator/blog/${post.id}`,
+                            },
+                            {
+                              type: "action",
+                              label: post.status === "published" ? "Unpublish" : "Publish",
+                              onSelect: () => void publication(post),
+                            },
+                            {
+                              type: "action",
+                              label: "Delete",
+                              destructive: true,
+                              separatorBefore: true,
+                              onSelect: () => void remove(post),
+                            },
+                          ]}
+                          label={`Actions for article ${post.title}`}
+                        />
+                      </OperatorActionCell>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </OperatorTableSurface>
+        ) : (
+          <OperatorEmptyState
+            title="No articles found"
+            description="Try another filter or create the first article."
+            action={
+              <Button asChild>
+                <Link href="/operator/blog/new">New article</Link>
+              </Button>
+            }
+          />
+        )}
+      </OperatorSection>
+    </OperatorPage>
   );
 }
 
@@ -177,117 +307,123 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
     }
   }
   return (
-    <form onSubmit={submit} className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">
-            {saved ? "Edit post" : "New post"}
-          </h2>
-          <p className="text-sm text-slate-600">Markdown is rendered safely on the public blog.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save draft"}
-          </Button>
-          {saved && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void setPublication(status !== "published")}
-            >
-              {status === "published" ? "Unpublish" : "Publish"}
-            </Button>
-          )}
-          {saved && (
-            <Button type="button" variant="destructive" onClick={() => void remove()}>
-              Delete
-            </Button>
-          )}
-        </div>
-      </div>
-      {error && <Alert className="border-red-200 bg-red-50 text-red-800">{error}</Alert>}
-      <Card className="space-y-4 p-6">
-        <div>
-          <Label htmlFor="blog-title">Title</Label>
-          <Input
-            id="blog-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="blog-slug">Slug (optional)</Label>
-          <Input
-            id="blog-slug"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="generated-from-title"
-          />
-        </div>
-        <div>
-          <Label htmlFor="blog-excerpt">Excerpt</Label>
-          <Textarea
-            id="blog-excerpt"
-            value={excerpt}
-            onChange={(e) => setExcerpt(e.target.value)}
-          />
-        </div>
-        <div>
-          <Label>Content</Label>
-          <div className="mt-2 overflow-hidden rounded-md border">
-            <BlogEditor markdown={content} onChange={setContent} />
-          </div>
-          <details className="mt-3 rounded-md border p-4">
-            <summary className="cursor-pointer font-medium">Preview</summary>
-            <div className="mt-4">
-              <BlogMarkdown content={content} />
+    <OperatorPage>
+      <form onSubmit={submit} className="mx-auto w-full max-w-5xl space-y-5">
+        <OperatorPageHeader
+          eyebrow="Content operations"
+          title={saved ? "Edit article" : "New article"}
+          description="Markdown is rendered safely on the public blog."
+          actions={
+            <>
+              <Button asChild type="button" variant="ghost">
+                <Link href="/operator/blog">Cancel</Link>
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Saving…" : "Save draft"}
+              </Button>
+              {saved && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void setPublication(status !== "published")}
+                >
+                  {status === "published" ? "Unpublish" : "Publish"}
+                </Button>
+              )}
+              {saved && (
+                <Button type="button" variant="destructive" onClick={() => void remove()}>
+                  Delete
+                </Button>
+              )}
+            </>
+          }
+        />
+        {error && <OperatorErrorState message={error} />}
+        <OperatorSection title="Article content" surface>
+          <div className="grid gap-4">
+            <div>
+              <Label htmlFor="blog-title">Title</Label>
+              <Input
+                id="blog-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
             </div>
-          </details>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="blog-category">Category</Label>
-            <Input
-              id="blog-category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
+            <div>
+              <Label htmlFor="blog-slug">Slug (optional)</Label>
+              <Input
+                id="blog-slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="generated-from-title"
+              />
+            </div>
+            <div>
+              <Label htmlFor="blog-excerpt">Excerpt</Label>
+              <Textarea
+                id="blog-excerpt"
+                value={excerpt}
+                onChange={(e) => setExcerpt(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Content</Label>
+              <div className="mt-2 overflow-hidden rounded-md border">
+                <BlogEditor markdown={content} onChange={setContent} />
+              </div>
+              <details className="mt-3 rounded-md border p-4">
+                <summary className="cursor-pointer font-medium">Preview</summary>
+                <div className="mt-4">
+                  <BlogMarkdown content={content} />
+                </div>
+              </details>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="blog-category">Category</Label>
+                <Input
+                  id="blog-category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="blog-tags">Tags (comma separated)</Label>
+                <Input id="blog-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="blog-image">Featured image URL</Label>
+              <Input
+                id="blog-image"
+                type="url"
+                value={featuredImageUrl}
+                onChange={(e) => setFeaturedImageUrl(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="blog-seo-title">SEO title</Label>
+                <Input
+                  id="blog-seo-title"
+                  value={seoTitle}
+                  onChange={(e) => setSeoTitle(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="blog-seo-description">SEO description</Label>
+                <Textarea
+                  id="blog-seo-description"
+                  value={seoDescription}
+                  onChange={(e) => setSeoDescription(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
-          <div>
-            <Label htmlFor="blog-tags">Tags (comma separated)</Label>
-            <Input id="blog-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
-          </div>
-        </div>
-        <div>
-          <Label htmlFor="blog-image">Featured image URL</Label>
-          <Input
-            id="blog-image"
-            type="url"
-            value={featuredImageUrl}
-            onChange={(e) => setFeaturedImageUrl(e.target.value)}
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="blog-seo-title">SEO title</Label>
-            <Input
-              id="blog-seo-title"
-              value={seoTitle}
-              onChange={(e) => setSeoTitle(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="blog-seo-description">SEO description</Label>
-            <Textarea
-              id="blog-seo-description"
-              value={seoDescription}
-              onChange={(e) => setSeoDescription(e.target.value)}
-            />
-          </div>
-        </div>
-      </Card>
-      <HoneypotField />
-    </form>
+        </OperatorSection>
+        <HoneypotField />
+      </form>
+    </OperatorPage>
   );
 }

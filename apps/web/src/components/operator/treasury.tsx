@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   apiFetch,
   formatMinorUsd,
@@ -10,17 +10,31 @@ import {
   type OperatorTreasuryPage,
   type OperatorTreasurySummary,
 } from "@/lib/api-client";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
-import { Skeleton } from "../ui/skeleton";
-import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
 import { Money } from "../money";
 import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { CursorHistory } from "./ui/cursor-history";
+import { OperatorActionsMenu } from "./ui/actions-menu";
+import {
+  OperatorActionCell,
+  OperatorPrimaryCell,
+  OperatorStatusCell,
+  OperatorValueCell,
+} from "./ui/data-cells";
+import { OperatorEmptyState } from "./ui/empty-state";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorLoadingState } from "./ui/loading-state";
+import { OperatorMetricCard } from "./ui/metric-card";
+import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { OperatorPagination } from "./ui/pagination";
+import { OperatorSection } from "./ui/section";
+import { OperatorTableSurface } from "./ui/table-surface";
+import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Treasury data is temporarily unavailable.";
@@ -32,6 +46,7 @@ export function OperatorTreasuryPage() {
   const [search, setSearch] = useState("");
   const [direction, setDirection] = useState<"" | "credit" | "debit">("");
   const [source, setSource] = useState<"" | "automatic" | "manual">("");
+  const [history, setHistory] = useState(() => CursorHistory.firstPage());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -40,8 +55,13 @@ export function OperatorTreasuryPage() {
   const [entryDirection, setEntryDirection] = useState<"credit" | "debit">("credit");
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
+  const retryCursor = useRef<string | null>(null);
+  const busy = useRef(false);
 
-  async function load(cursor?: string | null, append = false) {
+  async function load(cursor: string | null = null) {
+    if (busy.current) return false;
+    busy.current = true;
+    retryCursor.current = cursor;
     setLoading(true);
     setError(null);
     try {
@@ -55,16 +75,25 @@ export function OperatorTreasuryPage() {
         apiFetch<OperatorTreasuryPage>(`/api/operator/treasury/entries?${params}`),
       ]);
       setSummary(nextSummary);
-      setPage(
-        append && page
-          ? { items: [...page.items, ...nextPage.items], nextCursor: nextPage.nextCursor }
-          : nextPage,
-      );
+      setPage(nextPage);
+      if (!cursor) setHistory(CursorHistory.firstPage());
+      return true;
     } catch (cause) {
       setError(errorMessage(cause));
+      return false;
     } finally {
+      busy.current = false;
       setLoading(false);
     }
+  }
+
+  async function nextPage() {
+    const cursor = page?.nextCursor;
+    if (cursor && !loading && (await load(cursor))) setHistory((value) => value.afterNext(cursor));
+  }
+  async function previousPage() {
+    if (history.hasPrevious && !loading && (await load(history.previous)))
+      setHistory((value) => value.afterPrevious());
   }
 
   useEffect(() => {
@@ -117,41 +146,41 @@ export function OperatorTreasuryPage() {
   }
 
   return (
-    <div className="operator-treasury-page">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Company accounting</p>
-          <h2 id="operator-treasury-heading">Treasury</h2>
-          <p className="panel-intro">
-            Inspect Cliqero-owned allocations and append-only operator entries. Wallet deposits and
-            user earnings remain separate.
-          </p>
-        </div>
-      </div>
-      {error && <Toast>{error}</Toast>}
-      <div className="operator-metric-grid operator-treasury-summary">
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Company accounting"
+        title="Treasury"
+        description="Inspect Cliqero-owned allocations and append-only operator entries. Wallet deposits and user earnings remain separate."
+      />
+      {error && <OperatorErrorState message={error} retry={() => void load(retryCursor.current)} />}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {summary ? (
           <>
-            <SummaryCard label="Current treasury balance" value={summary.balanceMinor} />
-            <SummaryCard label="Total credits" value={summary.creditsMinor} />
-            <SummaryCard label="Total debits" value={summary.debitsMinor} />
+            <OperatorMetricCard
+              label="Current treasury balance"
+              category="USD"
+              value={formatMinorUsd(summary.balanceMinor)}
+            />
+            <OperatorMetricCard
+              label="Total credits"
+              category="USD"
+              value={formatMinorUsd(summary.creditsMinor)}
+            />
+            <OperatorMetricCard
+              label="Total debits"
+              category="USD"
+              value={formatMinorUsd(summary.debitsMinor)}
+            />
           </>
         ) : (
-          [1, 2, 3].map((item) => (
-            <Card className="operator-metric-card" key={item}>
-              <Skeleton className="operator-metric-skeleton" />
-            </Card>
-          ))
+          <OperatorLoadingState variant="section" label="Loading treasury summary" />
         )}
       </div>
-      <Card>
-        <div className="operator-section-heading">
-          <div>
-            <p className="eyebrow">Append-only fact</p>
-            <h3>Record a company entry</h3>
-          </div>
-          <p className="panel-intro">Corrections are made with a separate opposite entry.</p>
-        </div>
+      <OperatorSection
+        title="Record a company entry"
+        description="Append-only accounting. Corrections are made with a separate opposite entry."
+        surface
+      >
         <form className="operator-treasury-form" onSubmit={createEntry}>
           <label>
             Direction
@@ -198,32 +227,25 @@ export function OperatorTreasuryPage() {
           </Button>
           <HoneypotField />
         </form>
-      </Card>
-      <Card>
-        <div className="operator-section-heading">
-          <div>
-            <p className="eyebrow">Immutable history</p>
-            <h3>Treasury entries</h3>
-          </div>
-        </div>
-        <form
-          className="operator-treasury-filters"
+      </OperatorSection>
+      <OperatorSection title="Treasury entries" description="Immutable ledger history.">
+        <OperatorToolbar
           onSubmit={(event) => {
             event.preventDefault();
             void load();
           }}
         >
-          <label>
-            Search
+          <OperatorFilterField label="Search" htmlFor="treasury-search">
             <Input
+              id="treasury-search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Title, note, source ID"
             />
-          </label>
-          <label>
-            Direction
+          </OperatorFilterField>
+          <OperatorFilterField label="Direction" htmlFor="treasury-direction">
             <Select
+              id="treasury-direction"
               value={direction}
               onChange={(event) => setDirection(event.target.value as typeof direction)}
             >
@@ -231,10 +253,10 @@ export function OperatorTreasuryPage() {
               <option value="credit">Credits</option>
               <option value="debit">Debits</option>
             </Select>
-          </label>
-          <label>
-            Source
+          </OperatorFilterField>
+          <OperatorFilterField label="Source" htmlFor="treasury-source">
             <Select
+              id="treasury-source"
               value={source}
               onChange={(event) => setSource(event.target.value as typeof source)}
             >
@@ -242,76 +264,101 @@ export function OperatorTreasuryPage() {
               <option value="automatic">Automatic platform allocations</option>
               <option value="manual">Manual operator entries</option>
             </Select>
-          </label>
-          <Button type="submit" variant="secondary" disabled={loading}>
-            Apply filters
-          </Button>
-          <HoneypotField />
-        </form>
+          </OperatorFilterField>
+          <div className="flex items-end gap-2">
+            <Button type="submit" variant="secondary" disabled={loading}>
+              Apply filters
+            </Button>
+            <HoneypotField />
+          </div>
+        </OperatorToolbar>
         {loading && !page ? (
-          <Skeleton className="operator-treasury-skeleton" />
+          <OperatorLoadingState variant="table" columns={6} label="Loading treasury entries" />
         ) : page?.items.length ? (
-          <>
-            <div className="operator-treasury-list">
-              {page.items.map((entry) => (
-                <TreasuryRow entry={entry} key={entry.id} />
-              ))}
-            </div>
-            {page.nextCursor && (
-              <Button
-                variant="secondary"
-                onClick={() => void load(page.nextCursor, true)}
-                disabled={loading}
-              >
-                {loading ? "Loading…" : "Next page"}
-              </Button>
-            )}
-          </>
+          <OperatorTableSurface
+            footer={
+              <OperatorPagination
+                hasPrevious={history.hasPrevious && !loading}
+                hasNext={Boolean(page.nextCursor) && !loading}
+                onPrevious={() => void previousPage()}
+                onNext={() => void nextPage()}
+              />
+            }
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Entry</TableHead>
+                  <TableHead>Direction</TableHead>
+                  <TableHead>Source / actor</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {page.items.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell>
+                      <OperatorPrimaryCell title={entry.title} subtitle={entry.note ?? entry.id} />
+                    </TableCell>
+                    <TableCell>
+                      <OperatorStatusCell status={entry.direction} />
+                    </TableCell>
+                    <TableCell>
+                      {entry.source?.kind === "distribution" && entry.source ? (
+                        <Link href={`/operator/distributions/${entry.source.id}`}>
+                          Distribution
+                        </Link>
+                      ) : entry.actor ? (
+                        `@${entry.actor.username}`
+                      ) : (
+                        "Manual operator entry"
+                      )}
+                    </TableCell>
+                    <TableCell>{new Date(entry.createdAt).toLocaleString()}</TableCell>
+                    <TableCell>
+                      <OperatorValueCell>
+                        <Money minor={entry.amountMinor} />
+                      </OperatorValueCell>
+                    </TableCell>
+                    <TableCell>
+                      <OperatorActionCell>
+                        <OperatorActionsMenu
+                          actions={
+                            entry.source?.kind === "distribution" && entry.source
+                              ? [
+                                  {
+                                    type: "link",
+                                    label: "View distribution",
+                                    href: `/operator/distributions/${entry.source.id}`,
+                                  },
+                                ]
+                              : [
+                                  {
+                                    type: "action",
+                                    label: "Immutable ledger entry",
+                                    disabled: true,
+                                    onSelect: () => undefined,
+                                  },
+                                ]
+                          }
+                          label={`Actions for treasury entry ${entry.id}`}
+                        />
+                      </OperatorActionCell>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </OperatorTableSurface>
         ) : (
-          <EmptyState
+          <OperatorEmptyState
             title="No treasury entries"
             description="Append-only entries will appear here."
           />
         )}
-      </Card>
-    </div>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card className="operator-metric-card">
-      <p className="eyebrow">USD</p>
-      <p className="operator-metric-value">{formatMinorUsd(value)}</p>
-      <p className="operator-metric-label">{label}</p>
-    </Card>
-  );
-}
-
-function TreasuryRow({ entry }: { entry: OperatorTreasuryEntry }) {
-  const automatic = entry.source?.kind === "distribution";
-  return (
-    <article className="operator-treasury-row">
-      <div>
-        <div className="operator-treasury-row-heading">
-          <Badge variant={entry.direction === "credit" ? "default" : "destructive"}>
-            {entry.direction === "credit" ? "Credit" : "Debit"}
-          </Badge>
-          <strong>
-            <Money minor={entry.amountMinor} />
-          </strong>
-        </div>
-        <h4>{entry.title}</h4>
-        {entry.note && <p>{entry.note}</p>}
-      </div>
-      <div className="operator-treasury-row-meta">
-        <span>{new Date(entry.createdAt).toLocaleString()}</span>
-        <span>{automatic ? "Automatic platform allocation" : "Manual operator entry"}</span>
-        {entry.actor && <span>Actor: @{entry.actor.username}</span>}
-        {automatic && entry.source && (
-          <Link href={`/operator/distributions/${entry.source.id}`}>View distribution</Link>
-        )}
-      </div>
-    </article>
+      </OperatorSection>
+    </OperatorPage>
   );
 }

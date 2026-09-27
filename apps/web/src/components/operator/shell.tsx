@@ -8,10 +8,6 @@ import { authClient } from "@/lib/auth-client";
 import { apiFetch, type OperatorOverview } from "@/lib/api-client";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card } from "../ui/card";
-import { Skeleton } from "../ui/skeleton";
-import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +31,10 @@ import {
 import { BrandLink } from "../brand-identity";
 import { hasCapability, type Capability } from "@/modules/identity/capabilities";
 import { OperatorMetricCard } from "./ui/metric-card";
+import { OperatorEmptyState } from "./ui/empty-state";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorLoadingState } from "./ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "./ui/page";
 
 export function OperatorShell({
   capabilities,
@@ -66,8 +66,10 @@ export function OperatorShell({
   const [overview, setOverview] = useState<OperatorOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const overviewEnabled = children === undefined || children === null;
 
   useEffect(() => {
+    if (!overviewEnabled) return;
     let active = true;
     void apiFetch<OperatorOverview>("/api/operator/overview")
       .then((value) => {
@@ -83,7 +85,7 @@ export function OperatorShell({
     return () => {
       active = false;
     };
-  }, []);
+  }, [overviewEnabled]);
 
   async function signOut() {
     await authClient.signOut();
@@ -237,61 +239,41 @@ export function OperatorShell({
           <main className="min-w-0 p-4 lg:p-8">
             <div className="mx-auto w-full max-w-[1600px] space-y-6">
               {children ?? (
-                <section aria-labelledby="operator-overview-heading">
-                  <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                <OperatorPage>
+                  <OperatorPageHeader
+                    eyebrow={
+                      hasCapability(capabilities, "system.root")
+                        ? "Platform operations"
+                        : "Authorized operations"
+                    }
+                    title={
+                      hasCapability(capabilities, "system.root")
+                        ? "A clear view of the platform"
+                        : "A focused operational view"
+                    }
+                    description="Authoritative operational counts from Cliqero services."
+                    actions={
+                      <Badge variant="default">
                         {hasCapability(capabilities, "system.root")
-                          ? "Platform operations"
-                          : "Authorized operations"}
-                      </p>
-                      <h2
-                        id="operator-overview-heading"
-                        className="text-2xl font-semibold text-slate-900"
-                      >
-                        {hasCapability(capabilities, "system.root")
-                          ? "A clear view of the platform"
-                          : "A focused operational view"}
-                      </h2>
-                      <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                        Authoritative operational counts from Cliqero services.
-                      </p>
-                    </div>
-                    <Badge variant="default">
-                      {hasCapability(capabilities, "system.root")
-                        ? "Full operator access"
-                        : "Direct capabilities"}
-                    </Badge>
-                  </div>
-                  {error && <Toast>{error}</Toast>}
+                          ? "Full operator access"
+                          : "Direct capabilities"}
+                      </Badge>
+                    }
+                  />
+                  {error && (
+                    <OperatorErrorState message={error} retry={() => window.location.reload()} />
+                  )}
                   {loading ? (
-                    <div
-                      className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-                      aria-label="Loading overview"
-                    >
-                      {Array.from(
-                        { length: hasCapability(capabilities, "system.root") ? 7 : 3 },
-                        (_, index) => (
-                          <Card className="p-6" key={index}>
-                            <Skeleton className="h-24 w-full" />
-                          </Card>
-                        ),
-                      )}
-                    </div>
+                    <OperatorLoadingState variant="section" label="Loading operator overview" />
                   ) : overview ? (
                     <OverviewMetrics overview={overview} />
                   ) : (
-                    <Card className="p-6">
-                      <EmptyState
-                        title="Overview unavailable"
-                        description="Try refreshing this page."
-                      />
-                      <Button variant="secondary" onClick={() => window.location.reload()}>
-                        Refresh
-                      </Button>
-                    </Card>
+                    <OperatorEmptyState
+                      title="Overview unavailable"
+                      description="Try refreshing this page."
+                    />
                   )}
-                </section>
+                </OperatorPage>
               )}
             </div>
           </main>

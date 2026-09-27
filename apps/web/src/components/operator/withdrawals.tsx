@@ -1,25 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   apiFetch,
   formatMinorUsd,
-  type OperatorWithdrawal,
   type OperatorWithdrawalDetail as Detail,
   type OperatorWithdrawalPage,
   type OperatorWithdrawalState,
 } from "@/lib/api-client";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card } from "../ui/card";
-import { HoneypotField } from "../honeypot-field";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
-import { Skeleton } from "../ui/skeleton";
-import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
 import { CopyValue } from "../copy-value";
+import { Money } from "../money";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { CursorHistory } from "./ui/cursor-history";
+import { OperatorActionsMenu } from "./ui/actions-menu";
+import {
+  OperatorActionCell,
+  OperatorPrimaryCell,
+  OperatorStatusCell,
+  OperatorValueCell,
+} from "./ui/data-cells";
+import { OperatorEmptyState } from "./ui/empty-state";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorLoadingState } from "./ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { OperatorPagination } from "./ui/pagination";
+import { OperatorSection } from "./ui/section";
+import { OperatorTableSurface } from "./ui/table-surface";
+import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
 
 const states: Array<[OperatorWithdrawalState, string]> = [
   ["requested", "Requested"],
@@ -29,23 +40,22 @@ const states: Array<[OperatorWithdrawalState, string]> = [
   ["completed", "Completed"],
   ["failed", "Failed"],
 ];
-const tone = (state: OperatorWithdrawalState): "secondary" | "destructive" | "default" =>
-  state === "completed"
-    ? "default"
-    : state === "rejected" || state === "cancelled" || state === "failed"
-      ? "destructive"
-      : "secondary";
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Withdrawal data is temporarily unavailable.";
-
 export function OperatorWithdrawalList() {
   const [page, setPage] = useState<OperatorWithdrawalPage | null>(null);
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorWithdrawalState | "">("");
   const [attention, setAttention] = useState("");
+  const [history, setHistory] = useState(() => CursorHistory.firstPage());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  async function load(cursor?: string | null) {
+  const busy = useRef(false);
+  const retryCursor = useRef<string | null>(null);
+  async function load(cursor: string | null = null) {
+    if (busy.current) return null;
+    busy.current = true;
+    retryCursor.current = cursor;
     setLoading(true);
     setError(null);
     try {
@@ -54,10 +64,15 @@ export function OperatorWithdrawalList() {
       if (state) params.set("state", state);
       if (attention) params.set("attention", attention);
       if (cursor) params.set("cursor", cursor);
-      setPage(await apiFetch<OperatorWithdrawalPage>(`/api/operator/withdrawals?${params}`));
+      const result = await apiFetch<OperatorWithdrawalPage>(`/api/operator/withdrawals?${params}`);
+      setPage(result);
+      if (!cursor) setHistory(CursorHistory.firstPage());
+      return result;
     } catch (cause) {
       setError(message(cause));
+      return null;
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   }
@@ -66,120 +81,161 @@ export function OperatorWithdrawalList() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  async function nextPage() {
+    const cursor = page?.nextCursor;
+    if (!cursor || busy.current) return;
+    if (await load(cursor)) setHistory((current) => current.afterNext(cursor));
+  }
+  async function previousPage() {
+    if (!history.hasPrevious || busy.current) return;
+    if (await load(history.previous)) setHistory((current) => current.afterPrevious());
+  }
   return (
-    <div className="operator-withdrawals-page">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Withdrawal operations</p>
-          <h2>Withdrawal requests</h2>
-          <p className="panel-intro">
-            Review reserved earnings, then record when an external payment has been sent.
-          </p>
-        </div>
-      </div>
-      <Card>
-        <form
-          className="operator-funding-filters"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void load();
-          }}
-        >
-          <label>
-            Search account, withdrawal, or destination
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="ID, username, email, reference"
-            />
-          </label>
-          <label>
-            State
-            <Select
-              value={state}
-              onChange={(e) => setState(e.target.value as OperatorWithdrawalState | "")}
-            >
-              <option value="">All states</option>
-              {states.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label>
-            Attention
-            <Select value={attention} onChange={(e) => setAttention(e.target.value)}>
-              <option value="">All attention</option>
-              <option value="review">Needs review</option>
-              <option value="action_required">Payment/action required</option>
-            </Select>
-          </label>
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Withdrawal operations"
+        title="Withdrawal requests"
+        description="Review reserved earnings, then record when an external payment has been sent."
+      />
+      <OperatorToolbar
+        onSubmit={(e) => {
+          e.preventDefault();
+          void load(null);
+        }}
+        actions={
           <Button type="submit" variant="secondary" disabled={loading}>
-            {loading ? "Loading…" : "Apply filters"}
+            Apply filters
           </Button>
-          <HoneypotField />
-        </form>
-      </Card>
-      {error && <Toast>{error}</Toast>}
-      {loading && !page ? (
-        <Card>
-          <Skeleton className="operator-funding-detail-skeleton" />
-        </Card>
-      ) : page?.items.length ? (
-        <>
-          <div className="operator-withdrawal-list">
-            {page.items.map((item) => (
-              <WithdrawalRow key={item.id} item={item} />
+        }
+      >
+        <OperatorFilterField
+          label="Account, withdrawal, or destination"
+          htmlFor="withdrawal-search"
+        >
+          <Input
+            id="withdrawal-search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ID, username, email, reference"
+          />
+        </OperatorFilterField>
+        <OperatorFilterField label="State" htmlFor="withdrawal-state">
+          <Select
+            id="withdrawal-state"
+            value={state}
+            onChange={(e) => setState(e.target.value as OperatorWithdrawalState | "")}
+          >
+            <option value="">All states</option>
+            {states.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
             ))}
-          </div>
-          {page.nextCursor && (
-            <Button
-              variant="secondary"
-              onClick={() => void load(page.nextCursor)}
-              disabled={loading}
-            >
-              Next page
-            </Button>
-          )}
-        </>
-      ) : (
-        <Card>
-          <EmptyState
+          </Select>
+        </OperatorFilterField>
+        <OperatorFilterField label="Attention" htmlFor="withdrawal-attention">
+          <Select
+            id="withdrawal-attention"
+            value={attention}
+            onChange={(e) => setAttention(e.target.value)}
+          >
+            <option value="">All attention</option>
+            <option value="review">Needs review</option>
+            <option value="action_required">Payment/action required</option>
+          </Select>
+        </OperatorFilterField>
+      </OperatorToolbar>
+      {error && <OperatorErrorState message={error} retry={() => void load(retryCursor.current)} />}
+      <OperatorSection
+        title="Withdrawal history"
+        description="Transition controls remain on each record and are validated by the server."
+      >
+        {loading && !page ? (
+          <OperatorLoadingState variant="table" columns={6} />
+        ) : page?.items.length ? (
+          <OperatorTableSurface
+            footer={
+              <OperatorPagination
+                hasPrevious={history.hasPrevious && !loading}
+                hasNext={Boolean(page.nextCursor) && !loading}
+                onPrevious={() => void previousPage()}
+                onNext={() => void nextPage()}
+              />
+            }
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Destination</TableHead>
+                  <TableHead>State / attention</TableHead>
+                  <TableHead>Requested</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {page.items.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      <OperatorPrimaryCell
+                        title={
+                          <Link href={`/operator/users/${item.account.id}`}>
+                            @{item.account.username}
+                          </Link>
+                        }
+                        subtitle={item.account.email ?? item.account.id}
+                      />
+                    </TableCell>
+                    <TableCell>{item.destination?.name ?? "Saved destination"}</TableCell>
+                    <TableCell>
+                      <div className="grid gap-1">
+                        <OperatorStatusCell status={item.state} />
+                        <span className="text-xs text-slate-500">
+                          {item.attention === "none"
+                            ? "No action"
+                            : item.attention.replaceAll("_", " ")}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{new Date(item.createdAt).toLocaleString()}</TableCell>
+                    <TableCell>
+                      <OperatorValueCell>
+                        <Money minor={item.amountMinor} />
+                      </OperatorValueCell>
+                    </TableCell>
+                    <TableCell>
+                      <OperatorActionCell>
+                        <OperatorActionsMenu
+                          actions={[
+                            {
+                              type: "link",
+                              label: "Inspect withdrawal",
+                              href: `/operator/withdrawals/${item.id}`,
+                            },
+                            {
+                              type: "link",
+                              label: "View account",
+                              href: `/operator/users/${item.account.id}`,
+                            },
+                          ]}
+                          label={`Actions for withdrawal ${item.id}`}
+                        />
+                      </OperatorActionCell>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </OperatorTableSurface>
+        ) : (
+          <OperatorEmptyState
             title="No withdrawal requests found"
             description="Try another search or filter."
           />
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function WithdrawalRow({ item }: { item: OperatorWithdrawal }) {
-  return (
-    <Card className="operator-withdrawal-row">
-      <div>
-        <strong>@{item.account.username}</strong>
-        <span className="operator-withdrawal-email">
-          {item.account.email ?? "No authentication email"}
-        </span>
-        <Link href={`/operator/users/${item.account.id}`}>View account</Link>
-      </div>
-      <div className="operator-withdrawal-amount">
-        <small>Amount</small>
-        <strong>{formatMinorUsd(item.amountMinor)}</strong>
-      </div>
-      <div className="operator-funding-row-meta">
-        <Badge variant={tone(item.state)}>
-          {states.find(([value]) => value === item.state)?.[1] ?? item.state}
-        </Badge>
-        <span>Reservation: {item.reservation?.state ?? "missing"}</span>
-        <span>{item.attention === "none" ? "No action" : item.attention.replaceAll("_", " ")}</span>
-        <Button asChild variant="ghost">
-          <Link href={`/operator/withdrawals/${item.id}`}>Inspect</Link>
-        </Button>
-      </div>
-    </Card>
+        )}
+      </OperatorSection>
+    </OperatorPage>
   );
 }
 
@@ -227,42 +283,39 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
   }
   if (loading && !item)
     return (
-      <Card>
-        <Skeleton className="operator-funding-detail-skeleton" />
-      </Card>
+      <OperatorPage>
+        <OperatorLoadingState variant="section" label="Loading withdrawal detail" />
+      </OperatorPage>
     );
   if (!item)
     return (
-      <Card>
-        <EmptyState
+      <OperatorPage>
+        <OperatorErrorState
           title="Withdrawal unavailable"
-          description={error ?? "This withdrawal was not found."}
+          message={error ?? "This withdrawal was not found."}
+          retry={() => void load()}
         />
-      </Card>
+      </OperatorPage>
     );
   return (
-    <div className="operator-withdrawal-detail">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Withdrawal fact</p>
-          <h2>{formatMinorUsd(item.amountMinor)} withdrawal</h2>
-          <p className="panel-intro break-value">{item.id}</p>
-        </div>
-        <Badge variant={tone(item.state)}>{item.state}</Badge>
-      </div>
-      {error && <Toast>{error}</Toast>}
-      <div className="operator-detail-grid">
-        <Card>
-          <h3>Account</h3>
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Withdrawal fact"
+        title={`${formatMinorUsd(item.amountMinor)} withdrawal`}
+        description={item.id}
+        actions={<OperatorStatusCell status={item.state} />}
+      />
+      {error && <OperatorErrorState message={error} />}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <OperatorSection title="Account" surface>
           <p>
             <strong>@{item.account.username}</strong>
             <br />
             {item.account.email ?? "No authentication email"}
           </p>
           <Link href={`/operator/users/${item.account.id}`}>View account</Link>
-        </Card>
-        <Card>
-          <h3>Destination</h3>
+        </OperatorSection>
+        <OperatorSection title="Destination" surface>
           <p className="mb-3">
             {item.destination.methodName} · {item.destination.name}
           </p>
@@ -284,29 +337,26 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
               </div>
             ))}
           </dl>
-        </Card>
-        <Card>
-          <h3>Reservation</h3>
+        </OperatorSection>
+        <OperatorSection title="Reservation" surface>
           <p>
             {item.reservation
               ? `${item.reservation.state} · ${formatMinorUsd(item.reservation.amountMinor)}`
               : "No reservation record"}
           </p>
-        </Card>
+        </OperatorSection>
       </div>
       {item.state === "completed" && (
-        <Card>
-          <h3>Completion record</h3>
+        <OperatorSection title="Completion record" surface>
           <p>External reference: {item.externalReference ?? "Not provided"}</p>
           <p>Note: {item.completionNote ?? "Not provided"}</p>
           <p>Recorded by: {item.completedBy ?? "Unknown"}</p>
           <p>
             Completed at: {item.completedAt ? new Date(item.completedAt).toLocaleString() : "—"}
           </p>
-        </Card>
+        </OperatorSection>
       )}
-      <Card>
-        <h3>Actions</h3>
+      <OperatorSection title="Available actions" surface>
         <div className="operator-action-row">
           {item.state === "requested" && (
             <Button disabled={busy} onClick={() => void act("approve")}>
@@ -364,7 +414,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
             </form>
           )}
         </div>
-      </Card>
-    </div>
+      </OperatorSection>
+    </OperatorPage>
   );
 }

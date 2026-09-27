@@ -30,6 +30,7 @@ import { OperatorEmptyState } from "./ui/empty-state";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorLoadingState } from "./ui/loading-state";
 import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { OperatorMetricCard } from "./ui/metric-card";
 import { OperatorPagination } from "./ui/pagination";
 import { OperatorSection } from "./ui/section";
 import { OperatorTableSurface } from "./ui/table-surface";
@@ -41,8 +42,6 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { HoneypotField } from "../honeypot-field";
 import { Input } from "../ui/input";
-import { Skeleton } from "../ui/skeleton";
-import { EmptyState } from "../empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Toast } from "../toast";
 import { CountrySelect } from "../country-select";
@@ -519,34 +518,29 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
 
   if (loading)
     return (
-      <Card aria-label="Loading account">
-        <Skeleton className="catalogue-skeleton" />
-      </Card>
+      <OperatorPage>
+        <OperatorLoadingState variant="section" label="Loading account" />
+      </OperatorPage>
     );
   if (!account)
     return (
-      <Card>
-        <EmptyState
+      <OperatorPage>
+        <OperatorErrorState
           title="Account unavailable"
-          description={error || "This account could not be found."}
+          message={error || "This account could not be found."}
         />
-      </Card>
+      </OperatorPage>
     );
   return (
-    <div className="operator-user-detail">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Account inspection</p>
-          <h2>{account.displayName || account.username}</h2>
-          <p className="panel-intro">
-            @{account.username} · {account.email ?? "No authentication email"}
-          </p>
-        </div>
-      </div>
-      {error && <Toast>{error}</Toast>}
-      <div className="operator-detail-grid">
-        <Card>
-          <p className="eyebrow">Identity</p>
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Account inspection"
+        title={account.displayName || account.username}
+        description={`@${account.username} · ${account.email ?? "No authentication email"}`}
+      />
+      {error && <OperatorErrorState message={error} />}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <OperatorSection title="Identity" surface>
           <dl className="detail-list">
             <div>
               <dt>Account ID</dt>
@@ -561,7 +555,7 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
               <dd>{new Date(account.createdAt).toLocaleString()}</dd>
             </div>
           </dl>
-        </Card>
+        </OperatorSection>
         {!capabilityLoading && capabilityView && (
           <CapabilityCard
             view={capabilityView}
@@ -570,12 +564,9 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
           />
         )}
         {capabilityLoading && (
-          <Card>
-            <p className="eyebrow">Platform capabilities</p>
-            <Skeleton className="catalogue-skeleton" />
-          </Card>
+          <OperatorLoadingState variant="section" label="Loading platform capabilities" />
         )}
-        {capabilityError && <Toast>{capabilityError}</Toast>}
+        {capabilityError && <OperatorErrorState message={capabilityError} />}
         {!apiKeyLoading && apiKeyPage && (
           <OperatorApiKeyCard
             page={apiKeyPage}
@@ -593,15 +584,9 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
             onDismissSecret={() => setApiKeySecret(null)}
           />
         )}
-        {apiKeyLoading && (
-          <Card className="col-span-full">
-            <p className="eyebrow">API access</p>
-            <Skeleton className="catalogue-skeleton" />
-          </Card>
-        )}
-        {apiKeyError && !apiKeyPage && <Toast>{apiKeyError}</Toast>}
-        <Card>
-          <p className="eyebrow">Referral context</p>
+        {apiKeyLoading && <OperatorLoadingState variant="section" label="Loading API access" />}
+        {apiKeyError && !apiKeyPage && <OperatorErrorState message={apiKeyError} />}
+        <OperatorSection title="Referral context" surface>
           <dl className="detail-list">
             <div>
               <dt>Immediate parent</dt>
@@ -623,22 +608,18 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
           <Button asChild variant="secondary">
             <Link href={`/operator/network?root=${account.id}`}>View network</Link>
           </Button>
-        </Card>
-        <Card>
-          <p className="eyebrow">Commerce</p>
-          <p className="operator-metric-value">{account.purchaseCount.toLocaleString("en-US")}</p>
-          <p className="operator-metric-label">Purchases</p>
-          <p className="panel-note">
-            Financial balances and provider details are not part of this inspection surface.
-          </p>
-        </Card>
+        </OperatorSection>
+        <OperatorMetricCard
+          label="Purchases"
+          category="Commerce"
+          value={account.purchaseCount.toLocaleString("en-US")}
+        />
       </div>
-      <Card className="reassignment-card">
-        <p className="eyebrow">Referral administration</p>
-        <h3>Reassign immediate parent</h3>
-        <p className="panel-note">
-          Descendants remain attached. PostgreSQL prevents cycles and the action is audited.
-        </p>
+      <OperatorSection
+        title="Reassign immediate parent"
+        description="Descendants remain attached. PostgreSQL prevents cycles and the action is audited."
+        surface
+      >
         <div className="reassignment-current">
           <span>Current parent</span>
           <strong>{account.parent ? `@${account.parent.username}` : "None"}</strong>
@@ -688,18 +669,17 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
             </Button>
           </div>
         )}
-      </Card>
+      </OperatorSection>
       {account.latestParentReassignment && (
-        <Card>
-          <p className="eyebrow">Latest hierarchy audit</p>
+        <OperatorSection title="Latest hierarchy audit" surface>
           <p className="panel-note">
             Parent changed on{" "}
             {new Date(account.latestParentReassignment.occurredAt).toLocaleString()} by{" "}
             {account.latestParentReassignment.actorId || "an operator"}.
           </p>
-        </Card>
+        </OperatorSection>
       )}
-    </div>
+    </OperatorPage>
   );
 }
 

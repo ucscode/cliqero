@@ -1,22 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   apiFetch,
-  type OperatorDistribution,
   type OperatorDistributionDetail as DistributionDetail,
   type OperatorDistributionPage,
 } from "@/lib/api-client";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card } from "../ui/card";
-import { HoneypotField } from "../honeypot-field";
 import { Input } from "../ui/input";
-import { Skeleton } from "../ui/skeleton";
-import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
 import { Money } from "../money";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { CursorHistory } from "./ui/cursor-history";
+import { OperatorActionsMenu } from "./ui/actions-menu";
+import {
+  OperatorActionCell,
+  OperatorPrimaryCell,
+  OperatorStatusCell,
+  OperatorValueCell,
+} from "./ui/data-cells";
+import { OperatorEmptyState } from "./ui/empty-state";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorLoadingState } from "./ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { OperatorPagination } from "./ui/pagination";
+import { OperatorSection } from "./ui/section";
+import { OperatorTableSurface } from "./ui/table-surface";
+import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
 
 function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
@@ -31,19 +41,32 @@ function stateLabel(value: string) {
 export function OperatorDistributionList() {
   const [page, setPage] = useState<OperatorDistributionPage | null>(null);
   const [search, setSearch] = useState("");
+  const [history, setHistory] = useState(() => CursorHistory.firstPage());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  async function load(cursor?: string | null) {
+  const busy = useRef(false);
+  const retryCursor = useRef<string | null>(null);
+  async function load(cursor: string | null = null) {
+    if (busy.current) return null;
+    busy.current = true;
+    retryCursor.current = cursor;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ limit: "25" });
       if (search.trim()) params.set("search", search.trim());
       if (cursor) params.set("cursor", cursor);
-      setPage(await apiFetch<OperatorDistributionPage>(`/api/operator/distributions?${params}`));
+      const result = await apiFetch<OperatorDistributionPage>(
+        `/api/operator/distributions?${params}`,
+      );
+      setPage(result);
+      if (!cursor) setHistory(CursorHistory.firstPage());
+      return result;
     } catch (cause) {
       setError(errorMessage(cause));
+      return null;
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   }
@@ -53,113 +76,124 @@ export function OperatorDistributionList() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  async function next() {
+    const cursor = page?.nextCursor;
+    if (!cursor || busy.current) return;
+    if (await load(cursor)) setHistory((current) => current.afterNext(cursor));
+  }
+  async function previous() {
+    if (!history.hasPrevious || busy.current) return;
+    if (await load(history.previous)) setHistory((current) => current.afterPrevious());
+  }
   return (
-    <div className="operator-distributions-page">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Accounting inspection</p>
-          <h2>Distributions</h2>
-          <p className="panel-intro">
-            Read-only purchase distribution facts: actual referral commissions and the platform
-            remainder. Historical records are never recalculated here.
-          </p>
-        </div>
-      </div>
-      <Card className="operator-distributions-toolbar">
-        <form
-          className="operator-distributions-filters"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void load();
-          }}
-        >
-          <label>
-            Search distributions
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Distribution, purchase, buyer, or listing"
-            />
-          </label>
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Accounting inspection"
+        title="Distributions"
+        description="Read-only purchase distribution facts: actual referral commissions and the platform remainder. Historical records are never recalculated here."
+      />
+      <OperatorToolbar
+        onSubmit={(event) => {
+          event.preventDefault();
+          void load(null);
+        }}
+        actions={
           <Button type="submit" variant="secondary" disabled={loading}>
-            {loading ? "Loading…" : "Search"}
+            Apply
           </Button>
-          <HoneypotField />
-        </form>
-      </Card>
-      {error && <Toast>{error}</Toast>}
-      {loading && !page ? (
-        <div className="operator-distribution-list" aria-label="Loading distributions">
-          {[1, 2, 3].map((item) => (
-            <Card key={item}>
-              <Skeleton className="operator-funding-skeleton" />
-            </Card>
-          ))}
-        </div>
-      ) : page?.items.length ? (
-        <>
-          <div className="operator-distribution-list">
-            {page.items.map((item) => (
-              <DistributionRow distribution={item} key={item.id} />
-            ))}
-          </div>
-          {page.nextCursor && (
-            <Button
-              variant="secondary"
-              disabled={loading}
-              onClick={() => void load(page.nextCursor)}
-            >
-              {loading ? "Loading…" : "Next page"}
-            </Button>
-          )}
-        </>
-      ) : (
-        <Card>
-          <EmptyState
+        }
+      >
+        <OperatorFilterField label="Search distributions" htmlFor="distribution-search">
+          <Input
+            id="distribution-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Distribution, purchase, buyer, or listing"
+          />
+        </OperatorFilterField>
+      </OperatorToolbar>
+      {error && <OperatorErrorState message={error} retry={() => void load(retryCursor.current)} />}
+      <OperatorSection
+        title="Distribution ledger"
+        description="Financial history is immutable; use inspection to review its persisted facts."
+      >
+        {loading && !page ? (
+          <OperatorLoadingState variant="table" columns={6} />
+        ) : page?.items.length ? (
+          <OperatorTableSurface
+            footer={
+              <OperatorPagination
+                hasPrevious={history.hasPrevious && !loading}
+                hasNext={Boolean(page.nextCursor) && !loading}
+                onPrevious={() => void previous()}
+                onNext={() => void next()}
+              />
+            }
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Listing / purchase</TableHead>
+                  <TableHead>Buyer</TableHead>
+                  <TableHead>Beneficiaries</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead className="text-right">Gross</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {page.items.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      <OperatorPrimaryCell
+                        title={item.listingTitle}
+                        subtitle={`Purchase ${item.purchaseId}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Link href={`/operator/users/${item.buyer.id}`}>@{item.buyer.username}</Link>
+                    </TableCell>
+                    <TableCell>{item.beneficiaryCount}</TableCell>
+                    <TableCell>
+                      <OperatorStatusCell status="completed" />
+                    </TableCell>
+                    <TableCell>
+                      <OperatorValueCell>
+                        <Money minor={item.grossAmountMinor} />
+                      </OperatorValueCell>
+                    </TableCell>
+                    <TableCell>
+                      <OperatorActionCell>
+                        <OperatorActionsMenu
+                          actions={[
+                            {
+                              type: "link",
+                              label: "Inspect distribution",
+                              href: `/operator/distributions/${item.id}`,
+                            },
+                            {
+                              type: "link",
+                              label: "View buyer",
+                              href: `/operator/users/${item.buyer.id}`,
+                            },
+                          ]}
+                          label={`Actions for distribution ${item.id}`}
+                        />
+                      </OperatorActionCell>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </OperatorTableSurface>
+        ) : (
+          <OperatorEmptyState
             title="No distributions found"
             description="Completed purchase distributions will appear here when the worker records them."
           />
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function DistributionRow({ distribution }: { distribution: OperatorDistribution }) {
-  return (
-    <Card className="operator-distribution-row">
-      <div className="operator-distribution-row-main">
-        <div className="operator-distribution-identity">
-          <strong>{distribution.listingTitle}</strong>
-          <span>
-            Purchase <span className="break-value">{distribution.purchaseId}</span>
-          </span>
-          <Link href={`/operator/users/${distribution.buyer.id}`}>
-            @{distribution.buyer.username}
-          </Link>
-        </div>
-        <div className="operator-distribution-amounts">
-          <span>
-            <small>Gross USD</small>
-            <Money minor={distribution.grossAmountMinor} />
-          </span>
-          <span>
-            <small>Referral commissions</small>
-            <Money minor={distribution.referralAllocatedMinor} />
-          </span>
-        </div>
-      </div>
-      <div className="operator-distribution-row-meta">
-        <Badge variant="default">Completed</Badge>
-        <span>{distribution.beneficiaryCount} beneficiary(ies)</span>
-        <span>
-          Platform remainder <Money minor={distribution.platformRemainderMinor} />
-        </span>
-        <Button asChild variant="ghost">
-          <Link href={`/operator/distributions/${distribution.id}`}>Inspect</Link>
-        </Button>
-      </div>
-    </Card>
+        )}
+      </OperatorSection>
+    </OperatorPage>
   );
 }
 
@@ -176,33 +210,30 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
   }, [distributionId]);
   if (loading && !distribution)
     return (
-      <Card aria-label="Loading distribution detail">
-        <Skeleton className="operator-funding-detail-skeleton" />
-      </Card>
+      <OperatorPage>
+        <OperatorLoadingState variant="section" label="Loading distribution detail" />
+      </OperatorPage>
     );
   if (!distribution)
     return (
-      <Card>
-        <EmptyState
+      <OperatorPage>
+        <OperatorErrorState
           title="Distribution unavailable"
-          description={error || "This distribution was not found."}
+          message={error || "This distribution was not found."}
         />
-      </Card>
+      </OperatorPage>
     );
   return (
-    <div className="operator-distribution-detail">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Distribution fact</p>
-          <h2>{distribution.listingTitle}</h2>
-          <p className="panel-intro break-value">{distribution.id}</p>
-        </div>
-        <Badge variant="default">Completed</Badge>
-      </div>
-      {error && <Toast>{error}</Toast>}
-      <div className="operator-detail-grid">
-        <Card>
-          <h3>Purchase</h3>
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Distribution fact"
+        title={distribution.listingTitle}
+        description={distribution.id}
+        actions={<OperatorStatusCell status="completed" />}
+      />
+      {error && <OperatorErrorState message={error} />}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <OperatorSection title="Purchase" surface>
           <dl className="detail-list">
             <div>
               <dt>Listing</dt>
@@ -241,9 +272,8 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
               </dd>
             </div>
           </dl>
-        </Card>
-        <Card>
-          <h3>Platform allocation</h3>
+        </OperatorSection>
+        <OperatorSection title="Platform allocation" surface>
           <dl className="detail-list">
             <div>
               <dt>Referral commissions</dt>
@@ -270,10 +300,9 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
             The remainder includes missing-upline and integer-cent residue according to the
             persisted distribution facts.
           </p>
-        </Card>
+        </OperatorSection>
       </div>
-      <Card>
-        <h3>Referral attribution</h3>
+      <OperatorSection title="Referral attribution" surface>
         {distribution.attribution.referrer ? (
           <p className="panel-intro">
             Promoted by{" "}
@@ -284,15 +313,13 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
         ) : (
           <p className="panel-intro">No referral attribution was recorded for this purchase.</p>
         )}
-      </Card>
-      <Card>
-        <h3>Applied commission policy snapshot</h3>
+      </OperatorSection>
+      <OperatorSection title="Applied commission policy snapshot" surface>
         <pre className="operator-json-value">
           {JSON.stringify(distribution.policySnapshot, null, 2)}
         </pre>
-      </Card>
-      <Card>
-        <h3>Actual referral allocations</h3>
+      </OperatorSection>
+      <OperatorSection title="Actual referral allocations" surface>
         {distribution.allocations.length ? (
           <div className="operator-distribution-allocation-list">
             {distribution.allocations.map((allocation) => (
@@ -309,17 +336,10 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
                   </span>
                 </div>
                 <div>
-                  <Badge
-                    variant={
-                      allocation.balanceState === "available"
-                        ? "default"
-                        : allocation.balanceState === "reversed"
-                          ? "destructive"
-                          : "secondary"
-                    }
-                  >
-                    {stateLabel(allocation.balanceState)}
-                  </Badge>
+                  <OperatorStatusCell
+                    status={allocation.balanceState}
+                    label={stateLabel(allocation.balanceState)}
+                  />
                   <Money
                     minor={
                       allocation.direction === "debit"
@@ -332,7 +352,7 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
             ))}
           </div>
         ) : (
-          <EmptyState
+          <OperatorEmptyState
             title="No referral commissions"
             description="This distribution is valid with no qualifying referral commission allocations."
           />
@@ -342,10 +362,10 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
             Reversal {distribution.reversal.state}: {distribution.reversal.reason}
           </p>
         )}
-      </Card>
+      </OperatorSection>
       <Button asChild variant="secondary">
         <Link href="/operator/distributions">Back to distributions</Link>
       </Button>
-    </div>
+    </OperatorPage>
   );
 }

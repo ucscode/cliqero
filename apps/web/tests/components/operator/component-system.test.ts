@@ -8,6 +8,7 @@ import {
 
 const operatorFiles = [
   "shell.tsx",
+  "blog.tsx",
   "catalogue.tsx",
   "users.tsx",
   "network.tsx",
@@ -16,6 +17,7 @@ const operatorFiles = [
   "earnings.tsx",
   "withdrawals.tsx",
   "treasury.tsx",
+  "reviews.tsx",
 ];
 
 const operatorRoot = resolve(__dirname, "../../../src/components/operator");

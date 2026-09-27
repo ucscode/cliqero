@@ -5,7 +5,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   apiFetch,
   formatMinorUsd,
@@ -17,17 +17,30 @@ import {
   type OperatorListing,
   type OperatorListingPage,
 } from "@/lib/api-client";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
-import { Skeleton } from "../ui/skeleton";
 import { HoneypotField } from "../honeypot-field";
 import { Textarea } from "../ui/textarea";
-import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { CursorHistory } from "./ui/cursor-history";
+import { OperatorActionsMenu } from "./ui/actions-menu";
+import {
+  OperatorActionCell,
+  OperatorPrimaryCell,
+  OperatorStatusCell,
+  OperatorValueCell,
+} from "./ui/data-cells";
+import { OperatorEmptyState } from "./ui/empty-state";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorLoadingState } from "./ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { OperatorPagination } from "./ui/pagination";
+import { OperatorSection } from "./ui/section";
+import { OperatorTableSurface } from "./ui/table-surface";
+import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -59,12 +72,15 @@ export function OperatorCatalogueList() {
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
+  const [history, setHistory] = useState(() => CursorHistory.firstPage());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const retryCursor = useRef<string | null>(null);
 
   async function load(nextCursor: string | null = null) {
+    retryCursor.current = nextCursor;
     setLoading(true);
     setError(null);
     try {
@@ -74,11 +90,24 @@ export function OperatorCatalogueList() {
       if (nextCursor) params.set("cursor", nextCursor);
       setPage(await apiFetch<OperatorListingPage>(`/api/operator/listings?${params}`));
       setCursor(nextCursor);
+      if (!nextCursor) setHistory(CursorHistory.firstPage());
+      return true;
     } catch (cause) {
       setError(errorMessage(cause));
+      return false;
     } finally {
       setLoading(false);
     }
+  }
+
+  async function nextPage() {
+    const next = page?.next_cursor;
+    if (!next || loading) return;
+    if (await load(next)) setHistory((current) => current.afterNext(next));
+  }
+  async function previousPage() {
+    if (!history.hasPrevious || loading) return;
+    if (await load(history.previous)) setHistory((current) => current.afterPrevious());
   }
 
   useEffect(() => {
@@ -150,56 +179,56 @@ export function OperatorCatalogueList() {
   }
 
   return (
-    <div className="operator-catalogue-page">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Platform catalogue</p>
-          <h2 id="operator-catalogue-heading">Listings</h2>
-          <p className="panel-intro">
-            Create and curate the listings Cliqero makes available to customers.
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/operator/catalogue/new">New listing</Link>
-        </Button>
-      </div>
-
-      <Card className="catalogue-toolbar">
-        <form
-          className="catalogue-filters"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void load();
-          }}
-        >
-          <label>
-            Search
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Title or description"
-            />
-          </label>
-          <label>
-            State
-            <Select value={state} onChange={(event) => setState(event.target.value)}>
-              <option value="">All states</option>
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-              <option value="archived">Archived</option>
-            </Select>
-          </label>
-          <Button type="submit" variant="secondary">
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Platform catalogue"
+        title="Listings"
+        description="Create and curate the listings Cliqero makes available to customers."
+        actions={
+          <Button asChild>
+            <Link href="/operator/catalogue/new">New listing</Link>
+          </Button>
+        }
+      />
+      <OperatorToolbar
+        onSubmit={(event) => {
+          event.preventDefault();
+          void load(null);
+        }}
+        actions={
+          <Button type="submit" variant="secondary" disabled={loading}>
             Apply filters
           </Button>
-          <HoneypotField />
-        </form>
-        <div className="catalogue-transfer">
-          <span className="eyebrow">Transfer</span>
-          <div className="catalogue-transfer-actions">
+        }
+      >
+        <OperatorFilterField label="Search" htmlFor="catalogue-search">
+          <Input
+            id="catalogue-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Title or description"
+          />
+        </OperatorFilterField>
+        <OperatorFilterField label="State" htmlFor="catalogue-state">
+          <Select
+            id="catalogue-state"
+            value={state}
+            onChange={(event) => setState(event.target.value)}
+          >
+            <option value="">All states</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+            <option value="archived">Archived</option>
+          </Select>
+        </OperatorFilterField>
+      </OperatorToolbar>
+      <details className="rounded-xl border border-slate-200 bg-white p-4">
+        <summary className="cursor-pointer font-medium text-slate-800">Import and export</summary>
+        <div className="mt-4 grid gap-4">
+          <div className="flex flex-wrap gap-2">
             {(["json", "csv", "yaml"] as const).map((format) => (
               <a
-                className="inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium hover:bg-slate-100"
+                className="rounded-md px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50"
                 href={`/api/operator/listings/export?format=${format}`}
                 key={format}
               >
@@ -207,11 +236,15 @@ export function OperatorCatalogueList() {
               </a>
             ))}
           </div>
-          <form className="catalogue-import" onSubmit={(event) => void importFile(event)}>
+          <form
+            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+            onSubmit={(event) => void importFile(event)}
+          >
             <Input
               type="file"
               name="file"
               accept=".json,.csv,.yaml,.yml,text/csv,application/json"
+              aria-label="Import file"
             />
             <Select name="format" defaultValue="json" aria-label="Import format">
               <option value="json">JSON</option>
@@ -233,99 +266,125 @@ export function OperatorCatalogueList() {
             </Toast>
           )}
         </div>
-      </Card>
-
-      {error && <Toast>{error}</Toast>}
-      {loading ? (
-        <div className="catalogue-list-grid" aria-label="Loading catalogue">
-          {Array.from({ length: 4 }, (_, index) => (
-            <Card className="catalogue-card" key={index}>
-              <Skeleton className="catalogue-skeleton" />
-            </Card>
-          ))}
-        </div>
-      ) : page?.items.length ? (
-        <>
-          <div className="catalogue-list-grid">
-            {page.items.map((listing) => (
-              <CatalogueCard key={listing.id} listing={listing} onAction={changeState} />
-            ))}
-          </div>
-          <div className="catalogue-pagination">
-            <span className="panel-note">Showing a bounded page, ordered newest first.</span>
-            {page.next_cursor && (
-              <Button variant="secondary" onClick={() => void load(page.next_cursor)}>
-                Next page
-              </Button>
-            )}
-          </div>
-        </>
-      ) : (
-        <Card>
-          <EmptyState
+      </details>
+      {error && <OperatorErrorState message={error} retry={() => void load(retryCursor.current)} />}
+      <OperatorSection
+        title="Catalogue"
+        description="Archive preserves the listing record; it does not hard-delete history."
+      >
+        {loading ? (
+          <OperatorLoadingState variant="table" columns={6} />
+        ) : page?.items.length ? (
+          <OperatorTableSurface
+            footer={
+              <OperatorPagination
+                hasPrevious={history.hasPrevious && !loading}
+                hasNext={Boolean(page.next_cursor) && !loading}
+                onPrevious={() => void previousPage()}
+                onNext={() => void nextPage()}
+              />
+            }
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Listing</TableHead>
+                  <TableHead>Destination / key</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead className="text-right">Price</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {page.items.map((listing) => (
+                  <TableRow key={listing.id}>
+                    <TableCell>
+                      <OperatorPrimaryCell
+                        title={
+                          <Link href={`/operator/catalogue/${listing.id}`}>{listing.title}</Link>
+                        }
+                        subtitle={listing.short_description || "No short description"}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <OperatorPrimaryCell
+                        title={listing.destination}
+                        subtitle={listing.external_key ?? undefined}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <OperatorStatusCell status={listing.state ?? "draft"} />
+                    </TableCell>
+                    <TableCell>
+                      <OperatorValueCell>
+                        {formatMinorUsd(listing.price.minor_amount)}
+                      </OperatorValueCell>
+                    </TableCell>
+                    <TableCell>
+                      <OperatorActionCell>
+                        <OperatorActionsMenu
+                          actions={[
+                            {
+                              type: "link",
+                              label: "View",
+                              href: `/operator/catalogue/${listing.id}`,
+                            },
+                            {
+                              type: "link",
+                              label: "Edit",
+                              href: `/operator/catalogue/${listing.id}`,
+                            },
+                            ...(listing.state === "draft"
+                              ? [
+                                  {
+                                    type: "action" as const,
+                                    label: "Publish",
+                                    onSelect: () => void changeState(listing, "publish"),
+                                  },
+                                ]
+                              : []),
+                            ...(listing.state === "published"
+                              ? [
+                                  {
+                                    type: "action" as const,
+                                    label: "Archive",
+                                    destructive: true,
+                                    onSelect: () => void changeState(listing, "archive"),
+                                  },
+                                ]
+                              : []),
+                            ...(listing.state === "archived"
+                              ? [
+                                  {
+                                    type: "action" as const,
+                                    label: "Restore",
+                                    onSelect: () => void changeState(listing, "restore"),
+                                  },
+                                ]
+                              : []),
+                          ]}
+                          label={`Actions for ${listing.title}`}
+                        />
+                      </OperatorActionCell>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </OperatorTableSurface>
+        ) : (
+          <OperatorEmptyState
             title="No listings found"
             description="Try another filter or create the first catalogue listing."
+            action={
+              <Button asChild>
+                <Link href="/operator/catalogue/new">New listing</Link>
+              </Button>
+            }
           />
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function CatalogueCard({
-  listing,
-  onAction,
-}: {
-  listing: OperatorListing;
-  onAction: (listing: OperatorListing, action: "publish" | "restore" | "archive") => Promise<void>;
-}) {
-  return (
-    <Card className="catalogue-card">
-      <div className="catalogue-card-media">
-        {listing.media[0] ? (
-          <img src={listing.media[0].url} alt={listing.media[0].alt_text || ""} />
-        ) : (
-          <span aria-hidden="true">C</span>
         )}
-      </div>
-      <div className="catalogue-card-content">
-        <div className="catalogue-card-title-row">
-          <h3>{listing.title}</h3>
-          <Badge variant={listing.state === "published" ? "default" : "secondary"}>
-            {listing.state ?? "draft"}
-          </Badge>
-        </div>
-        <p className="catalogue-card-description">
-          {listing.short_description || "No short description provided."}
-        </p>
-        <strong className="catalogue-card-price">
-          {formatMinorUsd(listing.price.minor_amount)}
-        </strong>
-        {listing.external_key && (
-          <p className="catalogue-card-key">External key: {listing.external_key}</p>
-        )}
-        <div className="catalogue-card-actions">
-          <Button asChild variant="secondary">
-            <Link href={`/operator/catalogue/${listing.id}`}>Edit</Link>
-          </Button>
-          {listing.state === "draft" && (
-            <Button variant="default" onClick={() => void onAction(listing, "publish")}>
-              Publish
-            </Button>
-          )}
-          {listing.state === "archived" && (
-            <Button variant="secondary" onClick={() => void onAction(listing, "restore")}>
-              Restore
-            </Button>
-          )}
-          {listing.state === "published" && (
-            <Button variant="destructive" onClick={() => void onAction(listing, "archive")}>
-              Archive
-            </Button>
-          )}
-        </div>
-      </div>
-    </Card>
+      </OperatorSection>
+    </OperatorPage>
   );
 }
 
@@ -416,27 +475,29 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
 
   if (loading)
     return (
-      <Card>
-        <Skeleton className="catalogue-editor-skeleton" />
-      </Card>
+      <OperatorPage>
+        <OperatorLoadingState variant="section" label="Loading listing" />
+      </OperatorPage>
     );
   return (
-    <div className="operator-catalogue-page">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">{editing ? "Catalogue listing" : "New catalogue listing"}</p>
-          <h2>{editing ? "Edit listing" : "Create listing"}</h2>
-          <p className="panel-intro">
-            Listings are managed by Cliqero. No seller or payee is selected here.
-          </p>
-        </div>
-        <Button asChild variant="ghost">
-          <Link href="/operator/catalogue">Back to catalogue</Link>
-        </Button>
-      </div>
-      {error && <Toast>{error}</Toast>}
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow={editing ? "Catalogue listing" : "New catalogue listing"}
+        title={editing ? "Edit listing" : "Create listing"}
+        description="Listings are managed by Cliqero. No seller or payee is selected here."
+        actions={
+          <Button asChild variant="ghost">
+            <Link href="/operator/catalogue">Back to catalogue</Link>
+          </Button>
+        }
+      />
+      {error && <OperatorErrorState message={error} />}
       {saved && <Toast tone="success">Listing saved.</Toast>}
-      <Card>
+      <OperatorSection
+        title={editing ? "Listing details" : "New listing details"}
+        description="Save catalogue fields through the existing listing workflow."
+        surface
+      >
         <form className="catalogue-editor-form" onSubmit={save}>
           <label>
             Title
@@ -516,14 +577,14 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           </Button>
           <HoneypotField />
         </form>
-      </Card>
+      </OperatorSection>
       {editing && listing && (
         <>
           <CatalogueMedia listing={listing} onChange={setListing} />
           <CatalogueIntegrations listingId={listing.id} />
         </>
       )}
-    </div>
+    </OperatorPage>
   );
 }
 
@@ -603,18 +664,12 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
     }
   }
   return (
-    <Card className="catalogue-media-panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Access integration</p>
-          <h3>Listing credentials</h3>
-          <p className="panel-note">
-            Credentials let an external destination verify an entitled buyer. Secrets are shown
-            once.
-          </p>
-        </div>
-      </div>
-      {error && <Toast>{error}</Toast>}
+    <OperatorSection
+      title="Listing credentials"
+      description="Credentials let an external destination verify an entitled buyer. Secrets are shown once."
+      surface
+    >
+      {error && <OperatorErrorState message={error} />}
       {secret && (
         <Toast tone="success">
           <strong>Copy this credential now:</strong>
@@ -667,12 +722,12 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
           ))}
         </div>
       ) : (
-        <EmptyState
+        <OperatorEmptyState
           title="No access credentials"
           description="Create one when this listing needs an external access verifier."
         />
       )}
-    </Card>
+    </OperatorSection>
   );
 }
 
@@ -744,14 +799,8 @@ function CatalogueMedia({
     }
   }
   return (
-    <Card className="catalogue-media-panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Listing media</p>
-          <h3>Images</h3>
-        </div>
-      </div>
-      {error && <Toast>{error}</Toast>}
+    <OperatorSection title="Listing images" surface>
+      {error && <OperatorErrorState message={error} />}
       <form className="media-upload-form" onSubmit={(event) => void upload(event)}>
         <Input name="file" type="file" accept="image/*" required />
         <Button type="submit" variant="secondary" disabled={busy}>
@@ -783,11 +832,11 @@ function CatalogueMedia({
           ))}
         </div>
       ) : (
-        <EmptyState
+        <OperatorEmptyState
           title="No media yet"
           description="Add a browser-renderable image to improve the public listing."
         />
       )}
-    </Card>
+    </OperatorSection>
   );
 }

@@ -10,14 +10,13 @@ import {
   type OperatorAccountPage,
 } from "@/lib/api-client";
 import { Button } from "../ui/button";
-import { Card } from "../ui/card";
-import { HoneypotField } from "../honeypot-field";
 import { Input } from "../ui/input";
-import { Skeleton } from "../ui/skeleton";
-import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
 import { HierarchyGraph } from "../hierarchy/graph";
 import { mergeHierarchyChildren } from "../hierarchy/graph/model";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorLoadingState } from "./ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -103,72 +102,71 @@ export function OperatorNetwork() {
 
   if (loading)
     return (
-      <Card aria-label="Loading network">
-        <Skeleton className="hierarchy-skeleton" />
-      </Card>
+      <OperatorPage>
+        <OperatorPageHeader eyebrow="Network operations" title="Referral network" />
+        <OperatorLoadingState variant="section" label="Loading referral network" />
+      </OperatorPage>
     );
   if (!tree || !selfId)
     return (
-      <Card>
-        <EmptyState
+      <OperatorPage>
+        <OperatorPageHeader eyebrow="Network operations" title="Referral network" />
+        <OperatorErrorState
           title="Network unavailable"
-          description={error || "Try refreshing the network."}
+          message={error || "Try refreshing the network."}
+          retry={() => void load()}
         />
-        <Button variant="secondary" onClick={() => void load()}>
-          Retry
-        </Button>
-      </Card>
+      </OperatorPage>
     );
   return (
-    <div className="operator-network-page">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Network operations</p>
-          <h2 id="operator-network-heading">Referral network</h2>
-          <p className="panel-intro">
-            Inspect any account branch in bounded windows. Relationships change only through
-            explicit reassignment.
-          </p>
-        </div>
-        <Button variant="secondary" onClick={() => void load()} disabled={loading}>
-          Refresh
-        </Button>
-      </div>
-      {error && <Toast>{error}</Toast>}
-      <Card className="operator-network-search">
-        <form
-          className="catalogue-filters"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void searchAccounts();
-          }}
-        >
-          <label>
-            Find an account
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Username, email, or account ID"
-            />
-          </label>
-          <Button type="submit" variant="secondary">
-            Search network
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Network operations"
+        title="Referral network"
+        description="Inspect any account branch in bounded windows. Relationships change only through explicit reassignment."
+        actions={
+          <Button variant="secondary" onClick={() => void load()} disabled={loading}>
+            Refresh
           </Button>
-          <HoneypotField />
-        </form>
-        {results.length > 0 && (
-          <ul className="operator-search-results">
-            {results.map((result) => (
-              <li key={result.id}>
-                <button type="button" onClick={() => openRoot(result.id)}>
-                  <strong>@{result.username}</strong>
-                  <span>{result.displayName || result.email}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+        }
+      />
+      {error && <OperatorErrorState message={error} />}
+      <OperatorToolbar
+        onSubmit={(event) => {
+          event.preventDefault();
+          void searchAccounts();
+        }}
+        actions={
+          <Button type="submit" variant="secondary">
+            Search
+          </Button>
+        }
+      >
+        <OperatorFilterField label="Find an account" htmlFor="operator-network-search">
+          <Input
+            id="operator-network-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Username, email, or account ID"
+          />
+        </OperatorFilterField>
+      </OperatorToolbar>
+      {results.length > 0 && (
+        <ul className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
+          {results.map((result) => (
+            <li key={result.id}>
+              <button
+                className="w-full rounded-lg border border-slate-200 p-3 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                type="button"
+                onClick={() => openRoot(result.id)}
+              >
+                <strong className="block">@{result.username}</strong>
+                <span className="text-sm text-slate-600">{result.displayName || result.email}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <HierarchyGraph
         tree={tree}
         selfAccountId={selfId}
@@ -180,6 +178,6 @@ export function OperatorNetwork() {
         onViewUser={(id) => router.push(`/operator/users/${id}`)}
         onReassignParent={(id) => router.push(`/operator/users/${id}`)}
       />
-    </div>
+    </OperatorPage>
   );
 }

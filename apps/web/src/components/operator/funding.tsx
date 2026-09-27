@@ -1,24 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   apiFetch,
-  type OperatorFunding,
   type OperatorFundingDetail as FundingDetail,
   type OperatorFundingPage,
   type OperatorFundingState,
 } from "@/lib/api-client";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card } from "../ui/card";
-import { HoneypotField } from "../honeypot-field";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
-import { Skeleton } from "../ui/skeleton";
-import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
 import { Money } from "../money";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { CursorHistory } from "./ui/cursor-history";
+import { OperatorActionsMenu } from "./ui/actions-menu";
+import {
+  OperatorActionCell,
+  OperatorPrimaryCell,
+  OperatorStatusCell,
+  OperatorValueCell,
+} from "./ui/data-cells";
+import { OperatorEmptyState } from "./ui/empty-state";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorLoadingState } from "./ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { OperatorPagination } from "./ui/pagination";
+import { OperatorSection } from "./ui/section";
+import { OperatorTableSurface } from "./ui/table-surface";
+import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
 
 const states: Array<{ value: OperatorFundingState; label: string }> = [
   { value: "initialization_pending", label: "Initialization pending" },
@@ -34,13 +44,6 @@ const states: Array<{ value: OperatorFundingState; label: string }> = [
 
 function stateLabel(state: OperatorFundingState) {
   return states.find((item) => item.value === state)?.label ?? state;
-}
-
-function stateTone(state: OperatorFundingState): "secondary" | "destructive" | "default" {
-  if (state === "confirmed") return "default";
-  if (state === "failed" || state === "blocked" || state === "reconciliation_pending")
-    return "destructive";
-  return "secondary";
 }
 
 function formatDate(value: string | null) {
@@ -78,10 +81,16 @@ export function OperatorFundingList() {
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorFundingState | "">("");
   const [provider, setProvider] = useState("");
+  const [history, setHistory] = useState(() => CursorHistory.firstPage());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const busy = useRef(false);
+  const retryCursor = useRef<string | null>(null);
 
-  async function load(cursor?: string | null) {
+  async function load(cursor: string | null = null) {
+    if (busy.current) return null;
+    busy.current = true;
+    retryCursor.current = cursor;
     setLoading(true);
     setError(null);
     try {
@@ -90,10 +99,15 @@ export function OperatorFundingList() {
       if (state) params.set("state", state);
       if (provider.trim()) params.set("provider", provider.trim());
       if (cursor) params.set("cursor", cursor);
-      setPage(await apiFetch<OperatorFundingPage>(`/api/operator/funding?${params}`));
+      const result = await apiFetch<OperatorFundingPage>(`/api/operator/funding?${params}`);
+      setPage(result);
+      if (!cursor) setHistory(CursorHistory.firstPage());
+      return result;
     } catch (cause) {
       setError(errorMessage(cause));
+      return null;
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   }
@@ -105,138 +119,186 @@ export function OperatorFundingList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function next() {
+    const cursor = page?.nextCursor;
+    if (!cursor || busy.current) return;
+    if (await load(cursor)) setHistory((current) => current.afterNext(cursor));
+  }
+  async function previous() {
+    if (!history.hasPrevious || busy.current) return;
+    if (await load(history.previous)) setHistory((current) => current.afterPrevious());
+  }
+
   return (
-    <div className="operator-funding-page">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Funding operations</p>
-          <h2 id="operator-funding-heading">Wallet funding</h2>
-          <p className="panel-intro">
-            Inspect provider-backed wallet funding without changing financial facts or confirming
-            payments manually.
-          </p>
-        </div>
-      </div>
-      <Card className="operator-funding-toolbar">
-        <form
-          className="operator-funding-filters"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void load();
-          }}
-        >
-          <label>
-            Search funding, reference, or account
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Funding ID, provider reference, username, email"
-            />
-          </label>
-          <label>
-            State
-            <Select
-              value={state}
-              onChange={(event) => setState(event.target.value as OperatorFundingState | "")}
-            >
-              <option value="">All states</option>
-              {states.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label>
-            Provider
-            <Input
-              value={provider}
-              onChange={(event) => setProvider(event.target.value)}
-              placeholder="development"
-            />
-          </label>
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Funding operations"
+        title="Wallet funding"
+        description="Inspect provider-backed wallet funding without changing financial facts or confirming payments manually."
+      />
+      <OperatorToolbar
+        onSubmit={(event) => {
+          event.preventDefault();
+          void load(null);
+        }}
+        actions={
           <Button type="submit" variant="secondary" disabled={loading}>
-            {loading ? "Loading…" : "Apply filters"}
+            Apply filters
           </Button>
-          <HoneypotField />
-        </form>
-      </Card>
-      {error && <Toast>{error}</Toast>}
-      {loading && !page ? (
-        <div className="operator-funding-list" aria-label="Loading funding">
-          {[1, 2, 3].map((item) => (
-            <Card key={item}>
-              <Skeleton className="operator-funding-skeleton" />
-            </Card>
-          ))}
-        </div>
-      ) : page?.items.length ? (
-        <>
-          <div className="operator-funding-list">
-            {page.items.map((funding) => (
-              <FundingRow funding={funding} key={funding.id} />
-            ))}
-          </div>
-          {page.nextCursor && (
-            <Button
-              variant="secondary"
-              onClick={() => void load(page.nextCursor)}
-              disabled={loading}
-            >
-              {loading ? "Loading…" : "Next page"}
-            </Button>
-          )}
-        </>
-      ) : (
-        <Card>
-          <EmptyState
-            title="No funding transactions found"
-            description="Try a different search or state filter. Empty results do not indicate a funding failure."
+        }
+      >
+        <OperatorFilterField label="Funding, reference, or account" htmlFor="funding-search">
+          <Input
+            id="funding-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Funding ID, reference, username, email"
           />
-        </Card>
-      )}
-    </div>
+        </OperatorFilterField>
+        <OperatorFilterField label="State" htmlFor="funding-state">
+          <Select
+            id="funding-state"
+            value={state}
+            onChange={(event) => setState(event.target.value as OperatorFundingState | "")}
+          >
+            <option value="">All states</option>
+            {states.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </Select>
+        </OperatorFilterField>
+        <OperatorFilterField label="Provider" htmlFor="funding-provider">
+          <Input
+            id="funding-provider"
+            value={provider}
+            onChange={(event) => setProvider(event.target.value)}
+            placeholder="Provider name"
+          />
+        </OperatorFilterField>
+      </OperatorToolbar>
+      {error && <OperatorErrorState message={error} retry={() => void load(retryCursor.current)} />}
+      <OperatorSection
+        title="Funding records"
+        description="Provider facts, evidence, and wallet-credit state are inspected without deleting financial history."
+      >
+        {loading && !page ? (
+          <OperatorLoadingState variant="table" columns={6} />
+        ) : page?.items.length ? (
+          <OperatorTableSurface
+            footer={
+              <OperatorPagination
+                hasPrevious={history.hasPrevious && !loading}
+                hasNext={Boolean(page.nextCursor) && !loading}
+                onPrevious={() => void previous()}
+                onNext={() => void next()}
+              />
+            }
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Provider / reference</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Credit</TableHead>
+                  <TableHead className="text-right">Funding</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {page.items.map((funding) => (
+                  <TableRow key={funding.id}>
+                    <TableCell>
+                      <OperatorPrimaryCell
+                        title={
+                          <Link href={`/operator/users/${funding.account.id}`}>
+                            @{funding.account.username}
+                          </Link>
+                        }
+                        subtitle={funding.account.email ?? funding.account.id}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <OperatorPrimaryCell
+                        title={funding.provider}
+                        subtitle={funding.providerReference}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <OperatorStatusCell
+                        status={funding.state}
+                        label={stateLabel(funding.state)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {funding.walletCredit ? (
+                        <OperatorStatusCell status={funding.walletCredit.state} />
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <OperatorValueCell>
+                        <Money minor={funding.canonicalAmountMinor} />{" "}
+                        <span className="text-xs text-slate-500">
+                          (
+                          <Money
+                            minor={funding.collectionAmountMinor}
+                            currency={funding.collectionCurrency}
+                          />
+                          )
+                        </span>
+                      </OperatorValueCell>
+                    </TableCell>
+                    <TableCell>
+                      <OperatorActionCell>
+                        <OperatorActionsMenu
+                          actions={[
+                            {
+                              type: "link",
+                              label: "Inspect funding",
+                              href: `/operator/funding/${funding.id}`,
+                            },
+                            {
+                              type: "link",
+                              label: "View account",
+                              href: `/operator/users/${funding.account.id}`,
+                            },
+                          ]}
+                          label={`Actions for funding ${funding.id}`}
+                        />
+                      </OperatorActionCell>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </OperatorTableSurface>
+        ) : (
+          <OperatorEmptyState
+            title="No funding transactions found"
+            description="Try another search or state filter. Empty results do not indicate a funding failure."
+          />
+        )}
+      </OperatorSection>
+    </OperatorPage>
   );
 }
 
-function FundingRow({ funding }: { funding: OperatorFunding }) {
-  return (
-    <Card className="operator-funding-row">
-      <div className="operator-funding-row-main">
-        <div className="operator-funding-identity">
-          <strong>@{funding.account.username}</strong>
-          <span>{funding.account.email ?? "No authentication email"}</span>
-          <Link href={`/operator/users/${funding.account.id}`}>View account</Link>
-        </div>
-        <div className="operator-funding-amounts">
-          <span>
-            <small>Canonical USD</small>
-            <Money minor={funding.canonicalAmountMinor} />
-          </span>
-          <span>
-            <small>Collected</small>
-            <Money minor={funding.collectionAmountMinor} currency={funding.collectionCurrency} />
-          </span>
-        </div>
-      </div>
-      <div className="operator-funding-row-meta">
-        <Badge variant={stateTone(funding.state)}>{stateLabel(funding.state)}</Badge>
-        <span>{funding.provider}</span>
-        <span className="break-value">{funding.providerReference}</span>
-        <span>Credit: {funding.walletCredit ? funding.walletCredit.state : "none"}</span>
-        <Button asChild variant="ghost">
-          <Link href={`/operator/funding/${funding.id}`}>Inspect</Link>
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
-export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
+export function OperatorFundingDetail({
+  fundingId,
+  canManage = false,
+}: {
+  fundingId: string;
+  canManage?: boolean;
+}) {
   const [funding, setFunding] = useState<FundingDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -268,36 +330,63 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
     }
   }
 
+  async function confirmBankTransfer() {
+    if (!funding || !canManage || !window.confirm("Confirm that this bank transfer was received?"))
+      return;
+    setConfirming(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/operator/funding/${funding.id}/confirm-bank-transfer`, {
+        method: "POST",
+      });
+      await load();
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setConfirming(false);
+    }
+  }
+
   if (loading && !funding)
     return (
-      <Card aria-label="Loading funding detail">
-        <Skeleton className="operator-funding-detail-skeleton" />
-      </Card>
+      <OperatorPage>
+        <OperatorLoadingState variant="section" label="Loading funding detail" />
+      </OperatorPage>
     );
   if (!funding)
     return (
-      <Card>
-        <EmptyState
+      <OperatorPage>
+        <OperatorErrorState
           title="Funding unavailable"
-          description={error || "This funding record was not found."}
+          message={error || "This funding record was not found."}
+          retry={() => void load()}
         />
-      </Card>
+      </OperatorPage>
     );
 
   return (
-    <div className="operator-funding-detail">
-      <div className="operator-heading">
-        <div>
-          <p className="eyebrow">Funding fact</p>
-          <h2>Wallet funding inspection</h2>
-          <p className="panel-intro break-value">{funding.id}</p>
-        </div>
-        <Badge variant={stateTone(funding.state)}>{stateLabel(funding.state)}</Badge>
-      </div>
-      {error && <Toast>{error}</Toast>}
-      <div className="operator-funding-detail-grid">
-        <Card>
-          <h3>Funding fact</h3>
+    <OperatorPage>
+      <OperatorPageHeader
+        eyebrow="Funding fact"
+        title="Wallet funding inspection"
+        description={funding.id}
+        actions={<OperatorStatusCell status={funding.state} label={stateLabel(funding.state)} />}
+      />
+      {error && <OperatorErrorState message={error} />}
+      {canManage &&
+        funding.provider === "bank_transfer" &&
+        (funding.state === "awaiting_payment" || funding.state === "verification_pending") && (
+          <OperatorSection
+            title="Manual bank verification"
+            description="Confirm only after independently verifying the transfer in the receiving account."
+          >
+            <Button type="button" disabled={confirming} onClick={() => void confirmBankTransfer()}>
+              {confirming ? "Confirming…" : "Confirm received transfer"}
+            </Button>
+          </OperatorSection>
+        )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <OperatorSection title="Funding fact" surface>
           <dl className="detail-list">
             <div>
               <dt>Account</dt>
@@ -341,9 +430,8 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
               <dd>{formatDate(funding.confirmedAt)}</dd>
             </div>
           </dl>
-        </Card>
-        <Card>
-          <h3>Amounts</h3>
+        </OperatorSection>
+        <OperatorSection title="Amounts and wallet consequence" surface>
           <dl className="detail-list">
             <div>
               <dt>Canonical amount</dt>
@@ -365,24 +453,20 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
               <dd>{funding.collectionCurrency}</dd>
             </div>
           </dl>
-          <h3>Wallet consequence</h3>
           {funding.walletCredit ? (
             <p className="operator-funding-credit-status">
-              <Badge variant={funding.walletCredit.state === "available" ? "default" : "secondary"}>
-                {funding.walletCredit.state}
-              </Badge>{" "}
-              credit · <Money minor={funding.walletCredit.amountMinor} />
+              <OperatorStatusCell status={funding.walletCredit.state} /> credit ·{" "}
+              <Money minor={funding.walletCredit.amountMinor} />
               {funding.walletCredit.availableAt &&
                 ` · available ${formatDate(funding.walletCredit.availableAt)}`}
             </p>
           ) : (
             <p className="panel-intro">No wallet credit has been created.</p>
           )}
-        </Card>
+        </OperatorSection>
       </div>
       {funding.conversionSnapshot && (
-        <Card>
-          <h3>Conversion snapshot</h3>
+        <OperatorSection title="Conversion snapshot" surface>
           <dl className="detail-list">
             <div>
               <dt>Pair</dt>
@@ -407,11 +491,10 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
               <dd>{formatDate(funding.conversionSnapshot.observedAt)}</dd>
             </div>
           </dl>
-        </Card>
+        </OperatorSection>
       )}
       {funding.evidence && (
-        <Card>
-          <h3>Bank-transfer evidence</h3>
+        <OperatorSection title="Bank-transfer evidence" surface>
           <dl className="detail-list">
             {operatorBankTransferEvidenceRows(funding.evidence).map((row) => (
               <div key={row.label}>
@@ -424,18 +507,16 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
             Proof viewing is not available from this operator screen; review the recorded metadata
             or use the configured secure retrieval mechanism when one is provided.
           </p>
-        </Card>
+        </OperatorSection>
       )}
-      <Card>
-        <h3>Provider initialization</h3>
+      <OperatorSection title="Provider initialization" surface>
         <p className="panel-intro">
           {funding.providerInitialization?.authorizationUrl
             ? "An authorization URL was persisted for the provider flow. It is intentionally not exposed as an operator action."
             : "No provider authorization URL is persisted."}
         </p>
-      </Card>
-      <Card>
-        <h3>Provider operations</h3>
+      </OperatorSection>
+      <OperatorSection title="Provider operations" surface>
         {funding.operations.length ? (
           <div className="operator-funding-operation-list">
             {funding.operations.map((operation) => (
@@ -444,9 +525,7 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
                   <strong>{operation.operation}</strong>
                   <span>{formatDate(operation.occurredAt)}</span>
                 </div>
-                <Badge variant={operation.outcome === "succeeded" ? "default" : "destructive"}>
-                  {operation.outcome}
-                </Badge>
+                <OperatorStatusCell status={operation.outcome} />
                 <p>{operation.providerMessage || operation.failureKind || "No provider message"}</p>
               </div>
             ))}
@@ -454,9 +533,8 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
         ) : (
           <p className="panel-intro">No provider operations recorded.</p>
         )}
-      </Card>
-      <Card>
-        <h3>Provider events</h3>
+      </OperatorSection>
+      <OperatorSection title="Provider events" surface>
         {funding.events.length ? (
           <div className="operator-funding-operation-list">
             {funding.events.map((event) => (
@@ -465,17 +543,7 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
                   <strong>{event.eventType}</strong>
                   <span>{formatDate(event.receivedAt)}</span>
                 </div>
-                <Badge
-                  variant={
-                    event.state === "processed"
-                      ? "default"
-                      : event.state === "rejected"
-                        ? "destructive"
-                        : "secondary"
-                  }
-                >
-                  {event.state}
-                </Badge>
+                <OperatorStatusCell status={event.state} />
                 <p>{event.lastError || `Outbox: ${event.outboxState || "not recorded"}`}</p>
               </div>
             ))}
@@ -483,10 +551,10 @@ export function OperatorFundingDetail({ fundingId }: { fundingId: string }) {
         ) : (
           <p className="panel-intro">No correlated provider events recorded.</p>
         )}
-      </Card>
+      </OperatorSection>
       <Button variant="secondary" onClick={() => void load()} disabled={loading}>
         {loading ? "Refreshing…" : "Refresh detail"}
       </Button>
-    </div>
+    </OperatorPage>
   );
 }
