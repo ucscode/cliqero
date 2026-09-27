@@ -34,6 +34,7 @@ import {
 } from "../ui/sidebar";
 import { BrandLink } from "../brand-identity";
 import { hasCapability, type Capability } from "@/modules/identity/capabilities";
+import { OperatorMetricCard } from "./ui/metric-card";
 
 export function OperatorShell({
   capabilities,
@@ -166,7 +167,9 @@ export function OperatorShell({
               <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
                 Operations
               </span>
-              <Badge variant="destructive">Operator</Badge>
+              <Badge variant="secondary" className="w-fit">
+                Operator
+              </Badge>
             </div>
             <SidebarGroup>
               <SidebarGroupLabel>Workspace</SidebarGroupLabel>
@@ -229,64 +232,66 @@ export function OperatorShell({
               </DropdownMenuContent>
             </DropdownMenu>
           </header>
-          <main className="min-w-0 space-y-6 p-4 lg:p-8">
-            {children ?? (
-              <section aria-labelledby="operator-overview-heading">
-                <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+          <main className="min-w-0 p-4 lg:p-8">
+            <div className="mx-auto w-full max-w-[1600px] space-y-6">
+              {children ?? (
+                <section aria-labelledby="operator-overview-heading">
+                  <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                        {hasCapability(capabilities, "system.root")
+                          ? "Platform operations"
+                          : "Authorized operations"}
+                      </p>
+                      <h2
+                        id="operator-overview-heading"
+                        className="text-2xl font-semibold text-slate-900"
+                      >
+                        {hasCapability(capabilities, "system.root")
+                          ? "A clear view of the platform"
+                          : "A focused operational view"}
+                      </h2>
+                      <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                        Authoritative operational counts from Cliqero services.
+                      </p>
+                    </div>
+                    <Badge variant="default">
                       {hasCapability(capabilities, "system.root")
-                        ? "Platform operations"
-                        : "Authorized operations"}
-                    </p>
-                    <h2
-                      id="operator-overview-heading"
-                      className="text-2xl font-semibold text-slate-900"
+                        ? "Full operator access"
+                        : "Direct capabilities"}
+                    </Badge>
+                  </div>
+                  {error && <Toast>{error}</Toast>}
+                  {loading ? (
+                    <div
+                      className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                      aria-label="Loading overview"
                     >
-                      {hasCapability(capabilities, "system.root")
-                        ? "A clear view of the platform"
-                        : "A focused operational view"}
-                    </h2>
-                    <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                      Authoritative operational counts from Cliqero services.
-                    </p>
-                  </div>
-                  <Badge variant="default">
-                    {hasCapability(capabilities, "system.root")
-                      ? "Full operator access"
-                      : "Direct capabilities"}
-                  </Badge>
-                </div>
-                {error && <Toast>{error}</Toast>}
-                {loading ? (
-                  <div
-                    className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-                    aria-label="Loading overview"
-                  >
-                    {Array.from(
-                      { length: hasCapability(capabilities, "system.root") ? 7 : 3 },
-                      (_, index) => (
-                        <Card className="p-6" key={index}>
-                          <Skeleton className="h-24 w-full" />
-                        </Card>
-                      ),
-                    )}
-                  </div>
-                ) : overview ? (
-                  <OverviewMetrics overview={overview} />
-                ) : (
-                  <Card className="p-6">
-                    <EmptyState
-                      title="Overview unavailable"
-                      description="Try refreshing this page."
-                    />
-                    <Button variant="secondary" onClick={() => window.location.reload()}>
-                      Refresh
-                    </Button>
-                  </Card>
-                )}
-              </section>
-            )}
+                      {Array.from(
+                        { length: hasCapability(capabilities, "system.root") ? 7 : 3 },
+                        (_, index) => (
+                          <Card className="p-6" key={index}>
+                            <Skeleton className="h-24 w-full" />
+                          </Card>
+                        ),
+                      )}
+                    </div>
+                  ) : overview ? (
+                    <OverviewMetrics overview={overview} />
+                  ) : (
+                    <Card className="p-6">
+                      <EmptyState
+                        title="Overview unavailable"
+                        description="Try refreshing this page."
+                      />
+                      <Button variant="secondary" onClick={() => window.location.reload()}>
+                        Refresh
+                      </Button>
+                    </Card>
+                  )}
+                </section>
+              )}
+            </div>
           </main>
         </SidebarInset>
       </div>
@@ -311,13 +316,12 @@ function OverviewMetrics({ overview }: { overview: OperatorOverview }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {cards.map(([label, value, group]) => (
-        <Card className="p-6" key={label}>
-          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">{group}</p>
-          <p className="mt-3 text-3xl font-semibold text-slate-900">
-            {value.toLocaleString("en-US")}
-          </p>
-          <p className="mt-1 text-sm text-slate-600">{label}</p>
-        </Card>
+        <OperatorMetricCard
+          key={label}
+          label={label}
+          value={value.toLocaleString("en-US")}
+          category={group}
+        />
       ))}
     </div>
   );
