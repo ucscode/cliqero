@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  dashboardSectionTitle,
-  nextNavigationGroupOpen,
-  resolveDashboardSection,
-  resolveNavigationGroupOpen,
-} from "@/components/dashboard/navigation";
+import { dashboardSectionTitle, resolveDashboardSection } from "@/components/dashboard/navigation";
+import { resolveSidebarGroupOpen, toggleSidebarGroupOpen } from "@/components/sidebar/nav-group";
 
 const source = readFileSync(
   resolve(process.cwd(), "src/components/dashboard/navigation.tsx"),
@@ -14,6 +10,10 @@ const source = readFileSync(
 );
 const shellSource = readFileSync(
   resolve(process.cwd(), "src/components/dashboard/shell.tsx"),
+  "utf8",
+);
+const sharedNavigationSource = readFileSync(
+  resolve(process.cwd(), "src/components/sidebar/nav-group.tsx"),
   "utf8",
 );
 
@@ -101,26 +101,27 @@ describe("dashboard navigation", () => {
   });
 
   it("defaults active groups open while allowing explicit collapse and reopen", () => {
-    expect(resolveNavigationGroupOpen(true, null)).toBe(true);
-    expect(nextNavigationGroupOpen(true, null)).toBe(false);
-    expect(resolveNavigationGroupOpen(true, false)).toBe(false);
-    expect(nextNavigationGroupOpen(true, false)).toBe(true);
-    expect(resolveNavigationGroupOpen(true, true)).toBe(true);
-    expect(resolveNavigationGroupOpen(false, null)).toBe(false);
+    expect(resolveSidebarGroupOpen(true, null)).toBe(true);
+    expect(toggleSidebarGroupOpen(true, null)).toBe(false);
+    expect(resolveSidebarGroupOpen(true, false)).toBe(false);
+    expect(toggleSidebarGroupOpen(true, false)).toBe(true);
+    expect(resolveSidebarGroupOpen(true, true)).toBe(true);
+    expect(resolveSidebarGroupOpen(false, null)).toBe(false);
   });
 
   it("opens a group naturally when navigation activates it", () => {
     expect(source).toContain("key={`Money-${section}`}");
     expect(source).toContain("key={`Referrals-${section}`}");
-    expect(resolveNavigationGroupOpen(true, null)).toBe(true);
+    expect(resolveSidebarGroupOpen(true, null)).toBe(true);
   });
 
   it("keeps parent toggles understated and synchronizes accessibility and chevron state", () => {
-    expect(source).toContain('type="button"');
-    expect(source).toContain("aria-expanded={open}");
-    expect(source).toContain('${open ? "rotate-180" : ""}');
-    expect(source).toContain("isActive={section === item.section}");
-    expect(source).toContain('className={active ? "bg-emerald-50');
-    expect(source).not.toContain("isActive={active}");
+    expect(sharedNavigationSource).toContain('type="button"');
+    expect(sharedNavigationSource).toContain("aria-expanded={open}");
+    expect(sharedNavigationSource).toContain('${open ? "rotate-180" : ""}');
+    expect(sharedNavigationSource).toContain("isActive={activeKey === item.key}");
+    expect(sharedNavigationSource).toContain('className={active ? "bg-emerald-50');
+    expect(source).toContain("key={`Money-${section}`}");
+    expect(source).toContain("<SidebarNavGroup");
   });
 });

@@ -28,6 +28,8 @@ COPY --from=build /workspace/apps/web/.next/static ./apps/web/.next/static
 # Web-owned informational MDX is repository-owned runtime content. Bake it into
 # the production image; development bind-mounts the same directory for live edits.
 COPY --from=build /workspace/apps/web/content ./apps/web/content
+# Blog SQLite migrations are runtime files used to upgrade the persistent blog database.
+COPY --from=build /workspace/apps/web/src/infrastructure/blog/migrations ./apps/web/src/infrastructure/blog/migrations
 # Reference data is loaded at runtime by the application and is not guaranteed to
 # be included in Next.js standalone output, so copy the app-owned data explicitly.
 COPY --from=build /workspace/apps/web/data ./apps/web/data

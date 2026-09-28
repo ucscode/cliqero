@@ -2,16 +2,22 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const PREVIEW_LIFETIME_SECONDS = 5 * 60;
 
-type PreviewClaims = { postId: string; accountId: string; expiresAt: number };
+type PreviewClaims = { postId: string; revisionId: string; accountId: string; expiresAt: number };
 
 export function issueBlogPreviewToken(
   postId: string,
+  revisionId: string,
   accountId: string,
   secret: string,
   nowSeconds = Math.floor(Date.now() / 1000),
 ) {
   const payload = Buffer.from(
-    JSON.stringify({ postId, accountId, expiresAt: nowSeconds + PREVIEW_LIFETIME_SECONDS }),
+    JSON.stringify({
+      postId,
+      revisionId,
+      accountId,
+      expiresAt: nowSeconds + PREVIEW_LIFETIME_SECONDS,
+    }),
   ).toString("base64url");
   const signature = createHmac("sha256", secret).update(payload).digest("base64url");
   return `${payload}.${signature}`;
@@ -20,6 +26,7 @@ export function issueBlogPreviewToken(
 export function verifyBlogPreviewToken(
   token: string,
   postId: string,
+  revisionId: string,
   accountId: string,
   secret: string,
   nowSeconds = Math.floor(Date.now() / 1000),
@@ -45,6 +52,7 @@ export function verifyBlogPreviewToken(
     const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as PreviewClaims;
     return (
       claims.postId === postId &&
+      claims.revisionId === revisionId &&
       claims.accountId === accountId &&
       Number.isSafeInteger(claims.expiresAt) &&
       claims.expiresAt > nowSeconds

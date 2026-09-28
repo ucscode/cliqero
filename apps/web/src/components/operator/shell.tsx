@@ -34,6 +34,7 @@ import { OperatorEmptyState } from "./ui/empty-state";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorLoadingState } from "./ui/loading-state";
 import { OperatorPage, OperatorPageHeader } from "./ui/page";
+import { SidebarNavGroup, type SidebarNavItem } from "../sidebar/nav-group";
 
 export function OperatorShell({
   capabilities,
@@ -94,12 +95,6 @@ export function OperatorShell({
   const navigation = [
     { key: "overview", href: "/operator", label: "Overview", visible: true },
     {
-      key: "catalogue",
-      href: "/operator/catalogue",
-      label: "Catalogue",
-      visible: hasCapability(capabilities, "catalogue.manage"),
-    },
-    {
       key: "users",
       href: "/operator/users",
       label: "Users",
@@ -113,19 +108,21 @@ export function OperatorShell({
       label: "Network",
       visible: hasCapability(capabilities, "hierarchy.manage"),
     },
-    {
-      key: "reviews",
-      href: "/operator/reviews",
-      label: "Reviews",
-      visible: hasCapability(capabilities, "reviews.moderate"),
-    },
   ];
-  const groups = [
+  const groups: Array<{ label: string; items: Array<SidebarNavItem & { visible?: boolean }> }> = [
+    {
+      label: "Catalogue",
+      items: [
+        ...(hasCapability(capabilities, "catalogue.manage")
+          ? [{ key: "catalogue", href: "/operator/catalogue", label: "Listings" }]
+          : []),
+        ...(hasCapability(capabilities, "reviews.moderate")
+          ? [{ key: "reviews", href: "/operator/reviews", label: "Reviews" }]
+          : []),
+      ],
+    },
     {
       label: "Finance",
-      active: ["funding", "distributions", "earnings", "withdrawals", "treasury"].includes(
-        activeSection,
-      ),
       items: [
         {
           key: "funding",
@@ -161,7 +158,6 @@ export function OperatorShell({
     },
     {
       label: "Blog",
-      active: activeSection === "blog" || activeSection === "blogCategories",
       items: [
         {
           key: "blog",
@@ -178,7 +174,12 @@ export function OperatorShell({
       ],
     },
   ]
-    .map((group) => ({ ...group, items: group.items.filter((item) => item.visible) }))
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => !("visible" in item) || item.visible !== false)
+        .map(({ key, href, label }) => ({ key, href, label })),
+    }))
     .filter((group) => group.items.length);
 
   return (
@@ -192,7 +193,7 @@ export function OperatorShell({
             <SidebarGroup>
               <SidebarMenu id="operator-navigation" aria-label="Operator navigation">
                 {navigation
-                  .filter((item) => item.visible)
+                  .filter((item) => item.key === "overview" && item.visible)
                   .map((item) => (
                     <SidebarMenuItem key={item.key}>
                       <SidebarMenuButton asChild isActive={activeSection === item.key}>
@@ -200,24 +201,35 @@ export function OperatorShell({
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
-                {groups.map((group) => (
-                  <li key={group.label} className="list-none">
-                    <details open={group.active} className="group/operator-nav">
-                      <summary className="cursor-pointer select-none rounded-md px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
-                        {group.label}
-                      </summary>
-                      <SidebarMenu className="mt-1 pl-2">
-                        {group.items.map((item) => (
-                          <SidebarMenuItem key={item.key}>
-                            <SidebarMenuButton asChild isActive={activeSection === item.key}>
-                              <Link href={item.href}>{item.label}</Link>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        ))}
-                      </SidebarMenu>
-                    </details>
-                  </li>
-                ))}
+                {groups
+                  .filter((group) => group.label === "Catalogue")
+                  .map((group) => (
+                    <SidebarNavGroup
+                      key={`${group.label}-${activeSection}`}
+                      label={group.label}
+                      items={group.items}
+                      activeKey={activeSection}
+                    />
+                  ))}
+                {navigation
+                  .filter((item) => item.key !== "overview" && item.visible)
+                  .map((item) => (
+                    <SidebarMenuItem key={item.key}>
+                      <SidebarMenuButton asChild isActive={activeSection === item.key}>
+                        <Link href={item.href}>{item.label}</Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                {groups
+                  .filter((group) => group.label !== "Catalogue")
+                  .map((group) => (
+                    <SidebarNavGroup
+                      key={`${group.label}-${activeSection}`}
+                      label={group.label}
+                      items={group.items}
+                      activeKey={activeSection}
+                    />
+                  ))}
               </SidebarMenu>
             </SidebarGroup>
           </SidebarContent>

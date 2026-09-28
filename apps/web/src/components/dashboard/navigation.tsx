@@ -1,8 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
-import { useState } from "react";
 import type { AccountAccess } from "@/lib/api-client";
 import {
   SidebarContent,
@@ -12,6 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "../ui/sidebar";
+import { SidebarNavGroup } from "../sidebar/nav-group";
 
 const navigation = [
   { label: "Overview", href: "/dashboard", section: "overview" },
@@ -75,14 +74,6 @@ export function dashboardSectionTitle(section: string) {
   return navigation.find((item) => item.section === section)?.label ?? "Overview";
 }
 
-export function resolveNavigationGroupOpen(active: boolean, manualOpen: boolean | null) {
-  return manualOpen ?? active;
-}
-
-export function nextNavigationGroupOpen(active: boolean, manualOpen: boolean | null) {
-  return !resolveNavigationGroupOpen(active, manualOpen);
-}
-
 export function DashboardNavigation({
   accountAccess,
   section,
@@ -102,17 +93,25 @@ export function DashboardNavigation({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          <DashboardNavGroup
+          <SidebarNavGroup
             key={`Money-${section}`}
             label="Money"
-            items={moneyNavigation}
-            section={section}
+            items={moneyNavigation.map((item) => ({
+              key: item.section,
+              href: item.href,
+              label: item.label,
+            }))}
+            activeKey={section}
           />
-          <DashboardNavGroup
+          <SidebarNavGroup
             key={`Referrals-${section}`}
             label="Referrals"
-            items={referralNavigation}
-            section={section}
+            items={referralNavigation.map((item) => ({
+              key: item.section,
+              href: item.href,
+              label: item.label,
+            }))}
+            activeKey={section}
           />
           <SidebarMenuItem className="mt-2 border-t border-slate-200 pt-2">
             <SidebarMenuButton asChild isActive={section === "settings"} className="font-medium">
@@ -129,47 +128,5 @@ export function DashboardNavigation({
         </SidebarMenu>
       </SidebarGroup>
     </SidebarContent>
-  );
-}
-
-function DashboardNavGroup({
-  label,
-  items,
-  section,
-}: {
-  label: string;
-  items: typeof navigation;
-  section: string;
-}) {
-  const active = items.some((item) => item.section === section);
-  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  const open = resolveNavigationGroupOpen(active, manualOpen);
-
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        type="button"
-        className={active ? "bg-emerald-50 font-semibold text-emerald-900" : undefined}
-        aria-expanded={open}
-        onClick={() => setManualOpen((value) => nextNavigationGroupOpen(active, value))}
-      >
-        <span>{label}</span>
-        <ChevronDown
-          className={`ml-auto h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
-          aria-hidden="true"
-        />
-      </SidebarMenuButton>
-      {open && (
-        <SidebarMenu className="ml-3 border-l border-slate-200 pl-2">
-          {items.map((item) => (
-            <SidebarMenuItem key={item.href}>
-              <SidebarMenuButton asChild isActive={section === item.section}>
-                <Link href={item.href}>{item.label}</Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      )}
-    </SidebarMenuItem>
   );
 }

@@ -1,8 +1,9 @@
-import { newId } from "@/kernel/ids";
+import { BlogService } from "@/application/blog/service";
+import { SqliteBlogRepository } from "./repository";
 import { getBlogDatabase } from "./database";
 
 if (process.env.NODE_ENV === "production") throw new Error("Blog fixtures are development-only");
-const db = getBlogDatabase().sqlite;
+const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
 const posts = Array.from({ length: 20 }, (_, index) => ({
   slug: `fixture-guide-${index + 1}`,
   title: index === 0 ? "How to get more from a useful catalogue" : `Development guide ${index + 1}`,
@@ -13,65 +14,66 @@ const posts = Array.from({ length: 20 }, (_, index) => ({
   content:
     index === 0
       ? "# Start here\n\nDiscover a listing, fund your wallet, and choose access.\n\n- Browse\n- Buy\n- Access\n\n```ts\nconst useful = true;\n```"
-      : `## A practical note\n\nThis fixture article covers a realistic product topic and gives the layout enough content to review.\n\n[Explore the catalogue](/).`,
+      : "## A practical note\n\nThis fixture article covers a realistic product topic and gives the layout enough content to review.\n\n[Explore the catalogue](/).",
   category: index % 3 === 0 ? "Guides" : index % 3 === 1 ? "Product" : "Community",
   tags: index % 2 ? ["product", "access"] : ["guides", "referrals"],
   published: index !== 19,
 }));
-const categoryId = new Map<string, string>();
-const tagId = new Map<string, string>();
-const now = Date.now();
-const tx = db.transaction(() => {
-  for (const post of posts) {
-    let category = db.prepare("select id from blog_categories where name=?").get(post.category) as
-      { id: string } | undefined;
-    if (!category) {
-      category = { id: newId() };
-      db.prepare("insert into blog_categories(id,slug,name) values(?,?,?)").run(
-        category.id,
-        post.category.toLowerCase(),
-        post.category,
-      );
-    }
-    categoryId.set(post.category, category.id);
-    const id =
-      (
-        db.prepare("select id from blog_posts where slug=?").get(post.slug) as
-          { id: string } | undefined
-      )?.id ?? newId();
-    db.prepare(
-      `insert into blog_posts(id,slug,title,excerpt,content_markdown,status,category_id,published_at,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?) on conflict(slug) do update set title=excluded.title,excerpt=excluded.excerpt,content_markdown=excluded.content_markdown,status=excluded.status,category_id=excluded.category_id,published_at=excluded.published_at,updated_at=excluded.updated_at`,
-    ).run(
-      id,
-      post.slug,
-      post.title,
-      post.excerpt,
-      post.content,
-      post.published ? "published" : "draft",
-      category.id,
-      post.published ? now - posts.indexOf(post) * 86_400_000 : null,
-      now - posts.indexOf(post) * 86_400_000,
-      now,
+
+for (const fixture of posts) {
+  const category =
+    service.categories().find((item) => item.name === fixture.category) ??
+    service.createCategory(fixture.category);
+  const current = service.get(fixture.slug);
+  const desiredStatus = fixture.published ? "published" : "draft";
+  if (!current) {
+    const created = service.create(
+      {
+        slug: fixture.slug,
+        title: fixture.title,
+        excerpt: fixture.excerpt,
+        content: fixture.content,
+        desired_status: desiredStatus,
+        category_id: category.id,
+        tags: fixture.tags,
+      },
+      null,
     );
-    db.prepare("delete from blog_post_tags where post_id=?").run(id);
-    for (const name of post.tags) {
-      let tag = tagId.get(name)
-        ? { id: tagId.get(name)! }
-        : (db.prepare("select id from blog_tags where name=?").get(name) as
-            { id: string } | undefined);
-      if (!tag) {
-        tag = { id: newId() };
-        db.prepare("insert into blog_tags(id,slug,name) values(?,?,?)").run(tag.id, name, name);
-      }
-      tagId.set(name, tag.id);
-      db.prepare("insert or ignore into blog_post_tags(post_id,tag_id) values(?,?)").run(
-        id,
-        tag.id,
-      );
-    }
+    if (created && fixture.published) service.publish(created.id);
+    continue;
   }
-});
-tx();
+  const same =
+    current.title === fixture.title &&
+    current.excerpt === fixture.excerpt &&
+    current.content === fixture.content &&
+    current.category?.id === category.id &&
+    current.tags
+      .map((tag) => tag.name)
+      .sort()
+      .join(",") === [...fixture.tags].sort().join(",") &&
+    current.desiredStatus === desiredStatus;
+  if (!same) {
+    service.save(
+      current.id,
+      {
+        slug: fixture.slug,
+        title: fixture.title,
+        excerpt: fixture.excerpt,
+        content: fixture.content,
+        desired_status: desiredStatus,
+        category_id: category.id,
+        tags: fixture.tags,
+      },
+      null,
+    );
+  }
+  const refreshed = service.get(current.id);
+  if (refreshed && refreshed.publicationStatus !== desiredStatus)
+    service.applyStatus(current.id, desiredStatus);
+  else if (refreshed?.hasWorkingRevision && desiredStatus === "published")
+    service.applyStatus(current.id, "published");
+}
+
 console.log(
   `Seeded ${posts.length} development blog posts (${posts.filter((post) => post.published).length} published).`,
 );

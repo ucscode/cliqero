@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApiApp } from "@/api/hono";
+import { BlogCategoryConflictError } from "@/modules/blog/domain/blog";
 import {
   authorizeLegacyRequest,
   getLegacyRouteAccess,
@@ -259,11 +260,14 @@ function appWith(
       blog: {
         list: () => ({ items: [], nextCursor: null, limit: 25 }),
         get: () => null,
+        getWorkingRevision: () => null,
+        getRevision: () => null,
         categories: () => [],
         tags: () => [],
         create: () => ({}),
-        update: () => ({}),
+        save: () => ({}),
         publish: () => ({}),
+        unpublish: () => ({}),
         delete: () => {},
         createCategory: (name: string) => ({
           id: "00000000-0000-4000-8000-000000000009",
@@ -308,7 +312,57 @@ describe("Hono API foundation", () => {
     );
     expect(oversizedPage.status).toBe(400);
   });
-  it("protects managed category routes and issues draft preview URLs only to content operators", async () => {
+  it("keeps revision metadata in Operator Blog responses only", async () => {
+    const post = {
+      id: "00000000-0000-4000-8000-000000000011",
+      revisionId: "revision-working",
+      slug: "live-post",
+      title: "Published version",
+      excerpt: "Public excerpt",
+      content: "Public Markdown",
+      desiredStatus: "published",
+      publicationStatus: "published",
+      hasWorkingRevision: true,
+      workingRevisionUpdatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      featuredImageUrl: null,
+      authorAccountId: null,
+      seoTitle: null,
+      seoDescription: null,
+      canonicalUrl: null,
+      publishedAt: new Date("2025-01-01T00:00:00.000Z"),
+      createdAt: new Date("2024-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      category: null,
+      tags: [],
+    };
+    const overrides = { list: () => ({ items: [post], nextCursor: null, limit: 25 }) };
+    const publicResponse = await appWith(null, undefined, undefined, overrides).fetch(
+      new Request("http://localhost/api/blog/posts"),
+    );
+    const publicPost = (await publicResponse.json()).items[0];
+    expect(publicPost.title).toBe("Published version");
+    expect(publicPost).not.toHaveProperty("revisionId");
+    expect(publicPost).not.toHaveProperty("publicationStatus");
+    expect(publicPost).not.toHaveProperty("hasWorkingRevision");
+    expect(publicPost).not.toHaveProperty("workingRevisionUpdatedAt");
+
+    const operator = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session",
+      capabilities: ["content.manage"],
+      scopes: new Set<string>(),
+    };
+    const operatorResponse = await appWith(operator, undefined, undefined, overrides).fetch(
+      new Request("http://localhost/api/operator/blog"),
+    );
+    expect((await operatorResponse.json()).items[0]).toMatchObject({
+      publicationStatus: "published",
+      hasWorkingRevision: true,
+      revisionId: "revision-working",
+    });
+  });
+  it("protects managed category routes and issues revision-bound previews only to content operators", async () => {
     const id = "00000000-0000-4000-8000-000000000099";
     const user = {
       accountId: "00000000-0000-4000-8000-000000000001",
@@ -328,18 +382,19 @@ describe("Hono API foundation", () => {
     process.env.BETTER_AUTH_SECRET = "test-preview-secret";
     try {
       const preview = await appWith(user, undefined, undefined, {
-        get: () => ({ id, status: "draft" }),
+        getWorkingRevision: () => ({ id, revisionId: "revision-1" }),
       }).fetch(
         new Request(`http://localhost/api/operator/blog/posts/${id}/preview`, { method: "POST" }),
       );
       expect(preview.status).toBe(200);
       const payload = await preview.json();
       expect(payload.url).toMatch(/^\/blog\/preview\//);
+      expect(payload.revisionId).toBe("revision-1");
       expect(payload.url).not.toContain("test-preview-secret");
       expect(
         (
           await appWith({ ...user, kind: "api_key" }, undefined, undefined, {
-            get: () => ({ id, status: "draft" }),
+            getWorkingRevision: () => ({ id, revisionId: "revision-1" }),
           }).fetch(
             new Request(`http://localhost/api/operator/blog/posts/${id}/preview`, {
               method: "POST",
@@ -350,6 +405,39 @@ describe("Hono API foundation", () => {
     } finally {
       if (previousSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
       else process.env.BETTER_AUTH_SECRET = previousSecret;
+    }
+  });
+  it("validates category slugs and reports duplicate names/slugs as stable conflicts", async () => {
+    const user = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session",
+      capabilities: ["content.manage"],
+      scopes: new Set<string>(),
+    };
+    const invalid = await appWith(user).fetch(
+      new Request("http://localhost/api/operator/blog/categories", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Guides", slug: "Bad slug" }),
+      }),
+    );
+    expect(invalid.status).toBe(400);
+
+    for (const field of ["name", "slug"] as const) {
+      const duplicate = await appWith(user, undefined, undefined, {
+        createCategory: () => {
+          throw new BlogCategoryConflictError(field);
+        },
+      }).fetch(
+        new Request("http://localhost/api/operator/blog/categories", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "Guides", slug: "guides" }),
+        }),
+      );
+      expect(duplicate.status).toBe(409);
+      expect(await duplicate.json()).toMatchObject({ code: `category_${field}_conflict` });
     }
   });
   it("serves an OpenAPI document", async () => {
@@ -478,6 +566,15 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "account",
       "x-required-api-scope": "blog:read",
     });
+    const postInput = paths["/api/blog/posts"].post.requestBody.content["application/json"].schema;
+    expect(postInput.properties).toHaveProperty("desired_status");
+    expect(postInput.properties).not.toHaveProperty("status");
+    const categoryInput =
+      paths["/api/operator/blog/categories"].post.requestBody.content["application/json"].schema;
+    expect(categoryInput.properties).toHaveProperty("slug");
+    const operatorPost =
+      paths["/api/operator/blog"].get.responses["200"].content["application/json"].schema;
+    expect(JSON.stringify(operatorPost)).toContain("publicationStatus");
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
     expect(paths["/api/listings"].get).toMatchObject({

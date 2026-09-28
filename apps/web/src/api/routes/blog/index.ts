@@ -1,18 +1,49 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import { blogPostInputSchema } from "@/modules/blog/domain/blog";
+import {
+  blogCategoryNameSchema,
+  blogCategorySlugSchema,
+  BlogCategoryConflictError,
+  BlogCategoryInUseError,
+  BlogCategoryNotFoundError,
+  blogPostInputSchema,
+} from "@/modules/blog/domain/blog";
 import type { Env } from "../../shared/context";
 import { requirePrincipal, requireCapabilityScope } from "../../shared/context";
 import { errorSchema } from "../../shared/schemas";
 import { domainError } from "../../shared/error";
-import { blogJson } from "./serialization";
-import { blogPageSchema, blogPostSchema } from "./contracts";
+import { blogJson, operatorBlogJson } from "./serialization";
+import {
+  blogPageSchema,
+  blogPostSchema,
+  operatorBlogPageSchema,
+  operatorBlogPostSchema,
+} from "./contracts";
 import { loadOperatorTableConfiguration } from "@/config/operator-tables";
-import { BlogCategoryInUseError } from "@/modules/blog/domain/blog";
 import { issueBlogPreviewToken } from "@/security/blog-preview";
 
 const blogCategorySchema = z.object({ id: z.string().uuid(), slug: z.string(), name: z.string() });
-const blogCategoryInputSchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
+const blogCategoryCreateSchema = z
+  .object({
+    name: blogCategoryNameSchema,
+    slug: z.union([blogCategorySlugSchema, z.literal("")]).optional(),
+  })
+  .strict();
+const blogCategoryPatchSchema = z
+  .object({ name: blogCategoryNameSchema.optional(), slug: blogCategorySlugSchema.optional() })
+  .strict()
+  .refine(
+    (value) => value.name !== undefined || value.slug !== undefined,
+    "Provide a name or slug.",
+  );
+
+function categoryConflict(c: Parameters<typeof domainError>[0], error: unknown) {
+  if (error instanceof BlogCategoryConflictError)
+    return c.json({ error: error.message, code: `category_${error.field}_conflict` }, 409);
+  if (error instanceof BlogCategoryNotFoundError)
+    return c.json({ error: error.message, code: "not_found" }, 404);
+  return domainError(c, error);
+}
 
 export function registerBlogRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
   const tableConfiguration = loadOperatorTableConfiguration().tables;
@@ -31,15 +62,17 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       request: { params: z.object({ id: z.string().uuid() }) },
       responses: {
         200: {
-          description: "Short-lived draft preview URL",
-          content: { "application/json": { schema: z.object({ url: z.string() }) } },
+          description: "Short-lived preview URL bound to one saved working revision",
+          content: {
+            "application/json": { schema: z.object({ url: z.string(), revisionId: z.string() }) },
+          },
         },
         403: {
           description: "Authenticated Operator session required",
           content: { "application/json": { schema: errorSchema } },
         },
         404: {
-          description: "Draft not found",
+          description: "Saved working revision not found",
           content: { "application/json": { schema: errorSchema } },
         },
         500: {
@@ -55,15 +88,18 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
       if (denied) return denied;
       const id = c.req.valid("param").id;
-      const post = container.blog.get(id);
-      if (!post || post.status !== "draft")
-        return c.json({ error: "Draft not found", code: "not_found" }, 404);
+      const post = container.blog.getWorkingRevision(id);
+      if (!post)
+        return c.json({ error: "Saved working revision not found", code: "not_found" }, 404);
       const secret = process.env.BETTER_AUTH_SECRET?.trim();
       if (!secret)
         return c.json({ error: "Preview is unavailable", code: "configuration_error" }, 500);
-      const token = issueBlogPreviewToken(id, p.accountId, secret);
+      const token = issueBlogPreviewToken(id, post.revisionId, p.accountId, secret);
       return c.json(
-        { url: `/blog/preview/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}` },
+        {
+          revisionId: post.revisionId,
+          url: `/blog/preview/${encodeURIComponent(id)}?revision=${encodeURIComponent(post.revisionId)}&token=${encodeURIComponent(token)}`,
+        },
         200,
       );
     },
@@ -238,13 +274,25 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
     createRoute({
       method: "post",
       path: "/api/operator/blog/categories",
-      request: { body: { content: { "application/json": { schema: blogCategoryInputSchema } } } },
+      request: { body: { content: { "application/json": { schema: blogCategoryCreateSchema } } } },
       responses: {
         201: {
           description: "Blog category created",
           content: { "application/json": { schema: blogCategorySchema } },
         },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          description: "Invalid category input or slug",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Category name or slug is already in use",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Category not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     (c) => {
@@ -253,9 +301,10 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
       if (denied) return denied;
       try {
-        return c.json(container.blog.createCategory(c.req.valid("json").name), 201);
+        const body = c.req.valid("json");
+        return c.json(container.blog.createCategory(body.name, body.slug), 201);
       } catch (error) {
-        return domainError(c, error);
+        return categoryConflict(c, error);
       }
     },
   );
@@ -265,7 +314,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       path: "/api/operator/blog/categories/{categoryId}",
       request: {
         params: z.object({ categoryId: z.string().uuid() }),
-        body: { content: { "application/json": { schema: blogCategoryInputSchema } } },
+        body: { content: { "application/json": { schema: blogCategoryPatchSchema } } },
       },
       responses: {
         200: {
@@ -273,6 +322,18 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
           content: { "application/json": { schema: blogCategorySchema } },
         },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          description: "Invalid category input or slug",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Category not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Category name or slug is already in use",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     (c) => {
@@ -282,11 +343,11 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       if (denied) return denied;
       try {
         return c.json(
-          container.blog.updateCategory(c.req.valid("param").categoryId, c.req.valid("json").name),
+          container.blog.updateCategory(c.req.valid("param").categoryId, c.req.valid("json")),
           200,
         );
       } catch (error) {
-        return domainError(c, error);
+        return categoryConflict(c, error);
       }
     },
   );
@@ -327,7 +388,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       responses: {
         200: {
           description: "Operator blog posts",
-          content: { "application/json": { schema: blogPageSchema } },
+          content: { "application/json": { schema: operatorBlogPageSchema } },
         },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
       },
@@ -338,7 +399,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
       if (denied) return denied;
       const page = container.blog.list(c.req.valid("query"));
-      return c.json({ ...page, items: page.items.map(blogJson) }, 200);
+      return c.json({ ...page, items: page.items.map(operatorBlogJson) }, 200);
     },
   );
   const blogWriteBody = blogPostInputSchema;
@@ -352,10 +413,18 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       },
       responses: {
         201: {
-          description: "Blog post created",
-          content: { "application/json": { schema: blogPostSchema } },
+          description: "Working revision created",
+          content: { "application/json": { schema: operatorBlogPostSchema } },
         },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          description: "Invalid article input",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Article slug conflict",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     (c) => {
@@ -365,11 +434,9 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
-        if (body.status === "published" && p.kind === "api_key" && !p.scopes.has("blog:publish"))
-          return c.json({ error: "Forbidden", code: "insufficient_scope" }, 403);
         const key = c.req.header("Idempotency-Key");
         if (!key) throw new Error("Idempotency-Key is required");
-        return c.json(blogJson(container.blog.create(body, p.accountId, key)), 201);
+        return c.json(operatorBlogJson(container.blog.create(body, p.accountId, key)), 201);
       } catch (error) {
         return domainError(c, error);
       }
@@ -385,10 +452,22 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       },
       responses: {
         200: {
-          description: "Blog post updated",
-          content: { "application/json": { schema: blogPostSchema } },
+          description: "A new working revision was saved; any live revision remains unchanged",
+          content: { "application/json": { schema: operatorBlogPostSchema } },
         },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          description: "Invalid article input",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Article not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Article slug conflict",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     (c) => {
@@ -398,9 +477,10 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
-        if (body.status === "published" && p.kind === "api_key" && !p.scopes.has("blog:publish"))
-          return c.json({ error: "Forbidden", code: "insufficient_scope" }, 403);
-        return c.json(blogJson(container.blog.update(c.req.valid("param").id, body)), 200);
+        return c.json(
+          operatorBlogJson(container.blog.save(c.req.valid("param").id, body, p.accountId)),
+          200,
+        );
       } catch (error) {
         return domainError(c, error);
       }
@@ -417,11 +497,21 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
         request: { params: z.object({ id: z.string().uuid() }) },
         responses: {
           200: {
-            description: "Blog publication state changed",
-            content: { "application/json": { schema: blogPostSchema } },
+            description: published
+              ? "Promote the saved working revision to the public article"
+              : "Remove the article from public listing without deleting its revisions",
+            content: { "application/json": { schema: operatorBlogPostSchema } },
           },
           403: {
             description: "Forbidden",
+            content: { "application/json": { schema: errorSchema } },
+          },
+          404: {
+            description: "Article not found",
+            content: { "application/json": { schema: errorSchema } },
+          },
+          409: {
+            description: "No promotable saved revision",
             content: { "application/json": { schema: errorSchema } },
           },
         },
@@ -432,7 +522,10 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
         const denied = requireCapabilityScope(c, p, "content.manage", "blog:publish");
         if (denied) return denied;
         try {
-          return c.json(blogJson(container.blog.publish(c.req.valid("param").id, published)), 200);
+          const post = published
+            ? container.blog.publish(c.req.valid("param").id)
+            : container.blog.unpublish(c.req.valid("param").id);
+          return c.json(operatorBlogJson(post), 200);
         } catch (error) {
           return domainError(c, error);
         }
@@ -445,8 +538,12 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       path: "/api/blog/posts/{id}",
       request: { params: z.object({ id: z.string().uuid() }) },
       responses: {
-        204: { description: "Blog post deleted" },
+        204: { description: "Blog article and its revision history deleted" },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+        404: {
+          description: "Article not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     (c) => {

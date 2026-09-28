@@ -80,6 +80,7 @@ export function OperatorBlogCategories() {
 export function OperatorBlogCategoryEditor({ initial }: { initial?: BlogCategory }) {
   const router = useRouter();
   const [name, setName] = useState(initial?.name ?? "");
+  const [slug, setSlug] = useState(initial?.slug ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -92,7 +93,10 @@ export function OperatorBlogCategoryEditor({ initial }: { initial?: BlogCategory
         {
           method: initial ? "PATCH" : "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({
+            name,
+            ...(initial ? (slug !== initial.slug ? { slug } : {}) : slug.trim() ? { slug } : {}),
+          }),
         },
       );
       router.push("/operator/blog/categories");
@@ -125,6 +129,21 @@ export function OperatorBlogCategoryEditor({ initial }: { initial?: BlogCategory
           onChange={(event) => setName(event.target.value)}
           required
         />
+      </div>
+      <div>
+        <Label htmlFor="category-slug">Slug</Label>
+        <Input
+          id="category-slug"
+          value={slug}
+          maxLength={120}
+          onChange={(event) => setSlug(event.target.value)}
+          placeholder="generated-from-name"
+          aria-describedby="category-slug-help"
+        />
+        <p id="category-slug-help" className="mt-1 text-sm text-slate-600">
+          Use lowercase letters, numbers, and single hyphens. Leaving this blank on creation
+          generates it from the category name; renaming never changes an existing slug.
+        </p>
       </div>
     </CrudEdit>
   );

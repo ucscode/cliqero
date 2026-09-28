@@ -17,10 +17,14 @@ export default async function BlogDraftPreviewPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; revision?: string }>;
 }) {
-  const [{ id }, { token }, requestHeaders] = await Promise.all([params, searchParams, headers()]);
-  if (!token) notFound();
+  const [{ id }, { token, revision }, requestHeaders] = await Promise.all([
+    params,
+    searchParams,
+    headers(),
+  ]);
+  if (!token || !revision) notFound();
   const container = getContainer();
   const principal = await container.principalResolver.resolve(
     new Request(`http://localhost/blog/preview/${encodeURIComponent(id)}`, {
@@ -34,15 +38,16 @@ export default async function BlogDraftPreviewPage({
   )
     notFound();
   const secret = process.env.BETTER_AUTH_SECRET?.trim();
-  if (!secret || !verifyBlogPreviewToken(token, id, principal.account.id, secret)) notFound();
-  const post = container.blog.get(id);
-  if (!post || post.status !== "draft") notFound();
+  if (!secret || !verifyBlogPreviewToken(token, id, revision, principal.account.id, secret))
+    notFound();
+  const post = container.blog.getRevision(id, revision);
+  if (!post) notFound();
   return (
     <>
       <SiteHeader />
       <main className="mx-auto max-w-4xl px-4 py-12 sm:px-8">
         <p className="mb-6 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Private draft preview. This page is not publicly indexed or cached.
+          Private saved-revision preview. This page is not publicly indexed or cached.
         </p>
         <BlogArticle post={post} />
       </main>

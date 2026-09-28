@@ -10,20 +10,24 @@ export interface BlogListOptions {
   publishedOnly?: boolean;
 }
 
-export interface BlogPersistenceInput {
+export interface BlogRevisionInput {
   id: string;
   slug: string;
   title: string;
   excerpt: string;
   content: string;
-  status: "draft" | "published";
+  desiredStatus: "draft" | "published";
   featuredImageUrl: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
   canonicalUrl: string | null;
-  publishedAt: Date | null;
   categoryId: string | null;
   tags: string[];
+}
+
+export interface BlogCategoryInput {
+  name?: string;
+  slug?: string;
 }
 
 export interface BlogRepository {
@@ -31,19 +35,25 @@ export interface BlogRepository {
   findIdempotency(key: string): { requestHash: string; postId: string } | null;
   saveIdempotency(key: string, requestHash: string, postId: string): void;
   findSlugOwner(slug: string): string | null;
-  create(input: BlogPersistenceInput, authorAccountId: string | null): BlogPost | null;
-  update(id: string, input: BlogPersistenceInput): BlogPost | null;
-  setPublished(id: string, publishedAt: Date | null): BlogPost | null;
+  create(postId: string, input: BlogRevisionInput, authorAccountId: string | null): BlogPost | null;
+  saveRevision(
+    postId: string,
+    input: BlogRevisionInput,
+    authorAccountId: string | null,
+  ): BlogPost | null;
+  applyPublication(id: string, desiredStatus: "draft" | "published"): BlogPost | null;
   delete(id: string): void;
   get(idOrSlug: string, publishedOnly?: boolean): BlogPost | null;
+  getWorkingRevision(id: string): BlogPost | null;
+  getRevision(id: string, revisionId: string): BlogPost | null;
   list(options?: BlogListOptions): {
     items: BlogPost[];
     nextCursor: string | null;
     limit: number;
   };
   categories(): BlogCategory[];
-  createCategory(name: string): BlogCategory;
-  updateCategory(id: string, name: string): BlogCategory | null;
+  createCategory(input: { name: string; slug: string }): BlogCategory;
+  updateCategory(id: string, input: BlogCategoryInput): BlogCategory | null;
   deleteCategory(id: string): void;
   categoryIsUsed(id: string): boolean;
   tags(): unknown[];

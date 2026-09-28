@@ -2,14 +2,16 @@ import type Database from "better-sqlite3";
 import slugify from "slugify";
 import { newId } from "@/kernel/ids";
 import {
+  BlogCategoryConflictError,
   BlogCategoryInUseError,
   type BlogCategory,
   type BlogPost,
 } from "@/modules/blog/domain/blog";
 import type {
+  BlogCategoryInput,
   BlogListOptions,
-  BlogPersistenceInput,
   BlogRepository,
+  BlogRevisionInput,
 } from "@/application/blog/contracts";
 
 type Row = Record<string, any>;
@@ -26,18 +28,20 @@ function decodeCursor(value: string | undefined): [number, string] | null {
   }
 }
 
-function date(value: number | null | undefined) {
-  return value == null ? null : new Date(Number(value));
-}
+const date = (value: number | null | undefined) => (value == null ? null : new Date(Number(value)));
 
-function mapPost(row: Row, tags: Array<{ slug: string; name: string }> = []): BlogPost {
+function mapPost(row: Row, tags: Array<{ slug: string; name: string }>): BlogPost {
   return {
-    id: row.id,
+    id: row.post_id,
+    revisionId: row.revision_id,
     slug: row.slug,
     title: row.title,
     excerpt: row.excerpt,
     content: row.content_markdown,
-    status: row.status,
+    desiredStatus: row.desired_status,
+    publicationStatus: row.publication_state,
+    hasWorkingRevision: row.working_revision_id != null,
+    workingRevisionUpdatedAt: date(row.working_updated_at),
     featuredImageUrl: row.featured_image_url ?? null,
     authorAccountId: row.author_account_id ?? null,
     seoTitle: row.seo_title ?? null,
@@ -45,7 +49,7 @@ function mapPost(row: Row, tags: Array<{ slug: string; name: string }> = []): Bl
     canonicalUrl: row.canonical_url ?? null,
     publishedAt: date(row.published_at),
     createdAt: new Date(Number(row.created_at)),
-    updatedAt: new Date(Number(row.updated_at)),
+    updatedAt: new Date(Number(row.revision_updated_at)),
     category: row.category_slug
       ? { id: row.category_id, slug: row.category_slug, name: row.category_name }
       : null,
@@ -54,7 +58,7 @@ function mapPost(row: Row, tags: Array<{ slug: string; name: string }> = []): Bl
 }
 
 export class SqliteBlogRepository implements BlogRepository {
-  constructor(private readonly db: BlogDatabase) {}
+  constructor(private readonly db: Database.Database) {}
 
   transaction<T>(operation: () => T): T {
     return this.db.transaction(operation)();
@@ -74,74 +78,66 @@ export class SqliteBlogRepository implements BlogRepository {
   }
 
   findSlugOwner(slug: string) {
-    const row = this.db.prepare("select id from blog_posts where slug=?").get(slug) as
-      { id: string } | undefined;
+    const row = this.db
+      .prepare(
+        `select p.id from blog_posts p
+         join blog_post_revisions r on r.id in (p.working_revision_id, p.published_revision_id)
+         where r.slug=? limit 1`,
+      )
+      .get(slug) as { id: string } | undefined;
     return row?.id ?? null;
   }
 
-  create(input: BlogPersistenceInput, authorAccountId: string | null) {
+  create(postId: string, input: BlogRevisionInput, authorAccountId: string | null) {
     const now = Date.now();
-    const categoryId = input.categoryId;
     this.db
       .prepare(
-        `insert into blog_posts(id,slug,title,excerpt,content_markdown,status,featured_image_url,author_account_id,seo_title,seo_description,canonical_url,published_at,created_at,updated_at,category_id)
-         values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `insert into blog_posts(id, publication_state, author_account_id, published_at, created_at, updated_at)
+         values(?, 'draft', ?, null, ?, ?)`,
       )
-      .run(
-        input.id,
-        input.slug,
-        input.title,
-        input.excerpt,
-        input.content,
-        input.status,
-        input.featuredImageUrl,
-        authorAccountId,
-        input.seoTitle,
-        input.seoDescription,
-        input.canonicalUrl,
-        input.publishedAt?.getTime() ?? null,
-        now,
-        now,
-        categoryId,
-      );
-    this.replaceTags(input.id, input.tags);
-    return this.get(input.id);
+      .run(postId, authorAccountId, now, now);
+    this.insertRevision(postId, input, authorAccountId, 1, now);
+    this.db
+      .prepare("update blog_posts set working_revision_id=?, updated_at=? where id=?")
+      .run(input.id, now, postId);
+    return this.get(postId);
   }
 
-  update(id: string, input: BlogPersistenceInput) {
-    const categoryId = input.categoryId;
-    const result = this.db
+  saveRevision(postId: string, input: BlogRevisionInput, authorAccountId: string | null) {
+    const post = this.db.prepare("select id from blog_posts where id=?").get(postId);
+    if (!post) return null;
+    const revisionNumber = this.db
       .prepare(
-        `update blog_posts
-            set slug=?,title=?,excerpt=?,content_markdown=?,status=?,featured_image_url=?,seo_title=?,seo_description=?,canonical_url=?,published_at=?,updated_at=?,category_id=?
-          where id=?`,
+        "select coalesce(max(revision_number), 0) + 1 n from blog_post_revisions where post_id=?",
       )
-      .run(
-        input.slug,
-        input.title,
-        input.excerpt,
-        input.content,
-        input.status,
-        input.featuredImageUrl,
-        input.seoTitle,
-        input.seoDescription,
-        input.canonicalUrl,
-        input.publishedAt?.getTime() ?? null,
-        Date.now(),
-        categoryId,
-        id,
-      );
-    if (!result.changes) return null;
-    this.replaceTags(id, input.tags);
-    return this.get(id);
+      .get(postId) as { n: number };
+    const now = Date.now();
+    this.insertRevision(postId, input, authorAccountId, revisionNumber.n, now);
+    this.db
+      .prepare("update blog_posts set working_revision_id=?, updated_at=? where id=?")
+      .run(input.id, now, postId);
+    return this.get(postId);
   }
 
-  setPublished(id: string, publishedAt: Date | null) {
-    const status = publishedAt ? "published" : "draft";
-    const result = this.db
-      .prepare("update blog_posts set status=?,published_at=?,updated_at=? where id=?")
-      .run(status, publishedAt?.getTime() ?? null, Date.now(), id);
-    return result.changes ? this.get(id) : null;
+  applyPublication(id: string, desiredStatus: "draft" | "published") {
+    const now = Date.now();
+    const result =
+      desiredStatus === "published"
+        ? this.db
+            .prepare(
+              `update blog_posts
+                 set publication_state='published',
+                     published_revision_id=coalesce(working_revision_id, published_revision_id),
+                     working_revision_id=null,
+                     published_at=coalesce(published_at, ?), updated_at=?
+               where id=? and coalesce(working_revision_id, published_revision_id) is not null`,
+            )
+            .run(now, now, id)
+        : this.db
+            .prepare("update blog_posts set publication_state='draft', updated_at=? where id=?")
+            .run(now, id);
+    if (!result.changes) return this.get(id);
+    return this.get(id);
   }
 
   delete(id: string) {
@@ -150,35 +146,50 @@ export class SqliteBlogRepository implements BlogRepository {
   }
 
   get(idOrSlug: string, publishedOnly = false): BlogPost | null {
+    const revisionJoin = publishedOnly
+      ? "r.id=p.published_revision_id and p.publication_state='published'"
+      : "r.id=coalesce(p.working_revision_id, p.published_revision_id)";
     const row = this.db
       .prepare(
-        `select p.*, c.slug category_slug, c.name category_name
-           from blog_posts p
-           left join blog_categories c on c.id=p.category_id
-          where ${publishedOnly ? "p.status='published' and" : ""} (p.id=? or p.slug=?) limit 1`,
+        `select p.id post_id, r.id revision_id, r.slug, r.title, r.excerpt, r.content_markdown,
+                r.desired_status, r.featured_image_url, r.seo_title, r.seo_description,
+                r.canonical_url, r.category_id, p.author_account_id, p.publication_state,
+                p.working_revision_id, p.published_at, p.created_at, r.updated_at revision_updated_at,
+                wr.updated_at working_updated_at, c.slug category_slug, c.name category_name
+           from blog_posts p join blog_post_revisions r on ${revisionJoin}
+           left join blog_post_revisions wr on wr.id=p.working_revision_id
+           left join blog_categories c on c.id=r.category_id
+          where p.id=? or r.slug=? limit 1`,
       )
       .get(idOrSlug, idOrSlug) as Row | undefined;
-    if (!row) return null;
-    const tags = this.db
-      .prepare(
-        "select t.slug,t.name from blog_post_tags pt join blog_tags t on t.id=pt.tag_id where pt.post_id=? order by t.name",
-      )
-      .all(row.id) as Array<{ slug: string; name: string }>;
-    return mapPost(row, tags);
+    return row ? mapPost(row, this.revisionTags(row.revision_id)) : null;
+  }
+
+  getWorkingRevision(id: string) {
+    const row = this.revisionRow(`p.id=? and p.working_revision_id=r.id`, id);
+    return row ? mapPost(row, this.revisionTags(row.revision_id)) : null;
+  }
+
+  getRevision(id: string, revisionId: string) {
+    const row = this.revisionRow("p.id=? and r.id=?", id, revisionId);
+    return row ? mapPost(row, this.revisionTags(row.revision_id)) : null;
   }
 
   list(options: BlogListOptions = {}) {
     const limit = Math.min(Math.max(options.limit ?? 12, 1), 50);
+    const isPublic = Boolean(options.publishedOnly);
+    const revisionJoin = isPublic
+      ? "r.id=p.published_revision_id and p.publication_state='published'"
+      : "r.id=coalesce(p.working_revision_id, p.published_revision_id)";
     const where: string[] = [];
-    const values: any[] = [];
-    if (options.publishedOnly) where.push("p.status='published'");
-    else if (options.status) {
-      where.push("p.status=?");
+    const values: unknown[] = [];
+    if (!isPublic && options.status) {
+      where.push("p.publication_state=?");
       values.push(options.status);
     }
     if (options.search) {
       where.push(
-        "(lower(p.title) like lower(?) or lower(p.excerpt) like lower(?) or p.slug like ?)",
+        "(lower(r.title) like lower(?) or lower(r.excerpt) like lower(?) or r.slug like ?)",
       );
       const q = `%${options.search.trim()}%`;
       values.push(q, q, q);
@@ -189,7 +200,7 @@ export class SqliteBlogRepository implements BlogRepository {
     }
     if (options.tag) {
       where.push(
-        "exists (select 1 from blog_post_tags pt2 join blog_tags t2 on t2.id=pt2.tag_id where pt2.post_id=p.id and t2.slug=?)",
+        "exists (select 1 from blog_post_revision_tags rt2 join blog_tags t2 on t2.id=rt2.tag_id where rt2.revision_id=r.id and t2.slug=?)",
       );
       values.push(options.tag);
     }
@@ -200,30 +211,28 @@ export class SqliteBlogRepository implements BlogRepository {
     }
     const rows = this.db
       .prepare(
-        `select p.*, c.slug category_slug, c.name category_name
-           from blog_posts p
-           left join blog_categories c on c.id=p.category_id
+        `select p.id post_id, r.id revision_id, r.slug, r.title, r.excerpt, r.content_markdown,
+                r.desired_status, r.featured_image_url, r.seo_title, r.seo_description,
+                r.canonical_url, r.category_id, p.author_account_id, p.publication_state,
+                p.working_revision_id, p.published_at, p.created_at, r.updated_at revision_updated_at,
+                wr.updated_at working_updated_at, c.slug category_slug, c.name category_name
+           from blog_posts p join blog_post_revisions r on ${revisionJoin}
+           left join blog_post_revisions wr on wr.id=p.working_revision_id
+           left join blog_categories c on c.id=r.category_id
           ${where.length ? `where ${where.join(" and ")}` : ""}
           order by p.created_at desc,p.id desc limit ?`,
       )
       .all(...values, limit + 1) as Row[];
     const hasMore = rows.length > limit;
     const selected = rows.slice(0, limit);
-    const items = selected.map((row) =>
-      mapPost(
-        row,
-        this.db
-          .prepare(
-            "select t.slug,t.name from blog_post_tags pt join blog_tags t on t.id=pt.tag_id where pt.post_id=? order by t.name",
-          )
-          .all(row.id) as Array<{ slug: string; name: string }>,
-      ),
-    );
+    const items = selected.map((row) => mapPost(row, this.revisionTags(row.revision_id)));
     const last = selected.at(-1);
     return {
       items,
       nextCursor:
-        hasMore && last ? Buffer.from(`${last.created_at}|${last.id}`).toString("base64url") : null,
+        hasMore && last
+          ? Buffer.from(`${last.created_at}|${last.post_id}`).toString("base64url")
+          : null,
       limit,
     };
   }
@@ -234,67 +243,138 @@ export class SqliteBlogRepository implements BlogRepository {
       .all() as BlogCategory[];
   }
 
-  createCategory(name: string): BlogCategory {
+  createCategory(input: { name: string; slug: string }): BlogCategory {
     const id = newId();
-    const slug = this.uniqueTaxonomySlug("blog_categories", name);
-    this.db.prepare("insert into blog_categories(id,slug,name) values(?,?,?)").run(id, slug, name);
-    return { id, slug, name };
+    try {
+      this.db
+        .prepare("insert into blog_categories(id,slug,name) values(?,?,?)")
+        .run(id, input.slug, input.name);
+    } catch (error) {
+      this.throwCategoryConflict(error);
+    }
+    return { id, ...input };
   }
 
-  updateCategory(id: string, name: string): BlogCategory | null {
+  updateCategory(id: string, input: BlogCategoryInput): BlogCategory | null {
     const current = this.db
       .prepare("select id,slug,name from blog_categories where id=?")
       .get(id) as BlogCategory | undefined;
     if (!current) return null;
-    const baseSlug = slugify(name, { lower: true, strict: true, trim: true }) || "category";
-    let slug = baseSlug;
-    let suffix = 1;
-    while (this.db.prepare("select id from blog_categories where slug=? and id<>?").get(slug, id)) {
-      slug = `${baseSlug}-${++suffix}`;
+    const next = { name: input.name ?? current.name, slug: input.slug ?? current.slug };
+    try {
+      this.db
+        .prepare("update blog_categories set name=?,slug=? where id=?")
+        .run(next.name, next.slug, id);
+    } catch (error) {
+      this.throwCategoryConflict(error);
     }
-    this.db.prepare("update blog_categories set name=?,slug=? where id=?").run(name, slug, id);
-    return { id, slug, name };
+    return { id, ...next };
   }
 
   deleteCategory(id: string): void {
-    if (this.categoryIsUsed(id)) throw new BlogCategoryInUseError();
-    this.db.prepare("delete from blog_categories where id=?").run(id);
+    try {
+      this.db.prepare("delete from blog_categories where id=?").run(id);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("FOREIGN KEY constraint failed"))
+        throw new BlogCategoryInUseError();
+      throw error;
+    }
   }
 
   categoryIsUsed(id: string): boolean {
-    return Boolean(this.db.prepare("select 1 from blog_posts where category_id=? limit 1").get(id));
+    return Boolean(
+      this.db.prepare("select 1 from blog_post_revisions where category_id=? limit 1").get(id),
+    );
   }
 
   tags() {
     return this.db.prepare("select id,slug,name from blog_tags order by name").all();
   }
 
-  private uniqueTaxonomySlug(table: "blog_categories" | "blog_tags", name: string) {
-    const base = slugify(name, { lower: true, strict: true, trim: true }) || "item";
-    let candidate = base;
-    let n = 1;
-    while (this.db.prepare(`select id from ${table} where slug=?`).get(candidate))
-      candidate = `${base}-${++n}`;
-    return candidate;
+  private insertRevision(
+    postId: string,
+    input: BlogRevisionInput,
+    authorAccountId: string | null,
+    revisionNumber: number,
+    now: number,
+  ) {
+    this.db
+      .prepare(
+        `insert into blog_post_revisions(
+           id, post_id, revision_number, slug, title, excerpt, content_markdown, desired_status,
+           featured_image_url, seo_title, seo_description, canonical_url, category_id,
+           created_by_account_id, created_at, updated_at
+         ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        input.id,
+        postId,
+        revisionNumber,
+        input.slug,
+        input.title,
+        input.excerpt,
+        input.content,
+        input.desiredStatus,
+        input.featuredImageUrl,
+        input.seoTitle,
+        input.seoDescription,
+        input.canonicalUrl,
+        input.categoryId,
+        authorAccountId,
+        now,
+        now,
+      );
+    this.replaceRevisionTags(input.id, input.tags);
   }
 
-  private replaceTags(postId: string, names: string[]) {
-    this.db.prepare("delete from blog_post_tags where post_id=?").run(postId);
+  private revisionRow(where: string, ...values: string[]) {
+    return this.db
+      .prepare(
+        `select p.id post_id, r.id revision_id, r.slug, r.title, r.excerpt, r.content_markdown,
+                r.desired_status, r.featured_image_url, r.seo_title, r.seo_description,
+                r.canonical_url, r.category_id, p.author_account_id, p.publication_state,
+                p.working_revision_id, p.published_at, p.created_at, r.updated_at revision_updated_at,
+                wr.updated_at working_updated_at, c.slug category_slug, c.name category_name
+           from blog_posts p join blog_post_revisions r on r.post_id=p.id
+           left join blog_post_revisions wr on wr.id=p.working_revision_id
+           left join blog_categories c on c.id=r.category_id
+          where ${where} limit 1`,
+      )
+      .get(...values) as Row | undefined;
+  }
+
+  private revisionTags(revisionId: string) {
+    return this.db
+      .prepare(
+        "select t.slug,t.name from blog_post_revision_tags rt join blog_tags t on t.id=rt.tag_id where rt.revision_id=? order by t.name",
+      )
+      .all(revisionId) as Array<{ slug: string; name: string }>;
+  }
+
+  private replaceRevisionTags(revisionId: string, names: string[]) {
     for (const name of names) {
       let tag = this.db.prepare("select id from blog_tags where lower(name)=lower(?)").get(name) as
         { id: string } | undefined;
       if (!tag) {
         const id = newId();
-        this.db
-          .prepare("insert into blog_tags(id,slug,name) values(?,?,?)")
-          .run(id, this.uniqueTaxonomySlug("blog_tags", name), name);
+        const base = slugify(name, { lower: true, strict: true, trim: true }) || "tag";
+        let slug = base;
+        let suffix = 1;
+        while (this.db.prepare("select id from blog_tags where slug=?").get(slug))
+          slug = `${base}-${++suffix}`;
+        this.db.prepare("insert into blog_tags(id,slug,name) values(?,?,?)").run(id, slug, name);
         tag = { id };
       }
       this.db
-        .prepare("insert or ignore into blog_post_tags(post_id,tag_id) values(?,?)")
-        .run(postId, tag.id);
+        .prepare("insert into blog_post_revision_tags(revision_id,tag_id) values(?,?)")
+        .run(revisionId, tag.id);
     }
   }
-}
 
-export type BlogDatabase = Database.Database;
+  private throwCategoryConflict(error: unknown): never {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("blog_categories.name")) throw new BlogCategoryConflictError("name");
+    if (message.includes("blog_categories.slug")) throw new BlogCategoryConflictError("slug");
+    throw error;
+  }
+}
