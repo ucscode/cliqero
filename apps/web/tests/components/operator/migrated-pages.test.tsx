@@ -49,7 +49,7 @@ describe("operator console shared page migration", () => {
       "Create listing",
       'aria-labelledby="_R_',
     ],
-    ["new blog article", <OperatorBlogEditor key="blog-create" />, "New article", "max-w-[1400px]"],
+    ["new blog article", <OperatorBlogEditor key="blog-create" />, "New article", "max-w-5xl"],
     ["user create", <OperatorUserForm key="user-create" />, "Create user", "max-w-4xl"],
   ])("%s uses the shared form-page composition", (_name, Page, title, composition) => {
     const html = renderToStaticMarkup(Page);
@@ -59,7 +59,7 @@ describe("operator console shared page migration", () => {
 
   it("uses the shared loading state while an existing catalogue listing is fetched", () => {
     const html = renderToStaticMarkup(<OperatorCatalogueEditor listingId="listing-1" />);
-    expect(html).toContain("max-w-[1400px]");
+    expect(html).toContain("max-w-4xl");
     expect(html).toContain('role="status"');
     expect(html).toContain("Loading listing");
   });

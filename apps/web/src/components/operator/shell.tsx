@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { Badge } from "../ui/badge";
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch, type OperatorOverview } from "@/lib/api-client";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -19,7 +19,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -167,16 +166,7 @@ export function OperatorShell({
             <BrandLink className="text-slate-900" />
           </SidebarHeader>
           <SidebarContent>
-            <div className="grid gap-2 px-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                Operations
-              </span>
-              <Badge variant="secondary" className="w-fit">
-                Operator
-              </Badge>
-            </div>
             <SidebarGroup>
-              <SidebarGroupLabel>Workspace</SidebarGroupLabel>
               <SidebarMenu id="operator-navigation" aria-label="Operator navigation">
                 {navigation
                   .filter((item) => item.visible)

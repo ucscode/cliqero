@@ -68,7 +68,7 @@ describe("operator users list", () => {
     const headers = Array.from(html.matchAll(/<th\b[^>]*>(.*?)<\/th>/g), (match) => match[1]);
 
     expect(html).toContain("<table");
-    expect(headers).toEqual(["User", "Email", "Direct referrals", "Country", "Action"]);
+    expect(headers).toEqual(["User", "Email", "Direct referrals", "Country", "Actions"]);
     expect(html).toContain("@reviewer_three");
     expect(html).toContain("Reviewer Three");
     expect(html).toContain("reviewer.three@example.test");
@@ -153,7 +153,7 @@ describe("operator users list", () => {
   });
 
   it("uses the shared table loading, empty, and retryable error states", () => {
-    const loading = renderUsers({ loading: true });
+    const loading = renderUsers({ loading: true, page: null });
     const empty = renderUsers({ page: { items: [], nextCursor: null } });
     const failed = renderUsers({ page: null, error: "Account service unavailable." });
 

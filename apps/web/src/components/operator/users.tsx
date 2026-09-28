@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   apiFetch,
   ApiClientError,
@@ -20,29 +20,22 @@ import {
   type Capability,
 } from "@/modules/identity/capabilities";
 import { API_SCOPE_METADATA } from "@/modules/identity/api/scopes";
-import {
-  OperatorActionCell,
-  OperatorPrimaryCell,
-  OperatorSecondaryText,
-  OperatorValueCell,
-} from "./ui/data-cells";
-import { OperatorEmptyState } from "./ui/empty-state";
+import { OperatorPrimaryCell, OperatorSecondaryText, OperatorValueCell } from "./ui/data-cells";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorLoadingState } from "./ui/loading-state";
-import { OperatorPage, OperatorPageHeader } from "./ui/page";
 import { OperatorMetricCard } from "./ui/metric-card";
-import { OperatorPagination } from "./ui/pagination";
 import { OperatorSection } from "./ui/section";
-import { OperatorTableSurface } from "./ui/table-surface";
-import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
-import { OperatorActionsMenu } from "./ui/actions-menu";
-import { CursorHistory } from "./ui/cursor-history";
+import { OperatorFilterField } from "./ui/toolbar";
+import { CrudIndex } from "./crud/index-page";
+import { CrudDetail, CrudDetails } from "./crud/detail";
+import { CrudEdit } from "./crud/edit";
+import { useCrudCollection } from "./crud/use-collection";
+import type { CrudColumn } from "./crud/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { HoneypotField } from "../honeypot-field";
 import { Input } from "../ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Toast } from "../toast";
 import { CountrySelect } from "../country-select";
 import { Label } from "../ui/label";
@@ -72,82 +65,40 @@ export function operatorUserRowActions(account: OperatorAccountSummary, canManag
 }
 
 export function OperatorUsersList({ canManage = false }: { canManage?: boolean }) {
-  const [page, setPage] = useState<OperatorAccountPage | null>(null);
   const [search, setSearch] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
-  const [cursorHistory, setCursorHistory] = useState(() => CursorHistory.firstPage());
-  const navigationPending = useRef(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load(cursor: string | null = null, searchValue = appliedSearch) {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ limit: "25" });
-      if (searchValue) params.set("search", searchValue);
-      if (cursor) params.set("cursor", cursor);
-      const result = await apiFetch<OperatorAccountPage>(`/api/operator/accounts?${params}`);
-      setPage(result);
-      return result;
-    } catch (cause) {
-      setError(message(cause));
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }
+  const collection = useCrudCollection(async (appliedSearch: string, cursor) => {
+    const params = new URLSearchParams({ limit: "25" });
+    if (appliedSearch) params.set("search", appliedSearch);
+    if (cursor) params.set("cursor", cursor);
+    return apiFetch<OperatorAccountPage>(`/api/operator/accounts?${params}`);
+  }, "");
 
   useEffect(() => {
     // Load once; search is submitted intentionally to avoid request storms.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
+    void collection.apply("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <OperatorUsersListView
-      page={page}
+      page={
+        collection.loading && collection.items.length === 0
+          ? null
+          : { items: collection.items, nextCursor: collection.nextCursor }
+      }
       search={search}
-      loading={loading}
-      error={error}
+      loading={collection.loading}
+      error={collection.error}
       canManage={canManage}
       onSearchChange={setSearch}
       onSearch={(event) => {
         event.preventDefault();
-        const submittedSearch = search.trim();
-        void load(null, submittedSearch).then((result) => {
-          if (result) {
-            setAppliedSearch(submittedSearch);
-            setCursorHistory(CursorHistory.firstPage());
-          }
-        });
+        void collection.apply(search.trim());
       }}
-      onRetry={() => void load(cursorHistory.current)}
-      hasPrevious={cursorHistory.hasPrevious}
-      onPrevious={() => {
-        if (loading || navigationPending.current || !cursorHistory.hasPrevious) return;
-        navigationPending.current = true;
-        void load(cursorHistory.previous)
-          .then((result) => {
-            if (result) setCursorHistory((history) => history.afterPrevious());
-          })
-          .finally(() => {
-            navigationPending.current = false;
-          });
-      }}
-      onNext={() => {
-        const nextCursor = page?.nextCursor;
-        if (loading || navigationPending.current || !nextCursor) return;
-        navigationPending.current = true;
-        void load(nextCursor)
-          .then((result) => {
-            if (result) setCursorHistory((history) => history.afterNext(nextCursor));
-          })
-          .finally(() => {
-            navigationPending.current = false;
-          });
-      }}
+      onRetry={() => void collection.retry()}
+      hasPrevious={collection.hasPrevious}
+      onPrevious={() => void collection.previous()}
+      onNext={() => void collection.next()}
     />
   );
 }
@@ -177,32 +128,64 @@ export function OperatorUsersListView({
   onPrevious: () => void;
   onNext: () => void;
 }) {
+  const columns: readonly CrudColumn<OperatorAccountSummary>[] = [
+    {
+      key: "user",
+      label: "User",
+      primary: true,
+      render: (account) => (
+        <OperatorPrimaryCell
+          title={
+            <Link
+              href={`/operator/users/${account.id}`}
+              className="rounded-sm hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+            >
+              @{account.username}
+            </Link>
+          }
+          subtitle={
+            account.displayName && account.displayName !== account.username
+              ? account.displayName
+              : undefined
+          }
+        />
+      ),
+    },
+    {
+      key: "email",
+      label: "Email",
+      render: (account) => (
+        <OperatorSecondaryText className="break-all">
+          {account.email ?? "No authentication email"}
+        </OperatorSecondaryText>
+      ),
+    },
+    {
+      key: "referrals",
+      label: "Direct referrals",
+      align: "right",
+      render: (account) => <OperatorValueCell>{account.directReferralCount}</OperatorValueCell>,
+    },
+    {
+      key: "country",
+      label: "Country",
+      render: (account) => <OperatorSecondaryText>{account.country || "—"}</OperatorSecondaryText>,
+    },
+  ];
+
   return (
-    <OperatorPage>
-      <OperatorPageHeader
-        eyebrow="Account operations"
-        title="Users"
-        description="Search safe account projections and inspect referral context."
-        actions={
-          canManage ? (
-            <Button asChild size="sm">
-              <Link href="/operator/users/new">Add user</Link>
-            </Button>
-          ) : undefined
-        }
-      />
-      <OperatorToolbar
-        className="max-w-4xl"
-        onSubmit={onSearch}
-        actions={
-          <>
-            <Button type="submit" variant="secondary" disabled={loading}>
-              {loading ? "Searching…" : "Search"}
-            </Button>
-            <HoneypotField />
-          </>
-        }
-      >
+    <CrudIndex
+      eyebrow="Account operations"
+      title="Users"
+      description="Search safe account projections and inspect referral context."
+      headerActions={
+        canManage ? (
+          <Button asChild size="sm">
+            <Link href="/operator/users/new">Add user</Link>
+          </Button>
+        ) : undefined
+      }
+      filters={
         <OperatorFilterField label="Search accounts" htmlFor="operator-user-search">
           <Input
             id="operator-user-search"
@@ -212,103 +195,41 @@ export function OperatorUsersListView({
             placeholder="Username, email, or account ID"
           />
         </OperatorFilterField>
-      </OperatorToolbar>
-      <OperatorSection title="Users">
-        {error && <OperatorErrorState message={error} retry={onRetry} />}
-        {loading ? (
-          <OperatorLoadingState variant="table" rows={5} columns={5} label="Loading users" />
-        ) : page?.items.length ? (
-          <OperatorTableSurface
-            footer={
-              page.nextCursor || hasPrevious ? (
-                <OperatorPagination
-                  hasPrevious={hasPrevious && !loading}
-                  hasNext={Boolean(page.nextCursor) && !loading}
-                  onPrevious={onPrevious}
-                  onNext={onNext}
-                  summary={`Showing ${page.items.length} users`}
-                />
-              ) : undefined
+      }
+      onFiltersSubmit={onSearch}
+      toolbarActions={
+        <>
+          <Button type="submit" variant="secondary" disabled={loading}>
+            {loading ? "Searching…" : "Search"}
+          </Button>
+          <HoneypotField />
+        </>
+      }
+      toolbarClassName="max-w-4xl"
+      items={page?.items ?? []}
+      columns={columns}
+      getRowKey={(account) => account.id}
+      actions={(account) => operatorUserRowActions(account, Boolean(canManage))}
+      actionLabel={(account) => `Actions for @${account.username}`}
+      loading={loading}
+      loadingLabel="Loading users"
+      error={error}
+      onRetry={onRetry}
+      emptyTitle="No users found"
+      emptyDescription="Try a different username, email, or account ID."
+      pagination={
+        page && (page.nextCursor || hasPrevious)
+          ? {
+              hasPrevious,
+              hasNext: Boolean(page.nextCursor),
+              onPrevious,
+              onNext,
+              summary: `Showing ${page.items.length} users`,
             }
-          >
-            <Table className="min-w-[760px]">
-              <TableHeader>
-                <TableRow className="border-slate-200 bg-slate-50 hover:bg-slate-50">
-                  <TableHead scope="col" className="px-4 text-xs uppercase tracking-wider">
-                    User
-                  </TableHead>
-                  <TableHead scope="col" className="px-4 text-xs uppercase tracking-wider">
-                    Email
-                  </TableHead>
-                  <TableHead
-                    scope="col"
-                    className="px-4 text-right text-xs uppercase tracking-wider"
-                  >
-                    Direct referrals
-                  </TableHead>
-                  <TableHead scope="col" className="px-4 text-xs uppercase tracking-wider">
-                    Country
-                  </TableHead>
-                  <TableHead
-                    scope="col"
-                    className="px-4 text-right text-xs uppercase tracking-wider"
-                  >
-                    Action
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {page.items.map((account) => (
-                  <TableRow key={account.id} className="border-slate-200 bg-white">
-                    <TableCell className="max-w-64 px-4 py-3">
-                      <OperatorPrimaryCell
-                        title={
-                          <Link
-                            href={`/operator/users/${account.id}`}
-                            className="rounded-sm hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
-                          >
-                            @{account.username}
-                          </Link>
-                        }
-                        subtitle={
-                          account.displayName && account.displayName !== account.username
-                            ? account.displayName
-                            : undefined
-                        }
-                      />
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <OperatorSecondaryText className="break-all">
-                        {account.email ?? "No authentication email"}
-                      </OperatorSecondaryText>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <OperatorValueCell>{account.directReferralCount}</OperatorValueCell>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <OperatorSecondaryText>{account.country || "—"}</OperatorSecondaryText>
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <OperatorActionCell>
-                        <OperatorActionsMenu
-                          label={`Actions for @${account.username}`}
-                          actions={operatorUserRowActions(account, Boolean(canManage))}
-                        />
-                      </OperatorActionCell>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </OperatorTableSurface>
-        ) : !error ? (
-          <OperatorEmptyState
-            title="No users found"
-            description="Try a different username, email, or account ID."
-          />
-        ) : null}
-      </OperatorSection>
-    </OperatorPage>
+          : undefined
+      }
+      sectionTitle="Users"
+    />
   );
 }
 
@@ -516,170 +437,156 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
     }
   }
 
-  if (loading)
-    return (
-      <OperatorPage>
-        <OperatorLoadingState variant="section" label="Loading account" />
-      </OperatorPage>
-    );
+  if (loading) return <CrudDetail eyebrow="Account inspection" title="User" loading />;
   if (!account)
     return (
-      <OperatorPage>
-        <OperatorErrorState
-          title="Account unavailable"
-          message={error || "This account could not be found."}
-        />
-      </OperatorPage>
+      <CrudDetail
+        eyebrow="Account inspection"
+        title="User unavailable"
+        error={{
+          title: "Account unavailable",
+          message: error || "This account could not be found.",
+        }}
+      />
     );
   return (
-    <OperatorPage>
-      <OperatorPageHeader
-        eyebrow="Account inspection"
-        title={account.displayName || account.username}
-        description={`@${account.username} · ${account.email ?? "No authentication email"}`}
-      />
-      {error && <OperatorErrorState message={error} />}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <OperatorSection title="Identity" surface>
-          <dl className="detail-list">
-            <div>
-              <dt>Account ID</dt>
-              <dd className="break-value">{account.id}</dd>
-            </div>
-            <div>
-              <dt>Country</dt>
-              <dd>{account.country || "Not set"}</dd>
-            </div>
-            <div>
-              <dt>Created</dt>
-              <dd>{new Date(account.createdAt).toLocaleString()}</dd>
-            </div>
-          </dl>
-        </OperatorSection>
-        {!capabilityLoading && capabilityView && (
-          <CapabilityCard
-            view={capabilityView}
-            saving={capabilitySaving}
-            onChange={changeCapability}
-          />
-        )}
-        {capabilityLoading && (
-          <OperatorLoadingState variant="section" label="Loading platform capabilities" />
-        )}
-        {capabilityError && <OperatorErrorState message={capabilityError} />}
-        {!apiKeyLoading && apiKeyPage && (
-          <OperatorApiKeyCard
-            page={apiKeyPage}
-            name={apiKeyName}
-            expiry={apiKeyExpiry}
-            selectedScopes={apiKeyScopes}
-            saving={apiKeySaving}
-            secret={apiKeySecret}
-            error={apiKeyError}
-            onNameChange={setApiKeyName}
-            onExpiryChange={setApiKeyExpiry}
-            onToggleScope={toggleApiKeyScope}
-            onCreate={createApiKey}
-            onRevoke={revokeApiKey}
-            onDismissSecret={() => setApiKeySecret(null)}
-          />
-        )}
-        {apiKeyLoading && <OperatorLoadingState variant="section" label="Loading API access" />}
-        {apiKeyError && !apiKeyPage && <OperatorErrorState message={apiKeyError} />}
-        <OperatorSection title="Referral context" surface>
-          <dl className="detail-list">
-            <div>
-              <dt>Immediate parent</dt>
-              <dd>
-                {account.parent ? (
-                  <Link href={`/operator/users/${account.parent.id}`}>
-                    @{account.parent.username}
-                  </Link>
-                ) : (
-                  "No parent"
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Direct referrals</dt>
-              <dd>{account.directReferralCount}</dd>
-            </div>
-          </dl>
-          <Button asChild variant="secondary">
-            <Link href={`/operator/network?root=${account.id}`}>View network</Link>
-          </Button>
-        </OperatorSection>
-        <OperatorMetricCard
-          label="Purchases"
-          category="Commerce"
-          value={account.purchaseCount.toLocaleString("en-US")}
-        />
-      </div>
-      <OperatorSection
-        title="Reassign immediate parent"
-        description="Descendants remain attached. PostgreSQL prevents cycles and the action is audited."
-        surface
-      >
-        <div className="reassignment-current">
-          <span>Current parent</span>
-          <strong>{account.parent ? `@${account.parent.username}` : "None"}</strong>
-        </div>
-        <form
-          className="reassignment-search"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void searchParent();
-          }}
-        >
-          <label>
-            Find new parent
-            <Input
-              value={parentSearch}
-              onChange={(event) => setParentSearch(event.target.value)}
-              placeholder="Username, email, or account ID"
+    <CrudDetail
+      eyebrow="Account inspection"
+      title={account.displayName || account.username}
+      description={`@${account.username} · ${account.email ?? "No authentication email"}`}
+      fieldsTitle="Identity"
+      fields={[
+        { label: "Account ID", value: account.id, className: "break-all" },
+        { label: "Country", value: account.country || "Not set" },
+        { label: "Created", value: new Date(account.createdAt).toLocaleString() },
+      ]}
+      sections={
+        <>
+          {error && <OperatorErrorState message={error} />}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {!capabilityLoading && capabilityView && (
+              <CapabilityCard
+                view={capabilityView}
+                saving={capabilitySaving}
+                onChange={changeCapability}
+              />
+            )}
+            {capabilityLoading && (
+              <OperatorLoadingState variant="section" label="Loading platform capabilities" />
+            )}
+            {capabilityError && <OperatorErrorState message={capabilityError} />}
+            {!apiKeyLoading && apiKeyPage && (
+              <OperatorApiKeyCard
+                page={apiKeyPage}
+                name={apiKeyName}
+                expiry={apiKeyExpiry}
+                selectedScopes={apiKeyScopes}
+                saving={apiKeySaving}
+                secret={apiKeySecret}
+                error={apiKeyError}
+                onNameChange={setApiKeyName}
+                onExpiryChange={setApiKeyExpiry}
+                onToggleScope={toggleApiKeyScope}
+                onCreate={createApiKey}
+                onRevoke={revokeApiKey}
+                onDismissSecret={() => setApiKeySecret(null)}
+              />
+            )}
+            {apiKeyLoading && <OperatorLoadingState variant="section" label="Loading API access" />}
+            {apiKeyError && !apiKeyPage && <OperatorErrorState message={apiKeyError} />}
+            <OperatorSection title="Referral context" surface>
+              <CrudDetails
+                fields={[
+                  {
+                    label: "Immediate parent",
+                    value: account.parent ? (
+                      <Link href={`/operator/users/${account.parent.id}`}>
+                        @{account.parent.username}
+                      </Link>
+                    ) : (
+                      "No parent"
+                    ),
+                  },
+                  { label: "Direct referrals", value: account.directReferralCount },
+                ]}
+              />
+              <Button asChild variant="secondary">
+                <Link href={`/operator/network?root=${account.id}`}>View network</Link>
+              </Button>
+            </OperatorSection>
+            <OperatorMetricCard
+              label="Purchases"
+              category="Commerce"
+              value={account.purchaseCount.toLocaleString("en-US")}
             />
-          </label>
-          <Button type="submit" variant="secondary">
-            Search
-          </Button>
-        </form>
-        {parentResults.length > 0 && (
-          <ul className="operator-search-results">
-            {parentResults.map((result) => (
-              <li key={result.id}>
-                <button
-                  type="button"
-                  className={selectedParent?.id === result.id ? "selected" : ""}
-                  onClick={() => setSelectedParent(result)}
-                >
-                  <strong>@{result.username}</strong>
-                  <span>{result.displayName || result.email}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {selectedParent && (
-          <div className="reassignment-confirm">
-            <span>
-              New parent: <strong>@{selectedParent.username}</strong>
-            </span>
-            <Button type="button" onClick={() => void reassign()} disabled={saving}>
-              {saving ? "Saving…" : "Confirm reassignment"}
-            </Button>
           </div>
-        )}
-      </OperatorSection>
-      {account.latestParentReassignment && (
-        <OperatorSection title="Latest hierarchy audit" surface>
-          <p className="panel-note">
-            Parent changed on{" "}
-            {new Date(account.latestParentReassignment.occurredAt).toLocaleString()} by{" "}
-            {account.latestParentReassignment.actorId || "an operator"}.
-          </p>
-        </OperatorSection>
-      )}
-    </OperatorPage>
+          <OperatorSection
+            title="Reassign immediate parent"
+            description="Descendants remain attached. PostgreSQL prevents cycles and the action is audited."
+            surface
+          >
+            <div className="reassignment-current">
+              <span>Current parent</span>
+              <strong>{account.parent ? `@${account.parent.username}` : "None"}</strong>
+            </div>
+            <form
+              className="reassignment-search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void searchParent();
+              }}
+            >
+              <label>
+                Find new parent
+                <Input
+                  value={parentSearch}
+                  onChange={(event) => setParentSearch(event.target.value)}
+                  placeholder="Username, email, or account ID"
+                />
+              </label>
+              <Button type="submit" variant="secondary">
+                Search
+              </Button>
+            </form>
+            {parentResults.length > 0 && (
+              <ul className="operator-search-results">
+                {parentResults.map((result) => (
+                  <li key={result.id}>
+                    <button
+                      type="button"
+                      className={selectedParent?.id === result.id ? "selected" : ""}
+                      onClick={() => setSelectedParent(result)}
+                    >
+                      <strong>@{result.username}</strong>
+                      <span>{result.displayName || result.email}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {selectedParent && (
+              <div className="reassignment-confirm">
+                <span>
+                  New parent: <strong>@{selectedParent.username}</strong>
+                </span>
+                <Button type="button" onClick={() => void reassign()} disabled={saving}>
+                  {saving ? "Saving…" : "Confirm reassignment"}
+                </Button>
+              </div>
+            )}
+          </OperatorSection>
+          {account.latestParentReassignment && (
+            <OperatorSection title="Latest hierarchy audit" surface>
+              <p className="panel-note">
+                Parent changed on{" "}
+                {new Date(account.latestParentReassignment.occurredAt).toLocaleString()} by{" "}
+                {account.latestParentReassignment.actorId || "an operator"}.
+              </p>
+            </OperatorSection>
+          )}
+        </>
+      }
+    />
   );
 }
 
@@ -821,26 +728,22 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
   }
 
   return (
-    <OperatorPage className="max-w-4xl">
-      <OperatorPageHeader
-        eyebrow="Account operations"
-        title={create ? "Add user" : "Edit account"}
-        description={
-          create
-            ? "Create an account without handling or storing its password."
-            : "Update the account username or country. Email and referral relationships are managed separately."
-        }
-        actions={
-          <Button asChild variant="secondary" size="sm">
-            <Link href={accountId ? `/operator/users/${accountId}` : "/operator/users"}>
-              Back to {accountId ? "account" : "users"}
-            </Link>
-          </Button>
-        }
-      />
-      <OperatorSection title={create ? "Account details" : "Editable profile fields"}>
-        {error && <OperatorErrorState message={error} />}
-        {success && (
+    <CrudEdit
+      mode={create ? "create" : "edit"}
+      eyebrow="Account operations"
+      title={create ? "Add user" : "Edit account"}
+      description={
+        create
+          ? "Create an account without handling or storing its password."
+          : "Update the account username or country. Email and referral relationships are managed separately."
+      }
+      backHref={accountId ? `/operator/users/${accountId}` : "/operator/users"}
+      saving={saving}
+      loading={loading}
+      onSubmit={(event) => void submit(event)}
+      error={error}
+      success={
+        success ? (
           <Toast tone="success">
             <p>{success}</p>
             {createdAccountId && (
@@ -852,47 +755,27 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
               </Link>
             )}
           </Toast>
-        )}
-        {loading ? (
-          <OperatorLoadingState variant="section" label="Loading account" />
-        ) : (
-          <Card className="p-5">
-            <form className="grid gap-5" onSubmit={(event) => void submit(event)}>
-              <OperatorUserFormFields
-                create={create}
-                username={username}
-                email={email}
-                country={country}
-                onUsernameChange={setUsername}
-                onEmailChange={setEmail}
-                onCountryChange={setCountry}
-              />
-              <p className="text-sm text-slate-600">
-                {create
-                  ? "The account holder sets their password using an email link. Parent assignment remains a separate hierarchy operation."
-                  : "Email changes require the account holder’s Better Auth verification flow. Parent assignment remains a separate hierarchy operation."}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={saving || loading}>
-                  {saving
-                    ? create
-                      ? "Creating…"
-                      : "Saving…"
-                    : create
-                      ? "Create user"
-                      : "Save changes"}
-                </Button>
-                <Button asChild type="button" variant="secondary">
-                  <Link href={accountId ? `/operator/users/${accountId}` : "/operator/users"}>
-                    Cancel
-                  </Link>
-                </Button>
-              </div>
-            </form>
-          </Card>
-        )}
-      </OperatorSection>
-    </OperatorPage>
+        ) : undefined
+      }
+      submitLabel={create ? "Create user" : "Save changes"}
+      savingLabel={create ? "Creating…" : "Saving…"}
+      sectionTitle={create ? "Account details" : "Editable profile fields"}
+    >
+      <OperatorUserFormFields
+        create={create}
+        username={username}
+        email={email}
+        country={country}
+        onUsernameChange={setUsername}
+        onEmailChange={setEmail}
+        onCountryChange={setCountry}
+      />
+      <p className="text-sm text-slate-600">
+        {create
+          ? "The account holder sets their password using an email link. Parent assignment remains a separate hierarchy operation."
+          : "Email changes require the account holder’s Better Auth verification flow. Parent assignment remains a separate hierarchy operation."}
+      </p>
+    </CrudEdit>
   );
 }
 

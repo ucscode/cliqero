@@ -1,26 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, type ListingReview } from "@/lib/api-client";
 import { Select } from "../ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { CursorHistory } from "./ui/cursor-history";
-import { OperatorActionsMenu } from "./ui/actions-menu";
-import {
-  OperatorActionCell,
-  OperatorPrimaryCell,
-  OperatorStatusCell,
-  OperatorValueCell,
-} from "./ui/data-cells";
-import { OperatorEmptyState } from "./ui/empty-state";
-import { OperatorErrorState } from "./ui/error-state";
-import { OperatorLoadingState } from "./ui/loading-state";
-import { OperatorPage, OperatorPageHeader } from "./ui/page";
-import { OperatorPagination } from "./ui/pagination";
-import { OperatorSection } from "./ui/section";
-import { OperatorTableSurface } from "./ui/table-surface";
-import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
+import { Button } from "../ui/button";
+import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
+import { OperatorFilterField } from "./ui/toolbar";
+import { CrudIndex } from "./crud/index-page";
+import { useCrudCollection } from "./crud/use-collection";
+import type { CrudColumn } from "./crud/table";
 
 type Review = ListingReview & { reviewer?: string; listing_title?: string };
 type ReviewPage = { items: Review[]; next_cursor: string | null };
@@ -29,201 +18,139 @@ const errorMessage = (error: unknown) =>
 
 export function OperatorReviews() {
   const [status, setStatus] = useState("pending");
-  const [page, setPage] = useState<ReviewPage | null>(null);
-  const [history, setHistory] = useState(() => CursorHistory.firstPage());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const busy = useRef(false);
-  const retryCursor = useRef<string | null>(null);
-
-  const load = useCallback(
-    async (cursor: string | null = null) => {
-      if (busy.current) return null;
-      busy.current = true;
-      retryCursor.current = cursor;
-      setLoading(true);
-      setError(null);
-      try {
-        const params = new URLSearchParams({ status });
-        if (cursor) params.set("cursor", cursor);
-        const result = await apiFetch<ReviewPage>(`/api/operator/reviews?${params}`);
-        setPage(result);
-        if (!cursor) setHistory(CursorHistory.firstPage());
-        return result;
-      } catch (cause) {
-        setError(errorMessage(cause));
-        return null;
-      } finally {
-        busy.current = false;
-        setLoading(false);
-      }
-    },
-    [status],
-  );
+  const [actionError, setActionError] = useState<string | null>(null);
+  const collection = useCrudCollection(async (appliedStatus: string, cursor) => {
+    const params = new URLSearchParams({ status: appliedStatus });
+    if (cursor) params.set("cursor", cursor);
+    const result = await apiFetch<ReviewPage>(`/api/operator/reviews?${params}`);
+    return { items: result.items, nextCursor: result.next_cursor };
+  }, "pending");
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+    void collection.apply("pending");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function moderate(id: string, action: "approve" | "reject") {
-    if (busy.current) return;
-    busy.current = true;
-    setLoading(true);
-    setError(null);
     try {
+      setActionError(null);
       await apiFetch(`/api/operator/reviews/${id}/${action}`, { method: "POST" });
-      busy.current = false;
-      await load(history.current);
+      await collection.retry();
     } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      busy.current = false;
-      setLoading(false);
+      setActionError(errorMessage(cause));
     }
   }
-
-  async function next() {
-    const cursor = page?.next_cursor;
-    if (!cursor || busy.current) return;
-    const result = await load(cursor);
-    if (result) setHistory((current) => current.afterNext(cursor));
-  }
-  async function previous() {
-    if (!history.hasPrevious || busy.current) return;
-    const cursor = history.previous;
-    const result = await load(cursor);
-    if (result) setHistory((current) => current.afterPrevious());
-  }
+  const columns: readonly CrudColumn<Review>[] = [
+    {
+      key: "listing",
+      label: "Listing",
+      primary: true,
+      render: (review) => (
+        <OperatorPrimaryCell
+          title={
+            <Link href={`/operator/catalogue/${review.listing_id}`}>
+              {review.listing_title ?? "Listing"}
+            </Link>
+          }
+          subtitle={review.listing_id}
+        />
+      ),
+    },
+    { key: "reviewer", label: "Reviewer", render: (review) => review.reviewer ?? "Customer" },
+    {
+      key: "rating",
+      label: "Rating",
+      render: (review) => <OperatorValueCell align="left">{review.rating}/5</OperatorValueCell>,
+    },
+    {
+      key: "review",
+      label: "Review",
+      render: (review) => <span className="whitespace-pre-wrap">{review.body || "—"}</span>,
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (review) => <OperatorStatusCell status={review.status} />,
+    },
+    {
+      key: "submitted",
+      label: "Submitted",
+      render: (review) => new Date(review.created_at).toLocaleString(),
+    },
+  ];
 
   return (
-    <OperatorPage>
-      <OperatorPageHeader
-        eyebrow="Customer feedback"
-        title="Reviews"
-        description="Moderate submitted listing reviews. Decisions remain protected by the review moderation capability."
-      />
-      <OperatorToolbar
-        onSubmit={(event) => {
-          event.preventDefault();
-          void load();
-        }}
-      >
+    <CrudIndex
+      eyebrow="Customer feedback"
+      title="Reviews"
+      description="Moderate submitted listing reviews. Decisions remain protected by the review moderation capability."
+      filters={
         <OperatorFilterField label="Status" htmlFor="review-status">
           <Select
             id="review-status"
             value={status}
-            onChange={(event) => {
-              setStatus(event.target.value);
-            }}
+            onChange={(event) => setStatus(event.target.value)}
           >
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </Select>
         </OperatorFilterField>
-      </OperatorToolbar>
-      {error && <OperatorErrorState message={error} retry={() => void load(retryCursor.current)} />}
-      <OperatorSection
-        title="Moderation queue"
-        description="Review content and status before taking an action."
-      >
-        {loading && !page ? (
-          <OperatorLoadingState variant="table" columns={7} />
-        ) : page?.items.length ? (
-          <OperatorTableSurface
-            footer={
-              <OperatorPagination
-                hasPrevious={history.hasPrevious && !loading}
-                hasNext={Boolean(page.next_cursor) && !loading}
-                onPrevious={() => void previous()}
-                onNext={() => void next()}
-              />
-            }
-          >
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Listing</TableHead>
-                  <TableHead>Reviewer</TableHead>
-                  <TableHead>Rating</TableHead>
-                  <TableHead>Review</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Submitted</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {page.items.map((review) => (
-                  <TableRow key={review.id}>
-                    <TableCell>
-                      <OperatorPrimaryCell
-                        title={
-                          <Link href={`/operator/catalogue/${review.listing_id}`}>
-                            {review.listing_title ?? "Listing"}
-                          </Link>
-                        }
-                        subtitle={review.listing_id}
-                      />
-                    </TableCell>
-                    <TableCell>{review.reviewer ?? "Customer"}</TableCell>
-                    <TableCell>
-                      <OperatorValueCell align="left">{review.rating}/5</OperatorValueCell>
-                    </TableCell>
-                    <TableCell className="max-w-sm whitespace-pre-wrap">
-                      {review.body || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <OperatorStatusCell status={review.status} />
-                    </TableCell>
-                    <TableCell>{new Date(review.created_at).toLocaleString()}</TableCell>
-                    <TableCell>
-                      <OperatorActionCell>
-                        <OperatorActionsMenu
-                          actions={
-                            review.status === "pending"
-                              ? [
-                                  {
-                                    type: "link",
-                                    label: "View listing",
-                                    href: `/operator/catalogue/${review.listing_id}`,
-                                  },
-                                  {
-                                    type: "action",
-                                    label: "Approve",
-                                    onSelect: () => void moderate(review.id, "approve"),
-                                  },
-                                  {
-                                    type: "action",
-                                    label: "Reject",
-                                    destructive: true,
-                                    onSelect: () => void moderate(review.id, "reject"),
-                                  },
-                                ]
-                              : [
-                                  {
-                                    type: "link",
-                                    label: "View listing",
-                                    href: `/operator/catalogue/${review.listing_id}`,
-                                  },
-                                ]
-                          }
-                          label={`Actions for review ${review.id}`}
-                        />
-                      </OperatorActionCell>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </OperatorTableSurface>
-        ) : (
-          <OperatorEmptyState
-            title="No reviews in this queue"
-            description="Reviews matching this status will appear here."
-          />
-        )}
-      </OperatorSection>
-    </OperatorPage>
+      }
+      onFiltersSubmit={(event) => {
+        event.preventDefault();
+        void collection.apply(status);
+      }}
+      toolbarActions={
+        <Button type="submit" variant="secondary" disabled={collection.loading}>
+          Apply
+        </Button>
+      }
+      items={collection.items}
+      columns={columns}
+      getRowKey={(review) => review.id}
+      actions={(review) =>
+        review.status === "pending"
+          ? [
+              {
+                type: "link",
+                label: "View listing",
+                href: `/operator/catalogue/${review.listing_id}`,
+              },
+              {
+                type: "action",
+                label: "Approve",
+                onSelect: () => void moderate(review.id, "approve"),
+              },
+              {
+                type: "action",
+                label: "Reject",
+                destructive: true,
+                onSelect: () => void moderate(review.id, "reject"),
+              },
+            ]
+          : [
+              {
+                type: "link",
+                label: "View listing",
+                href: `/operator/catalogue/${review.listing_id}`,
+              },
+            ]
+      }
+      actionLabel={(review) => `Actions for review ${review.id}`}
+      loading={collection.loading}
+      error={actionError ?? collection.error}
+      onRetry={() => void collection.retry()}
+      emptyTitle="No reviews in this queue"
+      emptyDescription="Reviews matching this status will appear here."
+      pagination={{
+        hasPrevious: collection.hasPrevious,
+        hasNext: collection.hasNext,
+        onPrevious: () => void collection.previous(),
+        onNext: () => void collection.next(),
+      }}
+      sectionTitle="Moderation queue"
+      sectionDescription="Review content and status before taking an action."
+    />
   );
 }
