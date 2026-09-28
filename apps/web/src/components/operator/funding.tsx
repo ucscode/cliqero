@@ -76,8 +76,9 @@ export function OperatorFundingList() {
     async (
       filters: { search: string; state: OperatorFundingState | ""; provider: string },
       cursor,
+      pageSize,
     ) => {
-      const params = new URLSearchParams({ limit: "25" });
+      const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       if (filters.state) params.set("state", filters.state);
       if (filters.provider) params.set("provider", filters.provider);
@@ -87,12 +88,6 @@ export function OperatorFundingList() {
     },
     { search: "", state: "", provider: "" },
   );
-
-  useEffect(() => {
-    // The first read is intentionally explicit; filters are submitted by the operator.
-    void collection.apply({ search: "", state: "", provider: "" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const columns: readonly CrudColumn<OperatorFundingPage["items"][number]>[] = [
     {
@@ -189,12 +184,23 @@ export function OperatorFundingList() {
         event.preventDefault();
         void collection.apply({ search: search.trim(), state, provider: provider.trim() });
       }}
+      onFiltersReset={async () => {
+        const ok = await collection.apply({ search: "", state: "", provider: "" });
+        if (ok) {
+          setSearch("");
+          setState("");
+          setProvider("");
+        }
+        return ok;
+      }}
+      filtersDirty={Boolean(search.trim() || state || provider.trim())}
       toolbarActions={
         <Button type="submit" variant="secondary" disabled={collection.loading}>
           Apply filters
         </Button>
       }
       items={collection.items}
+      pageSize={collection.pageSizeControl}
       columns={columns}
       getRowKey={(funding) => funding.id}
       actions={actions}

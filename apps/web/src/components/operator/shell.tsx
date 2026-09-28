@@ -56,6 +56,7 @@ export function OperatorShell({
     | "withdrawals"
     | "treasury"
     | "blog"
+    | "blogCategories"
     | "reviews";
   children?: ReactNode;
 }) {
@@ -113,48 +114,72 @@ export function OperatorShell({
       visible: hasCapability(capabilities, "hierarchy.manage"),
     },
     {
-      key: "funding",
-      href: "/operator/funding",
-      label: "Funding",
-      visible: hasCapability(capabilities, "finance.read"),
-    },
-    {
-      key: "distributions",
-      href: "/operator/distributions",
-      label: "Distributions",
-      visible: hasCapability(capabilities, "finance.read"),
-    },
-    {
-      key: "earnings",
-      href: "/operator/earnings",
-      label: "Earnings",
-      visible: hasCapability(capabilities, "finance.read"),
-    },
-    {
-      key: "withdrawals",
-      href: "/operator/withdrawals",
-      label: "Withdrawals",
-      visible: hasCapability(capabilities, "withdrawals.manage"),
-    },
-    {
-      key: "treasury",
-      href: "/operator/treasury",
-      label: "Treasury",
-      visible: hasCapability(capabilities, "treasury.manage"),
-    },
-    {
-      key: "blog",
-      href: "/operator/blog",
-      label: "Blog",
-      visible: hasCapability(capabilities, "content.manage"),
-    },
-    {
       key: "reviews",
       href: "/operator/reviews",
       label: "Reviews",
       visible: hasCapability(capabilities, "reviews.moderate"),
     },
   ];
+  const groups = [
+    {
+      label: "Finance",
+      active: ["funding", "distributions", "earnings", "withdrawals", "treasury"].includes(
+        activeSection,
+      ),
+      items: [
+        {
+          key: "funding",
+          href: "/operator/funding",
+          label: "Funding",
+          visible: hasCapability(capabilities, "finance.read"),
+        },
+        {
+          key: "distributions",
+          href: "/operator/distributions",
+          label: "Distributions",
+          visible: hasCapability(capabilities, "finance.read"),
+        },
+        {
+          key: "earnings",
+          href: "/operator/earnings",
+          label: "Earnings",
+          visible: hasCapability(capabilities, "finance.read"),
+        },
+        {
+          key: "withdrawals",
+          href: "/operator/withdrawals",
+          label: "Withdrawals",
+          visible: hasCapability(capabilities, "withdrawals.manage"),
+        },
+        {
+          key: "treasury",
+          href: "/operator/treasury",
+          label: "Treasury",
+          visible: hasCapability(capabilities, "treasury.manage"),
+        },
+      ],
+    },
+    {
+      label: "Blog",
+      active: activeSection === "blog" || activeSection === "blogCategories",
+      items: [
+        {
+          key: "blog",
+          href: "/operator/blog",
+          label: "Posts",
+          visible: hasCapability(capabilities, "content.manage"),
+        },
+        {
+          key: "blogCategories",
+          href: "/operator/blog/categories",
+          label: "Categories",
+          visible: hasCapability(capabilities, "content.manage"),
+        },
+      ],
+    },
+  ]
+    .map((group) => ({ ...group, items: group.items.filter((item) => item.visible) }))
+    .filter((group) => group.items.length);
 
   return (
     <SidebarProvider>
@@ -175,6 +200,24 @@ export function OperatorShell({
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
+                {groups.map((group) => (
+                  <li key={group.label} className="list-none">
+                    <details open={group.active} className="group/operator-nav">
+                      <summary className="cursor-pointer select-none rounded-md px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+                        {group.label}
+                      </summary>
+                      <SidebarMenu className="mt-1 pl-2">
+                        {group.items.map((item) => (
+                          <SidebarMenuItem key={item.key}>
+                            <SidebarMenuButton asChild isActive={activeSection === item.key}>
+                              <Link href={item.href}>{item.label}</Link>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        ))}
+                      </SidebarMenu>
+                    </details>
+                  </li>
+                ))}
               </SidebarMenu>
             </SidebarGroup>
           </SidebarContent>
@@ -191,11 +234,11 @@ export function OperatorShell({
         <SidebarInset>
           <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-white/95 px-4 backdrop-blur lg:px-8">
             <SidebarTrigger aria-label="Open operator navigation" />
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="inline-flex items-center gap-2 px-2 py-1.5"
+                  className="ml-auto inline-flex items-center gap-2 px-2 py-1.5"
                   aria-label="Open operator account menu"
                 >
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-800">

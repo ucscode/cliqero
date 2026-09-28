@@ -50,9 +50,15 @@ export function OperatorActionsMenu({
   label?: string;
 }) {
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon" aria-label={label}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={label}
+          className="hover:bg-slate-200 focus-visible:ring-2"
+        >
           <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>

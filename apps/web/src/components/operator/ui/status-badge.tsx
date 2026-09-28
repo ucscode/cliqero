@@ -53,5 +53,12 @@ export function OperatorStatusBadge({
   label?: string;
   tone?: OperatorStatusTone;
 }) {
-  return <Badge variant={badgeVariants[tone ?? operatorStatusTone(status)]}>{label}</Badge>;
+  return (
+    <Badge
+      variant={badgeVariants[tone ?? operatorStatusTone(status)]}
+      className="rounded-md px-2 py-0.5"
+    >
+      {label}
+    </Badge>
+  );
 }

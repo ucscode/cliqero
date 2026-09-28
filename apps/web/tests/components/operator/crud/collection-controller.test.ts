@@ -67,10 +67,10 @@ describe("operator CRUD collection controller", () => {
     await controller.apply("applied");
     expect(await controller.next()).toBe(false);
     expect(controller.hasPrevious).toBe(false);
-    expect(reader.mock.calls.at(-1)).toEqual(["applied", "page-2"]);
+    expect(reader.mock.calls.at(-1)).toEqual(["applied", "page-2", 25]);
 
     await controller.retry();
-    expect(reader.mock.calls.at(-1)).toEqual(["applied", null]);
+    expect(reader.mock.calls.at(-1)).toEqual(["applied", null, 25]);
     reader.mockImplementation(async (filter, cursor) => ({
       items: [`${filter}:${cursor ?? "first"}`],
       nextCursor: cursor ? null : "page-2",
@@ -78,7 +78,7 @@ describe("operator CRUD collection controller", () => {
     await controller.next();
     expect(controller.hasPrevious).toBe(true);
     await controller.previous();
-    expect(reader.mock.calls.at(-1)).toEqual(["applied", null]);
+    expect(reader.mock.calls.at(-1)).toEqual(["applied", null, 25]);
   });
 
   it("does not advance or discard cursor history after a failed Previous request", async () => {
@@ -115,5 +115,38 @@ describe("operator CRUD collection controller", () => {
     resolveRead({ items: ["loaded"], nextCursor: null });
     expect(await pending).toBe(true);
     expect(reader).toHaveBeenCalledTimes(1);
+  });
+
+  it("tracks initialization and preserves valid rows after failed refreshes", async () => {
+    let fail = false;
+    const controller = new CrudCollectionController<string, string>(
+      async (filter, cursor, size) => {
+        if (fail) throw new Error("refresh unavailable");
+        return { items: [`${filter}:${cursor ?? "first"}:${size}`], nextCursor: null };
+      },
+      "default",
+      25,
+    );
+    expect(controller.initialized).toBe(false);
+    await controller.setPageSize(50);
+    expect(controller.initialized).toBe(true);
+    expect(controller.items).toEqual(["default:first:50"]);
+    expect(controller.currentPageSize).toBe(50);
+    const accepted = controller.items;
+    fail = true;
+    expect(await controller.apply("new-filter")).toBe(false);
+    expect(controller.items).toBe(accepted);
+    expect(controller.error).toBe("refresh unavailable");
+  });
+
+  it("keeps successful empty results distinct from uninitialized collections", async () => {
+    const controller = new CrudCollectionController<string, string>(
+      async () => ({ items: [], nextCursor: null }),
+      "default",
+    );
+    expect(controller.initialized).toBe(false);
+    expect(await controller.apply("default")).toBe(true);
+    expect(controller.initialized).toBe(true);
+    expect(controller.items).toEqual([]);
   });
 });

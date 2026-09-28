@@ -46,10 +46,12 @@ describe("BlogService SQLite capability", () => {
   });
   it("stores relational category and tags", () => {
     const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
+    const category = service.createCategory("Guides");
     const post = service.create(
-      input({ category: "Guides", tags: ["referrals", "marketing"] }),
+      input({ category_id: category.id, tags: ["referrals", "marketing"] }),
       null,
     );
+    expect(post?.category?.id).toBe(category.id);
     expect(post?.category?.slug).toBe("guides");
     expect(post?.tags.map((tag) => tag.name)).toEqual(["marketing", "referrals"]);
     expect(service.categories()).toHaveLength(1);
@@ -77,13 +79,20 @@ describe("BlogService SQLite capability", () => {
   });
   it("paginates category and tag-filtered published posts", () => {
     const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
+    const guides = service.createCategory("Guides");
+    const other = service.createCategory("Other");
     for (let i = 0; i < 3; i += 1)
       service.create(
-        input({ title: `Guide ${i}`, status: "published", category: "Guides", tags: ["launch"] }),
+        input({
+          title: `Guide ${i}`,
+          status: "published",
+          category_id: guides.id,
+          tags: ["launch"],
+        }),
         null,
       );
     service.create(
-      input({ title: "Other", status: "published", category: "Other", tags: ["other"] }),
+      input({ title: "Other", status: "published", category_id: other.id, tags: ["other"] }),
       null,
     );
     const categoryFirst = service.list({ publishedOnly: true, category: "guides", limit: 1 });
@@ -104,5 +113,38 @@ describe("BlogService SQLite capability", () => {
     expect(categorySecond.items[0]?.category?.slug).toBe("guides");
     expect(tagFirst.items[0]?.tags.some((tag) => tag.slug === "launch")).toBe(true);
     expect(tagSecond.items[0]?.tags.some((tag) => tag.slug === "launch")).toBe(true);
+  });
+
+  it("manages categories and refuses to delete one still assigned to a post", () => {
+    const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
+    const category = service.createCategory("Engineering");
+    expect(() => service.createCategory("Engineering")).toThrow(/already exists/);
+    const updated = service.updateCategory(category.id, "Engineering Notes");
+    expect(updated.slug).toBe("engineering-notes");
+    const post = service.create(input({ category_id: updated.id }), null);
+    expect(post?.category?.id).toBe(updated.id);
+    expect(() => service.deleteCategory(updated.id)).toThrow(/assigned to one or more articles/);
+    expect(() =>
+      service.create(input({ category_id: "00000000-0000-4000-8000-000000000099" }), null),
+    ).toThrow(/selected blog category no longer exists/);
+    service.delete(post!.id);
+    service.deleteCategory(updated.id);
+    expect(service.categories()).toHaveLength(0);
+  });
+
+  it("returns bounded per-record outcomes for explicit blog bulk actions", () => {
+    const service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
+    const first = service.create(input({ title: "First" }), null)!;
+    const second = service.create(input({ title: "Second" }), null)!;
+    expect(service.bulk([first.id, second.id], "publish", 2)).toEqual([
+      { id: first.id, success: true },
+      { id: second.id, success: true },
+    ]);
+    const missingId = "00000000-0000-4000-8000-000000000099";
+    const mixed = service.bulk([first.id, missingId], "delete", 2);
+    expect(mixed[0]).toMatchObject({ id: first.id, success: true });
+    expect(mixed[1]).toMatchObject({ id: missingId, success: false });
+    expect(() => service.bulk([first.id, first.id], "delete", 2)).toThrow(/unique/);
+    expect(() => service.bulk([first.id, second.id], "delete", 1)).toThrow(/between 1 and 1/);
   });
 });

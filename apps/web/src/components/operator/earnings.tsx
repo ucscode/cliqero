@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { apiFetch, type OperatorEarningsPage } from "@/lib/api-client";
 import { Money } from "../money";
 import { Button } from "../ui/button";
@@ -23,8 +23,8 @@ export function OperatorEarningsList() {
   const [state, setState] = useState("");
   const [totals, setTotals] = useState<OperatorEarningsPage["totals"] | null>(null);
   const collection = useCrudCollection(
-    async (filters: { search: string; state: string }, cursor) => {
-      const params = new URLSearchParams({ limit: "25" });
+    async (filters: { search: string; state: string }, cursor, pageSize) => {
+      const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       if (filters.state) params.set("state", filters.state);
       if (cursor) params.set("cursor", cursor);
@@ -34,12 +34,6 @@ export function OperatorEarningsList() {
     },
     { search: "", state: "" },
   );
-
-  useEffect(() => {
-    void collection.apply({ search: "", state: "" });
-    // Initial load intentionally captures the initial (empty) filters only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   type Entry = OperatorEarningsPage["items"][number];
   const columns: readonly CrudColumn<Entry>[] = [
@@ -141,6 +135,15 @@ export function OperatorEarningsList() {
           </OperatorFilterField>
         </>
       }
+      onFiltersReset={async () => {
+        const ok = await collection.apply({ search: "", state: "" });
+        if (ok) {
+          setSearch("");
+          setState("");
+        }
+        return ok;
+      }}
+      filtersDirty={Boolean(search.trim() || state)}
       onFiltersSubmit={(event) => {
         event.preventDefault();
         void collection.apply({ search: search.trim(), state });
@@ -151,6 +154,7 @@ export function OperatorEarningsList() {
         </Button>
       }
       items={collection.items}
+      pageSize={collection.pageSizeControl}
       columns={columns}
       getRowKey={(entry) => entry.id}
       actions={(entry) => [

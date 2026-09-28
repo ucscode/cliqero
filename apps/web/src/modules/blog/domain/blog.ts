@@ -18,7 +18,7 @@ export const blogPostInputSchema = z
     seo_title: z.string().trim().max(200).nullable().optional(),
     seo_description: z.string().trim().max(500).nullable().optional(),
     canonical_url: z.string().url().max(2000).nullable().optional(),
-    category: z.string().trim().max(100).nullable().optional(),
+    category_id: z.string().uuid().nullable().optional(),
     tags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
     author_account_id: z.string().uuid().nullable().optional(),
   })
@@ -39,6 +39,15 @@ export type BlogPost = {
   publishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  category: { slug: string; name: string } | null;
+  category: { id: string; slug: string; name: string } | null;
   tags: Array<{ slug: string; name: string }>;
 };
+
+export type BlogCategory = { id: string; slug: string; name: string };
+
+export class BlogCategoryInUseError extends Error {
+  constructor() {
+    super("This category is assigned to one or more articles. Reassign them before deleting it.");
+    this.name = "BlogCategoryInUseError";
+  }
+}

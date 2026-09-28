@@ -1,4 +1,4 @@
-import type { BlogPost } from "@/modules/blog/domain/blog";
+import type { BlogCategory, BlogPost } from "@/modules/blog/domain/blog";
 
 export interface BlogListOptions {
   search?: string;
@@ -22,7 +22,7 @@ export interface BlogPersistenceInput {
   seoDescription: string | null;
   canonicalUrl: string | null;
   publishedAt: Date | null;
-  category: string | null;
+  categoryId: string | null;
   tags: string[];
 }
 
@@ -41,6 +41,10 @@ export interface BlogRepository {
     nextCursor: string | null;
     limit: number;
   };
-  categories(): unknown[];
+  categories(): BlogCategory[];
+  createCategory(name: string): BlogCategory;
+  updateCategory(id: string, name: string): BlogCategory | null;
+  deleteCategory(id: string): void;
+  categoryIsUsed(id: string): boolean;
   tags(): unknown[];
 }

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiError, authenticatedAccount } from "../../http";
 import { getContainer } from "@/infrastructure/container";
 import { listingWithMediaView, ownerListingView } from "@/application/listing/service";
+import { loadOperatorTableConfiguration } from "@/config/operator-tables";
 
 const schema = z
   .object({
@@ -47,10 +48,16 @@ export async function GET(request: Request) {
   try {
     const c = getContainer();
     await c.operators.requireCapability(account.id, "catalogue.manage");
+    const tableConfiguration = loadOperatorTableConfiguration().tables;
     const u = new URL(request.url),
       query = z
         .object({
-          limit: z.coerce.number().int().min(1).max(100).default(20),
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(tableConfiguration.max_page_size)
+            .default(tableConfiguration.default_page_size),
           state: z.enum(["draft", "published", "archived"]).optional(),
           search: z.string().max(200).optional(),
           cursor: z.string().optional(),

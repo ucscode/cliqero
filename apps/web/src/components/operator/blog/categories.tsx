@@ -1,0 +1,131 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
+import { apiFetch } from "@/lib/api-client";
+import type { BlogCategory } from "@/modules/blog/domain/blog";
+import { Button } from "../../ui/button";
+import { Input } from "../../ui/input";
+import { Label } from "../../ui/label";
+import { CrudEdit } from "../crud/edit";
+import { CrudIndex } from "../crud/index-page";
+import type { CrudColumn } from "../crud/table";
+import { OperatorPrimaryCell } from "../ui/data-cells";
+import { useCrudCollection } from "../crud/use-collection";
+
+export function OperatorBlogCategories() {
+  const [error, setError] = useState<string | null>(null);
+  const collection = useCrudCollection(async () => {
+    const result = await apiFetch<{ items: BlogCategory[] }>("/api/operator/blog/categories");
+    return { items: result.items, nextCursor: null };
+  }, {});
+  async function remove(category: BlogCategory) {
+    if (!window.confirm(`Delete category “${category.name}”?`)) return;
+    setError(null);
+    try {
+      await apiFetch(`/api/operator/blog/categories/${category.id}`, { method: "DELETE" });
+      await collection.retry();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to delete category.");
+    }
+  }
+  const columns: readonly CrudColumn<BlogCategory>[] = [
+    {
+      key: "name",
+      label: "Category",
+      primary: true,
+      render: (category) => (
+        <OperatorPrimaryCell title={category.name} subtitle={`/${category.slug}`} />
+      ),
+    },
+  ];
+  return (
+    <CrudIndex
+      eyebrow="Content operations"
+      title="Blog categories"
+      description="Manage categories assigned to public articles. Categories in use cannot be removed."
+      createAction={{ label: "New category", href: "/operator/blog/categories/new" }}
+      items={collection.items}
+      columns={columns}
+      getRowKey={(category) => category.id}
+      actions={(category) => [
+        { type: "link", label: "Edit", href: `/operator/blog/categories/${category.id}` },
+        {
+          type: "action",
+          label: "Delete",
+          destructive: true,
+          onSelect: () => void remove(category),
+        },
+      ]}
+      actionLabel={(category) => `Actions for category ${category.name}`}
+      loading={collection.loading}
+      initialized={collection.initialized}
+      error={error ?? collection.error}
+      onRetry={() => {
+        setError(null);
+        void collection.retry();
+      }}
+      emptyTitle="No categories yet"
+      emptyDescription="Create a category to organize blog articles."
+      emptyAction={
+        <Button asChild size="sm">
+          <Link href="/operator/blog/categories/new">Create category</Link>
+        </Button>
+      }
+    />
+  );
+}
+
+export function OperatorBlogCategoryEditor({ initial }: { initial?: BlogCategory }) {
+  const router = useRouter();
+  const [name, setName] = useState(initial?.name ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiFetch<BlogCategory>(
+        initial ? `/api/operator/blog/categories/${initial.id}` : "/api/operator/blog/categories",
+        {
+          method: initial ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name }),
+        },
+      );
+      router.push("/operator/blog/categories");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to save category.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <CrudEdit
+      mode={initial ? "edit" : "create"}
+      backHref="/operator/blog/categories"
+      eyebrow="Content operations"
+      title={initial ? "Edit category" : "New category"}
+      description="Categories are managed separately and selected by posts."
+      saving={saving}
+      onSubmit={submit}
+      error={error}
+      submitLabel="Save category"
+      savingLabel="Saving…"
+      sectionTitle="Category details"
+    >
+      <div>
+        <Label htmlFor="category-name">Name</Label>
+        <Input
+          id="category-name"
+          value={name}
+          maxLength={100}
+          onChange={(event) => setName(event.target.value)}
+          required
+        />
+      </div>
+    </CrudEdit>
+  );
+}

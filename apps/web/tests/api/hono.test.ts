@@ -14,6 +14,7 @@ function appWith(
     key: null,
   },
   hierarchySearch: (...args: any[]) => Promise<unknown[]> = async () => [],
+  blogOverrides: Record<string, unknown> = {},
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
   return createApiApp(
@@ -264,6 +265,16 @@ function appWith(
         update: () => ({}),
         publish: () => ({}),
         delete: () => {},
+        createCategory: (name: string) => ({
+          id: "00000000-0000-4000-8000-000000000009",
+          name,
+          slug: "sample",
+        }),
+        updateCategory: (id: string, name: string) => ({ id, name, slug: "sample" }),
+        deleteCategory: () => {},
+        categoryIsUsed: () => false,
+        bulk: () => [],
+        ...blogOverrides,
       },
     } as any,
     schemaAccess,
@@ -292,6 +303,54 @@ describe("Hono API foundation", () => {
     expect(
       (await appWith(operator).fetch(new Request("http://localhost/api/operator/blog"))).status,
     ).toBe(200);
+    const oversizedPage = await appWith(operator).fetch(
+      new Request("http://localhost/api/operator/blog?limit=51"),
+    );
+    expect(oversizedPage.status).toBe(400);
+  });
+  it("protects managed category routes and issues draft preview URLs only to content operators", async () => {
+    const id = "00000000-0000-4000-8000-000000000099";
+    const user = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "user_session",
+      capabilities: ["content.manage"],
+      scopes: new Set<string>(),
+    };
+    expect(
+      (await appWith().fetch(new Request("http://localhost/api/operator/blog/categories"))).status,
+    ).toBe(401);
+    const categories = await appWith(user).fetch(
+      new Request("http://localhost/api/operator/blog/categories"),
+    );
+    expect(categories.status).toBe(200);
+    const previousSecret = process.env.BETTER_AUTH_SECRET;
+    process.env.BETTER_AUTH_SECRET = "test-preview-secret";
+    try {
+      const preview = await appWith(user, undefined, undefined, {
+        get: () => ({ id, status: "draft" }),
+      }).fetch(
+        new Request(`http://localhost/api/operator/blog/posts/${id}/preview`, { method: "POST" }),
+      );
+      expect(preview.status).toBe(200);
+      const payload = await preview.json();
+      expect(payload.url).toMatch(/^\/blog\/preview\//);
+      expect(payload.url).not.toContain("test-preview-secret");
+      expect(
+        (
+          await appWith({ ...user, kind: "api_key" }, undefined, undefined, {
+            get: () => ({ id, status: "draft" }),
+          }).fetch(
+            new Request(`http://localhost/api/operator/blog/posts/${id}/preview`, {
+              method: "POST",
+            }),
+          )
+        ).status,
+      ).toBe(403);
+    } finally {
+      if (previousSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
+      else process.env.BETTER_AUTH_SECRET = previousSecret;
+    }
   });
   it("serves an OpenAPI document", async () => {
     const response = await appWith().fetch(new Request("http://localhost/api/openapi.json"));
@@ -406,6 +465,19 @@ describe("Hono API foundation", () => {
     });
     expect(paths["/api/blog/posts"]).toBeDefined();
     expect(paths["/api/operator/blog"]).toBeDefined();
+    expect(paths["/api/operator/table-config"].get).toBeDefined();
+    expect(paths["/api/operator/blog/categories"].get).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "blog:read",
+    });
+    expect(paths["/api/operator/blog/bulk"].post).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "blog:manage",
+    });
+    expect(paths["/api/operator/blog/posts/{id}/preview"].post).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "blog:read",
+    });
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
     expect(paths["/api/listings"].get).toMatchObject({

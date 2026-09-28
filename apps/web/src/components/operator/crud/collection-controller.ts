@@ -9,12 +9,16 @@ export class CrudCollectionController<TFilters, TItem> {
   private nextCursor: string | null = null;
   private busy = false;
   private reader: CrudPageReader<TFilters, TItem>;
+  private pageSize: number;
+  initialized = false;
+  loading = false;
   items: TItem[] = [];
   error: string | null = null;
 
-  constructor(reader: CrudPageReader<TFilters, TItem>, initialFilters: TFilters) {
+  constructor(reader: CrudPageReader<TFilters, TItem>, initialFilters: TFilters, pageSize = 25) {
     this.reader = reader;
     this.appliedFilters = initialFilters;
+    this.pageSize = pageSize;
   }
 
   setReader(reader: CrudPageReader<TFilters, TItem>) {
@@ -32,9 +36,18 @@ export class CrudCollectionController<TFilters, TItem> {
     return this.nextCursor;
   }
 
-  async apply(filters: TFilters): Promise<boolean> {
-    if (!(await this.request(filters, null))) return false;
+  get currentPageSize() {
+    return this.pageSize;
+  }
+
+  setInitialPageSize(pageSize: number) {
+    if (!this.initialized && Number.isInteger(pageSize) && pageSize > 0) this.pageSize = pageSize;
+  }
+
+  async apply(filters: TFilters, pageSize = this.pageSize): Promise<boolean> {
+    if (!(await this.request(filters, null, pageSize))) return false;
     this.appliedFilters = filters;
+    this.pageSize = pageSize;
     this.cursor = null;
     this.history = CursorHistory.firstPage();
     return true;
@@ -43,7 +56,7 @@ export class CrudCollectionController<TFilters, TItem> {
   async next(): Promise<boolean> {
     const target = this.nextCursor;
     if (!target || this.busy) return false;
-    if (!(await this.request(this.appliedFilters, target))) return false;
+    if (!(await this.request(this.appliedFilters, target, this.pageSize))) return false;
     this.history = this.history.afterNext(target);
     return true;
   }
@@ -51,33 +64,45 @@ export class CrudCollectionController<TFilters, TItem> {
   async previous(): Promise<boolean> {
     if (!this.history.hasPrevious || this.busy) return false;
     const target = this.history.previous;
-    if (!(await this.request(this.appliedFilters, target))) return false;
+    if (!(await this.request(this.appliedFilters, target, this.pageSize))) return false;
     this.history = this.history.afterPrevious();
     return true;
   }
 
   retry(): Promise<boolean> {
-    return this.request(this.appliedFilters, this.cursor);
+    return this.request(this.appliedFilters, this.cursor, this.pageSize);
   }
 
   refresh(): Promise<boolean> {
     return this.apply(this.appliedFilters);
   }
 
-  private async request(filters: TFilters, cursor: string | null): Promise<boolean> {
+  setPageSize(pageSize: number): Promise<boolean> {
+    if (!Number.isInteger(pageSize) || pageSize < 1 || this.busy) return Promise.resolve(false);
+    return this.apply(this.appliedFilters, pageSize);
+  }
+
+  private async request(
+    filters: TFilters,
+    cursor: string | null,
+    pageSize: number,
+  ): Promise<boolean> {
     if (this.busy) return false;
     this.busy = true;
+    this.loading = true;
     this.error = null;
     try {
-      const page: CrudPage<TItem> = await this.reader(filters, cursor);
+      const page: CrudPage<TItem> = await this.reader(filters, cursor, pageSize);
       this.items = page.items;
       this.nextCursor = page.nextCursor;
       this.cursor = cursor;
+      this.initialized = true;
       return true;
     } catch (cause) {
       this.error = cause instanceof Error ? cause.message : "The collection could not be loaded.";
       return false;
     } finally {
+      this.loading = false;
       this.busy = false;
     }
   }

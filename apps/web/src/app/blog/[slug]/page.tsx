@@ -1,12 +1,10 @@
-/* eslint-disable @next/next/no-img-element -- featured image URLs are runtime-configured. */
-
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { SiteHeader } from "@/components/site/header";
 import { SiteFooter } from "@/components/site/footer";
-import { BlogMarkdown } from "@/components/blog/markdown";
+import { BlogArticle } from "@/components/blog/article";
 import { getBlogService } from "@/infrastructure/blog/service";
 import { siteConfig } from "@/config/site";
 export const dynamic = "force-dynamic";
@@ -45,24 +43,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back to blog
         </Link>
-        <p className="mt-8 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          {post.category?.name ?? "Cliqero Journal"}
-          {post.publishedAt && ` · ${post.publishedAt.toLocaleDateString("en-US")}`}
-        </p>
-        <h1 className="mt-3 text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">
-          {post.title}
-        </h1>
-        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">{post.excerpt}</p>
-        {post.featuredImageUrl && (
-          <img
-            src={post.featuredImageUrl}
-            alt=""
-            className="mt-8 max-h-[30rem] w-full rounded-xl object-cover"
-          />
-        )}
-        <article className="mt-10">
-          <BlogMarkdown content={post.content} />
-        </article>
+        <BlogArticle post={post} />
       </main>
       <SiteFooter />
     </>

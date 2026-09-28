@@ -8,15 +8,22 @@ import {
   operatorDistributionSummarySchema,
   operatorEarningsEntrySchema,
 } from "./contracts";
+import { loadOperatorTableConfiguration } from "@/config/operator-tables";
 
 export function registerOperatorFinanceRoutes(
   app: OpenAPIHono<Env>,
   container: ApplicationContainer,
 ) {
+  const tableConfiguration = loadOperatorTableConfiguration().tables;
   const operatorDistributionQuery = z.object({
     search: z.string().max(100).optional(),
     cursor: z.string().max(512).optional(),
-    limit: z.coerce.number().int().min(1).max(50).default(25),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(tableConfiguration.max_page_size)
+      .default(tableConfiguration.default_page_size),
   });
   app.openapi(
     createRoute({
@@ -100,7 +107,12 @@ export function registerOperatorFinanceRoutes(
     search: z.string().max(100).optional(),
     state: z.enum(["pending", "available", "reversed"]).optional(),
     cursor: z.string().max(512).optional(),
-    limit: z.coerce.number().int().min(1).max(50).default(25),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(tableConfiguration.max_page_size)
+      .default(tableConfiguration.default_page_size),
   });
   app.openapi(
     createRoute({

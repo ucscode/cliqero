@@ -41,8 +41,9 @@ export function OperatorWithdrawalList() {
     async (
       filters: { search: string; state: OperatorWithdrawalState | ""; attention: string },
       cursor,
+      pageSize,
     ) => {
-      const params = new URLSearchParams({ limit: "25" });
+      const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       if (filters.state) params.set("state", filters.state);
       if (filters.attention) params.set("attention", filters.attention);
@@ -52,10 +53,6 @@ export function OperatorWithdrawalList() {
     },
     { search: "", state: "", attention: "" },
   );
-  useEffect(() => {
-    void collection.apply({ search: "", state: "", attention: "" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   type Withdrawal = OperatorWithdrawalPage["items"][number];
   const columns: readonly CrudColumn<Withdrawal>[] = [
     {
@@ -146,6 +143,16 @@ export function OperatorWithdrawalList() {
           </OperatorFilterField>
         </>
       }
+      onFiltersReset={async () => {
+        const ok = await collection.apply({ search: "", state: "", attention: "" });
+        if (ok) {
+          setSearch("");
+          setState("");
+          setAttention("");
+        }
+        return ok;
+      }}
+      filtersDirty={Boolean(search.trim() || state || attention)}
       onFiltersSubmit={(event) => {
         event.preventDefault();
         void collection.apply({ search: search.trim(), state, attention });
@@ -156,6 +163,7 @@ export function OperatorWithdrawalList() {
         </Button>
       }
       items={collection.items}
+      pageSize={collection.pageSizeControl}
       columns={columns}
       getRowKey={(item) => item.id}
       actions={(item) => [

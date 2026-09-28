@@ -15,7 +15,7 @@ export const blogPostSchema = z.object({
   publishedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  category: z.object({ slug: z.string(), name: z.string() }).nullable(),
+  category: z.object({ id: z.string().uuid(), slug: z.string(), name: z.string() }).nullable(),
   tags: z.array(z.object({ slug: z.string(), name: z.string() })),
 });
 export const blogPageSchema = z.object({

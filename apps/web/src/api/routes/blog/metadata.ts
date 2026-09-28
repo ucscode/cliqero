@@ -14,4 +14,25 @@ export const blogOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     scope: "blog:publish",
   },
   { path: "/api/operator/blog", method: "get", mode: "account", scope: "blog:read" },
+  {
+    path: "/api/operator/blog/posts/{id}/preview",
+    method: "post",
+    mode: "account",
+    scope: "blog:read",
+  },
+  { path: "/api/operator/blog/bulk", method: "post", mode: "account", scope: "blog:manage" },
+  { path: "/api/operator/blog/categories", method: "get", mode: "account", scope: "blog:read" },
+  { path: "/api/operator/blog/categories", method: "post", mode: "account", scope: "blog:write" },
+  {
+    path: "/api/operator/blog/categories/{categoryId}",
+    method: "patch",
+    mode: "account",
+    scope: "blog:write",
+  },
+  {
+    path: "/api/operator/blog/categories/{categoryId}",
+    method: "delete",
+    mode: "account",
+    scope: "blog:manage",
+  },
 ];

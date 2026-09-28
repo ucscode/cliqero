@@ -67,8 +67,8 @@ export function OperatorCatalogueList() {
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const collection = useCrudCollection(
-    async (filters: { search: string; state: string }, cursor) => {
-      const params = new URLSearchParams({ limit: "20" });
+    async (filters: { search: string; state: string }, cursor, pageSize) => {
+      const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       if (filters.state) params.set("state", filters.state);
       if (cursor) params.set("cursor", cursor);
@@ -77,12 +77,6 @@ export function OperatorCatalogueList() {
     },
     { search: "", state: "" },
   );
-
-  useEffect(() => {
-    void collection.apply({ search: "", state: "" });
-    // Initial data only; filtering is submitted deliberately.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function changeState(listing: OperatorListing, action: "publish" | "restore" | "archive") {
     if (action === "archive" && !window.confirm(`Archive “${listing.title}”?`)) return;
@@ -248,6 +242,15 @@ export function OperatorCatalogueList() {
         event.preventDefault();
         void collection.apply({ search: search.trim(), state });
       }}
+      onFiltersReset={async () => {
+        const ok = await collection.apply({ search: "", state: "" });
+        if (ok) {
+          setSearch("");
+          setState("");
+        }
+        return ok;
+      }}
+      filtersDirty={Boolean(search.trim() || state)}
       toolbarActions={
         <Button type="submit" variant="secondary" disabled={collection.loading}>
           Apply filters
@@ -301,6 +304,7 @@ export function OperatorCatalogueList() {
         </details>
       }
       items={collection.items}
+      pageSize={collection.pageSizeControl}
       columns={columns}
       getRowKey={(listing) => listing.id}
       actions={actions}

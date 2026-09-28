@@ -6,6 +6,7 @@ import { OperatorActionsMenu, type OperatorAction } from "../ui/actions-menu";
 import { OperatorActionCell } from "../ui/data-cells";
 import { OperatorTableSurface } from "../ui/table-surface";
 import { cn } from "@/lib/utils";
+import { useEffect, useRef } from "react";
 
 export type CrudColumn<T> = {
   key: string;
@@ -19,6 +20,14 @@ export type CrudColumn<T> = {
   className?: string;
 };
 
+export type CrudSelection<T> = {
+  selectedKeys: ReadonlySet<string>;
+  onChange: (selectedKeys: Set<string>) => void;
+  max: number;
+  labelForItem: (item: T) => string;
+  onLimitReached?: () => void;
+};
+
 export function CrudTable<T>({
   items,
   columns,
@@ -27,6 +36,7 @@ export function CrudTable<T>({
   actionLabel,
   footer,
   className,
+  selection,
 }: {
   items: readonly T[];
   columns: readonly CrudColumn<T>[];
@@ -35,8 +45,45 @@ export function CrudTable<T>({
   actionLabel?: (item: T) => string;
   footer?: ReactNode;
   className?: string;
+  selection?: CrudSelection<T>;
 }) {
   const visibleMobileColumns = columns.filter((column) => !column.hideOnMobile);
+  const visibleItems = items.filter((item) => selection?.selectedKeys.has(getRowKey(item)));
+  const allVisibleSelected = Boolean(items.length && visibleItems.length === items.length);
+  const someVisibleSelected = visibleItems.length > 0 && !allVisibleSelected;
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected;
+  }, [someVisibleSelected]);
+
+  function toggleRow(item: T, checked: boolean) {
+    if (!selection) return;
+    const key = getRowKey(item);
+    const keys = new Set(selection.selectedKeys);
+    if (checked && !keys.has(key) && keys.size >= selection.max) {
+      selection.onLimitReached?.();
+      return;
+    }
+    if (checked) keys.add(key);
+    else keys.delete(key);
+    selection.onChange(keys);
+  }
+
+  function toggleVisible(checked: boolean) {
+    if (!selection) return;
+    const keys = new Set(selection.selectedKeys);
+    for (const item of items) {
+      const key = getRowKey(item);
+      if (checked && !keys.has(key)) {
+        if (keys.size >= selection.max) {
+          selection.onLimitReached?.();
+          break;
+        }
+        keys.add(key);
+      } else if (!checked) keys.delete(key);
+    }
+    selection.onChange(keys);
+  }
 
   return (
     <>
@@ -45,13 +92,25 @@ export function CrudTable<T>({
           <Table>
             <TableHeader className="bg-slate-100">
               <TableRow>
+                {selection && (
+                  <TableHead className="w-12 px-4 py-3">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={(event) => toggleVisible(event.target.checked)}
+                      aria-label="Select all visible records"
+                      className="size-4 accent-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                    />
+                  </TableHead>
+                )}
                 {columns
                   .filter((column) => !column.hideOnDesktop)
                   .map((column) => (
                     <TableHead
                       key={column.key}
                       className={cn(
-                        "h-9 font-semibold text-slate-700",
+                        "px-4 py-3 font-semibold text-slate-700",
                         column.align === "right" && "text-right",
                         column.className,
                       )}
@@ -60,7 +119,7 @@ export function CrudTable<T>({
                     </TableHead>
                   ))}
                 {actions && (
-                  <TableHead className="h-9 text-right font-semibold text-slate-700">
+                  <TableHead className="px-4 py-3 text-right font-semibold text-slate-700">
                     Actions
                   </TableHead>
                 )}
@@ -70,8 +129,19 @@ export function CrudTable<T>({
               {items.map((item) => (
                 <TableRow
                   key={getRowKey(item)}
-                  className="odd:bg-white even:bg-slate-50/70 hover:bg-slate-100"
+                  className="odd:bg-white even:bg-slate-50/70 hover:bg-slate-50"
                 >
+                  {selection && (
+                    <TableCell className="w-12 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selection.selectedKeys.has(getRowKey(item))}
+                        onChange={(event) => toggleRow(item, event.target.checked)}
+                        aria-label={`Select ${selection.labelForItem(item)}`}
+                        className="size-4 accent-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                      />
+                    </TableCell>
+                  )}
                   {columns
                     .filter((column) => !column.hideOnDesktop)
                     .map((column) => (
@@ -80,7 +150,7 @@ export function CrudTable<T>({
                         className={cn(
                           "min-w-0",
                           column.align === "right" && "text-right",
-                          "py-3",
+                          "px-4 py-3",
                           column.className,
                         )}
                       >
@@ -88,7 +158,7 @@ export function CrudTable<T>({
                       </TableCell>
                     ))}
                   {actions && (
-                    <TableCell>
+                    <TableCell className="px-4 py-3">
                       <OperatorActionCell>
                         <OperatorActionsMenu
                           actions={actions(item)}
@@ -112,8 +182,20 @@ export function CrudTable<T>({
           return (
             <article
               key={getRowKey(item)}
-              className="min-w-0 rounded-md border border-slate-200 bg-white px-4 py-4 even:bg-slate-50/70"
+              className="min-w-0 rounded-md border border-slate-200 bg-white px-4 py-4"
             >
+              {selection && (
+                <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <input
+                    type="checkbox"
+                    checked={selection.selectedKeys.has(getRowKey(item))}
+                    onChange={(event) => toggleRow(item, event.target.checked)}
+                    aria-label={`Select ${selection.labelForItem(item)}`}
+                    className="size-4 accent-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                  />
+                  <span>{selection.labelForItem(item)}</span>
+                </label>
+              )}
               <dl className="grid min-w-0 gap-3">
                 {mobileColumns.map((column) => (
                   <div key={column.key} className="min-w-0">
@@ -122,7 +204,7 @@ export function CrudTable<T>({
                     </dt>
                     <dd
                       className={cn(
-                        "mt-0.5 min-w-0 break-words text-sm text-slate-900",
+                        "mt-0.5 min-w-0 break-words text-sm text-left text-slate-900",
                         column.primary && "font-medium",
                         column.className,
                       )}

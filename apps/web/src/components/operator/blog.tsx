@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { BlogEditor } from "../blog/editor";
-import { BlogMarkdown } from "../blog/markdown";
 import { apiFetch } from "@/lib/api-client";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -12,6 +11,7 @@ import { Select } from "../ui/select";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import type { BlogPost } from "@/modules/blog/domain/blog";
+import type { BlogCategory } from "@/modules/blog/domain/blog";
 import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { OperatorPrimaryCell, OperatorStatusCell } from "./ui/data-cells";
@@ -20,14 +20,15 @@ import { CrudIndex } from "./crud/index-page";
 import { useCrudCollection } from "./crud/use-collection";
 import type { CrudColumn } from "./crud/table";
 import { CrudEdit } from "./crud/edit";
+import type { CrudBulkAction } from "./crud/bulk-actions";
 
 export function OperatorBlogList() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const collection = useCrudCollection(
-    async (filters: { search: string; status: string }, cursor) => {
-      const params = new URLSearchParams({ limit: "25" });
+    async (filters: { search: string; status: string }, cursor, pageSize) => {
+      const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       if (filters.status) params.set("status", filters.status);
       if (cursor) params.set("cursor", cursor);
@@ -38,10 +39,6 @@ export function OperatorBlogList() {
     },
     { search: "", status: "" },
   );
-  useEffect(() => {
-    void collection.apply({ search: "", status: "" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   async function publication(post: BlogPost) {
     setActionError(null);
     try {
@@ -64,6 +61,37 @@ export function OperatorBlogList() {
       setActionError(cause instanceof Error ? cause.message : "Unable to delete post.");
     }
   }
+  async function bulk(action: "publish" | "unpublish" | "delete", posts: readonly BlogPost[]) {
+    if (action === "delete" && !window.confirm(`Delete ${posts.length} selected articles?`))
+      return false;
+    setActionError(null);
+    try {
+      const { results } = await apiFetch<{
+        results: Array<{ id: string; success: boolean; error?: string }>;
+      }>("/api/operator/blog/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, ids: posts.map((post) => post.id) }),
+      });
+      const failures = results.filter((result) => !result.success);
+      if (failures.length)
+        setActionError(
+          `${failures.length} article${failures.length === 1 ? "" : "s"} could not be updated.`,
+        );
+      await collection.retry();
+      return true;
+    } catch (cause) {
+      setActionError(
+        cause instanceof Error ? cause.message : "Unable to update selected articles.",
+      );
+      return false;
+    }
+  }
+  const bulkActions: readonly CrudBulkAction<BlogPost>[] = [
+    { label: "Publish", onSelect: (posts) => bulk("publish", posts) },
+    { label: "Unpublish", onSelect: (posts) => bulk("unpublish", posts) },
+    { label: "Delete", destructive: true, onSelect: (posts) => bulk("delete", posts) },
+  ];
   const columns: readonly CrudColumn<BlogPost>[] = [
     {
       key: "article",
@@ -122,14 +150,34 @@ export function OperatorBlogList() {
         setActionError(null);
         void collection.apply({ search: search.trim(), status });
       }}
+      onFiltersReset={async () => {
+        const ok = await collection.apply({ search: "", status: "" });
+        if (ok) {
+          setSearch("");
+          setStatus("");
+        }
+        return ok;
+      }}
+      filtersDirty={Boolean(search.trim() || status)}
       toolbarActions={
         <Button type="submit" variant="secondary" disabled={collection.loading}>
           Apply
         </Button>
       }
       items={collection.items}
+      pageSize={collection.pageSizeControl}
       columns={columns}
       getRowKey={(post) => post.id}
+      selection={
+        collection.maxBulkSelection
+          ? {
+              enabled: true,
+              max: collection.maxBulkSelection,
+              labelForItem: (post) => `Select article ${post.title}`,
+              bulkActions,
+            }
+          : undefined
+      }
       actions={(post) => [
         { type: "link", label: "View / edit", href: `/operator/blog/${post.id}` },
         {
@@ -171,7 +219,8 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   const [slug, setSlug] = useState(initial?.slug ?? "");
   const [excerpt, setExcerpt] = useState(initial?.excerpt ?? "");
   const [content, setContent] = useState(initial?.content ?? "# New article\n\n");
-  const [category, setCategory] = useState(initial?.category?.name ?? "");
+  const [categoryId, setCategoryId] = useState(initial?.category?.id ?? "");
+  const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [tags, setTags] = useState(initial?.tags.map((t) => t.name).join(", ") ?? "");
   const [seoTitle, setSeoTitle] = useState(initial?.seoTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(initial?.seoDescription ?? "");
@@ -180,6 +229,33 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<BlogPost | null>(initial ?? null);
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void apiFetch<{ items: BlogCategory[] }>("/api/operator/blog/categories")
+      .then(({ items }) => {
+        if (active) setCategories(items);
+      })
+      .catch((cause) => {
+        if (active) setError(cause instanceof Error ? cause.message : "Unable to load categories.");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const dirty = Boolean(
+    saved &&
+    (title !== saved.title ||
+      slug !== saved.slug ||
+      excerpt !== saved.excerpt ||
+      content !== saved.content ||
+      categoryId !== (saved.category?.id ?? "") ||
+      tags !== saved.tags.map((tag) => tag.name).join(", ") ||
+      seoTitle !== (saved.seoTitle ?? "") ||
+      seoDescription !== (saved.seoDescription ?? "") ||
+      featuredImageUrl !== (saved.featuredImageUrl ?? "") ||
+      status !== saved.status),
+  );
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
@@ -195,7 +271,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
         excerpt,
         content,
         status: status as "draft" | "published",
-        category: category || undefined,
+        category_id: categoryId || null,
         tags: tags
           .split(",")
           .map((v) => v.trim())
@@ -250,6 +326,29 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
       setError(e instanceof Error ? e.message : "Unable to delete post.");
     }
   }
+  async function preview() {
+    if (!saved || dirty || status !== "draft" || previewing) return;
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) {
+      setError("Allow pop-ups to open the private draft preview.");
+      return;
+    }
+    tab.opener = null;
+    setPreviewing(true);
+    setError(null);
+    try {
+      const result = await apiFetch<{ url: string }>(
+        `/api/operator/blog/posts/${saved.id}/preview`,
+        { method: "POST" },
+      );
+      tab.location.href = result.url;
+    } catch (cause) {
+      tab.close();
+      setError(cause instanceof Error ? cause.message : "Unable to open draft preview.");
+    } finally {
+      setPreviewing(false);
+    }
+  }
   return (
     <CrudEdit
       mode={saved ? "edit" : "create"}
@@ -275,6 +374,19 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
               {status === "published" ? "Unpublish" : "Publish"}
             </Button>
           )}
+          {saved && status === "draft" && (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={dirty || previewing}
+              onClick={() => void preview()}
+            >
+              {previewing ? "Preparing preview…" : "Preview"}
+            </Button>
+          )}
+          <Button asChild type="button" variant="outline">
+            <Link href="/operator/blog/categories">Manage categories</Link>
+          </Button>
           {saved && (
             <Button type="button" variant="destructive" onClick={() => void remove()}>
               Delete
@@ -315,21 +427,27 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
           <div className="mt-2 overflow-hidden rounded-md border">
             <BlogEditor markdown={content} onChange={setContent} />
           </div>
-          <details className="mt-3 rounded-md border p-4">
-            <summary className="cursor-pointer font-medium">Preview</summary>
-            <div className="mt-4">
-              <BlogMarkdown content={content} />
-            </div>
-          </details>
+          {dirty && saved && (
+            <p className="mt-2 text-sm text-slate-600">
+              Save changes before previewing this draft.
+            </p>
+          )}
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="blog-category">Category</Label>
-            <Input
+            <Select
               id="blog-category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+            >
+              <option value="">No category</option>
+              {categories.map((categoryOption) => (
+                <option key={categoryOption.id} value={categoryOption.id}>
+                  {categoryOption.name}
+                </option>
+              ))}
+            </Select>
           </div>
           <div>
             <Label htmlFor="blog-tags">Tags (comma separated)</Label>

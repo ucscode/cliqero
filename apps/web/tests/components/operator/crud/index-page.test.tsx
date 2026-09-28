@@ -91,4 +91,29 @@ describe("operator CRUD index", () => {
     expect(page).toContain("Ada");
     expect(page).toContain('aria-label="Operator result pages"');
   });
+
+  it("keeps existing rows visible and announces a refresh instead of replacing them with a skeleton", () => {
+    const page = render({
+      initialized: true,
+      loading: true,
+      items: [{ id: "1", name: "Previously loaded row" }],
+    });
+    expect(page).toContain("Previously loaded row");
+    expect(page).toContain("Updating records");
+    expect(page).not.toContain("Loading records");
+  });
+
+  it("renders Clear only for filtered collections and exposes configured page sizes", () => {
+    const plain = render();
+    expect(plain).not.toContain(">Clear</button>");
+    const filtered = render({
+      filters: <input aria-label="Search" />,
+      filtersDirty: true,
+      onFiltersReset: () => true,
+      pageSize: { value: 25, options: [25, 50], onChange: vi.fn() },
+    });
+    expect(filtered).toContain(">Clear</button>");
+    expect(filtered).toContain('aria-label="Rows per page"');
+    expect(filtered).toContain('<option value="50">50</option>');
+  });
 });

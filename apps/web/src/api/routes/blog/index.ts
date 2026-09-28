@@ -7,8 +7,15 @@ import { errorSchema } from "../../shared/schemas";
 import { domainError } from "../../shared/error";
 import { blogJson } from "./serialization";
 import { blogPageSchema, blogPostSchema } from "./contracts";
+import { loadOperatorTableConfiguration } from "@/config/operator-tables";
+import { BlogCategoryInUseError } from "@/modules/blog/domain/blog";
+import { issueBlogPreviewToken } from "@/security/blog-preview";
+
+const blogCategorySchema = z.object({ id: z.string().uuid(), slug: z.string(), name: z.string() });
+const blogCategoryInputSchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
 
 export function registerBlogRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
+  const tableConfiguration = loadOperatorTableConfiguration().tables;
   const blogListQuery = z.object({
     search: z.string().max(100).optional(),
     status: z.enum(["draft", "published"]).optional(),
@@ -17,6 +24,100 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(25),
   });
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/blog/posts/{id}/preview",
+      request: { params: z.object({ id: z.string().uuid() }) },
+      responses: {
+        200: {
+          description: "Short-lived draft preview URL",
+          content: { "application/json": { schema: z.object({ url: z.string() }) } },
+        },
+        403: {
+          description: "Authenticated Operator session required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Draft not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        500: {
+          description: "Preview signing is not configured",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      if (p.kind !== "user_session") return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
+      if (denied) return denied;
+      const id = c.req.valid("param").id;
+      const post = container.blog.get(id);
+      if (!post || post.status !== "draft")
+        return c.json({ error: "Draft not found", code: "not_found" }, 404);
+      const secret = process.env.BETTER_AUTH_SECRET?.trim();
+      if (!secret)
+        return c.json({ error: "Preview is unavailable", code: "configuration_error" }, 500);
+      const token = issueBlogPreviewToken(id, p.accountId, secret);
+      return c.json(
+        { url: `/blog/preview/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}` },
+        200,
+      );
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/blog/bulk",
+      description: "Bounded content bulk operations. Requires the blog:manage scope.",
+      request: {
+        body: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({
+                  action: z.enum(["publish", "unpublish", "delete"]),
+                  ids: z
+                    .array(z.string().uuid())
+                    .min(1)
+                    .max(tableConfiguration.max_bulk_selection)
+                    .refine((ids) => new Set(ids).size === ids.length, "ids must be unique"),
+                })
+                .strict(),
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Per-article bulk outcomes",
+          content: {
+            "application/json": {
+              schema: z.object({
+                results: z.array(
+                  z.object({ id: z.string(), success: z.boolean(), error: z.string().optional() }),
+                ),
+              }),
+            },
+          },
+        },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const { action, ids } = c.req.valid("json");
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
+      if (denied) return denied;
+      return c.json(
+        { results: container.blog.bulk(ids, action, tableConfiguration.max_bulk_selection) },
+        200,
+      );
+    },
+  );
   app.openapi(
     createRoute({
       method: "get",
@@ -104,7 +205,120 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
         200,
       ),
   );
-  const blogAdminListQuery = blogListQuery.extend({});
+  const blogAdminListQuery = blogListQuery.extend({
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(tableConfiguration.max_page_size)
+      .default(tableConfiguration.default_page_size),
+  });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/operator/blog/categories",
+      responses: {
+        200: {
+          description: "Managed blog categories",
+          content: {
+            "application/json": { schema: z.object({ items: z.array(blogCategorySchema) }) },
+          },
+        },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
+      if (denied) return denied;
+      return c.json({ items: container.blog.categories() }, 200);
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/blog/categories",
+      request: { body: { content: { "application/json": { schema: blogCategoryInputSchema } } } },
+      responses: {
+        201: {
+          description: "Blog category created",
+          content: { "application/json": { schema: blogCategorySchema } },
+        },
+        403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
+      if (denied) return denied;
+      try {
+        return c.json(container.blog.createCategory(c.req.valid("json").name), 201);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "patch",
+      path: "/api/operator/blog/categories/{categoryId}",
+      request: {
+        params: z.object({ categoryId: z.string().uuid() }),
+        body: { content: { "application/json": { schema: blogCategoryInputSchema } } },
+      },
+      responses: {
+        200: {
+          description: "Blog category updated",
+          content: { "application/json": { schema: blogCategorySchema } },
+        },
+        403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
+      if (denied) return denied;
+      try {
+        return c.json(
+          container.blog.updateCategory(c.req.valid("param").categoryId, c.req.valid("json").name),
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "delete",
+      path: "/api/operator/blog/categories/{categoryId}",
+      request: { params: z.object({ categoryId: z.string().uuid() }) },
+      responses: {
+        204: { description: "Unused blog category deleted" },
+        409: {
+          description: "Category is still assigned to an article",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
+      if (denied) return denied;
+      try {
+        container.blog.deleteCategory(c.req.valid("param").categoryId);
+        return c.body(null, 204);
+      } catch (error) {
+        if (error instanceof BlogCategoryInUseError)
+          return c.json({ error: error.message, code: "category_in_use" }, 409);
+        return domainError(c, error);
+      }
+    },
+  );
   app.openapi(
     createRoute({
       method: "get",

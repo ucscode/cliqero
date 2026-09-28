@@ -67,23 +67,17 @@ export function operatorUserRowActions(account: OperatorAccountSummary, canManag
 
 export function OperatorUsersList({ canManage = false }: { canManage?: boolean }) {
   const [search, setSearch] = useState("");
-  const collection = useCrudCollection(async (appliedSearch: string, cursor) => {
-    const params = new URLSearchParams({ limit: "25" });
+  const collection = useCrudCollection(async (appliedSearch: string, cursor, pageSize) => {
+    const params = new URLSearchParams({ limit: String(pageSize) });
     if (appliedSearch) params.set("search", appliedSearch);
     if (cursor) params.set("cursor", cursor);
     return apiFetch<OperatorAccountPage>(`/api/operator/accounts?${params}`);
   }, "");
 
-  useEffect(() => {
-    // Load once; search is submitted intentionally to avoid request storms.
-    void collection.apply("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
     <OperatorUsersListView
       page={
-        collection.loading && collection.items.length === 0
+        !collection.initialized
           ? null
           : { items: collection.items, nextCursor: collection.nextCursor }
       }
@@ -100,6 +94,15 @@ export function OperatorUsersList({ canManage = false }: { canManage?: boolean }
       hasPrevious={collection.hasPrevious}
       onPrevious={() => void collection.previous()}
       onNext={() => void collection.next()}
+      pageSize={collection.pageSize}
+      pageSizeOptions={collection.pageSizeOptions}
+      onPageSizeChange={(value) => void collection.changePageSize(value)}
+      filtersDirty={Boolean(search.trim())}
+      onFiltersReset={async () => {
+        const ok = await collection.apply("");
+        if (ok) setSearch("");
+        return ok;
+      }}
     />
   );
 }
@@ -116,6 +119,11 @@ export function OperatorUsersListView({
   hasPrevious,
   onPrevious,
   onNext,
+  pageSize,
+  pageSizeOptions,
+  onPageSizeChange,
+  filtersDirty,
+  onFiltersReset,
 }: {
   page: OperatorAccountPage | null;
   search: string;
@@ -128,6 +136,11 @@ export function OperatorUsersListView({
   hasPrevious: boolean;
   onPrevious: () => void;
   onNext: () => void;
+  pageSize?: number | null;
+  pageSizeOptions?: readonly number[];
+  onPageSizeChange?: (value: number) => void;
+  filtersDirty?: boolean;
+  onFiltersReset?: () => boolean | void | Promise<boolean | void>;
 }) {
   const columns: readonly CrudColumn<OperatorAccountSummary>[] = [
     {
@@ -197,6 +210,8 @@ export function OperatorUsersListView({
         </OperatorFilterField>
       }
       onFiltersSubmit={onSearch}
+      onFiltersReset={onFiltersReset}
+      filtersDirty={filtersDirty}
       toolbarActions={
         <>
           <Button type="submit" variant="secondary" disabled={loading}>
@@ -212,6 +227,7 @@ export function OperatorUsersListView({
       actions={(account) => operatorUserRowActions(account, Boolean(canManage))}
       actionLabel={(account) => `Actions for @${account.username}`}
       loading={loading}
+      initialized={page !== null}
       loadingLabel="Loading users"
       error={error}
       onRetry={onRetry}
@@ -225,6 +241,15 @@ export function OperatorUsersListView({
               onPrevious,
               onNext,
               summary: `Showing ${page.items.length} users`,
+            }
+          : undefined
+      }
+      pageSize={
+        pageSize && pageSizeOptions?.length && onPageSizeChange
+          ? {
+              value: pageSize,
+              options: pageSizeOptions,
+              onChange: onPageSizeChange,
             }
           : undefined
       }

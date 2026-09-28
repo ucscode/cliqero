@@ -10,8 +10,9 @@ help:
 dev:
 	docker compose up -d
 
-# Rebuild and start the development Compose stack. Use this after dependency,
-# Dockerfile, base-image, or OS-layer changes; ordinary source/config edits use `just dev`.
+# Rebuild and start the development Compose stack. Use only after Dockerfile,
+# base-image, OS-package, or development image-build changes. Dependency changes
+# use `just deps` / `just npm-add` and do not require an image build.
 dev-build:
 	docker compose up -d --build
 
@@ -19,10 +20,26 @@ dev-build:
 dev-down:
 	docker compose down
 
-# Destructive: stop the development stack and delete local volumes
-# (including PostgreSQL, blog/media data, and persisted node_modules)
+# Destructive: stop the development stack and delete all local volumes,
+# including PostgreSQL, blog/media data, Next output, and dependency volumes.
 dev-clean:
 	docker compose down -v --remove-orphans
+
+# Destructive: remove only the named development dependency volumes.
+deps-clean:
+	docker compose stop main outbox-worker
+	@docker volume rm $$(docker volume ls -q --filter label=com.docker.compose.volume=cliqero-node-modules) $$(docker volume ls -q --filter label=com.docker.compose.volume=cliqero-web-node-modules)
+
+# Add/remove npm dependencies in the Linux development container without a build.
+npm-add package workspace="@cliqero/web":
+	docker compose stop main outbox-worker
+	docker compose run --rm --no-deps main npm install {{package}} --workspace {{workspace}}
+	docker compose up -d --no-build main outbox-worker
+
+npm-remove package workspace="@cliqero/web":
+	docker compose stop main outbox-worker
+	docker compose run --rm --no-deps main npm uninstall {{package}} --workspace {{workspace}}
+	docker compose up -d --no-build main outbox-worker
 
 # Follow development service logs
 dev-logs:
@@ -84,7 +101,9 @@ npm *args:
 # Reconcile persisted development dependencies exactly with package-lock.json
 # Useful after pulling dependency changes or when node_modules gets out of sync.
 deps:
-	docker compose exec main npm ci
+	docker compose stop main outbox-worker
+	docker compose run --rm --no-deps main npm ci
+	docker compose up -d --no-build main outbox-worker
 
 # Run the web application's full test command
 test:

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   apiFetch,
   formatMinorUsd,
@@ -49,8 +49,9 @@ export function OperatorTreasuryPage() {
         source: "" | "automatic" | "manual";
       },
       cursor,
+      pageSize,
     ) => {
-      const params = new URLSearchParams({ limit: "25" });
+      const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       if (filters.direction) params.set("direction", filters.direction);
       if (filters.source) params.set("source", filters.source);
@@ -64,12 +65,6 @@ export function OperatorTreasuryPage() {
     },
     { search: "", direction: "", source: "" },
   );
-
-  useEffect(() => {
-    // Filters are submitted explicitly so a partially edited query never refetches unexpectedly.
-    void collection.apply({ search: "", direction: "", source: "" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function createEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -298,11 +293,22 @@ export function OperatorTreasuryPage() {
           </div>
         </>
       }
+      onFiltersReset={async () => {
+        const ok = await collection.apply({ search: "", direction: "", source: "" });
+        if (ok) {
+          setSearch("");
+          setDirection("");
+          setSource("");
+        }
+        return ok;
+      }}
+      filtersDirty={Boolean(search.trim() || direction || source)}
       onFiltersSubmit={(event) => {
         event.preventDefault();
         void collection.apply({ search: search.trim(), direction, source });
       }}
       items={collection.items}
+      pageSize={collection.pageSizeControl}
       columns={columns}
       getRowKey={(entry) => entry.id}
       actions={actions}

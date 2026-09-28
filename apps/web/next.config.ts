@@ -14,6 +14,18 @@ loadEnvConfig(repositoryRoot, false, undefined, true);
 const site = loadSiteConfiguration();
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/blog/preview/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+    ];
+  },
   output: "standalone",
   outputFileTracingIncludes: {
     "/docs/assets/[asset]": [

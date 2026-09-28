@@ -19,7 +19,7 @@ const TableRow = ({ className, ...props }: React.HTMLAttributes<HTMLTableRowElem
 );
 const TableHead = ({ className, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
   <th
-    className={cn("h-10 px-2 text-left align-middle font-medium text-slate-500", className)}
+    className={cn("px-2 py-3 text-left align-middle font-medium text-slate-500", className)}
     {...props}
   />
 );

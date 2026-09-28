@@ -1,0 +1,13 @@
+parameters:
+  # Shared server-enforced limits and validated rows-per-page options.
+  tables:
+    # Default requested page size for Operator lists.
+    default_page_size: 25
+    # Hard maximum applied by Operator list endpoints.
+    max_page_size: 50
+    # Values offered by the shared Operator rows selector.
+    page_size_options:
+      - 25
+      - 50
+    # Maximum selection accepted by resource-specific bulk operations.
+    max_bulk_selection: 100

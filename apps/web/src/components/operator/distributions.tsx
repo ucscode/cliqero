@@ -33,8 +33,8 @@ function stateLabel(value: string) {
 
 export function OperatorDistributionList() {
   const [search, setSearch] = useState("");
-  const collection = useCrudCollection(async (appliedSearch: string, cursor) => {
-    const params = new URLSearchParams({ limit: "25" });
+  const collection = useCrudCollection(async (appliedSearch: string, cursor, pageSize) => {
+    const params = new URLSearchParams({ limit: String(pageSize) });
     if (appliedSearch) params.set("search", appliedSearch);
     if (cursor) params.set("cursor", cursor);
     const result = await apiFetch<OperatorDistributionPage>(
@@ -42,10 +42,6 @@ export function OperatorDistributionList() {
     );
     return { items: result.items, nextCursor: result.nextCursor };
   }, "");
-  useEffect(() => {
-    void collection.apply("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const columns: readonly CrudColumn<OperatorDistributionPage["items"][number]>[] = [
     {
       key: "listing",
@@ -97,12 +93,19 @@ export function OperatorDistributionList() {
         event.preventDefault();
         void collection.apply(search.trim());
       }}
+      onFiltersReset={async () => {
+        const ok = await collection.apply("");
+        if (ok) setSearch("");
+        return ok;
+      }}
+      filtersDirty={Boolean(search.trim())}
       toolbarActions={
         <Button type="submit" variant="secondary" disabled={collection.loading}>
           Apply
         </Button>
       }
       items={collection.items}
+      pageSize={collection.pageSizeControl}
       columns={columns}
       getRowKey={(item) => item.id}
       actions={actions}

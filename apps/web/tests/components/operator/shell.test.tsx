@@ -26,5 +26,24 @@ describe("operator shell", () => {
     expect(html).toContain("Users page");
     expect(html).toContain("sticky top-0");
     expect(html).toContain("h-14");
+    expect(html).toContain("ml-auto");
+  });
+
+  it("groups Finance and Blog navigation and opens the active child group", () => {
+    const html = renderToStaticMarkup(
+      <OperatorShell
+        capabilities={["finance.read", "content.manage"]}
+        username="operator"
+        email="operator@example.test"
+        activeSection="blogCategories"
+      >
+        <main>Categories</main>
+      </OperatorShell>,
+    );
+    expect(html).toContain(">Finance</summary>");
+    expect(html).toContain(">Blog</summary>");
+    expect(html).toContain("/operator/blog/categories");
+    expect(html).toMatch(/<details open="" class="group\/operator-nav">.*?Blog/s);
+    expect(html).not.toContain("/operator/treasury");
   });
 });

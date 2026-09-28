@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { apiFetch, type ListingReview } from "@/lib/api-client";
 import { Select } from "../ui/select";
@@ -19,17 +19,12 @@ const errorMessage = (error: unknown) =>
 export function OperatorReviews() {
   const [status, setStatus] = useState("pending");
   const [actionError, setActionError] = useState<string | null>(null);
-  const collection = useCrudCollection(async (appliedStatus: string, cursor) => {
-    const params = new URLSearchParams({ status: appliedStatus });
+  const collection = useCrudCollection(async (appliedStatus: string, cursor, pageSize) => {
+    const params = new URLSearchParams({ status: appliedStatus, limit: String(pageSize) });
     if (cursor) params.set("cursor", cursor);
     const result = await apiFetch<ReviewPage>(`/api/operator/reviews?${params}`);
     return { items: result.items, nextCursor: result.next_cursor };
   }, "pending");
-
-  useEffect(() => {
-    void collection.apply("pending");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function moderate(id: string, action: "approve" | "reject") {
     try {
@@ -97,6 +92,12 @@ export function OperatorReviews() {
           </Select>
         </OperatorFilterField>
       }
+      onFiltersReset={async () => {
+        const ok = await collection.apply("pending");
+        if (ok) setStatus("pending");
+        return ok;
+      }}
+      filtersDirty={status !== "pending"}
       onFiltersSubmit={(event) => {
         event.preventDefault();
         void collection.apply(status);
@@ -107,6 +108,7 @@ export function OperatorReviews() {
         </Button>
       }
       items={collection.items}
+      pageSize={collection.pageSizeControl}
       columns={columns}
       getRowKey={(review) => review.id}
       actions={(review) =>

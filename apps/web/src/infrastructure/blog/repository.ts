@@ -1,7 +1,11 @@
 import type Database from "better-sqlite3";
 import slugify from "slugify";
 import { newId } from "@/kernel/ids";
-import type { BlogPost } from "@/modules/blog/domain/blog";
+import {
+  BlogCategoryInUseError,
+  type BlogCategory,
+  type BlogPost,
+} from "@/modules/blog/domain/blog";
 import type {
   BlogListOptions,
   BlogPersistenceInput,
@@ -42,7 +46,9 @@ function mapPost(row: Row, tags: Array<{ slug: string; name: string }> = []): Bl
     publishedAt: date(row.published_at),
     createdAt: new Date(Number(row.created_at)),
     updatedAt: new Date(Number(row.updated_at)),
-    category: row.category_slug ? { slug: row.category_slug, name: row.category_name } : null,
+    category: row.category_slug
+      ? { id: row.category_id, slug: row.category_slug, name: row.category_name }
+      : null,
     tags,
   };
 }
@@ -75,7 +81,7 @@ export class SqliteBlogRepository implements BlogRepository {
 
   create(input: BlogPersistenceInput, authorAccountId: string | null) {
     const now = Date.now();
-    const categoryId = this.ensureCategory(input.category);
+    const categoryId = input.categoryId;
     this.db
       .prepare(
         `insert into blog_posts(id,slug,title,excerpt,content_markdown,status,featured_image_url,author_account_id,seo_title,seo_description,canonical_url,published_at,created_at,updated_at,category_id)
@@ -103,7 +109,7 @@ export class SqliteBlogRepository implements BlogRepository {
   }
 
   update(id: string, input: BlogPersistenceInput) {
-    const categoryId = this.ensureCategory(input.category);
+    const categoryId = input.categoryId;
     const result = this.db
       .prepare(
         `update blog_posts
@@ -222,25 +228,45 @@ export class SqliteBlogRepository implements BlogRepository {
     };
   }
 
-  categories() {
-    return this.db.prepare("select id,slug,name from blog_categories order by name").all();
+  categories(): BlogCategory[] {
+    return this.db
+      .prepare("select id,slug,name from blog_categories order by name")
+      .all() as BlogCategory[];
+  }
+
+  createCategory(name: string): BlogCategory {
+    const id = newId();
+    const slug = this.uniqueTaxonomySlug("blog_categories", name);
+    this.db.prepare("insert into blog_categories(id,slug,name) values(?,?,?)").run(id, slug, name);
+    return { id, slug, name };
+  }
+
+  updateCategory(id: string, name: string): BlogCategory | null {
+    const current = this.db
+      .prepare("select id,slug,name from blog_categories where id=?")
+      .get(id) as BlogCategory | undefined;
+    if (!current) return null;
+    const baseSlug = slugify(name, { lower: true, strict: true, trim: true }) || "category";
+    let slug = baseSlug;
+    let suffix = 1;
+    while (this.db.prepare("select id from blog_categories where slug=? and id<>?").get(slug, id)) {
+      slug = `${baseSlug}-${++suffix}`;
+    }
+    this.db.prepare("update blog_categories set name=?,slug=? where id=?").run(name, slug, id);
+    return { id, slug, name };
+  }
+
+  deleteCategory(id: string): void {
+    if (this.categoryIsUsed(id)) throw new BlogCategoryInUseError();
+    this.db.prepare("delete from blog_categories where id=?").run(id);
+  }
+
+  categoryIsUsed(id: string): boolean {
+    return Boolean(this.db.prepare("select 1 from blog_posts where category_id=? limit 1").get(id));
   }
 
   tags() {
     return this.db.prepare("select id,slug,name from blog_tags order by name").all();
-  }
-
-  private ensureCategory(name: string | null) {
-    if (!name) return null;
-    const existing = this.db
-      .prepare("select id from blog_categories where lower(name)=lower(?)")
-      .get(name) as { id: string } | undefined;
-    if (existing) return existing.id;
-    const id = newId();
-    this.db
-      .prepare("insert into blog_categories(id,slug,name) values(?,?,?)")
-      .run(id, this.uniqueTaxonomySlug("blog_categories", name), name);
-    return id;
   }
 
   private uniqueTaxonomySlug(table: "blog_categories" | "blog_tags", name: string) {

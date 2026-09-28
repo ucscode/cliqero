@@ -57,4 +57,24 @@ describe("operator CRUD table", () => {
     expect(html).toContain("Actions");
     expect(html).toContain('aria-label="Row actions"');
   });
+
+  it("renders shared desktop and mobile selection controls for the same visible records", () => {
+    const html = renderToStaticMarkup(
+      <CrudTable
+        items={[{ id: "r-1", name: "Ada" }]}
+        columns={[{ key: "name", label: "Name", primary: true, render: (item) => item.name }]}
+        getRowKey={(item) => item.id}
+        selection={{
+          selectedKeys: new Set(["r-1"]),
+          onChange: () => {},
+          max: 10,
+          labelForItem: (item) => item.name,
+        }}
+      />,
+    );
+    expect(html).toContain('aria-label="Select all visible records"');
+    expect(html).toContain('aria-label="Select Ada"');
+    expect(html.match(/aria-label="Select Ada"/g)).toHaveLength(2);
+    expect(html).toMatch(/<th[^>]*>.*?Select all visible records/s);
+  });
 });
