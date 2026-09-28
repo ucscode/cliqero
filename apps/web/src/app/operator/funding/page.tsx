@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function OperatorFundingPage() {
   const access = await requireOperatorPage("/operator/funding");
   return (
-    <OperatorShell {...access} activeSection="funding" title="Funding">
+    <OperatorShell {...access} activeSection="funding">
       <OperatorFundingList />
     </OperatorShell>
   );

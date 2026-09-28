@@ -148,7 +148,6 @@ export function OperatorTreasuryPage() {
     {
       key: "amount",
       label: "Amount",
-      align: "right",
       render: (entry) => (
         <OperatorValueCell>
           <Money minor={entry.amountMinor} />

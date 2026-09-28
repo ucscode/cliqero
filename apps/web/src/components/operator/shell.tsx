@@ -40,7 +40,6 @@ export function OperatorShell({
   username,
   email,
   activeSection = "overview",
-  title = "Overview",
   children,
 }: {
   capabilities: readonly Capability[];
@@ -58,7 +57,6 @@ export function OperatorShell({
     | "treasury"
     | "blog"
     | "reviews";
-  title?: string;
   children?: ReactNode;
 }) {
   const router = useRouter();
@@ -191,16 +189,8 @@ export function OperatorShell({
           </SidebarFooter>
         </Sidebar>
         <SidebarInset>
-          <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between gap-4 border-b bg-white/95 px-4 backdrop-blur lg:px-8">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger aria-label="Open operator navigation" />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                  Operational view
-                </p>
-                <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
-              </div>
-            </div>
+          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-white/95 px-4 backdrop-blur lg:px-8">
+            <SidebarTrigger aria-label="Open operator navigation" />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button

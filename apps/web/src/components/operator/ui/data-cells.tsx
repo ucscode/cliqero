@@ -31,7 +31,7 @@ export function OperatorSecondaryText({
 
 export function OperatorValueCell({
   children,
-  align = "right",
+  align = "left",
   className,
 }: {
   children: ReactNode;

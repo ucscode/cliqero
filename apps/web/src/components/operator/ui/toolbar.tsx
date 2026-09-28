@@ -16,7 +16,7 @@ export function OperatorToolbar({
       aria-label={formProps["aria-label"] ?? "Operator filters"}
       {...formProps}
       className={cn(
-        "grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[minmax(0,1fr)_auto] md:items-end",
+        "grid gap-4 border-b border-slate-200 pb-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end",
         className,
       )}
     >

@@ -81,7 +81,6 @@ export function OperatorEarningsList() {
     {
       key: "amount",
       label: "Amount",
-      align: "right",
       render: (entry) => (
         <OperatorValueCell>
           <Money

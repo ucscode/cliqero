@@ -8,7 +8,7 @@ export default async function OperatorListingPage({ params }: { params: Promise<
   const { id } = await params;
   const access = await requireOperatorPage(`/operator/catalogue/${encodeURIComponent(id)}`);
   return (
-    <OperatorShell {...access} activeSection="catalogue" title="Edit listing">
+    <OperatorShell {...access} activeSection="catalogue">
       <OperatorCatalogueEditor listingId={id} />
     </OperatorShell>
   );

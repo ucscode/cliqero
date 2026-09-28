@@ -35,6 +35,21 @@ describe("operator component-system migration", () => {
     expect(source).toContain("SidebarProvider");
     expect(source).toContain("SidebarMenuButton");
     expect(source).not.toContain("operator-sidebar");
+    expect(source).not.toContain("Operational view");
+    expect(source).not.toContain("<h1");
+    expect(source).toContain("Open operator account menu");
+    expect(source).toContain("Open operator navigation");
+  });
+
+  it("uses CrudFieldList terminology without retaining CrudDetails references", () => {
+    const sourceFiles = [
+      resolve(operatorRoot, "users.tsx"),
+      resolve(operatorRoot, "crud/detail.tsx"),
+      resolve(operatorRoot, "crud/field-list.tsx"),
+    ];
+    const sources = sourceFiles.map((path) => readFileSync(path, "utf8")).join("\n");
+    expect(sources).toContain("CrudFieldList");
+    expect(sources).not.toContain("CrudDetails");
   });
 
   it("has no deprecated Badge tone compatibility prop", () => {

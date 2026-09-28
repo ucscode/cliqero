@@ -131,7 +131,6 @@ export function OperatorFundingList() {
     {
       key: "amount",
       label: "Funding",
-      align: "right",
       render: (funding) => (
         <OperatorValueCell>
           <Money minor={funding.canonicalAmountMinor} />{" "}

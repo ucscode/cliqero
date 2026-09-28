@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function OperatorUsersPage() {
   const access = await requireOperatorPage("/operator/users");
   return (
-    <OperatorShell {...access} activeSection="users" title="Users">
+    <OperatorShell {...access} activeSection="users">
       <OperatorUsersList canManage={hasCapability(access.capabilities, "accounts.manage")} />
     </OperatorShell>
   );

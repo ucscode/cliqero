@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export default async function OperatorBlogPage() {
   const access = await requireOperatorPage("/operator/blog");
   return (
-    <OperatorShell {...access} activeSection="blog" title="Blog">
+    <OperatorShell {...access} activeSection="blog">
       <OperatorBlogList />
     </OperatorShell>
   );

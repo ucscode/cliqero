@@ -12,7 +12,7 @@ export default async function OperatorUserDetailPage({
   const { accountId } = await params;
   const access = await requireOperatorPage(`/operator/users/${encodeURIComponent(accountId)}`);
   return (
-    <OperatorShell {...access} activeSection="users" title="Account">
+    <OperatorShell {...access} activeSection="users">
       <OperatorUserDetail accountId={accountId} />
     </OperatorShell>
   );

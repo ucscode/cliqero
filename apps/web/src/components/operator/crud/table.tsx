@@ -43,24 +43,35 @@ export function CrudTable<T>({
       <div className="hidden md:block">
         <OperatorTableSurface footer={footer} className={className}>
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-slate-100">
               <TableRow>
                 {columns
                   .filter((column) => !column.hideOnDesktop)
                   .map((column) => (
                     <TableHead
                       key={column.key}
-                      className={cn(column.align === "right" && "text-right", column.className)}
+                      className={cn(
+                        "h-9 font-semibold text-slate-700",
+                        column.align === "right" && "text-right",
+                        column.className,
+                      )}
                     >
                       {column.label}
                     </TableHead>
                   ))}
-                {actions && <TableHead className="text-right">Actions</TableHead>}
+                {actions && (
+                  <TableHead className="h-9 text-right font-semibold text-slate-700">
+                    Actions
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item) => (
-                <TableRow key={getRowKey(item)}>
+                <TableRow
+                  key={getRowKey(item)}
+                  className="odd:bg-white even:bg-slate-50/70 hover:bg-slate-100"
+                >
                   {columns
                     .filter((column) => !column.hideOnDesktop)
                     .map((column) => (
@@ -69,6 +80,7 @@ export function CrudTable<T>({
                         className={cn(
                           "min-w-0",
                           column.align === "right" && "text-right",
+                          "py-3",
                           column.className,
                         )}
                       >
@@ -92,22 +104,26 @@ export function CrudTable<T>({
         </OperatorTableSurface>
       </div>
 
-      <div className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white md:hidden">
+      <div className="space-y-3 md:hidden">
         {items.map((item) => {
           const mobileColumns = [...visibleMobileColumns].sort(
             (left, right) => Number(Boolean(right.primary)) - Number(Boolean(left.primary)),
           );
           return (
-            <article key={getRowKey(item)} className="min-w-0 px-4 py-4">
+            <article
+              key={getRowKey(item)}
+              className="min-w-0 rounded-md border border-slate-200 bg-white px-4 py-4 even:bg-slate-50/70"
+            >
               <dl className="grid min-w-0 gap-3">
                 {mobileColumns.map((column) => (
                   <div key={column.key} className="min-w-0">
-                    <dt className="text-xs font-medium text-slate-500">
+                    <dt className="text-xs font-semibold text-slate-700">
                       {column.mobileLabel ?? column.label}
                     </dt>
                     <dd
                       className={cn(
                         "mt-0.5 min-w-0 break-words text-sm text-slate-900",
+                        column.primary && "font-medium",
                         column.className,
                       )}
                     >

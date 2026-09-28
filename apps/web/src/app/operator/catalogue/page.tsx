@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function OperatorCataloguePage() {
   const access = await requireOperatorPage("/operator/catalogue");
   return (
-    <OperatorShell {...access} activeSection="catalogue" title="Catalogue">
+    <OperatorShell {...access} activeSection="catalogue">
       <section aria-labelledby="operator-catalogue-heading">
         <OperatorCatalogueList />
       </section>

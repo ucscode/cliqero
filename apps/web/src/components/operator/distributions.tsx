@@ -67,7 +67,6 @@ export function OperatorDistributionList() {
     {
       key: "gross",
       label: "Gross",
-      align: "right",
       render: (item) => (
         <OperatorValueCell>
           <Money minor={item.grossAmountMinor} />

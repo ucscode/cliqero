@@ -12,7 +12,7 @@ export default async function OperatorDistributionDetailPage({
   const access = await requireOperatorPage("/operator/distributions");
   const { distributionId } = await params;
   return (
-    <OperatorShell {...access} activeSection="distributions" title="Distribution detail">
+    <OperatorShell {...access} activeSection="distributions">
       <OperatorDistributionDetail distributionId={distributionId} />
     </OperatorShell>
   );

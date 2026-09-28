@@ -13,7 +13,7 @@ export default async function OperatorFundingDetailPage({
   const { fundingId } = await params;
   const access = await requireOperatorPage(`/operator/funding/${encodeURIComponent(fundingId)}`);
   return (
-    <OperatorShell {...access} activeSection="funding" title="Funding detail">
+    <OperatorShell {...access} activeSection="funding">
       <OperatorFundingDetail
         fundingId={fundingId}
         canManage={hasCapability(access.capabilities, "finance.manage")}

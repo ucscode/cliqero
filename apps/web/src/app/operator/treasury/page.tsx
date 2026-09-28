@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function OperatorTreasuryPageRoute() {
   const access = await requireOperatorPage("/operator/treasury");
   return (
-    <OperatorShell {...access} activeSection="treasury" title="Treasury">
+    <OperatorShell {...access} activeSection="treasury">
       <OperatorTreasuryPage />
     </OperatorShell>
   );

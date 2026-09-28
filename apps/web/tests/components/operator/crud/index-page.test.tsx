@@ -25,6 +25,28 @@ function render(
 }
 
 describe("operator CRUD index", () => {
+  it("does not repeat the page title as a collection heading", () => {
+    const page = render({ title: "Records", sectionTitle: "Records" });
+    expect(page).toContain(">Records</h2>");
+    expect(page).not.toContain(">Records</h3>");
+  });
+
+  it("keeps a distinct collection heading when it adds context", () => {
+    const page = render({ title: "Records", sectionTitle: "Recently updated" });
+    expect(page).toContain("Recently updated");
+  });
+
+  it("keeps the matching collection heading when it has a section description", () => {
+    const page = render({
+      title: "Records",
+      sectionTitle: "Records",
+      sectionDescription: "Latest records from the system.",
+    });
+    expect(page).toContain("Latest records from the system.");
+    expect(page).toContain(">Records</h2>");
+    expect(page).toContain(">Records</h3>");
+  });
+
   it("provides standard loading, error/retry, empty, filter/sort/action and pagination slots", () => {
     const loading = render({ loading: true });
     expect(loading).toContain("Loading");

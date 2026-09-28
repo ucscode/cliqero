@@ -24,10 +24,37 @@ describe("operator CRUD table", () => {
     expect(html).toContain("hidden md:block");
     expect(html).toContain("md:hidden");
     expect(html).toContain("break-words");
+    expect(html).toContain("bg-slate-100");
+    expect(html).toContain("font-semibold text-slate-700");
+    expect(html).toContain("even:bg-slate-50/70");
+    expect(html).toContain("rounded-md");
+    expect(html).toContain("space-y-3");
+    expect(html).not.toContain("rounded-xl border border-slate-200 bg-white md:hidden");
+    expect(html).toContain('<dt class="text-xs font-semibold text-slate-700">Name</dt>');
     expect(html).toContain(">Name</dt>");
     expect(html).toContain(">State</dt>");
+    expect(html).toContain("py-3");
     expect(html.match(/Long operator record/g)).toHaveLength(2);
     expect(html.match(/active/g)).toHaveLength(2);
     expect(html.match(/Record actions/g)).toHaveLength(2);
+  });
+
+  it("keeps default values left-aligned on desktop and mobile with usable actions", () => {
+    const html = renderToStaticMarkup(
+      <CrudTable
+        items={[{ id: "r-1", amount: "125.00" }]}
+        columns={[{ key: "amount", label: "Amount", render: (item) => item.amount }]}
+        getRowKey={(item) => item.id}
+        actions={() => [{ type: "link", label: "Inspect", href: "/operator/records/r-1" }]}
+      />,
+    );
+
+    const valueCell = html.match(/<td class="([^"]*)">125\.00<\/td>/)?.[1] ?? "";
+    const mobileValue = html.match(/<dd class="([^"]*)">125\.00<\/dd>/)?.[1] ?? "";
+    expect(valueCell).not.toContain("text-right");
+    expect(mobileValue).not.toContain("text-right");
+    expect(html).toContain("text-left");
+    expect(html).toContain("Actions");
+    expect(html).toContain('aria-label="Row actions"');
   });
 });

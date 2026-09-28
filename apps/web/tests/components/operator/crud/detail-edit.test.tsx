@@ -3,8 +3,18 @@ import type { FormEvent } from "react";
 import { describe, expect, it } from "vitest";
 import { CrudDetail } from "@/components/operator/crud/detail";
 import { CrudEdit } from "@/components/operator/crud/edit";
+import { CrudFieldList } from "@/components/operator/crud/field-list";
 
 describe("operator CRUD detail", () => {
+  it("exports the unambiguous reusable CrudFieldList name", () => {
+    const html = renderToStaticMarkup(
+      <CrudFieldList fields={[{ label: "State", value: "Active" }]} />,
+    );
+    expect(html).toContain("<dl");
+    expect(html).toContain("State");
+    expect(html).toContain("Active");
+  });
+
   it("renders read-only fields, actions, custom sections, and safely wraps long identifiers", () => {
     const id = "account-" + "a".repeat(80);
     const html = renderToStaticMarkup(

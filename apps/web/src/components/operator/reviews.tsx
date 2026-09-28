@@ -60,7 +60,7 @@ export function OperatorReviews() {
     {
       key: "rating",
       label: "Rating",
-      render: (review) => <OperatorValueCell align="left">{review.rating}/5</OperatorValueCell>,
+      render: (review) => <OperatorValueCell>{review.rating}/5</OperatorValueCell>,
     },
     {
       key: "review",

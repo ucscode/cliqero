@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function OperatorNetworkPage() {
   const access = await requireOperatorPage("/operator/network");
   return (
-    <OperatorShell {...access} activeSection="network" title="Network">
+    <OperatorShell {...access} activeSection="network">
       <OperatorNetwork />
     </OperatorShell>
   );

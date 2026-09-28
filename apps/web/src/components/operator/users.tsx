@@ -27,7 +27,8 @@ import { OperatorMetricCard } from "./ui/metric-card";
 import { OperatorSection } from "./ui/section";
 import { OperatorFilterField } from "./ui/toolbar";
 import { CrudIndex } from "./crud/index-page";
-import { CrudDetail, CrudDetails } from "./crud/detail";
+import { CrudDetail } from "./crud/detail";
+import { CrudFieldList } from "./crud/field-list";
 import { CrudEdit } from "./crud/edit";
 import { useCrudCollection } from "./crud/use-collection";
 import type { CrudColumn } from "./crud/table";
@@ -163,7 +164,6 @@ export function OperatorUsersListView({
     {
       key: "referrals",
       label: "Direct referrals",
-      align: "right",
       render: (account) => <OperatorValueCell>{account.directReferralCount}</OperatorValueCell>,
     },
     {
@@ -205,7 +205,7 @@ export function OperatorUsersListView({
           <HoneypotField />
         </>
       }
-      toolbarClassName="max-w-4xl"
+      toolbarClassName="max-w-2xl"
       items={page?.items ?? []}
       columns={columns}
       getRowKey={(account) => account.id}
@@ -228,7 +228,6 @@ export function OperatorUsersListView({
             }
           : undefined
       }
-      sectionTitle="Users"
     />
   );
 }
@@ -495,7 +494,7 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
             {apiKeyLoading && <OperatorLoadingState variant="section" label="Loading API access" />}
             {apiKeyError && !apiKeyPage && <OperatorErrorState message={apiKeyError} />}
             <OperatorSection title="Referral context" surface>
-              <CrudDetails
+              <CrudFieldList
                 fields={[
                   {
                     label: "Immediate parent",

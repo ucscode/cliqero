@@ -176,7 +176,6 @@ export function OperatorCatalogueList() {
     {
       key: "price",
       label: "Price",
-      align: "right",
       render: (listing) => (
         <OperatorValueCell>{formatMinorUsd(listing.price.minor_amount)}</OperatorValueCell>
       ),

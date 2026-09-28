@@ -70,6 +70,9 @@ describe("operator UI composition components", () => {
     expect(html).toContain('for="username-filter"');
     expect(html).toContain('for="state-filter"');
     expect(html).toContain('type="submit"');
+    const formClass = html.match(/<form[^>]*class="([^"]+)"/)?.[1] ?? "";
+    expect(formClass).not.toMatch(/(?:rounded-|bg-white|shadow)/);
+    expect(formClass).toContain("border-b");
   });
 
   it("wraps semantic tables in an overflow-safe surface with optional framing", () => {
@@ -93,6 +96,7 @@ describe("operator UI composition components", () => {
     );
 
     expect(html).toContain("overflow-x-auto");
+    expect(html).toContain("rounded-md");
     expect(html).toContain("<table");
     expect(html).toContain('scope="col"');
     expect(html).toContain("alpha_one");
@@ -151,6 +155,7 @@ describe("operator UI composition components", () => {
 
     expect(cell).toContain("central_user@example.test");
     expect(cell).toContain("tabular-nums");
+    expect(cell).toContain("text-left");
     expect(cell).toContain("Identity");
     expect(cell).toContain("25 results on this page");
     expect(cell).toContain('aria-label="Operator result pages"');

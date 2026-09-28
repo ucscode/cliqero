@@ -90,6 +90,43 @@ export function CrudIndex<T>({
       )}
     </>
   );
+  const resolvedSectionTitle = sectionTitle ?? title;
+  const showSectionHeading = resolvedSectionTitle !== title || Boolean(sectionDescription);
+  const collectionContent =
+    loading && items.length === 0 ? (
+      <OperatorLoadingState
+        variant="table"
+        columns={columns.length + Number(Boolean(actions))}
+        label={loadingLabel ?? `Loading ${title.toLowerCase()}`}
+      />
+    ) : items.length ? (
+      <CrudTable
+        items={items}
+        columns={columns}
+        getRowKey={getRowKey}
+        actions={actions}
+        actionLabel={actionLabel}
+        footer={
+          pagination && (
+            <OperatorPagination
+              hasPrevious={pagination.hasPrevious && !loading}
+              hasNext={pagination.hasNext && !loading}
+              onPrevious={pagination.onPrevious}
+              onNext={pagination.onNext}
+              summary={pagination.summary}
+            />
+          )
+        }
+      />
+    ) : !error ? (
+      (empty ?? (
+        <OperatorEmptyState
+          title={emptyTitle}
+          description={emptyDescription}
+          action={emptyAction}
+        />
+      ))
+    ) : null;
 
   return (
     <OperatorPage>
@@ -113,42 +150,15 @@ export function CrudIndex<T>({
       ) : null}
       {beforeTable}
       {error && <OperatorErrorState message={error} retry={onRetry} />}
-      <OperatorSection title={sectionTitle ?? title} description={sectionDescription}>
-        {loading && items.length === 0 ? (
-          <OperatorLoadingState
-            variant="table"
-            columns={columns.length + Number(Boolean(actions))}
-            label={loadingLabel ?? `Loading ${title.toLowerCase()}`}
-          />
-        ) : items.length ? (
-          <CrudTable
-            items={items}
-            columns={columns}
-            getRowKey={getRowKey}
-            actions={actions}
-            actionLabel={actionLabel}
-            footer={
-              pagination && (
-                <OperatorPagination
-                  hasPrevious={pagination.hasPrevious && !loading}
-                  hasNext={pagination.hasNext && !loading}
-                  onPrevious={pagination.onPrevious}
-                  onNext={pagination.onNext}
-                  summary={pagination.summary}
-                />
-              )
-            }
-          />
-        ) : !error ? (
-          (empty ?? (
-            <OperatorEmptyState
-              title={emptyTitle}
-              description={emptyDescription}
-              action={emptyAction}
-            />
-          ))
-        ) : null}
-      </OperatorSection>
+      {showSectionHeading ? (
+        <OperatorSection title={resolvedSectionTitle} description={sectionDescription}>
+          {collectionContent}
+        </OperatorSection>
+      ) : (
+        <section aria-label={title} className="min-w-0">
+          {collectionContent}
+        </section>
+      )}
       {afterTable}
       {footer}
     </OperatorPage>

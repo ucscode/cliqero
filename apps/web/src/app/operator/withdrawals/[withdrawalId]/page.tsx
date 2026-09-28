@@ -14,7 +14,7 @@ export default async function OperatorWithdrawalDetailPage({
     `/operator/withdrawals/${encodeURIComponent(withdrawalId)}`,
   );
   return (
-    <OperatorShell {...access} activeSection="withdrawals" title="Withdrawal detail">
+    <OperatorShell {...access} activeSection="withdrawals">
       <OperatorWithdrawalDetail withdrawalId={withdrawalId} />
     </OperatorShell>
   );

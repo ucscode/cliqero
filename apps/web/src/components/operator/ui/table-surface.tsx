@@ -14,7 +14,7 @@ export function OperatorTableSurface({
   className?: string;
 }) {
   return (
-    <Card className={cn("min-w-0 overflow-hidden", className)}>
+    <Card className={cn("min-w-0 overflow-hidden rounded-md", className)}>
       {header && <div className="border-b border-slate-200 px-4 py-3 sm:px-5">{header}</div>}
       <div className="min-w-0 overflow-x-auto">{children}</div>
       {footer && <div className="border-t border-slate-200 px-4 py-3 sm:px-5">{footer}</div>}

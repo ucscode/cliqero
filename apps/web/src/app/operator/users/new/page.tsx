@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function OperatorUserCreatePage() {
   const access = await requireOperatorPage("/operator/users/new");
   return (
-    <OperatorShell {...access} activeSection="users" title="Add user">
+    <OperatorShell {...access} activeSection="users">
       <OperatorUserForm />
     </OperatorShell>
   );

@@ -5,7 +5,7 @@ import { requireOperatorPage } from "../operator-access";
 export default async function OperatorReviewsPage() {
   const access = await requireOperatorPage("/operator/reviews");
   return (
-    <OperatorShell {...access} activeSection="reviews" title="Reviews">
+    <OperatorShell {...access} activeSection="reviews">
       <OperatorReviews />
     </OperatorShell>
   );

@@ -94,7 +94,6 @@ export function OperatorWithdrawalList() {
     {
       key: "amount",
       label: "Amount",
-      align: "right",
       render: (item) => (
         <OperatorValueCell>
           <Money minor={item.amountMinor} />

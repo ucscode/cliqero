@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function OperatorWithdrawalsPage() {
   const access = await requireOperatorPage("/operator/withdrawals");
   return (
-    <OperatorShell {...access} activeSection="withdrawals" title="Withdrawals">
+    <OperatorShell {...access} activeSection="withdrawals">
       <OperatorWithdrawalList />
     </OperatorShell>
   );

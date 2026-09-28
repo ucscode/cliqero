@@ -9,7 +9,7 @@ export default async function EditBlogPage({ params }: { params: Promise<{ id: s
   const post = getBlogService().get((await params).id);
   if (!post) notFound();
   return (
-    <OperatorShell {...access} activeSection="blog" title="Edit blog post">
+    <OperatorShell {...access} activeSection="blog">
       <OperatorBlogEditor initial={post} />
     </OperatorShell>
   );
