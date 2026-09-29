@@ -3,6 +3,10 @@ import { newId } from "@/kernel/ids";
 import { Account } from "@/modules/identity/account";
 import { getContainer } from "@/infrastructure/container";
 import { fixturePng } from "@/infrastructure/postgres/seed/fixture-media";
+import {
+  CatalogueListingSeeder,
+  FREE_CATALOGUE_LISTINGS,
+} from "@/infrastructure/postgres/seed/catalogue-listings";
 
 if (process.env.NODE_ENV === "production")
   throw new Error("Catalogue fixtures are development-only");
@@ -91,14 +95,12 @@ const records = [
     "Field notes for thoughtful, permission-based growth.",
     "2100",
   ],
-  ["toolkit-10", "Product discovery cards", "A printable set of discovery prompts.", "1100"],
   [
     "toolkit-11",
     "Service reliability basics",
     "Practical incident and reliability foundations for teams that need a calmer way to operate services.\n\nLearn how to define useful service signals, write an incident plan, separate mitigation from follow-up work, and capture decisions while the context is fresh. The handbook uses approachable scenarios rather than assuming a large operations department.\n\nUse it as a starting point for a service review, an onboarding session, or a small team's first on-call agreement.",
     "3800",
   ],
-  ["toolkit-12", "Launch checklist", "A short checklist for a confident launch.", "600"],
   ["toolkit-13", "Operations handbook", "A long-form handbook for small product teams.", "5200"],
   [
     "toolkit-14",
@@ -301,6 +303,7 @@ try {
   );
   const container = getContainer();
   const owner = new Account(ownerId, "fixture_catalogue");
+  await new CatalogueListingSeeder(container.listingService).seedFree(owner);
   for (const [key, filename, altText, color] of mediaFixtures) {
     const listing = (
       await pool.query<{ id: string }>(
@@ -352,7 +355,9 @@ try {
   }
   await container.authentication.betterAuth.close();
   await container.database.close();
-  console.log(`Seeded ${records.length} development catalogue listings.`);
+  console.log(
+    `Seeded ${records.length + FREE_CATALOGUE_LISTINGS.length} development catalogue listings (${FREE_CATALOGUE_LISTINGS.length} free).`,
+  );
 } catch (error) {
   await pool.query("rollback");
   throw error;

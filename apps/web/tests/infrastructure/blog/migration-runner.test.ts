@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,6 +8,7 @@ import {
   blogMigrationDirectory,
 } from "@/infrastructure/blog/migration-runner";
 import { SqliteBlogRepository } from "@/infrastructure/blog/repository";
+import { closeBlogDatabaseForTests, getBlogDatabase } from "@/infrastructure/blog/database";
 
 const databases: Database.Database[] = [];
 const migrationDirectory = path.resolve("src/infrastructure/blog/migrations");
@@ -22,7 +24,7 @@ describe("authoritative Blog SQLite schema", () => {
     expect(blogMigrationDirectory("/app")).toBe("/app/apps/web/src/infrastructure/blog/migrations");
   });
 
-  it("creates the complete current schema from 0001 and can be safely initialized again", () => {
+  it("creates the complete current schema on a fresh database and accepts the current schema again", () => {
     const db = new Database(":memory:");
     databases.push(db);
     db.pragma("foreign_keys = ON");
@@ -79,6 +81,51 @@ describe("authoritative Blog SQLite schema", () => {
     expect(
       fs.readdirSync(migrationDirectory).filter((name) => /^\d{4}_.+\.sql$/.test(name)),
     ).toEqual(["0001_initial_blog_schema.sql"]);
+  });
+
+  it("fails clearly when an incompatible stale Blog table already exists", () => {
+    const db = new Database(":memory:");
+    databases.push(db);
+    db.exec("create table blog_posts (legacy_id text primary key)");
+
+    expect(() => applyBlogMigrations(db, migrationDirectory)).toThrow(
+      /does not match the current baseline.*explicitly reset/i,
+    );
+    expect(db.pragma("table_info(blog_posts)")).toMatchObject([{ name: "legacy_id" }]);
+  });
+
+  it("recognizes the previous baseline when only its IF NOT EXISTS spelling differs", () => {
+    const db = new Database(":memory:");
+    databases.push(db);
+    const schema = fs
+      .readFileSync(path.join(migrationDirectory, "0001_initial_blog_schema.sql"), "utf8")
+      .replace(/create (table|index|unique index) /gi, "create $1 if not exists ");
+    db.exec(schema);
+
+    expect(() => applyBlogMigrations(db, migrationDirectory)).not.toThrow();
+    expect(db.pragma("table_info(blog_posts)")).toHaveLength(14);
+  });
+
+  it("initializes the application Blog database from the authoritative baseline", () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "cliqero-blog-baseline-"));
+    const previousPath = process.env.BLOG_DATABASE_PATH;
+    process.env.BLOG_DATABASE_PATH = path.join(directory, "blog.sqlite");
+    try {
+      const database = getBlogDatabase();
+      expect(database.sqlite.prepare("select count(*) as count from blog_posts").get()).toEqual({
+        count: 0,
+      });
+      expect(
+        database.sqlite
+          .prepare("select name from sqlite_master where type='table' and name like 'blog_%'")
+          .all(),
+      ).toHaveLength(7);
+    } finally {
+      closeBlogDatabaseForTests();
+      if (previousPath === undefined) delete process.env.BLOG_DATABASE_PATH;
+      else process.env.BLOG_DATABASE_PATH = previousPath;
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("enforces taxonomy uniqueness, relationship foreign keys, and delete behavior", () => {

@@ -1,6 +1,6 @@
 -- Authoritative pre-production schema for the isolated Blog SQLite database.
 -- Development databases may be recreated; this file describes the current model directly.
-create table if not exists blog_posts (
+create table blog_posts (
   id text primary key not null,
   slug text not null unique,
   title text not null,
@@ -17,37 +17,37 @@ create table if not exists blog_posts (
   updated_at integer not null
 );
 
-create index if not exists blog_posts_status_created_idx
+create index blog_posts_status_created_idx
   on blog_posts(status, created_at desc, id desc);
 
-create table if not exists blog_categories (
+create table blog_categories (
   id text primary key not null,
   slug text not null unique,
   name text not null
 );
 
-create unique index if not exists blog_categories_name_ci_unique
+create unique index blog_categories_name_ci_unique
   on blog_categories(name collate nocase);
 
-create table if not exists blog_post_categories (
+create table blog_post_categories (
   post_id text not null references blog_posts(id) on delete cascade,
   category_id text not null references blog_categories(id) on delete restrict,
   primary key (post_id, category_id)
 );
 
-create table if not exists blog_tags (
+create table blog_tags (
   id text primary key not null,
   slug text not null unique,
   name text not null unique
 );
 
-create table if not exists blog_post_tags (
+create table blog_post_tags (
   post_id text not null references blog_posts(id) on delete cascade,
   tag_id text not null references blog_tags(id) on delete cascade,
   primary key (post_id, tag_id)
 );
 
-create table if not exists blog_previews (
+create table blog_previews (
   id text primary key not null,
   account_id text not null,
   payload_json text not null,
@@ -56,9 +56,9 @@ create table if not exists blog_previews (
   expires_at integer not null
 );
 
-create index if not exists blog_previews_expiry_idx on blog_previews(expires_at);
+create index blog_previews_expiry_idx on blog_previews(expires_at);
 
-create table if not exists blog_idempotency (
+create table blog_idempotency (
   key text primary key not null,
   request_hash text not null,
   post_id text not null references blog_posts(id) on delete cascade,
