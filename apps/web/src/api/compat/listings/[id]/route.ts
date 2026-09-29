@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiError, authenticatedAccount } from "../../http";
 import { getContainer } from "@/infrastructure/container";
 import { ownerListingView, listingWithMediaView } from "@/application/listing/service";
+import { apiAuthorizer } from "@/api/shared/authorization";
 
 const listingSchema = z
   .object({
@@ -27,6 +28,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!z.uuid().safeParse(id).success)
     return Response.json({ error: "Not found" }, { status: 404 });
   const c = getContainer();
+  const principal = await c.principalResolver.resolve(request);
+  const managementFailure = apiAuthorizer.authorize(
+    principal,
+    { mode: "account", capability: "catalogue.manage", scope: "catalogue:manage" },
+    request.headers.has("authorization"),
+  );
+  if (!managementFailure) {
+    try {
+      const listing = await c.listingService.getCatalogue(id);
+      return Response.json(
+        listingWithMediaView(
+          listing,
+          await c.listingMediaRepository.listByListing(id),
+          c.listingMedia,
+          true,
+          (await c.listingReviews.summariesForListings([listing.id])).get(listing.id) ?? null,
+        ),
+      );
+    } catch (error) {
+      return apiError(error, request);
+    }
+  }
   const account = await authenticatedAccount(request);
   if (account) {
     try {

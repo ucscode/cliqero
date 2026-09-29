@@ -54,7 +54,7 @@ suite("operator API-key administration", () => {
     const api = sessionApi(actor.id, ["api_keys.manage", "catalogue.manage"]);
 
     const createdResponse = await api.fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: "catalogue automation", scopes: ["catalogue:manage"] }),
@@ -66,7 +66,7 @@ suite("operator API-key administration", () => {
     expect(created.key_prefix).toBe(created.secret.slice(0, 18));
 
     const listed = await api.fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`),
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`),
     );
     expect(listed.status).toBe(200);
     const body = await listed.json();
@@ -96,22 +96,16 @@ suite("operator API-key administration", () => {
     expect(JSON.stringify(audit.rows[0].new_state)).not.toContain(created.secret);
 
     const revoked = await api.fetch(
-      new Request(
-        `http://localhost/api/operator/accounts/${target.id}/api-keys/${created.id}/revoke`,
-        {
-          method: "POST",
-        },
-      ),
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys/${created.id}/revoke`, {
+        method: "POST",
+      }),
     );
     expect(revoked.status).toBe(200);
     expect(await revoked.json()).toEqual({ changed: true });
     const repeated = await api.fetch(
-      new Request(
-        `http://localhost/api/operator/accounts/${target.id}/api-keys/${created.id}/revoke`,
-        {
-          method: "POST",
-        },
-      ),
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys/${created.id}/revoke`, {
+        method: "POST",
+      }),
     );
     expect(repeated.status).toBe(200);
     expect(await repeated.json()).toEqual({ changed: false });
@@ -130,17 +124,14 @@ suite("operator API-key administration", () => {
       createdBy: actor.id,
     });
     const beforeRevoke = await createApiApp(app as any).fetch(
-      new Request("http://localhost/api/operator/listings", {
+      new Request("http://localhost/api/listings?state=all", {
         headers: { authorization: `Bearer ${targetKey.secret}` },
       }),
     );
-    // The empty development catalogue may make the legacy handler reject its
-    // request shape, but authorization must have passed before the capability
-    // is revoked.
-    expect(beforeRevoke.status).not.toBe(403);
+    expect(beforeRevoke.status, await beforeRevoke.clone().text()).toBe(200);
     await app.capabilityAdministration.revoke(actor.id, target.id, "catalogue.manage");
     const afterRevoke = await createApiApp(app as any).fetch(
-      new Request("http://localhost/api/operator/listings", {
+      new Request("http://localhost/api/listings?state=all", {
         headers: { authorization: `Bearer ${targetKey.secret}` },
       }),
     );
@@ -165,7 +156,7 @@ suite("operator API-key administration", () => {
       "finance.read",
     ]);
     const denied = await api.fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: "treasury", scopes: ["treasury:manage"] }),
@@ -175,7 +166,7 @@ suite("operator API-key administration", () => {
     expect((await denied.json()).code).toBe("scope_delegation_forbidden");
 
     const broadDenied = await api.fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: "finance", scopes: ["operations:manage"] }),
@@ -188,7 +179,7 @@ suite("operator API-key administration", () => {
     await grant(root.id, "system.root");
     const rootApi = sessionApi(root.id, ["system.root"]);
     const targetDenied = await rootApi.fetch(
-      new Request(`http://localhost/api/operator/accounts/${actor.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${actor.id}/api-keys`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: "treasury", scopes: ["treasury:manage"] }),
@@ -208,7 +199,7 @@ suite("operator API-key administration", () => {
       createdBy: actor.id,
     });
     const scopeOnlyDenied = await createApiApp(app as any).fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`, {
         headers: { authorization: `Bearer ${scopeOnly.secret}` },
       }),
     );
@@ -222,13 +213,13 @@ suite("operator API-key administration", () => {
       createdBy: actor.id,
     });
     const denied = await createApiApp(app as any).fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`, {
         method: "GET",
         headers: { authorization: `Bearer ${missingScope.secret}` },
       }),
     );
     expect(denied.status).toBe(403);
-    expect((await denied.json()).code).toBe("insufficient_scope");
+    expect((await denied.json()).code).toBe("forbidden");
 
     const scoped = await app.apiKeys.create({
       accountId: actor.id,
@@ -237,7 +228,7 @@ suite("operator API-key administration", () => {
       createdBy: actor.id,
     });
     const allowed = await createApiApp(app as any).fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`, {
         headers: { authorization: `Bearer ${scoped.secret}` },
       }),
     );
@@ -252,12 +243,12 @@ suite("operator API-key administration", () => {
       createdBy: root.id,
     });
     const rootDenied = await createApiApp(app as any).fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`, {
         headers: { authorization: `Bearer ${rootKey.secret}` },
       }),
     );
     expect(rootDenied.status).toBe(403);
-    expect((await rootDenied.json()).code).toBe("insufficient_scope");
+    expect((await rootDenied.json()).code).toBe("forbidden");
 
     const rootScoped = await app.apiKeys.create({
       accountId: root.id,
@@ -266,7 +257,7 @@ suite("operator API-key administration", () => {
       createdBy: root.id,
     });
     const rootAllowed = await createApiApp(app as any).fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`, {
         headers: { authorization: `Bearer ${rootScoped.secret}` },
       }),
     );
@@ -280,7 +271,7 @@ suite("operator API-key administration", () => {
     await grant(actor.id, "api_keys.manage");
     const api = sessionApi(actor.id, ["api_keys.manage"]);
     const createdResponse = await api.fetch(
-      new Request(`http://localhost/api/operator/accounts/${target.id}/api-keys`, {
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: "ownership", scopes: [] }),
@@ -291,14 +282,14 @@ suite("operator API-key administration", () => {
 
     const wrongTarget = await api.fetch(
       new Request(
-        `http://localhost/api/operator/accounts/${foreignTarget.id}/api-keys/${created.id}/revoke`,
+        `http://localhost/api/accounts/${foreignTarget.id}/api-keys/${created.id}/revoke`,
         { method: "POST" },
       ),
     );
     expect(wrongTarget.status).toBe(404);
     expect(await app.apiKeys.authenticate(created.secret)).not.toBeNull();
 
-    const revokeUrl = `http://localhost/api/operator/accounts/${target.id}/api-keys/${created.id}/revoke`;
+    const revokeUrl = `http://localhost/api/accounts/${target.id}/api-keys/${created.id}/revoke`;
     const results = await Promise.all([
       api.fetch(new Request(revokeUrl, { method: "POST" })),
       api.fetch(new Request(revokeUrl, { method: "POST" })),

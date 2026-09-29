@@ -26,7 +26,7 @@ export function registerHierarchyRoutes(app: OpenAPIHono<Env>, container: Applic
   app.openapi(
     createRoute({
       method: "get",
-      path: "/api/operator/overview",
+      path: "/api/overview",
       responses: {
         200: {
           description: "Capability-scoped operator overview",
@@ -292,7 +292,7 @@ export function registerHierarchyRoutes(app: OpenAPIHono<Env>, container: Applic
   app.openapi(
     createRoute({
       method: "put",
-      path: "/api/operator/hierarchy/{accountId}/parent",
+      path: "/api/hierarchy/{accountId}/parent",
       request: {
         params: z.object({ accountId: z.string().uuid() }),
         body: {

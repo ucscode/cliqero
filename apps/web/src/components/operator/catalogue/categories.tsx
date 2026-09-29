@@ -14,13 +14,12 @@ import type { CrudColumn } from "@/components/crud/table";
 import { OperatorPrimaryCell } from "@/components/operator/ui/data-cells";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 
 export function OperatorListingCategories() {
   const [error, setError] = useState<string | null>(null);
   const collection = useCrudCollection(async () => {
-    const result = await apiFetch<{ items: ListingCategory[] }>(
-      "/api/operator/catalogue/categories",
-    );
+    const result = await apiFetch<{ items: ListingCategory[] }>("/api/catalogue/categories");
     return { items: result.items, nextCursor: null };
   }, {});
 
@@ -31,7 +30,7 @@ export function OperatorListingCategories() {
       return;
     setError(null);
     try {
-      await apiFetch(`/api/operator/catalogue/categories/${category.id}`, { method: "DELETE" });
+      await apiFetch(`/api/catalogue/categories/${category.id}`, { method: "DELETE" });
       await collection.retry();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to delete category.");
@@ -41,28 +40,19 @@ export function OperatorListingCategories() {
     if (!window.confirm(`Delete ${categories.length} selected catalogue categories?`)) return false;
     setError(null);
     try {
-      const results = await Promise.all(
-        categories.map(async (category) => {
-          try {
-            await apiFetch(`/api/operator/catalogue/categories/${category.id}`, {
-              method: "DELETE",
-            });
-            return { category, success: true as const };
-          } catch (cause) {
-            return {
-              category,
-              success: false as const,
-              error: cause instanceof Error ? cause.message : "Unable to delete category.",
-            };
-          }
-        }),
-      );
-      const failures = results.filter((result) => !result.success);
+      const results = await runOperatorBulkAction({
+        resource: "catalogue-categories",
+        action: "delete",
+        ids: categories.map((category) => category.id),
+      });
+      const failures = results.failed;
       if (failures.length)
         setError(
-          `${failures.length} of ${results.length} categories could not be deleted: ${failures
-            .map(({ category, error }) => `${category.name}: ${error}`)
-            .filter(Boolean)
+          `${failures.length} of ${categories.length} categories could not be deleted: ${failures
+            .map(
+              ({ id, message }) =>
+                `${categories.find((category) => category.id === id)?.name ?? id}: ${message}`,
+            )
             .join("; ")}`,
         );
       await collection.retry();
@@ -139,9 +129,7 @@ export function OperatorListingCategoryEditor({ initial }: { initial?: ListingCa
     setError(null);
     try {
       await apiFetch<ListingCategory>(
-        initial
-          ? `/api/operator/catalogue/categories/${initial.id}`
-          : "/api/operator/catalogue/categories",
+        initial ? `/api/catalogue/categories/${initial.id}` : "/api/catalogue/categories",
         {
           method: initial ? "PATCH" : "POST",
           headers: { "content-type": "application/json" },

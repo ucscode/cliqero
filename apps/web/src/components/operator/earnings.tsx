@@ -28,7 +28,7 @@ export function OperatorEarningsList() {
       if (filters.search) params.set("search", filters.search);
       if (filters.state) params.set("state", filters.state);
       if (cursor) params.set("cursor", cursor);
-      const next = await apiFetch<OperatorEarningsPage>(`/api/operator/earnings?${params}`);
+      const next = await apiFetch<OperatorEarningsPage>(`/api/earnings/entries?${params}`);
       setTotals(next.totals);
       return { items: next.items, nextCursor: next.nextCursor };
     },

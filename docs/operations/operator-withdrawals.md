@@ -57,9 +57,9 @@ UI.
 
 The operator API is resource-based:
 
-- `GET /api/operator/withdrawals`
-- `GET /api/operator/withdrawals/{withdrawalId}`
-- `PATCH /api/operator/withdrawals/{withdrawalId}`
+- `GET /api/withdrawals`
+- `GET /api/withdrawals/{withdrawalId}`
+- `PATCH /api/withdrawals/{withdrawalId}`
 
 The PATCH accepts approval, rejection with a reason, or completion with an
 optional `external_reference` and `note`. It requires the

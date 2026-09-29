@@ -1,22 +1,23 @@
 import type { Account } from "@/modules/identity/account";
-import type { ApiPrincipal } from "@/modules/identity/api/principal";
+import { isAuthenticatedPrincipal, type ApiPrincipal } from "@/modules/identity/api/principal";
 import { getContainer } from "@/infrastructure/container";
 import { apiErrorResult, publicErrorPayload, validationErrorPayload } from "./error";
 import { logDevelopmentError } from "@/infrastructure/development-log";
 
 /** Shared authentication boundary for capability routes migrating to Hono. */
-export async function authenticatedPrincipal(request: Request): Promise<ApiPrincipal | null> {
+export async function authenticatedPrincipal(request: Request): Promise<ApiPrincipal> {
   return getContainer().principalResolver.resolve(request);
 }
 
 export async function authenticatedAccount(request: Request): Promise<Account | null> {
-  return (await getContainer().principalResolver.resolve(request))?.account ?? null;
+  const principal = await getContainer().principalResolver.resolve(request);
+  return isAuthenticatedPrincipal(principal) ? principal.account : null;
 }
 
 /** Browser navigation endpoints must not treat API credentials as user sessions. */
 export async function authenticatedSessionAccount(request: Request): Promise<Account | null> {
   const principal = await authenticatedPrincipal(request);
-  return principal?.kind === "user_session" ? principal.account : null;
+  return principal.kind === "user_session" ? principal.account : null;
 }
 
 export function referralAttributionSource(request: Request): string | undefined {

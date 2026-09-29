@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const format = (new URL(request.url).searchParams.get("format") ?? "json") as TransferFormat;
     if (!["json", "csv", "yaml"].includes(format))
       return Response.json({ error: "Invalid export format" }, { status: 400 });
-    const content = serializeTransfer(await c.listingTransfer.export(account), format);
+    const content = serializeTransfer(await c.listingTransfer.exportCatalogue(account), format);
     return new Response(content, {
       headers: {
         "content-type": mime[format],

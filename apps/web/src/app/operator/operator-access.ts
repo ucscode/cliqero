@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getContainer } from "@/infrastructure/container";
+import { isAuthenticatedPrincipal } from "@/modules/identity/api/principal";
 import { canAccessOperator, hasCapability, type Capability } from "@/modules/identity/capabilities";
 
 export type OperatorPageAccess = {
@@ -34,7 +35,7 @@ export async function requireOperatorPage(pathname: string): Promise<OperatorPag
   const principal = await getContainer().principalResolver.resolve(
     new Request(`http://localhost${pathname}`, { headers: new Headers(requestHeaders) }),
   );
-  if (!principal) redirect(`/login?next=${encodeURIComponent(pathname)}`);
+  if (!isAuthenticatedPrincipal(principal)) redirect(`/login?next=${encodeURIComponent(pathname)}`);
   const required = capabilityForPath(pathname);
   if (!required && !canAccessOperator(principal.capabilities)) redirect("/dashboard");
   if (required && !hasCapability(principal.capabilities, required)) redirect("/operator");

@@ -1,29 +1,20 @@
 import { legacyRoutes } from "./compat/dispatch/routes";
 import type { ApiPrincipal } from "@/modules/identity/api/principal";
-import type { ApiScope } from "@/modules/identity/api/scopes";
-import type { Capability } from "@/modules/identity/capabilities";
-import { hasCapability } from "@/modules/identity/capabilities";
+import { apiAuthorizer, type AccessPolicy } from "./shared/authorization";
+import type { ApplicationContainer } from "@/infrastructure/container";
 
-type RouteContext = { params: Promise<Record<string, string>> };
-type Handler = (request: Request, context?: RouteContext) => Response | Promise<Response>;
-export type LegacyAuthMode =
-  "anonymous" | "account" | "session_only" | "integration_credential" | "deny";
-export type LegacyRouteAccess = {
-  mode: LegacyAuthMode;
-  scope?: ApiScope;
-  capability?: Capability;
-  apiKey?: "allow" | "reject";
-  allowIncompleteSession?: boolean;
+type RouteContext = {
+  params: Promise<Record<string, string>>;
+  container?: ApplicationContainer;
 };
+type Handler = (request: Request, context?: RouteContext) => Response | Promise<Response>;
+export type LegacyRouteAccess = AccessPolicy;
 
 const publicMethods = new Set(["GET"]);
 const publicPaths = new Set(["/api/health", "/api/listings", "/api/listings/:id"]);
 const sessionOnlyPaths = new Set([
   "/api/funding/development/verify",
   "/api/listings/:id/access",
-  "/api/listings/:listingId/integrations",
-  "/api/listings/:listingId/integrations/:integrationId",
-  "/api/listings/:listingId/integrations/:integrationId/rotate",
   "/api/me/onboarding",
   "/api/me/profile",
 ]);
@@ -39,25 +30,23 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
   if (pattern === "/api/me/onboarding")
     return { mode: "session_only", apiKey: "reject", allowIncompleteSession: true };
   if (sessionOnlyPaths.has(pattern)) return { mode: "session_only" };
-  if (pattern.startsWith("/api/operator/treasury")) {
+  if (pattern.startsWith("/api/treasury"))
     return {
       mode: "account",
       scope: method === "GET" ? "treasury:read" : "treasury:manage",
       capability: "treasury.manage",
     };
-  }
-  if (pattern.startsWith("/api/operator/listings"))
+  if (
+    pattern.startsWith("/api/listings/") &&
+    (pattern.includes("/integrations") || pattern.includes("/media"))
+  )
+    return { mode: "account" };
+  if (pattern === "/api/listings/import" || pattern === "/api/listings/export")
     return { mode: "account", scope: "catalogue:manage", capability: "catalogue.manage" };
-  if (pattern.startsWith("/api/operator/purchases") || pattern === "/api/operator/settlement")
-    return { mode: "account", scope: "operations:manage", capability: "finance.manage" };
-  if (pattern.startsWith("/api/operator/withdrawals"))
-    return { mode: "account", scope: "withdrawals:manage", capability: "withdrawals.manage" };
-  if (pattern.startsWith("/api/operator/distribution-policy"))
-    return { mode: "account", scope: "operations:manage", capability: "finance.read" };
-  if (pattern.startsWith("/api/operator/"))
-    // Unknown operator endpoints remain inaccessible until deliberately
-    // classified above; no account capability or API-key scope can bypass it.
-    return { mode: "deny" };
+  if (pattern === "/api/purchases/reverse" || pattern === "/api/earnings/settlement")
+    return { mode: "account", scope: "payments:manage", capability: "finance.manage" };
+  if (pattern === "/api/distribution-policy")
+    return { mode: "account", scope: "payments:read", capability: "finance.read" };
   if (pattern === "/api/listings/:id/referral-url")
     return { mode: "session_only", apiKey: "reject" };
   if (pattern === "/api/listings" || pattern === "/api/listings/:id")
@@ -155,39 +144,14 @@ export function authorizeLegacyRequest(
   principal: ApiPrincipal | null,
   access: LegacyRouteAccess,
 ): Response | null {
-  if (access.mode === "deny") return forbidden();
-  if (
-    access.mode !== "integration_credential" &&
-    request.headers.has("authorization") &&
-    !principal
-  )
-    return unauthorized();
-  if (access.mode === "session_only" && !principal && !access.allowIncompleteSession)
-    return unauthorized();
-  if (access.mode === "session_only" && principal?.kind === "api_key") return forbidden();
-  if (access.mode === "anonymous" && principal?.kind === "api_key" && access.apiKey === "reject")
-    return forbidden();
-  if (access.mode === "account" && !principal) return unauthorized();
-  if (
-    access.mode === "account" &&
-    access.capability &&
-    principal &&
-    !hasCapability(principal.capabilities, access.capability)
-  )
-    return forbidden();
-  if (
-    access.mode === "account" &&
-    principal?.kind === "api_key" &&
-    access.scope &&
-    !principal.scopes.has(access.scope)
-  )
-    return forbidden();
-  return null;
+  const failure = apiAuthorizer.authorize(principal, access, request.headers.has("authorization"));
+  return failure === "unauthorized" ? unauthorized() : failure === "forbidden" ? forbidden() : null;
 }
 
 export async function dispatchLegacyApi(
   request: Request,
   principal: ApiPrincipal | null = null,
+  container?: ApplicationContainer,
 ): Promise<Response | null> {
   const pathname = new URL(request.url).pathname;
   for (const route of legacyRoutes) {
@@ -202,7 +166,7 @@ export async function dispatchLegacyApi(
       );
     const denied = authorizeLegacyRequest(request, principal, access);
     if (denied) return denied;
-    return handler(request, { params: Promise.resolve(params) });
+    return handler(request, { params: Promise.resolve(params), container });
   }
   return null;
 }

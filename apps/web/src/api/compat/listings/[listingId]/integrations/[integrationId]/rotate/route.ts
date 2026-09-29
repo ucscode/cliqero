@@ -1,5 +1,5 @@
-import { authenticatedAccount, apiError } from "../../../../../http";
-import { getContainer } from "@/infrastructure/container";
+import { apiError } from "../../../../../http";
+import { authorizeListingIntegration } from "../../../../integrations/access";
 
 export async function POST(
   request: Request,
@@ -7,14 +7,25 @@ export async function POST(
 ) {
   try {
     const values = await params;
-    const account = await authenticatedAccount(request);
-    if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
-    const container = getContainer();
-    await container.listingService.getOwner(account, values.listingId);
-    const integration = await container.integrations.find(account.id, values.integrationId);
+    const access = await authorizeListingIntegration(request, values.listingId);
+    if ("response" in access) return access.response;
+    if (access.access === "manager")
+      return Response.json(
+        await access.container.integrations.rotateForListing(
+          access.principal.account.id,
+          values.listingId,
+          values.integrationId,
+        ),
+      );
+    const integration = await access.container.integrations.find(
+      access.principal.account.id,
+      values.integrationId,
+    );
     if (!integration.listing_ids.includes(values.listingId))
       return Response.json({ error: "Integration not found" }, { status: 404 });
-    return Response.json(await container.integrations.rotate(account.id, values.integrationId));
+    return Response.json(
+      await access.container.integrations.rotate(access.principal.account.id, values.integrationId),
+    );
   } catch (error) {
     return apiError(error);
   }

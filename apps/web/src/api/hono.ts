@@ -12,12 +12,12 @@ import type { Env } from "./shared/context";
 import { domainError } from "./shared/error";
 import { errorSchema } from "./shared/schemas";
 import { registerBlogRoutes } from "./routes/blog";
-import { registerOperatorOperationsRoutes } from "./routes/operator/operations";
-import { registerOperatorListingCategoryRoutes } from "./routes/operator/catalogue/categories";
-import { registerOperatorFinanceRoutes } from "./routes/operator/finance";
-import { registerOperatorWithdrawalRoutes } from "./routes/operator/withdrawal";
-import { registerOperatorTreasuryRoutes } from "./routes/operator/treasury";
-import { registerOperatorPaymentRoutes } from "./routes/operator/payments";
+import { registerAccountAndFundingRoutes } from "./routes/operations";
+import { registerCatalogueCategoryRoutes } from "./routes/catalogue/categories";
+import { registerFinanceRoutes } from "./routes/finance";
+import { registerWithdrawalRoutes } from "./routes/withdrawals";
+import { registerTreasuryRoutes } from "./routes/treasury";
+import { registerPaymentRoutes } from "./routes/payments";
 import { registerHierarchyRoutes } from "./routes/hierarchy";
 import { registerApiKeyRoutes } from "./routes/api-keys";
 import { registerFundingRoutes } from "./routes/funding";
@@ -28,14 +28,14 @@ import { registerPackageEntitlementRoutes } from "./routes/package/entitlements"
 import { accountAccessOpenApiMetadata } from "./routes/account-access/metadata";
 import { blogOpenApiMetadata } from "./routes/blog/metadata";
 import { hierarchyOpenApiMetadata } from "./routes/hierarchy/metadata";
-import { operatorAccountsOpenApiMetadata } from "./routes/operator/accounts/metadata";
-import { operatorFinanceOpenApiMetadata } from "./routes/operator/finance/metadata";
-import { operatorFundingOpenApiMetadata } from "./routes/operator/funding/metadata";
-import { operatorTreasuryOpenApiMetadata } from "./routes/operator/treasury/metadata";
-import { operatorWithdrawalOpenApiMetadata } from "./routes/operator/withdrawal/metadata";
+import { accountsOpenApiMetadata } from "./routes/accounts/management/metadata";
+import { financeOpenApiMetadata } from "./routes/finance/metadata";
+import { fundingOperationsOpenApiMetadata } from "./routes/funding-operations/metadata";
+import { treasuryOpenApiMetadata } from "./routes/treasury/metadata";
+import { withdrawalOpenApiMetadata } from "./routes/withdrawals/metadata";
 import { operatorReviewOpenApiMetadata } from "./routes/reviews/metadata";
-import { operatorCatalogueOpenApiMetadata } from "./routes/operator/catalogue/metadata";
-import { operatorPaymentsOpenApiMetadata } from "./routes/operator/payments/metadata";
+import { catalogueOpenApiMetadata } from "./routes/catalogue/metadata";
+import { paymentsOpenApiMetadata } from "./routes/payments/metadata";
 
 export function createApiApp(
   container: ApplicationContainer,
@@ -70,12 +70,12 @@ export function createApiApp(
     },
   );
   registerBlogRoutes(app, container);
-  registerOperatorOperationsRoutes(app, container);
-  registerOperatorListingCategoryRoutes(app, container);
-  registerOperatorFinanceRoutes(app, container);
-  registerOperatorWithdrawalRoutes(app, container);
-  registerOperatorTreasuryRoutes(app, container);
-  registerOperatorPaymentRoutes(app, container);
+  registerAccountAndFundingRoutes(app, container);
+  registerCatalogueCategoryRoutes(app, container);
+  registerFinanceRoutes(app, container);
+  registerWithdrawalRoutes(app, container);
+  registerTreasuryRoutes(app, container);
+  registerPaymentRoutes(app, container);
   registerHierarchyRoutes(app, container);
   registerApiKeyRoutes(app, container);
   registerReviewRoutes(app, container);
@@ -88,7 +88,7 @@ export function createApiApp(
   // services. This fallback keeps one authoritative HTTP router while legacy
   // Request/Response contracts remain available to existing clients.
   app.all("/api/*", async (c) => {
-    const response = await dispatchLegacyApi(c.req.raw, c.get("principal"));
+    const response = await dispatchLegacyApi(c.req.raw, c.get("principal"), container);
     return response ?? c.json({ error: "Not found", code: "not_found" }, 404);
   });
   return app;
@@ -105,14 +105,14 @@ export function generateOpenApiDocument(app: OpenAPIHono<Env>) {
     accountAccessOpenApiMetadata,
     blogOpenApiMetadata,
     hierarchyOpenApiMetadata,
-    operatorAccountsOpenApiMetadata,
-    operatorFinanceOpenApiMetadata,
-    operatorFundingOpenApiMetadata,
-    operatorTreasuryOpenApiMetadata,
-    operatorWithdrawalOpenApiMetadata,
+    accountsOpenApiMetadata,
+    financeOpenApiMetadata,
+    fundingOperationsOpenApiMetadata,
+    treasuryOpenApiMetadata,
+    withdrawalOpenApiMetadata,
     operatorReviewOpenApiMetadata,
-    operatorCatalogueOpenApiMetadata,
-    operatorPaymentsOpenApiMetadata,
+    catalogueOpenApiMetadata,
+    paymentsOpenApiMetadata,
   ]);
   delete document.paths["/api/openapi.json"];
   return document;

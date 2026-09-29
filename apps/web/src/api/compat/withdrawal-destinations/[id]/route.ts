@@ -15,7 +15,8 @@ const patchSchema = z.union([
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const principal = await authenticatedPrincipal(request);
-  if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (principal.kind === "anonymous")
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (principal.kind === "api_key" && !principal.scopes.has("withdrawals:read"))
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   try {
@@ -30,7 +31,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const principal = await authenticatedPrincipal(request);
-  if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (principal.kind === "anonymous")
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (principal.kind === "api_key" && !principal.scopes.has("withdrawals:create"))
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   try {

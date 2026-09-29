@@ -21,22 +21,13 @@ import * as listingImport from "@/api/compat/listings/import/route";
 import * as myListings from "@/api/compat/me/listings/route";
 import * as onboarding from "@/api/compat/me/onboarding/route";
 import * as profile from "@/api/compat/me/profile/route";
-import * as operatorDistributionPolicy from "@/api/compat/operator/distribution-policy/route";
-import * as operatorListings from "@/api/compat/operator/listings/route";
-import * as operatorListingById from "@/api/compat/operator/listings/[id]/route";
-import * as operatorListingMedia from "@/api/compat/operator/listings/[id]/media/route";
-import * as operatorListingMediaById from "@/api/compat/operator/listings/[id]/media/[mediaId]/route";
-import * as operatorListingIntegrations from "@/api/compat/operator/listings/[id]/integrations/route";
-import * as operatorListingIntegration from "@/api/compat/operator/listings/[id]/integrations/[integrationId]/route";
-import * as operatorListingIntegrationRotate from "@/api/compat/operator/listings/[id]/integrations/[integrationId]/rotate/route";
-import * as operatorListingExport from "@/api/compat/operator/listings/export/route";
-import * as operatorListingImport from "@/api/compat/operator/listings/import/route";
-import * as operatorPurchaseReverse from "@/api/compat/operator/purchases/reverse/route";
-import * as operatorSettlement from "@/api/compat/operator/settlement/route";
-import * as operatorTreasury from "@/api/compat/operator/treasury/route";
-import * as operatorTreasuryEntries from "@/api/compat/operator/treasury/entries/route";
-import * as operatorTreasuryEntry from "@/api/compat/operator/treasury/entries/[id]/route";
-import * as operatorTreasuryExpenses from "@/api/compat/operator/treasury/expenses/route";
+import * as distributionPolicy from "@/api/compat/distribution-policy/route";
+import * as purchaseReverse from "@/api/compat/purchases/reverse/route";
+import * as earningsSettlement from "@/api/compat/earnings/settlement/route";
+import * as treasury from "@/api/compat/treasury/route";
+import * as treasuryEntries from "@/api/compat/treasury/entries/route";
+import * as treasuryEntry from "@/api/compat/treasury/entries/[id]/route";
+import * as treasuryExpenses from "@/api/compat/treasury/expenses/route";
 import * as passwordReset from "@/api/compat/password-reset/route";
 import * as passwordResetRequest from "@/api/compat/password-reset/request/route";
 import * as purchases from "@/api/compat/purchases/route";
@@ -88,7 +79,10 @@ export const legacyRoutes: LegacyRoute[] = [
     pattern: "/api/listings/:listingId/integrations/:integrationId",
     module: listingIntegration,
   },
-  { pattern: "/api/listings/:listingId/integrations", module: listingIntegrations },
+  {
+    pattern: "/api/listings/:listingId/integrations",
+    module: listingIntegrations,
+  },
   { pattern: "/api/listings/:id/media/:mediaId", module: listingMediaById },
   { pattern: "/api/listings/:id/media", module: listingMedia },
   { pattern: "/api/listings/:id/access", module: listingAccess },
@@ -100,28 +94,13 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/me/listings", module: myListings },
   { pattern: "/api/me/onboarding", module: onboarding },
   { pattern: "/api/me/profile", module: profile },
-  { pattern: "/api/operator/distribution-policy", module: operatorDistributionPolicy },
-  { pattern: "/api/operator/listings/:id/media/:mediaId", module: operatorListingMediaById },
-  { pattern: "/api/operator/listings/:id/media", module: operatorListingMedia },
-  {
-    pattern: "/api/operator/listings/:id/integrations/:integrationId/rotate",
-    module: operatorListingIntegrationRotate,
-  },
-  {
-    pattern: "/api/operator/listings/:id/integrations/:integrationId",
-    module: operatorListingIntegration,
-  },
-  { pattern: "/api/operator/listings/:id/integrations", module: operatorListingIntegrations },
-  { pattern: "/api/operator/listings/export", module: operatorListingExport },
-  { pattern: "/api/operator/listings/import", module: operatorListingImport },
-  { pattern: "/api/operator/listings/:id", module: operatorListingById },
-  { pattern: "/api/operator/listings", module: operatorListings },
-  { pattern: "/api/operator/purchases/reverse", module: operatorPurchaseReverse },
-  { pattern: "/api/operator/settlement", module: operatorSettlement },
-  { pattern: "/api/operator/treasury/entries/:id", module: operatorTreasuryEntry },
-  { pattern: "/api/operator/treasury/entries", module: operatorTreasuryEntries },
-  { pattern: "/api/operator/treasury/expenses", module: operatorTreasuryExpenses },
-  { pattern: "/api/operator/treasury", module: operatorTreasury },
+  { pattern: "/api/distribution-policy", module: distributionPolicy },
+  { pattern: "/api/purchases/reverse", module: purchaseReverse },
+  { pattern: "/api/earnings/settlement", module: earningsSettlement },
+  { pattern: "/api/treasury/entries/:id", module: treasuryEntry },
+  { pattern: "/api/treasury/entries", module: treasuryEntries },
+  { pattern: "/api/treasury/expenses", module: treasuryExpenses },
+  { pattern: "/api/treasury", module: treasury },
   { pattern: "/api/password-reset/request", module: passwordResetRequest },
   { pattern: "/api/password-reset", module: passwordReset },
   { pattern: "/api/purchases/:id", module: purchaseById },

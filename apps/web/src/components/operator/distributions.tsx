@@ -37,9 +37,7 @@ export function OperatorDistributionList() {
     const params = new URLSearchParams({ limit: String(pageSize) });
     if (appliedSearch) params.set("search", appliedSearch);
     if (cursor) params.set("cursor", cursor);
-    const result = await apiFetch<OperatorDistributionPage>(
-      `/api/operator/distributions?${params}`,
-    );
+    const result = await apiFetch<OperatorDistributionPage>(`/api/distributions?${params}`);
     return { items: result.items, nextCursor: result.nextCursor };
   }, "");
   const columns: readonly CrudColumn<OperatorDistributionPage["items"][number]>[] = [
@@ -133,7 +131,7 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     // Detail reconstructs from persisted distribution, purchase, ledger and settlement facts.
-    void apiFetch<DistributionDetail>(`/api/operator/distributions/${distributionId}`)
+    void apiFetch<DistributionDetail>(`/api/distributions/${distributionId}`)
       .then(setDistribution)
       .catch((cause) => setError(errorMessage(cause)))
       .finally(() => setLoading(false));

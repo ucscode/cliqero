@@ -31,7 +31,7 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
   app.openapi(
     createRoute({
       method: "get",
-      path: "/api/operator/accounts/{accountId}/api-keys",
+      path: "/api/accounts/{accountId}/api-keys",
       request: { params: operatorKeyParams },
       responses: {
         200: {
@@ -88,7 +88,7 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/operator/accounts/{accountId}/api-keys",
+      path: "/api/accounts/{accountId}/api-keys",
       request: {
         params: operatorKeyParams,
         body: { content: { "application/json": { schema: operatorKeyBody } } },
@@ -148,7 +148,7 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/operator/accounts/{accountId}/api-keys/{id}/revoke",
+      path: "/api/accounts/{accountId}/api-keys/{id}/revoke",
       request: { params: operatorKeyIdParams },
       responses: {
         200: {

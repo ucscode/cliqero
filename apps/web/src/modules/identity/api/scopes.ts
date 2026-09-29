@@ -23,6 +23,7 @@ export const API_SCOPES = [
   "payments:manage",
   "operations:manage",
   "accounts:manage",
+  "accounts:read",
   "blog:read",
   "blog:write",
   "blog:publish",
@@ -139,6 +140,10 @@ export const API_SCOPE_METADATA = {
   "accounts:manage": {
     label: "Account management",
     description: "Restricts this key to account creation and supported profile updates.",
+  },
+  "accounts:read": {
+    label: "Account reads",
+    description: "Restricts this key to authorized account inspection requests.",
   },
   "blog:read": {
     label: "Content reads",

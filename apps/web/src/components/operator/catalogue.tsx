@@ -36,6 +36,7 @@ import type { OperatorAction } from "./ui/actions-menu";
 import { OperatorEmptyState } from "./ui/empty-state";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -73,10 +74,10 @@ export function OperatorCatalogueList() {
     async (filters: { search: string; state: string; visibility: string }, cursor, pageSize) => {
       const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
-      if (filters.state) params.set("state", filters.state);
+      params.set("state", filters.state || "all");
       if (filters.visibility) params.set("visibility", filters.visibility);
       if (cursor) params.set("cursor", cursor);
-      const page = await apiFetch<OperatorListingPage>(`/api/operator/listings?${params}`);
+      const page = await apiFetch<OperatorListingPage>(`/api/listings?${params}`);
       return { items: page.items, nextCursor: page.next_cursor };
     },
     { search: "", state: "", visibility: "" },
@@ -86,7 +87,7 @@ export function OperatorCatalogueList() {
     if (action === "archive" && !window.confirm(`Archive “${listing.title}”?`)) return;
     setActionError(null);
     try {
-      await apiFetch(`/api/operator/listings/${listing.id}`, {
+      await apiFetch(`/api/listings/${listing.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -113,33 +114,21 @@ export function OperatorCatalogueList() {
       return false;
     setActionError(null);
     try {
-      const results = await Promise.all(
-        listings.map(async (listing) => {
-          try {
-            await apiFetch(`/api/operator/listings/${listing.id}`, {
-              method: "PATCH",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                state:
-                  action === "publish" ? "published" : action === "archive" ? "archived" : "draft",
-              }),
-            });
-            return { listing, success: true as const };
-          } catch (cause) {
-            return {
-              listing,
-              success: false as const,
-              error: cause instanceof Error ? cause.message : "Unable to update listing state.",
-            };
-          }
-        }),
-      );
-      const failures = results.filter((result) => !result.success);
+      const results = await runOperatorBulkAction({
+        resource: "listings",
+        action: "set-state",
+        state: action === "publish" ? "published" : action === "archive" ? "archived" : "draft",
+        ids: listings.map((listing) => listing.id),
+      });
+      const failures = results.failed;
       const pastTense = { publish: "published", archive: "archived", restore: "restored" }[action];
       if (failures.length)
         setActionError(
-          `${failures.length} of ${results.length} listings could not be ${pastTense}: ${failures
-            .map(({ listing, error }) => `${listing.title}: ${error}`)
+          `${failures.length} of ${listings.length} listings could not be ${pastTense}: ${failures
+            .map(
+              ({ id, message: error }) =>
+                `${listings.find((listing) => listing.id === id)?.title ?? id}: ${error}`,
+            )
             .join("; ")}`,
         );
       await collection.retry();
@@ -183,7 +172,7 @@ export function OperatorCatalogueList() {
         skipped: number;
         failed: number;
       }>(
-        `/api/operator/listings/import?format=${encodeURIComponent(format)}&mode=${encodeURIComponent(mode)}`,
+        `/api/listings/import?format=${encodeURIComponent(format)}&mode=${encodeURIComponent(mode)}`,
         {
           method: "POST",
           headers: {
@@ -369,7 +358,7 @@ export function OperatorCatalogueList() {
               {(["json", "csv", "yaml"] as const).map((format) => (
                 <a
                   className="rounded-md px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50"
-                  href={`/api/operator/listings/export?format=${format}`}
+                  href={`/api/listings/export?format=${format}`}
                   key={format}
                 >
                   Export {format.toUpperCase()}
@@ -461,7 +450,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    void apiFetch<{ items: ListingCategory[] }>("/api/operator/catalogue/categories")
+    void apiFetch<{ items: ListingCategory[] }>("/api/catalogue/categories")
       .then((result) => {
         setCategories(result.items);
         setCategoriesLoaded(true);
@@ -471,7 +460,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
 
   useEffect(() => {
     if (!listingId) return;
-    void apiFetch<OperatorListing>(`/api/operator/listings/${listingId}`)
+    void apiFetch<OperatorListing>(`/api/listings/${listingId}`)
       .then((value) => {
         setListing(value);
         setForm({
@@ -508,7 +497,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
     try {
       const priceMinor = parseUsdMinor(form.price);
       if (editing) {
-        const next = await apiFetch<OperatorListing>(`/api/operator/listings/${listingId}`, {
+        const next = await apiFetch<OperatorListing>(`/api/listings/${listingId}`, {
           method: "PATCH",
           headers: { ...honeypotHeaders, "content-type": "application/json" },
           body: JSON.stringify({
@@ -528,7 +517,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         setListing(next);
         setSaved(true);
       } else {
-        const next = await apiFetch<OperatorListing>("/api/operator/listings", {
+        const next = await apiFetch<OperatorListing>("/api/listings", {
           method: "POST",
           headers: { ...honeypotHeaders, "content-type": "application/json" },
           body: JSON.stringify({
@@ -718,7 +707,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
   async function load() {
     try {
       const result = await apiFetch<{ items: Integration[] }>(
-        `/api/operator/listings/${listingId}/integrations`,
+        `/api/listings/${listingId}/integrations`,
       );
       setItems(result.items);
     } catch (cause) {
@@ -740,7 +729,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
     setError(null);
     try {
       const result = await apiFetch<IntegrationCredential>(
-        `/api/operator/listings/${listingId}/integrations`,
+        `/api/listings/${listingId}/integrations`,
         {
           method: "POST",
           headers: {
@@ -763,7 +752,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
     if (!window.confirm(`Rotate the credential for “${item.name}”?`)) return;
     try {
       const result = await apiFetch<IntegrationCredential>(
-        `/api/operator/listings/${listingId}/integrations/${item.id}/rotate`,
+        `/api/listings/${listingId}/integrations/${item.id}/rotate`,
         { method: "POST" },
       );
       setSecret(result.credential);
@@ -775,7 +764,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
   async function revoke(item: Integration) {
     if (!window.confirm(`Revoke “${item.name}”?`)) return;
     try {
-      await apiFetch(`/api/operator/listings/${listingId}/integrations/${item.id}`, {
+      await apiFetch(`/api/listings/${listingId}/integrations/${item.id}`, {
         method: "DELETE",
       });
       await load();
@@ -872,7 +861,7 @@ function CatalogueMedia({
     try {
       const body = new FormData();
       body.set("file", file);
-      const media = await apiFetch<ListingMedia>(`/api/operator/listings/${listing.id}/media`, {
+      const media = await apiFetch<ListingMedia>(`/api/listings/${listing.id}/media`, {
         method: "POST",
         headers: honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : undefined,
         body,
@@ -891,7 +880,7 @@ function CatalogueMedia({
   async function remove(media: ListingMedia) {
     if (!window.confirm("Remove this media from the listing?")) return;
     try {
-      await apiFetch(`/api/operator/listings/${listing.id}/media/${media.id}`, {
+      await apiFetch(`/api/listings/${listing.id}/media/${media.id}`, {
         method: "DELETE",
       });
       onChange({ ...listing, media: listing.media.filter((item) => item.id !== media.id) });
@@ -907,7 +896,7 @@ function CatalogueMedia({
       const next = [...listing.media];
       [next[index], next[target]] = [next[target], next[index]];
       for (const [position, item] of next.entries()) {
-        await apiFetch(`/api/operator/listings/${listing.id}/media/${item.id}`, {
+        await apiFetch(`/api/listings/${listing.id}/media/${item.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ position }),

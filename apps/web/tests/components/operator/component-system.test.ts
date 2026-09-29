@@ -45,30 +45,32 @@ describe("operator component-system migration", () => {
     const source = readFileSync(resolve(operatorRoot, "users.tsx"), "utf8");
     expect(source).toContain("canManage && onBulkDelete");
     expect(source).toContain('value: "delete"');
-    expect(source).toContain("/api/operator/accounts/${account.id}");
-    expect(source).not.toContain("/api/operator/accounts/bulk");
+    expect(source).toContain("/api/accounts/${account.id}");
+    expect(source).not.toContain("/api/accounts/bulk");
   });
 
-  it("keeps bulk selection as repeated canonical resource operations", () => {
-    const cases = [
-      ["users.tsx", "/api/operator/accounts/${account.id}", 'method: "DELETE"'],
-      ["blog/index.tsx", "/api/blog/posts/${post.id}", 'method: "DELETE"'],
-      ["blog/categories.tsx", "/api/operator/blog/categories/${category.id}", 'method: "DELETE"'],
-      [
-        "catalogue/categories.tsx",
-        "/api/operator/catalogue/categories/${category.id}",
-        'method: "DELETE"',
-      ],
-      ["catalogue.tsx", "/api/operator/listings/${listing.id}", 'method: "PATCH"'],
-      ["reviews.tsx", "/api/operator/reviews/${review.id}", 'method: "PATCH"'],
+  it("runs bulk selection through the server-side workflow, not repeated browser API calls", () => {
+    const files = [
+      "users.tsx",
+      "blog/index.tsx",
+      "blog/categories.tsx",
+      "catalogue/categories.tsx",
+      "catalogue.tsx",
+      "reviews.tsx",
     ] as const;
 
-    for (const [file, path, method] of cases) {
+    for (const file of files) {
       const source = readFileSync(resolve(operatorRoot, file), "utf8");
-      expect(source, file).toContain(path);
-      expect(source, file).toContain(method);
+      expect(source, file).toContain("runOperatorBulkAction");
       expect(source, file).not.toMatch(/\/api\/[^\s"'`]*\/bulk/);
     }
+  });
+
+  it("requests the authorized all-state withdrawal collection for operator tables", () => {
+    const source = readFileSync(resolve(operatorRoot, "withdrawals.tsx"), "utf8");
+    expect(source).toContain('params.set("state", filters.state || "all")');
+    expect(source).toContain("`/api/withdrawals?${params}`");
+    expect(source).not.toContain("/api/operator/withdrawals");
   });
 
   it("uses the shared Sidebar composition for operator navigation", () => {

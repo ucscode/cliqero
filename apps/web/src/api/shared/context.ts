@@ -1,62 +1,71 @@
 import type { Context } from "hono";
 import { hasCapability, type Capability } from "@/modules/identity/capabilities";
-import { operatorCapabilitiesForScope } from "@/modules/identity/api/scopes";
-import type { ApiPrincipal } from "@/modules/identity/api/principal";
+import { operatorCapabilitiesForScope, type ApiScope } from "@/modules/identity/api/scopes";
+import {
+  isAuthenticatedPrincipal,
+  type ApiPrincipal,
+  type AuthenticatedApiPrincipal,
+} from "@/modules/identity/api/principal";
+import { apiAuthorizer, type AccessPolicy } from "./authorization";
 
-export type Env = { Variables: { principal: ApiPrincipal | null } };
+export type Env = { Variables: { principal: ApiPrincipal } };
 export type ApiContext = Context<Env>;
 
-export function principal(c: ApiContext): ApiPrincipal | null {
+export function principal(c: ApiContext): ApiPrincipal {
   return c.get("principal");
 }
 
 export function requirePrincipal(c: ApiContext) {
   const value = principal(c);
-  if (!value) {
+  if (!isAuthenticatedPrincipal(value)) {
     c.header("WWW-Authenticate", "Bearer");
     return c.json({ error: "Unauthorized", code: "unauthorized" }, 401) as never;
   }
   return value;
 }
 
-export function requireScope(c: ApiContext, value: ApiPrincipal, scope: string) {
-  if (value.kind === "api_key" && !value.scopes.has(scope))
-    return c.json({ error: "Forbidden", code: "insufficient_scope" }, 403) as never;
-  return null;
+export function authorize(c: ApiContext, policy: AccessPolicy) {
+  const failure = apiAuthorizer.authorize(
+    principal(c),
+    policy,
+    c.req.header("authorization") !== undefined,
+  );
+  if (failure === "unauthorized") {
+    c.header("WWW-Authenticate", "Bearer");
+    return c.json({ error: "Unauthorized", code: "unauthorized" }, 401) as never;
+  }
+  return failure === "forbidden"
+    ? (c.json({ error: "Forbidden", code: "forbidden" }, 403) as never)
+    : null;
+}
+
+export function requireScope(c: ApiContext, value: AuthenticatedApiPrincipal, scope: ApiScope) {
+  return authorize(c, { mode: "account", scope });
 }
 
 export function requireCapabilityScope(
   c: ApiContext,
-  value: ApiPrincipal,
+  value: AuthenticatedApiPrincipal,
   capability: Capability,
-  scope: string,
+  scope: ApiScope,
 ) {
-  if (!hasCapability(value.capabilities, capability))
-    return c.json({ error: "Forbidden", code: "forbidden" }, 403) as never;
-  return requireScope(c, value, scope);
+  return authorize(c, { mode: "account", capability, scope });
 }
 
 export function requireSessionCapability(
   c: ApiContext,
-  value: ApiPrincipal,
+  value: AuthenticatedApiPrincipal,
   capability: Capability,
 ) {
-  if (value.kind !== "user_session")
-    return c.json(
-      { error: "A browser session is required.", code: "session_required" },
-      403,
-    ) as never;
-  if (!hasCapability(value.capabilities, capability))
-    return c.json({ error: "Forbidden", code: "forbidden" }, 403) as never;
-  return null;
+  return authorize(c, { mode: "session_only", capability });
 }
 
-export function hierarchyReadOrAdmin(c: ApiContext, value: ApiPrincipal) {
+export function hierarchyReadOrAdmin(c: ApiContext, value: AuthenticatedApiPrincipal) {
   if (value.kind === "api_key" && value.scopes.has("hierarchy:admin")) return null;
   return requireScope(c, value, "hierarchy:read");
 }
 
-export function grantableScopes(value: ApiPrincipal): Set<string> {
+export function grantableScopes(value: AuthenticatedApiPrincipal): Set<string> {
   const allowed = new Set([
     "hierarchy:read",
     "api_keys:manage",
@@ -73,6 +82,7 @@ export function grantableScopes(value: ApiPrincipal): Set<string> {
   ]);
   if (hasCapability(value.capabilities, "catalogue.manage")) allowed.add("catalogue:manage");
   if (hasCapability(value.capabilities, "accounts.manage")) allowed.add("accounts:manage");
+  if (hasCapability(value.capabilities, "accounts.read")) allowed.add("accounts:read");
   if (hasCapability(value.capabilities, "hierarchy.manage")) allowed.add("hierarchy:admin");
   if (hasCapability(value.capabilities, "withdrawals.manage")) allowed.add("withdrawals:manage");
   if (hasCapability(value.capabilities, "finance.read")) allowed.add("payments:read");

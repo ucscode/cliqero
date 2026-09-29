@@ -14,7 +14,7 @@ Catalogue management is documented in `docs/operations/operator-catalogue.md`. I
 existing Hono listing, media, and transfer APIs and never treats an authorized
 operator as a seller or payee.
 
-Overview data comes from `GET /api/operator/overview`, a Hono-owned aggregate
+Overview data comes from `GET /api/overview`, a Hono-owned aggregate
 projection. Browser sessions use the account's direct capabilities. API keys
 must also carry a scope appropriate to the operation. A scope never elevates
 the account's capabilities.

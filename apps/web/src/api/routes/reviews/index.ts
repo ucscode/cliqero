@@ -10,7 +10,8 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
     if (!z.uuid().safeParse(listingId).success)
       return c.json({ error: "Listing not found", code: "not_found" }, 404);
     const requested = Number(c.req.query("limit") ?? 10);
-    const accountId = c.get("principal")?.account.id;
+    const caller = c.get("principal");
+    const accountId = caller.kind === "anonymous" ? undefined : caller.account?.id;
     const page = await container.listingReviews.visible({
       listingId,
       accountId,
@@ -42,7 +43,7 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
     return c.json({ item: reviewJson(review, { reviewer: p.account.username, isMine: true }) });
   });
 
-  app.get("/api/operator/reviews", async (c) => {
+  app.get("/api/reviews", async (c) => {
     const p = requirePrincipal(c);
     if (!(p instanceof Object) || !("accountId" in p)) return p;
     const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
@@ -71,8 +72,8 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
   app.openapi(
     createRoute({
       method: "patch",
-      path: "/api/operator/reviews/{reviewId}",
-      tags: ["Reviews (Operator)"],
+      path: "/api/reviews/{reviewId}",
+      tags: ["Reviews"],
       summary: "Moderate a review",
       description:
         "Changes a pending review to approved or rejected. The review service rejects unsupported transitions.",

@@ -57,8 +57,8 @@ export function OperatorTreasuryPage() {
       if (filters.source) params.set("source", filters.source);
       if (cursor) params.set("cursor", cursor);
       const [nextSummary, nextPage] = await Promise.all([
-        apiFetch<OperatorTreasurySummary>("/api/operator/treasury"),
-        apiFetch<OperatorTreasuryPage>(`/api/operator/treasury/entries?${params}`),
+        apiFetch<OperatorTreasurySummary>("/api/treasury"),
+        apiFetch<OperatorTreasuryPage>(`/api/treasury/entries?${params}`),
       ]);
       setSummary(nextSummary);
       return { items: nextPage.items, nextCursor: nextPage.nextCursor };
@@ -83,7 +83,7 @@ export function OperatorTreasuryPage() {
     }
     setSaving(true);
     try {
-      await apiFetch<OperatorTreasuryEntry>("/api/operator/treasury/entries", {
+      await apiFetch<OperatorTreasuryEntry>("/api/treasury/entries", {
         method: "POST",
         headers: {
           "content-type": "application/json",

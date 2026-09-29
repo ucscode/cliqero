@@ -86,7 +86,13 @@ describe("wallet transaction API projection", () => {
     };
     expect((await GET(new Request("http://localhost/api/wallet/transactions"))).status).toBe(403);
 
-    fixtures.container.principalResolver.resolve = vi.fn(async () => null);
+    fixtures.container.principalResolver.resolve = vi.fn(async () => ({
+      kind: "anonymous",
+      accountId: null,
+      account: null,
+      capabilities: [],
+      scopes: new Set<string>(),
+    }));
     expect((await GET(new Request("http://localhost/api/wallet/transactions"))).status).toBe(401);
   });
 });

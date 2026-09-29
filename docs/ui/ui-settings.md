@@ -32,6 +32,6 @@ than a safe saved-destination resource.
 
 API keys are not an ordinary customer Settings feature. Operators may provision
 and manage keys for a selected account through the account-scoped operator API
-at `/api/operator/accounts/{accountId}/api-keys`. Key secrets are shown only at
+at `/api/accounts/{accountId}/api-keys`. Key secrets are shown only at
 creation; persistence, bearer authentication, scope enforcement, and revocation
 remain part of the platform's controlled integration functionality.

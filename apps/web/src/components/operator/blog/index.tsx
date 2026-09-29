@@ -20,6 +20,7 @@ import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
 import { CrudEdit } from "@/components/crud/edit";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 
 export function OperatorBlogList() {
   const [search, setSearch] = useState("");
@@ -29,10 +30,10 @@ export function OperatorBlogList() {
     async (filters: { search: string; status: string }, cursor, pageSize) => {
       const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
-      if (filters.status) params.set("status", filters.status);
+      params.set("status", filters.status || "all");
       if (cursor) params.set("cursor", cursor);
       const result = await apiFetch<{ items: BlogPost[]; nextCursor: string | null }>(
-        `/api/operator/blog?${params}`,
+        `/api/blog/posts?${params}`,
       );
       return { items: result.items, nextCursor: result.nextCursor };
     },
@@ -52,23 +53,21 @@ export function OperatorBlogList() {
     if (!window.confirm(`Delete ${posts.length} selected articles?`)) return false;
     setActionError(null);
     try {
-      const results = await Promise.all(
-        posts.map(async (post) => {
-          try {
-            await apiFetch(`/api/blog/posts/${post.id}`, { method: "DELETE" });
-            return { post, success: true as const };
-          } catch (cause) {
-            return {
-              post,
-              success: false as const,
-              error: cause instanceof Error ? cause.message : "Unable to delete article.",
-            };
-          }
-        }),
-      );
-      const failures = results.filter((result) => !result.success);
+      const results = await runOperatorBulkAction({
+        resource: "blog-posts",
+        action: "delete",
+        ids: posts.map((post) => post.id),
+      });
+      const failures = results.failed;
       if (failures.length)
-        setActionError(failures.map(({ post, error }) => `${post.title}: ${error}`).join(" "));
+        setActionError(
+          failures
+            .map(
+              ({ id, message }) =>
+                `${posts.find((post) => post.id === id)?.title ?? id}: ${message}`,
+            )
+            .join(" "),
+        );
       await collection.retry();
       return failures.length === 0;
     } catch (cause) {
@@ -209,7 +208,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   const [previewId, setPreviewId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    void apiFetch<{ items: BlogCategory[] }>("/api/operator/blog/categories")
+    void apiFetch<{ items: BlogCategory[] }>("/api/blog/categories")
       .then(({ items }) => {
         if (active) setCategories(items);
       })
@@ -241,7 +240,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   async function clearPreview() {
     if (previewId) {
       try {
-        await apiFetch(`/api/operator/blog/preview/${previewId}`, { method: "DELETE" });
+        await apiFetch(`/api/blog/previews/${previewId}`, { method: "DELETE" });
       } catch {
         /* Expiry cleanup is the safe fallback. */
       } finally {
@@ -310,14 +309,11 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
     setPreviewing(true);
     setError(null);
     try {
-      const result = await apiFetch<{ previewId: string; url: string }>(
-        "/api/operator/blog/preview",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...requestBody(), preview_id: previewId }),
-        },
-      );
+      const result = await apiFetch<{ previewId: string; url: string }>("/api/blog/previews", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...requestBody(), preview_id: previewId }),
+      });
       setPreviewId(result.previewId);
       tab.location.href = result.url;
     } catch (cause) {

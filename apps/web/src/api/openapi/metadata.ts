@@ -18,6 +18,7 @@ export type OpenApiMetadataEntry = {
   method: string;
   mode: string;
   scope?: string;
+  capability?: string;
   apiKey?: "allow" | "reject";
 };
 
@@ -40,6 +41,8 @@ const errorResponse = (description: string) => ({
 
 const authenticationResponsesByMode: Record<string, readonly string[]> = {
   anonymous: [],
+  public: [],
+  mixed: ["401", "403"],
   account: ["401", "403"],
   session_only: ["401", "403"],
   integration_credential: ["401"],
@@ -53,7 +56,10 @@ const authorizationResponseDescriptions: Record<string, string> = {
 type AccessMetadataBase = { security?: unknown };
 const accessMetadataBases = new WeakMap<OpenApiOperation, AccessMetadataBase>();
 
-function setAccess(operation: OpenApiOperation, mode: string, scope?: string) {
+function setAccess(
+  operation: OpenApiOperation,
+  access: { mode: string; scope?: string; capability?: string },
+) {
   if (!accessMetadataBases.has(operation)) {
     accessMetadataBases.set(operation, {
       security: operation.security,
@@ -61,11 +67,15 @@ function setAccess(operation: OpenApiOperation, mode: string, scope?: string) {
   }
   const base = accessMetadataBases.get(operation)!;
 
-  operation["x-authentication-mode"] = mode;
-  if (scope) operation["x-required-api-scope"] = scope;
+  operation["x-authentication-mode"] = access.mode;
+  if (access.mode === "anonymous" || access.mode === "mixed") operation["x-public-access"] = true;
+  else delete operation["x-public-access"];
+  if (access.capability) operation["x-session-capability"] = access.capability;
+  else delete operation["x-session-capability"];
+  if (access.scope) operation["x-required-api-scope"] = access.scope;
   else delete operation["x-required-api-scope"];
 
-  if (mode !== "account") {
+  if (access.mode !== "account" && !access.scope) {
     if (base.security === undefined) delete operation.security;
     else operation.security = base.security;
     return;
@@ -131,6 +141,8 @@ const domainDescriptions: Record<string, string> = {
     "Purchase and checkout operations preserve payment, ownership, and purchase lifecycle rules.",
   Wallet:
     "Wallet operations preserve funding verification, ledger idempotency, and account ownership boundaries.",
+  Funding:
+    "Funding records are persisted before provider initialization and are processed idempotently.",
   Withdrawals:
     "Withdrawal operations enforce account ownership, reserved-balance, and supported operator transition rules.",
   Hierarchy:
@@ -147,57 +159,49 @@ const domainDescriptions: Record<string, string> = {
     "Provider ingress validates the provider protocol and records events before application processing.",
   "Core/System": "System operations expose health and shared API capabilities.",
   "Internal UI": "This operation supports authenticated Cliqero application interfaces.",
-  "Operations (Operator)":
-    "Operator overview data is limited by the caller's operations capability.",
+  Operations: "Overview data is limited by the caller's documented account capabilities.",
 };
 
 function domainForPath(path: string): string {
   if (path.startsWith("/api/webhooks/") || path.includes("/ipn")) return "Provider callbacks";
-  const operator = path.startsWith("/api/operator/");
-  const relative = path.replace(/^\/api\//, "").replace(/^operator\//, "");
-  let domain: string;
+  const relative = path.replace(/^\/api\//, "");
+  if (relative === "overview") return "Operations";
   if (
     relative.startsWith("accounts") ||
     relative.startsWith("api-keys") ||
     relative.startsWith("me/")
   )
-    domain = "Accounts";
-  else if (relative.startsWith("operator/overview") || relative === "overview")
-    domain = "Operations";
-  else if (relative.includes("integrations")) domain = "Integrations";
-  else if (relative.startsWith("catalogue")) domain = "Catalogue";
-  else if (relative.startsWith("listings")) domain = "Listings";
-  else if (relative.startsWith("blog")) domain = "Blog";
-  else if (relative.startsWith("reviews")) domain = "Reviews";
-  else if (relative.startsWith("payments") || relative.includes("payment-callback"))
-    domain = "Payments";
-  else if (relative.startsWith("purchases") || relative.startsWith("checkout"))
-    domain = "Purchases";
-  else if (relative.startsWith("wallet") || relative.startsWith("funding")) domain = "Wallet";
-  else if (relative.startsWith("withdrawal")) domain = "Withdrawals";
-  else if (relative.startsWith("hierarchy")) domain = "Hierarchy";
-  else if (relative.startsWith("referral")) domain = "Referrals";
-  else if (relative.startsWith("treasury")) domain = "Treasury";
-  else if (
+    return "Accounts";
+  if (relative.includes("integrations")) return "Integrations";
+  if (relative.startsWith("catalogue")) return "Catalogue";
+  if (relative.startsWith("listings")) return "Listings";
+  if (relative.startsWith("blog")) return "Blog";
+  if (relative.startsWith("reviews")) return "Reviews";
+  if (relative.startsWith("payments") || relative.includes("payment-callback")) return "Payments";
+  if (relative.startsWith("purchases") || relative.startsWith("checkout")) return "Purchases";
+  if (relative.startsWith("funding")) return "Funding";
+  if (relative.startsWith("wallet")) return "Wallet";
+  if (relative.startsWith("withdrawal")) return "Withdrawals";
+  if (relative.startsWith("hierarchy")) return "Hierarchy";
+  if (relative.startsWith("referral")) return "Referrals";
+  if (relative.startsWith("treasury")) return "Treasury";
+  if (
     relative.startsWith("earning") ||
     relative.startsWith("distribution") ||
     relative.startsWith("settlement")
   )
-    domain = "Earnings";
-  else if (relative.startsWith("capabilit")) domain = "Capabilities";
-  else if (relative.startsWith("access/")) domain = "Integrations";
-  else if (path === "/api/openapi.json") domain = "Internal UI";
-  else domain = "Core/System";
-
-  if (domain === "Operations") return "Operations (Operator)";
-  return `${domain} (${operator ? "Operator" : "System"})`;
+    return "Earnings";
+  if (relative.startsWith("capabilit")) return "Capabilities";
+  if (relative.startsWith("access/")) return "Integrations";
+  if (path === "/api/openapi.json") return "Internal UI";
+  return "Core/System";
 }
 
 function readableResource(path: string) {
   const segments = path
     .replace(/^\/api\//, "")
     .split("/")
-    .filter((segment) => segment && segment !== "operator" && !/^\{.+\}$/.test(segment));
+    .filter((segment) => segment && !/^\{.+\}$/.test(segment));
   const last = segments.at(-1) ?? "API operation";
   const singular = last.endsWith("ies")
     ? `${last.slice(0, -3)}y`
@@ -210,7 +214,7 @@ function readableResource(path: string) {
 function operationSummary(path: string, method: string) {
   const resource = readableResource(path);
   if (path === "/api/health") return "Check API health";
-  if (path === "/api/operator/overview") return "Get operator overview";
+  if (path === "/api/overview") return "Get overview";
   if (path === "/api/wallet") return "Get wallet summary";
   if (path === "/api/me/profile") return method === "get" ? "Get profile" : "Update profile";
   if (path === "/api/me/session") return "Get current session";
@@ -301,14 +305,10 @@ function enrichOperation(path: string, method: string, operation: OpenApiOperati
       : operationSummary(path, method);
   operation.summary = summary;
   if (typeof operation.description !== "string" || !operation.description.trim()) {
-    const domain = tag.replace(/ \((System|Operator)\)$/, "");
-    operation.description = `${summary}. ${domainDescriptions[domain] ?? domainDescriptions["Core/System"]}`;
+    operation.description = `${summary}. ${domainDescriptions[tag] ?? domainDescriptions["Core/System"]}`;
   }
 
-  if (
-    method.toLowerCase() === "post" &&
-    /^\/api\/(?:operator\/)?listings\/\{[^}]+\}\/integrations$/.test(path)
-  ) {
+  if (method.toLowerCase() === "post" && /^\/api\/listings\/\{[^}]+\}\/integrations$/.test(path)) {
     operation.requestBody = {
       required: true,
       description: "Create a listing-scoped integration credential.",
@@ -413,7 +413,7 @@ export function applyOpenApiMetadata(
           "404": errorResponse("Request error"),
         },
       });
-      setAccess(operation, routeMethod.access.mode, routeMethod.access.scope);
+      setAccess(operation, routeMethod.access);
       addAuthenticationResponses(operation, routeMethod.access);
     }
   }
@@ -422,7 +422,7 @@ export function applyOpenApiMetadata(
     for (const entry of contribution) {
       const operation = document.paths[entry.path]?.[entry.method.toLowerCase()];
       if (operation) {
-        setAccess(operation, entry.mode, entry.scope);
+        setAccess(operation, entry);
         addAuthenticationResponses(operation, entry);
       }
     }
@@ -436,9 +436,7 @@ export function applyOpenApiMetadata(
     }
   (document as Record<string, unknown>).tags = [...tagNames].sort().map((name) => ({
     name,
-    description:
-      domainDescriptions[name.replace(/ \((System|Operator)\)$/, "")] ??
-      domainDescriptions["Core/System"],
+    description: domainDescriptions[name] ?? domainDescriptions["Core/System"],
   }));
 
   normalizeAuthorizationResponses(document);

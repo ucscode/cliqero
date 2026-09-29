@@ -28,8 +28,8 @@ normal capability model. Account readers do not receive mutation authority.
 Supported management operations are:
 
 ```text
-POST  /api/operator/accounts                 create an account
-PATCH /api/operator/accounts/{accountId}      update username and/or country
+POST  /api/accounts                 create an account
+PATCH /api/accounts/{accountId}      update username and/or country
 ```
 
 Creation goes through the existing authentication/identity workflow. The
@@ -59,16 +59,16 @@ are archived. Immediate children of the deleted account become parentless roots;
 their descendants stay attached to them, and no ancestor is substituted. Future
 commission shares for hierarchy levels that no longer exist go to the platform.
 Operators cannot delete themselves or the final `system.root` account.
-Deletion uses `DELETE /api/operator/accounts/{accountId}`. The UI's bounded bulk
+Deletion uses `DELETE /api/accounts/{accountId}`. The UI's bounded bulk
 action repeats that canonical operation per selected account, reports individual
 failures, and does not require a bulk API endpoint.
 
 Capability changes use explicit, idempotent grant/revoke operations:
 
 ```text
-GET    /api/operator/accounts/{accountId}/capabilities
-POST   /api/operator/accounts/{accountId}/capabilities
-DELETE /api/operator/accounts/{accountId}/capabilities/{capability}
+GET    /api/accounts/{accountId}/capabilities
+POST   /api/accounts/{accountId}/capabilities
+DELETE /api/accounts/{accountId}/capabilities/{capability}
 ```
 
 Only browser sessions may use these endpoints in Phase 2. A non-root capability
@@ -84,7 +84,7 @@ and continue wide branches with opaque child cursors. Visualization depth is a
 per-window display limit, not a global hierarchy limit.
 
 Parent changes use the existing `ReferralGraphService.reassignParent()` command
-and `PUT /api/operator/hierarchy/{accountId}/parent`. PostgreSQL cycle guards,
+and `PUT /api/hierarchy/{accountId}/parent`. PostgreSQL cycle guards,
 transaction serialization, and the `referral.parent_reassigned` append-only
 audit record remain authoritative. Dragging graph nodes is cosmetic and never
 changes hierarchy relationships or historical purchases/distributions.

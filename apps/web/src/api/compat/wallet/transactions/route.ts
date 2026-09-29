@@ -3,7 +3,8 @@ import { getContainer } from "@/infrastructure/container";
 import { WALLET_OVERVIEW_ACTIVITY_LIMIT } from "@/modules/wallet/wallet";
 export async function GET(request: Request) {
   const principal = await authenticatedPrincipal(request);
-  if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (principal.kind === "anonymous")
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (principal.kind === "api_key" && !principal.scopes.has("wallet:read"))
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   const values = await getContainer().wallet.history(

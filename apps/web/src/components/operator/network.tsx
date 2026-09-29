@@ -74,7 +74,7 @@ export function OperatorNetwork() {
     }
     try {
       const page = await apiFetch<OperatorAccountPage>(
-        `/api/operator/accounts?search=${encodeURIComponent(search.trim())}&limit=10`,
+        `/api/accounts?search=${encodeURIComponent(search.trim())}&limit=10`,
       );
       setResults(page.items);
     } catch (cause) {

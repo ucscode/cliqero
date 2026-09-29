@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       mode = url.searchParams.get("mode") ?? "create";
     if (!["json", "csv", "yaml"].includes(format) || !["create", "upsert"].includes(mode))
       return Response.json({ error: "Invalid import format or mode" }, { status: 400 });
-    const result = await c.listingTransfer.import(account, {
+    const result = await c.listingTransfer.importCatalogue(account, {
       format,
       mode: mode as "create" | "upsert",
       body: await request.text(),

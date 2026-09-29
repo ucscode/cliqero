@@ -25,8 +25,15 @@ const listing = {
 };
 
 function configure(principal: any, ownerError = true) {
+  const resolvedPrincipal = principal ?? {
+    kind: "anonymous",
+    accountId: null,
+    account: null,
+    capabilities: [],
+    scopes: new Set<string>(),
+  };
   fixtures.container = {
-    principalResolver: { resolve: vi.fn(async () => principal) },
+    principalResolver: { resolve: vi.fn(async () => resolvedPrincipal) },
     listingService: {
       getOwner: vi.fn(async () => {
         if (ownerError) throw new Error("Forbidden");

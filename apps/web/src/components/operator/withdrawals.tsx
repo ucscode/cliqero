@@ -45,10 +45,10 @@ export function OperatorWithdrawalList() {
     ) => {
       const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
-      if (filters.state) params.set("state", filters.state);
+      params.set("state", filters.state || "all");
       if (filters.attention) params.set("attention", filters.attention);
       if (cursor) params.set("cursor", cursor);
-      const result = await apiFetch<OperatorWithdrawalPage>(`/api/operator/withdrawals?${params}`);
+      const result = await apiFetch<OperatorWithdrawalPage>(`/api/withdrawals?${params}`);
       return { items: result.items, nextCursor: result.nextCursor };
     },
     { search: "", state: "", attention: "" },
@@ -200,7 +200,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
     setLoading(true);
     setError(null);
     try {
-      setItem(await apiFetch<Detail>(`/api/operator/withdrawals/${withdrawalId}`));
+      setItem(await apiFetch<Detail>(`/api/withdrawals/${withdrawalId}`));
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -218,7 +218,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
     try {
       const status =
         action === "approve" ? "approved" : action === "reject" ? "rejected" : "completed";
-      await apiFetch(`/api/operator/withdrawals/${withdrawalId}`, {
+      await apiFetch(`/api/withdrawals/${withdrawalId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status, ...body }),

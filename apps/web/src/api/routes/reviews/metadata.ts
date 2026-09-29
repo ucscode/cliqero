@@ -1,6 +1,6 @@
 export const operatorReviewOpenApiMetadata = [
   {
-    path: "/api/operator/reviews/{reviewId}",
+    path: "/api/reviews/{reviewId}",
     method: "patch",
     mode: "account",
     scope: "reviews:moderate",

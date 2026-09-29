@@ -83,7 +83,7 @@ export function OperatorFundingList() {
       if (filters.state) params.set("state", filters.state);
       if (filters.provider) params.set("provider", filters.provider);
       if (cursor) params.set("cursor", cursor);
-      const result = await apiFetch<OperatorFundingPage>(`/api/operator/funding?${params}`);
+      const result = await apiFetch<OperatorFundingPage>(`/api/funding?${params}`);
       return { items: result.items, nextCursor: result.nextCursor };
     },
     { search: "", state: "", provider: "" },
@@ -239,7 +239,7 @@ export function OperatorFundingDetail({
     setLoading(true);
     setError(null);
     try {
-      setFunding(await apiFetch<FundingDetail>(`/api/operator/funding/${fundingId}`));
+      setFunding(await apiFetch<FundingDetail>(`/api/funding/${fundingId}`));
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -271,7 +271,7 @@ export function OperatorFundingDetail({
     setConfirming(true);
     setError(null);
     try {
-      await apiFetch(`/api/operator/funding/${funding.id}/confirm-bank-transfer`, {
+      await apiFetch(`/api/funding/${funding.id}/confirm-bank-transfer`, {
         method: "POST",
       });
       await load();

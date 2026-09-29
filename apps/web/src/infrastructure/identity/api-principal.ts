@@ -7,30 +7,49 @@ import type {
   ApiPrincipal,
   ApiPrincipalKind,
 } from "@/modules/identity/api/principal";
+
+const anonymousPrincipal: ApiPrincipal = {
+  kind: "anonymous",
+  accountId: null,
+  account: null,
+  capabilities: [],
+  scopes: new Set(),
+};
+
 export class ApiPrincipalResolver {
+  private readonly requests = new WeakMap<Request, Promise<ApiPrincipal>>();
+
   constructor(
     private readonly authentication: AuthenticationService,
     private readonly apiKeys: ApiKeyAuthenticator,
     private readonly sql: QueryExecutor,
   ) {}
-  async resolve(request: Request): Promise<ApiPrincipal | null> {
+  resolve(request: Request): Promise<ApiPrincipal> {
+    const existing = this.requests.get(request);
+    if (existing) return existing;
+    const pending = this.resolveUncached(request);
+    this.requests.set(request, pending);
+    return pending;
+  }
+
+  private async resolveUncached(request: Request): Promise<ApiPrincipal> {
     const authorization = request.headers.get("authorization");
     let account: Account | null = null;
     let kind: ApiPrincipalKind = "user_session";
     let scopes: readonly string[] = [];
     if (authorization) {
-      if (!/^Bearer\s+/i.test(authorization)) return null;
+      if (!/^Bearer\s+/i.test(authorization)) return anonymousPrincipal;
       const token = authorization.replace(/^Bearer\s+/i, "").trim();
       if (token.startsWith("cliq_live_")) {
         const key = await this.apiKeys.authenticate(token);
-        if (!key) return null;
+        if (!key) return anonymousPrincipal;
         account = await this.authenticationAccount(key.accountId);
-        if (!account) return null;
+        if (!account) return anonymousPrincipal;
         kind = "api_key";
         scopes = key.scopes;
       } else account = await this.authentication.authenticate(token);
     } else account = await this.authentication.authenticateRequest(request);
-    if (!account) return null;
+    if (!account) return anonymousPrincipal;
     const rows = await this.sql.query<{ capability: string }>(
       `select capability from identity_capability.account_capabilities where account_id=(select id from identity_capability.accounts where uuid=$1)`,
       [account.id],

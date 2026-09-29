@@ -80,7 +80,7 @@ history into the browser.
 
 An approved withdrawal is paid manually outside Cliqero. The operator then
 records the already-sent payment, optional external reference, and note through
-`PATCH /api/operator/withdrawals/:id`. This updates the withdrawal and completes
+`PATCH /api/withdrawals/:id`. This updates the withdrawal and completes
 its reservation in one transaction. External automation can use the same API;
 Cliqero itself does not call an outbound payout provider.
 

@@ -15,7 +15,15 @@ import { GET } from "@/api/compat/listings/route";
 function configure() {
   const queryStorefront = vi.fn(async () => ({ items: [], nextCursor: null }));
   state.container = {
-    principalResolver: { resolve: vi.fn(async () => null) },
+    principalResolver: {
+      resolve: vi.fn(async () => ({
+        kind: "anonymous",
+        accountId: null,
+        account: null,
+        capabilities: [],
+        scopes: new Set<string>(),
+      })),
+    },
     listingService: { queryStorefront },
     listingMediaRepository: { listByListings: vi.fn(async () => new Map()) },
     listingMedia: { publicUrl: vi.fn() },
@@ -32,6 +40,32 @@ describe("catalogue listing route sorting contract", () => {
     expect(query).toHaveBeenCalledWith(
       { kind: "anonymous" },
       expect.objectContaining({ sort: "date", direction: "desc" }),
+    );
+  });
+
+  it("allows the configured CRUD page size for privileged catalogue filters", async () => {
+    const queryCatalogue = vi.fn(async () => ({ items: [], nextCursor: null }));
+    const container = {
+      principalResolver: {
+        resolve: vi.fn(async () => ({
+          kind: "user_session" as const,
+          accountId: "operator-id",
+          account: { id: "operator-id", username: "operator", country: "NG" },
+          capabilities: ["catalogue.manage" as const],
+          scopes: new Set<string>(),
+        })),
+      },
+      listingService: { queryCatalogue },
+      listingMediaRepository: { listByListings: vi.fn(async () => new Map()) },
+      listingMedia: { publicUrl: vi.fn() },
+    };
+    const response = await GET(new Request("http://localhost/api/listings?state=all&limit=50"), {
+      container: container as any,
+    });
+
+    expect(response.status).toBe(200);
+    expect(queryCatalogue).toHaveBeenCalledWith(
+      expect.objectContaining({ state: undefined, limit: 50 }),
     );
   });
 

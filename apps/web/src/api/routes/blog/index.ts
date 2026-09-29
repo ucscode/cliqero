@@ -13,12 +13,7 @@ import { requirePrincipal, requireCapabilityScope } from "../../shared/context";
 import { errorSchema } from "../../shared/schemas";
 import { domainError } from "../../shared/error";
 import { blogJson, operatorBlogJson } from "./serialization";
-import {
-  blogPageSchema,
-  blogPostSchema,
-  operatorBlogPageSchema,
-  operatorBlogPostSchema,
-} from "./contracts";
+import { blogPageSchema, blogPostSchema, operatorBlogPostSchema } from "./contracts";
 import { crudMaxRows } from "@/config/crud";
 
 const blogCategorySchema = z.object({ id: z.string().uuid(), slug: z.string(), name: z.string() });
@@ -48,11 +43,14 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   const maxRows = crudMaxRows();
   const blogListQuery = z.object({
     search: z.string().max(100).optional(),
-    status: z.enum(["draft", "published"]).optional(),
+    status: z.enum(["draft", "published", "all"]).optional(),
     category: z.string().max(100).optional(),
     tag: z.string().max(100).optional(),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(25),
+  });
+  const blogAdminListQuery = blogListQuery.extend({
+    limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });
   const previewBody = blogPostInputSchema.extend({
     preview_id: z.string().uuid().nullable().optional(),
@@ -60,7 +58,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/operator/blog/preview",
+      path: "/api/blog/previews",
       request: { body: { content: { "application/json": { schema: previewBody } } } },
       responses: {
         200: {
@@ -99,7 +97,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   app.openapi(
     createRoute({
       method: "delete",
-      path: "/api/operator/blog/preview/{previewId}",
+      path: "/api/blog/previews/{previewId}",
       request: { params: z.object({ previewId: z.string().uuid() }) },
       responses: {
         204: { description: "Owned preview removed" },
@@ -123,17 +121,30 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
     createRoute({
       method: "get",
       path: "/api/blog/posts",
-      request: { query: blogListQuery },
+      request: { query: blogAdminListQuery },
       responses: {
         200: {
-          description: "Published blog posts",
+          description:
+            "Published posts by default; draft/all filters require content-management access.",
           content: { "application/json": { schema: blogPageSchema } },
         },
       },
     }),
     (c) => {
       try {
-        const page = container.blog.list({ ...c.req.valid("query"), publishedOnly: true });
+        const query = c.req.valid("query");
+        const privileged = query.status === "draft" || query.status === "all";
+        if (privileged) {
+          const p = requirePrincipal(c);
+          if (!(p instanceof Object) || !("accountId" in p)) return p;
+          const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
+          if (denied) return denied;
+        }
+        const page = container.blog.list({
+          ...query,
+          status: query.status === "all" ? undefined : query.status,
+          publishedOnly: !privileged,
+        });
         return c.json({ ...page, items: page.items.map(blogJson) }, 200);
       } catch (error) {
         return domainError(c, error);
@@ -206,34 +217,10 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
         200,
       ),
   );
-  const blogAdminListQuery = blogListQuery.extend({
-    limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
-  });
-  app.openapi(
-    createRoute({
-      method: "get",
-      path: "/api/operator/blog/categories",
-      responses: {
-        200: {
-          description: "Managed blog categories",
-          content: {
-            "application/json": { schema: z.object({ items: z.array(blogCategorySchema) }) },
-          },
-        },
-      },
-    }),
-    (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
-      if (denied) return denied;
-      return c.json({ items: container.blog.categories() }, 200);
-    },
-  );
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/operator/blog/categories",
+      path: "/api/blog/categories",
       request: { body: { content: { "application/json": { schema: blogCategoryCreateSchema } } } },
       responses: {
         201: {
@@ -274,7 +261,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   app.openapi(
     createRoute({
       method: "patch",
-      path: "/api/operator/blog/categories/{categoryId}",
+      path: "/api/blog/categories/{categoryId}",
       request: {
         params: z.object({ categoryId: z.string().uuid() }),
         body: { content: { "application/json": { schema: blogCategoryPatchSchema } } },
@@ -317,7 +304,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   app.openapi(
     createRoute({
       method: "delete",
-      path: "/api/operator/blog/categories/{categoryId}",
+      path: "/api/blog/categories/{categoryId}",
       request: { params: z.object({ categoryId: z.string().uuid() }) },
       responses: {
         204: { description: "Unused blog category deleted" },
@@ -341,28 +328,6 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
           return c.json({ error: error.message, code: "category_in_use" }, 409);
         return domainError(c, error);
       }
-    },
-  );
-  app.openapi(
-    createRoute({
-      method: "get",
-      path: "/api/operator/blog",
-      request: { query: blogAdminListQuery },
-      responses: {
-        200: {
-          description: "Operator blog posts",
-          content: { "application/json": { schema: operatorBlogPageSchema } },
-        },
-        403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
-      },
-    }),
-    (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
-      if (denied) return denied;
-      const page = container.blog.list(c.req.valid("query"));
-      return c.json({ ...page, items: page.items.map(operatorBlogJson) }, 200);
     },
   );
   const blogWriteBody = blogPostInputSchema;

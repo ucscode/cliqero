@@ -1,101 +1,100 @@
 # Cliqero API surface
 
-Cliqero exposes HTTP endpoints for three different purposes. Their classification
-is based on the contract owner, not the framework route directory.
+Cliqero exposes one domain-oriented API. Authorization mode is independent of
+resource naming. Public visitors, authenticated users, privileged operators, and
+API keys use the same canonical resources subject to operation-specific
+authorization policy.
 
-## Core/System API
+The Operator dashboard is a privileged first-party client of the canonical
+Cliqero API. It does not have its own API namespace. `/api/operator/*` is not a
+registered API route family.
 
-Stable Cliqero domain capabilities intended for first-party services and
-authorized automation: accounts, catalogue, blog, reviews, payments, purchases,
-wallet/funding, withdrawals, referrals/hierarchy, treasury, and capabilities.
-Use domain resource names and Cliqero-owned states. A provider is data on a
-payment, never the general payment resource namespace. The main
-`/api/openapi.json` and `/docs` are the contract surface for these APIs.
+## Request authorization
 
-## Application/UI API
+Each API request follows one boundary:
 
-Screen-oriented projections, browser-session workflows, and retained
-compatibility endpoints exist to support the Cliqero web application. They may
-remain HTTP routes, but are not automatically stable automation contracts.
-Framework/UI conveniences should be documented and scoped separately when they
-are not suitable for API-key clients.
+```text
+request -> resolve principal -> authorize operation -> application/domain service -> response
+```
 
-## Provider/Ingress API
+The principal is one of:
 
-Replaceable providers call protocol-defined endpoints such as
-`/api/webhooks/paystack` and `/api/payments/nowpayments/ipn`. Browser return
-routes such as `/payments/paystack/callback` are also provider-specific
-application ingress. Provider-specific authentication/signature rules belong
-at these boundaries. Operator and automation workflows use provider-neutral
-Cliqero payment endpoints instead.
+- `anonymous`;
+- `user_session`, with account identity and capabilities;
+- `api_key`, with account identity, capabilities, and granted scopes.
 
-## Operator payment operations
+For API-key operations that carry both a capability and scope requirement, both
+must match. A scope never grants a capability the owning account does not have.
+Session requests are checked against the required capability. Public routes may
+allow anonymous access; selected browser-only operations explicitly reject API
+keys.
 
-The stable operator payment resource is `/api/operator/payments`, with detail,
-event inspection, and reconciliation subresources. Reconciliation reads the
-payment's recorded provider and delegates verification through the registered
-payment provider abstraction. The optional `provider` query filters a domain
-collection; it does not select a provider-specific route. Operator reads
-require `finance.read` and the `payments:read` API-key scope; mutations require
-`finance.manage` and the `payments:manage` scope.
+OpenAPI exposes operation authorization through metadata such as
+`x-authentication-mode`, `x-session-capability`, `x-required-api-scope`, and
+`x-public-access`.
 
-The former `/api/operator/paystack/events` and
-`/api/operator/paystack/reconcile` routes are removed. Provider callbacks remain
-provider-named because those routes implement external provider protocols.
+## Canonical resource families
 
-## OpenAPI organization
+Use resource-oriented routes, for example:
+
+- Accounts and keys: `/api/accounts`, `/api/accounts/{accountId}/capabilities`,
+  `/api/accounts/{accountId}/api-keys`.
+- Blog: `/api/blog/posts`, `/api/blog/categories`, and session-only
+  `/api/blog/previews`.
+- Listings: `/api/listings`, `/api/catalogue/categories`, and
+  `/api/listings/{listingId}/integrations`.
+- Reviews: `/api/reviews` and `/api/reviews/{reviewId}`.
+- Payments: `/api/payments`, `/api/payments/events`, and reconciliation
+  resources. These remain provider-neutral.
+- Funding, wallet, earnings, distributions, withdrawals, treasury, hierarchy,
+  and referrals remain under their respective domain paths.
+
+The same resource can provide public defaults and privileged filtered views.
+For example, blog post reads default to published content; `draft`/`all` status
+filters require content-management authority. Listing reads default to public
+catalogue visibility; internal states require catalogue-management authority.
+Privileged filters are authorized before the broader view is returned.
+
+Customer-owned resources remain ownership-scoped when privileged reads are
+available on the same path. Removing a route prefix does not make records
+public.
+
+## OpenAPI and provider ingress
 
 `/api/openapi.json` is the single generated specification and `/docs` renders
-that exact document. Operations use flat, context-aware tags such as `Accounts
-(System)` and `Accounts (Operator)`; a context appears only when routes for it
-exist. Every documented operation has a meaningful tag, action-oriented summary,
-and description. Provider ingress retains provider-specific wire-protocol names
-and is identified separately from System and Operator domain APIs. Do not add
-vendor-named operator routes for ordinary payment administration.
+that exact document. Tags describe resources (`Accounts`, `Listings`, `Blog`,
+`Reviews`, `Payments`, `Funding`, `Withdrawals`, `Hierarchy`, `Referrals`, and
+`Treasury`), not caller classes. Every operation has a tag, summary, and
+description.
 
-## Resource routes and state changes
+Provider protocol ingress remains provider-named because it implements an
+external protocol, for example `/api/webhooks/paystack`,
+`/api/payments/nowpayments/ipn`, and the Paystack browser return route
+`/payments/paystack/callback`. Provider-specific signature and wire-format rules
+belong at those boundaries; customer/operator payment operations use
+provider-neutral resources.
 
-Stable APIs do not expose Operator table bulk-selection endpoints. Bulk actions
-in the UI repeat canonical single-resource operations and report per-item
-failures. Ordinary lifecycle/status changes use `PATCH` on the resource with a
-validated state/status field; dedicated action routes are reserved for genuine
-commands with distinct side effects, such as rotating a credential.
+## UI-only workflows and state changes
 
-Listing-associated integration credentials are nested under their owning
-listing: System routes use `/api/listings/{listingId}/integrations/...`, while
-Operator routes use `/api/operator/listings/{listingId}/integrations/...`.
-System routes verify listing ownership, and the listing ID is not repeated in
-the create body.
+Bulk selection is a dashboard workflow, not a public API resource. The browser
+submits one server action; the server invokes the canonical application service
+for each selected record and returns per-item outcomes. No `/api/**/bulk` route
+is exposed in OpenAPI.
+
+Ordinary lifecycle/status changes use `PATCH` on the resource with a validated
+state/status field. Dedicated action routes are reserved for genuine commands
+with distinct side effects, such as rotating an integration credential.
+
+Listing integration credentials are nested under their listing at
+`/api/listings/{listingId}/integrations/...`. The handler authorizes either the
+listing owner or a catalogue manager; API-key managers must satisfy both the
+account capability and `catalogue:manage` scope. The listing ID is not repeated
+in the create body.
+
+## Preserved domain invariants
 
 Deleting an account removes its parent edge and detaches its immediate children
 by deleting their edges to the account. Those children become roots; their own
 descendants remain connected. The graph is not compressed or reparented. Future
 commission shares for configured referral levels absent from the live graph go
 to the platform rather than a substitute upline.
-
-## Compatibility route classification
-
-Compatibility handlers remain adapters, not a second application layer. The
-registered `/api/compat` routes are classified as follows:
-
-- **Core/System candidates:** accounts, listings and listing lifecycle/media,
-  purchases, wallet and funding, earnings, withdrawals and destinations,
-  referrals, integrations, operator accounts/capabilities, catalogue,
-  treasury, settlement, purchase reversal, and operator finance/funding. Their
-  contracts use Cliqero-owned records and policies even while older clients use
-  the compatibility path.
-- **Core/System checkout:** `/api/checkout` creation and
-  `/api/checkout/{id}/pay` are purchase/wallet domain operations; they do not
-  select or call an external payment provider.
-- **Application/UI or protocol support:** `/api/me/onboarding`,
-  `/api/funding/development/verify`, health, password reset, and integration credential
-  verification. These exist for browser/bootstrap, local development, or
-  authentication protocol workflows and are not provider payment APIs.
-- **Provider/Ingress:** the Next.js Paystack webhook and browser-return route,
-  plus the NOWPayments IPN route. They are outside `legacyRoutes` and the main
-  Core/System OpenAPI document because they implement provider wire protocols.
-
-The previously registered Paystack operator events/reconciliation compatibility
-handlers are obsolete and removed. Payment operations now live at
-`/api/operator/payments` and resolve provider protocol through the payment
-registry.

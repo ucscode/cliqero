@@ -70,7 +70,7 @@ export function OperatorShell({
   useEffect(() => {
     if (!overviewEnabled) return;
     let active = true;
-    void apiFetch<OperatorOverview>("/api/operator/overview")
+    void apiFetch<OperatorOverview>("/api/overview")
       .then((value) => {
         if (active) setOverview(value);
       })

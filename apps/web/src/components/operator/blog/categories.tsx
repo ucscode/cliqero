@@ -14,18 +14,19 @@ import type { CrudColumn } from "@/components/crud/table";
 import { OperatorPrimaryCell } from "../ui/data-cells";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 
 export function OperatorBlogCategories() {
   const [error, setError] = useState<string | null>(null);
   const collection = useCrudCollection(async () => {
-    const result = await apiFetch<{ items: BlogCategory[] }>("/api/operator/blog/categories");
+    const result = await apiFetch<{ items: BlogCategory[] }>("/api/blog/categories");
     return { items: result.items, nextCursor: null };
   }, {});
   async function remove(category: BlogCategory) {
     if (!window.confirm(`Delete category “${category.name}”?`)) return;
     setError(null);
     try {
-      await apiFetch(`/api/operator/blog/categories/${category.id}`, { method: "DELETE" });
+      await apiFetch(`/api/blog/categories/${category.id}`, { method: "DELETE" });
       await collection.retry();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to delete category.");
@@ -35,26 +36,19 @@ export function OperatorBlogCategories() {
     if (!window.confirm(`Delete ${categories.length} selected blog categories?`)) return false;
     setError(null);
     try {
-      const results = await Promise.all(
-        categories.map(async (category) => {
-          try {
-            await apiFetch(`/api/operator/blog/categories/${category.id}`, { method: "DELETE" });
-            return { category, success: true as const };
-          } catch (cause) {
-            return {
-              category,
-              success: false as const,
-              error: cause instanceof Error ? cause.message : "Unable to delete category.",
-            };
-          }
-        }),
-      );
-      const failures = results.filter((result) => !result.success);
+      const results = await runOperatorBulkAction({
+        resource: "blog-categories",
+        action: "delete",
+        ids: categories.map((category) => category.id),
+      });
+      const failures = results.failed;
       if (failures.length)
         setError(
-          `${failures.length} of ${results.length} categories could not be deleted: ${failures
-            .map(({ category, error }) => `${category.name}: ${error}`)
-            .filter(Boolean)
+          `${failures.length} of ${categories.length} categories could not be deleted: ${failures
+            .map(
+              ({ id, message }) =>
+                `${categories.find((category) => category.id === id)?.name ?? id}: ${message}`,
+            )
             .join("; ")}`,
         );
       await collection.retry();
@@ -128,7 +122,7 @@ export function OperatorBlogCategoryEditor({ initial }: { initial?: BlogCategory
     setError(null);
     try {
       await apiFetch<BlogCategory>(
-        initial ? `/api/operator/blog/categories/${initial.id}` : "/api/operator/blog/categories",
+        initial ? `/api/blog/categories/${initial.id}` : "/api/blog/categories",
         {
           method: initial ? "PATCH" : "POST",
           headers: { "content-type": "application/json" },

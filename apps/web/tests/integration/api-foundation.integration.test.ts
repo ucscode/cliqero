@@ -101,17 +101,17 @@ suite("headless API principal and hierarchy read model", () => {
         },
       } as any);
     const catalogueResponse = await forPrincipal(catalogueManager.id, ["catalogue.manage"]).fetch(
-      new Request("http://localhost/api/operator/overview"),
+      new Request("http://localhost/api/overview"),
     );
     expect(catalogueResponse.status).toBe(200);
     expect((await catalogueResponse.json()).users).toBeUndefined();
     const operatorResponse = await forPrincipal(operator.id, ["system.root"]).fetch(
-      new Request("http://localhost/api/operator/overview"),
+      new Request("http://localhost/api/overview"),
     );
     expect(operatorResponse.status).toBe(200);
     expect((await operatorResponse.json()).users).toEqual({ total: 3 });
     const ordinaryResponse = await forPrincipal(ordinary.id, []).fetch(
-      new Request("http://localhost/api/operator/overview"),
+      new Request("http://localhost/api/overview"),
     );
     expect(ordinaryResponse.status).toBe(403);
   });
@@ -135,7 +135,7 @@ suite("headless API principal and hierarchy read model", () => {
         }),
       },
     } as any);
-    const list = await api.fetch(new Request("http://localhost/api/operator/accounts?limit=1"));
+    const list = await api.fetch(new Request("http://localhost/api/accounts?limit=1"));
     expect(list.status).toBe(200);
     const listBody = await list.json();
     expect(listBody.items).toHaveLength(1);
@@ -144,17 +144,13 @@ suite("headless API principal and hierarchy read model", () => {
       username: expect.any(String),
     });
     expect(listBody.items[0].password_hash).toBeUndefined();
-    const detail = await api.fetch(
-      new Request(`http://localhost/api/operator/accounts/${child.id}`),
-    );
+    const detail = await api.fetch(new Request(`http://localhost/api/accounts/${child.id}`));
     expect(detail.status).toBe(200);
     expect(await detail.json()).toMatchObject({
       id: child.id,
       parent: { id: operator.id },
     });
-    const unrelated = await api.fetch(
-      new Request(`http://localhost/api/operator/accounts/${newId()}`),
-    );
+    const unrelated = await api.fetch(new Request(`http://localhost/api/accounts/${newId()}`));
     expect(unrelated.status).toBe(404);
   });
   it("keeps normalized profile usernames unique under concurrent updates", async () => {
@@ -361,7 +357,7 @@ suite("headless API principal and hierarchy read model", () => {
       },
     } as any);
     const response = await api.fetch(
-      new Request(`http://localhost/api/operator/hierarchy/${child.id}/parent`, {
+      new Request(`http://localhost/api/hierarchy/${child.id}/parent`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ parent_account_id: newParent.id }),
@@ -384,7 +380,7 @@ suite("headless API principal and hierarchy read model", () => {
     expect(
       (
         await deniedApi.fetch(
-          new Request(`http://localhost/api/operator/hierarchy/${child.id}/parent`, {
+          new Request(`http://localhost/api/hierarchy/${child.id}/parent`, {
             method: "PUT",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ parent_account_id: oldParent.id }),
@@ -407,7 +403,7 @@ suite("headless API principal and hierarchy read model", () => {
     expect(
       (
         await keyApi.fetch(
-          new Request(`http://localhost/api/operator/hierarchy/${child.id}/parent`, {
+          new Request(`http://localhost/api/hierarchy/${child.id}/parent`, {
             method: "PUT",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ parent_account_id: oldParent.id }),
@@ -430,7 +426,7 @@ suite("headless API principal and hierarchy read model", () => {
     expect(
       (
         await underprivilegedApi.fetch(
-          new Request(`http://localhost/api/operator/hierarchy/${child.id}/parent`, {
+          new Request(`http://localhost/api/hierarchy/${child.id}/parent`, {
             method: "PUT",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ parent_account_id: newParent.id }),

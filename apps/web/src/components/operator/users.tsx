@@ -40,6 +40,7 @@ import { Input } from "../ui/input";
 import { Toast } from "../toast";
 import { CountrySelect } from "../country-select";
 import { Label } from "../ui/label";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The account service is temporarily unavailable.";
@@ -112,7 +113,7 @@ export function OperatorUsersList({
     const params = new URLSearchParams({ limit: String(pageSize) });
     if (appliedSearch) params.set("search", appliedSearch);
     if (cursor) params.set("cursor", cursor);
-    return apiFetch<OperatorAccountPage>(`/api/operator/accounts?${params}`);
+    return apiFetch<OperatorAccountPage>(`/api/accounts?${params}`);
   }, "");
 
   return (
@@ -143,7 +144,7 @@ export function OperatorUsersList({
         )
           return;
         try {
-          await apiFetch(`/api/operator/accounts/${account.id}`, { method: "DELETE" });
+          await apiFetch(`/api/accounts/${account.id}`, { method: "DELETE" });
           setActionError(null);
           setSuccessNotice(`@${account.username} was deleted. Historical platform records remain.`);
           await collection.refresh();
@@ -158,27 +159,24 @@ export function OperatorUsersList({
           )
         )
           return false;
-        const results = await Promise.all(
-          accounts.map(async (account) => {
-            try {
-              await apiFetch(`/api/operator/accounts/${account.id}`, { method: "DELETE" });
-              return { account, deleted: true as const };
-            } catch (error) {
-              return { account, deleted: false as const, error: message(error) };
-            }
-          }),
-        );
+        const results = await runOperatorBulkAction({
+          resource: "accounts",
+          action: "delete",
+          ids: accounts.map((account) => account.id),
+        });
         await collection.refresh();
-        const failures = results.filter((item) => !item.deleted);
-        if (failures.length) {
+        if (results.failed.length) {
+          const accountsById = new Map(accounts.map((account) => [account.id, account]));
           setActionError(
-            failures.map(({ account, error }) => `@${account.username}: ${error}`).join(" "),
+            results.failed
+              .map(({ id, message: error }) => `@${accountsById.get(id)?.username ?? id}: ${error}`)
+              .join(" "),
           );
           return false;
         }
         setActionError(null);
         setSuccessNotice(
-          `${results.length} account(s) deleted. Historical platform records remain.`,
+          `${results.succeeded.length} account(s) deleted. Historical platform records remain.`,
         );
         return true;
       }}
@@ -395,7 +393,7 @@ export function OperatorUserDetail({
     setLoading(true);
     setError(null);
     try {
-      const loaded = await apiFetch<OperatorAccountDetail>(`/api/operator/accounts/${accountId}`);
+      const loaded = await apiFetch<OperatorAccountDetail>(`/api/accounts/${accountId}`);
       setAccount(loaded);
       return loaded;
     } catch (cause) {
@@ -411,9 +409,7 @@ export function OperatorUserDetail({
     setCapabilityError(null);
     try {
       setCapabilityView(
-        await apiFetch<CapabilityAdministrationView>(
-          `/api/operator/accounts/${accountId}/capabilities`,
-        ),
+        await apiFetch<CapabilityAdministrationView>(`/api/accounts/${accountId}/capabilities`),
       );
     } catch (cause) {
       // Account readers are intentionally not given assignment data. Keep the
@@ -431,9 +427,7 @@ export function OperatorUserDetail({
     setApiKeyLoading(true);
     setApiKeyError(null);
     try {
-      const result = await apiFetch<OperatorApiKeyPage>(
-        `/api/operator/accounts/${accountId}/api-keys`,
-      );
+      const result = await apiFetch<OperatorApiKeyPage>(`/api/accounts/${accountId}/api-keys`);
       setApiKeyPage(result);
       setApiKeyScopes((current) =>
         current.filter((scope) => result.manageable_scopes.includes(scope)),
@@ -473,20 +467,15 @@ export function OperatorUserDetail({
     setApiKeySaving(true);
     setApiKeyError(null);
     try {
-      const created = await apiFetch<OperatorApiKeyCreated>(
-        `/api/operator/accounts/${accountId}/api-keys`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            name: apiKeyName,
-            scopes: apiKeyScopes,
-            expires_at: apiKeyExpiry
-              ? new Date(`${apiKeyExpiry}T23:59:59.000Z`).toISOString()
-              : null,
-          }),
-        },
-      );
+      const created = await apiFetch<OperatorApiKeyCreated>(`/api/accounts/${accountId}/api-keys`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: apiKeyName,
+          scopes: apiKeyScopes,
+          expires_at: apiKeyExpiry ? new Date(`${apiKeyExpiry}T23:59:59.000Z`).toISOString() : null,
+        }),
+      });
       setApiKeySecret(created);
       setApiKeyName("");
       setApiKeyExpiry("");
@@ -504,7 +493,7 @@ export function OperatorUserDetail({
     setApiKeySaving(true);
     setApiKeyError(null);
     try {
-      await apiFetch(`/api/operator/accounts/${accountId}/api-keys/${key.id}/revoke`, {
+      await apiFetch(`/api/accounts/${accountId}/api-keys/${key.id}/revoke`, {
         method: "POST",
       });
       await loadApiKeys();
@@ -529,7 +518,7 @@ export function OperatorUserDetail({
     setCapabilityError(null);
     try {
       await apiFetch(
-        `/api/operator/accounts/${accountId}/capabilities${action === "revoke" ? `/${encodeURIComponent(capability)}` : ""}`,
+        `/api/accounts/${accountId}/capabilities${action === "revoke" ? `/${encodeURIComponent(capability)}` : ""}`,
         {
           method: action === "revoke" ? "DELETE" : "POST",
           ...(action === "grant"
@@ -552,7 +541,7 @@ export function OperatorUserDetail({
     if (!parentSearch.trim()) return;
     try {
       const result = await apiFetch<OperatorAccountPage>(
-        `/api/operator/accounts?search=${encodeURIComponent(parentSearch.trim())}&limit=10`,
+        `/api/accounts?search=${encodeURIComponent(parentSearch.trim())}&limit=10`,
       );
       setParentResults(result.items.filter((item) => item.id !== accountId));
     } catch (cause) {
@@ -566,7 +555,7 @@ export function OperatorUserDetail({
     setSaving(true);
     setError(null);
     try {
-      await apiFetch(`/api/operator/hierarchy/${account.id}/parent`, {
+      await apiFetch(`/api/hierarchy/${account.id}/parent`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ parent_account_id: selectedParent.id }),
@@ -592,7 +581,7 @@ export function OperatorUserDetail({
     setDeleting(true);
     setError(null);
     try {
-      await apiFetch(`/api/operator/accounts/${account.id}`, { method: "DELETE" });
+      await apiFetch(`/api/accounts/${account.id}`, { method: "DELETE" });
       router.push("/operator/users?notice=account-deleted");
       router.refresh();
     } catch (cause) {
@@ -855,7 +844,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
   useEffect(() => {
     if (!accountId) return;
     let active = true;
-    void apiFetch<OperatorAccountDetail>(`/api/operator/accounts/${accountId}`)
+    void apiFetch<OperatorAccountDetail>(`/api/accounts/${accountId}`)
       .then((account) => {
         if (!active) return;
         setUsername(account.username);
@@ -883,7 +872,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
         const result = await apiFetch<{
           account: OperatorAccountDetail;
           passwordSetupEmailRequested: boolean;
-        }>("/api/operator/accounts", {
+        }>("/api/accounts", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -899,14 +888,11 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
             : "Account created. Password setup email could not be requested; the account holder can use Forgot password.",
         );
       } else {
-        const account = await apiFetch<OperatorAccountDetail>(
-          `/api/operator/accounts/${accountId}`,
-          {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ username: username.trim(), country: country || null }),
-          },
-        );
+        const account = await apiFetch<OperatorAccountDetail>(`/api/accounts/${accountId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username: username.trim(), country: country || null }),
+        });
         router.push(`/operator/users/${account.id}`);
         router.refresh();
       }

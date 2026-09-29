@@ -6,6 +6,7 @@ import { usernameSchema } from "@/modules/identity/username";
 import { verifyCaptchaToken } from "@/security/captcha";
 import { writeApiDevelopmentDiagnostic } from "@/infrastructure/development-log";
 import { ACCOUNT_REFERRAL_COOKIE, clearReferralCookieHeader } from "@/modules/referral/cookie";
+import type { ApplicationContainer } from "@/infrastructure/container";
 
 const bodySchema = z.object({
   email: z.email("Enter a valid email address."),
@@ -16,7 +17,7 @@ const bodySchema = z.object({
   country: z.string().regex(/^[A-Za-z]{2}$/, "Choose a valid country."),
   captchaToken: z.string().optional(),
 });
-export async function POST(request: Request) {
+export async function registerAccount(request: Request, container: ApplicationContainer) {
   try {
     const input = bodySchema.parse(await request.json());
     if (
@@ -33,11 +34,11 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const account = await getContainer().authentication.register({
+    const account = await container.authentication.register({
       ...input,
       accountReferralSource: accountReferralSource(request),
     });
-    const profile = await getContainer().profiles.get(account.id);
+    const profile = await container.profiles.get(account.id);
     const response = Response.json(
       {
         id: account.id,
@@ -52,4 +53,8 @@ export async function POST(request: Request) {
   } catch (error) {
     return apiError(error, request);
   }
+}
+
+export async function POST(request: Request) {
+  return registerAccount(request, getContainer());
 }

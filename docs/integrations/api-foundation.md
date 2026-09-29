@@ -28,7 +28,7 @@ workers/webhooks instead. A scope never elevates the owning account's Cliqero
 capability.
 
 Operator API-key administration is account-scoped at
-`/api/operator/accounts/{accountId}/api-keys`. It requires the actor's
+`/api/accounts/{accountId}/api-keys`. It requires the actor's
 `api_keys.manage` capability (and `api_keys:manage` when the actor is itself an
 API-key principal). Operator-sensitive scopes are only assignable when the
 actor and target currently hold the corresponding account capability; the
@@ -94,7 +94,7 @@ may search globally. Parent reassignment is restricted to the operator command
 below; ordinary users cannot mutate graph relationships.
 
 Operator-controlled parent reassignment is now available at
-`PUT /api/operator/hierarchy/{accountId}/parent` with
+`PUT /api/hierarchy/{accountId}/parent` with
 `{"parent_account_id":"..."}`. It changes only the selected adjacency-list
 row; descendants are not rewritten and existing financial snapshots are never
 changed. PostgreSQL advisory locking, recursive cycle validation, account

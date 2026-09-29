@@ -3,6 +3,9 @@ import { apiError, authenticatedAccount } from "../http";
 import { getContainer } from "@/infrastructure/container";
 import { listingWithMediaView } from "@/application/listing/service";
 import { loadStorefrontConfiguration } from "@/config/storefront";
+import { isAuthenticatedPrincipal } from "@/modules/identity/api/principal";
+import { apiAuthorizer } from "@/api/shared/authorization";
+import { crudMaxRows } from "@/config/crud";
 
 const sorts = ["date", "price", "title", "rating"] as const;
 const directions = ["asc", "desc"] as const;
@@ -19,6 +22,7 @@ const listingSchema = z
       .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
       .optional(),
     external_key: z.string().max(128).optional(),
+    featured_position: z.number().int().positive().nullable().optional(),
     compare_at_price_minor: z.string().regex(/^\d+$/).nullable().optional(),
     visibility: z.enum(["public", "authenticated"]).optional(),
     category_ids: z
@@ -34,7 +38,7 @@ export async function POST(request: Request) {
   try {
     await getContainer().operators.requireCapability(account.id, "catalogue.manage");
     const body = listingSchema.parse(await request.json());
-    const listing = await getContainer().listingService.create(account, {
+    const listing = await getContainer().listingService.createCatalogue(account, {
       title: body.title,
       shortDescription: body.short_description,
       longDescription: body.long_description,
@@ -43,6 +47,7 @@ export async function POST(request: Request) {
       destination: body.destination,
       metadata: body.metadata,
       externalKey: body.external_key,
+      featuredPosition: body.featured_position,
       compareAtPriceMinor: body.compare_at_price_minor,
       visibility: body.visibility,
       categoryIds: body.category_ids,
@@ -57,9 +62,35 @@ export async function POST(request: Request) {
     return apiError(error);
   }
 }
-export async function GET(request: Request) {
-  const c = getContainer();
+export async function GET(
+  request: Request,
+  context?: { container?: ReturnType<typeof getContainer> },
+) {
+  const c = context?.container ?? getContainer();
   const url = new URL(request.url);
+  const principal = await c.principalResolver.resolve(request);
+  const storefrontConfig = loadStorefrontConfiguration();
+  const configuredLimit =
+    url.searchParams.get("featured") === "true"
+      ? storefrontConfig.home.featured_limit
+      : storefrontConfig.catalogue.page_size;
+  const stateFilter = url.searchParams.get("state") ?? undefined;
+  if (stateFilter) {
+    const denied = apiAuthorizer.authorize(
+      principal,
+      {
+        mode: "account",
+        capability: "catalogue.manage",
+        scope: "catalogue:manage",
+      },
+      request.headers.has("authorization"),
+    );
+    if (denied)
+      return Response.json(
+        { error: denied === "unauthorized" ? "Unauthorized" : "Forbidden", code: denied },
+        { status: denied === "unauthorized" ? 401 : 403 },
+      );
+  }
   const featuredOnly = url.searchParams.get("featured") === "true";
   const sort = sorts.includes(url.searchParams.get("sort") as (typeof sorts)[number])
     ? (url.searchParams.get("sort") as (typeof sorts)[number])
@@ -70,22 +101,54 @@ export async function GET(request: Request) {
     ? (url.searchParams.get("direction") as (typeof directions)[number])
     : "desc";
   try {
-    const principal = await c.principalResolver.resolve(request);
-    const storefrontConfig = loadStorefrontConfiguration();
-    const configuredLimit = featuredOnly
-      ? storefrontConfig.home.featured_limit
-      : storefrontConfig.catalogue.page_size;
+    const listingQuery = z.object({
+      state: z.enum(["draft", "published", "archived", "all"]).optional(),
+      visibility: z.enum(["public", "authenticated"]).optional(),
+      search: z.string().max(200).optional(),
+      cursor: z.string().optional(),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(stateFilter ? crudMaxRows() : configuredLimit)
+        .default(stateFilter ? crudMaxRows() : configuredLimit),
+    });
+    const query = listingQuery.parse({
+      state: stateFilter,
+      visibility: url.searchParams.get("visibility") ?? undefined,
+      search: url.searchParams.get("search") ?? undefined,
+      cursor: url.searchParams.get("cursor") ?? undefined,
+      limit: url.searchParams.get("limit") ?? undefined,
+    });
+    if (stateFilter) {
+      const page = await c.listingService.queryCatalogue({
+        state: query.state === "all" ? undefined : query.state,
+        visibility: query.visibility,
+        search: query.search,
+        cursor: query.cursor,
+        limit: query.limit,
+      });
+      const media = await c.listingMediaRepository.listByListings(
+        page.items.map((item) => item.id),
+      );
+      return Response.json({
+        items: page.items.map((item) =>
+          listingWithMediaView(item, media.get(item.id) ?? [], c.listingMedia, true),
+        ),
+        next_cursor: page.nextCursor,
+      });
+    }
     const requestedLimit = Number(url.searchParams.get("limit") ?? configuredLimit);
     const limit = Math.max(
       1,
       Math.min(Number.isFinite(requestedLimit) ? requestedLimit : configuredLimit, configuredLimit),
     );
     const page = await c.listingService.queryStorefront(
-      principal ? { kind: "authenticated" } : { kind: "anonymous" },
+      isAuthenticatedPrincipal(principal) ? { kind: "authenticated" } : { kind: "anonymous" },
       {
-        search: url.searchParams.get("search") ?? undefined,
-        cursor: url.searchParams.get("cursor") ?? undefined,
-        limit,
+        search: query.search,
+        cursor: query.cursor,
+        limit: Math.min(query.limit, limit),
         sort,
         direction,
         featuredOnly,

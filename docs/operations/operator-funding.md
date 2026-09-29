@@ -14,7 +14,7 @@ are not silently retried or confirmed by an operator. Provider verification is
 the only path that confirms funding. Authenticated Paystack events are stored
 and processed through the outbox before verification; an event never credits a
 wallet by itself. Payment reconciliation is operator-facing through the generic
-`/api/operator/payments` resource; provider selection is resolved from the
+`/api/payments` resource; provider selection is resolved from the
 persisted payment and registered provider adapter.
 
 Bank transfer is intentionally different: initialization returns safe transfer
@@ -33,5 +33,5 @@ API-key principals. It exposes safe account, reference, amount, state,
 provider-operation, and correlated event metadata. Provider payloads,
 authorization access codes, secrets, and manual confirmation/credit controls
 are intentionally absent. Payment inspection and reconciliation use the
-provider-neutral `/api/operator/payments` API; the payment's registered provider
+provider-neutral `/api/payments` API; the payment's registered provider
 adapter owns protocol verification.

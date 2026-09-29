@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getLegacyRouteAccess } from "@/api/legacy-dispatch";
 import { presentWithdrawal, presentWithdrawalPolicy } from "@/api/compat/withdrawals/presentation";
-import { operatorWithdrawalDetailSchema } from "@/api/routes/operator/withdrawal/contracts";
+import { operatorWithdrawalDetailSchema } from "@/api/routes/withdrawals/contracts";
 import { Money } from "@/modules/money/money";
 
 describe("withdrawal API contract", () => {

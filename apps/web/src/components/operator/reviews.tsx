@@ -11,6 +11,7 @@ import { CrudIndex } from "@/components/crud/index-page";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 
 type Review = ListingReview & { reviewer?: string; listing_title?: string };
 type ReviewPage = { items: Review[]; next_cursor: string | null };
@@ -31,14 +32,14 @@ export function OperatorReviews() {
   const collection = useCrudCollection(async (appliedStatus: string, cursor, pageSize) => {
     const params = new URLSearchParams({ status: appliedStatus, limit: String(pageSize) });
     if (cursor) params.set("cursor", cursor);
-    const result = await apiFetch<ReviewPage>(`/api/operator/reviews?${params}`);
+    const result = await apiFetch<ReviewPage>(`/api/reviews?${params}`);
     return { items: result.items, nextCursor: result.next_cursor };
   }, "pending");
 
   async function moderate(id: string, action: "approve" | "reject") {
     try {
       setActionError(null);
-      await apiFetch(`/api/operator/reviews/${id}`, {
+      await apiFetch(`/api/reviews/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status: action === "approve" ? "approved" : "rejected" }),
@@ -51,29 +52,17 @@ export function OperatorReviews() {
   async function moderateMany(reviews: readonly Review[], action: "approve" | "reject") {
     try {
       setActionError(null);
-      const results = await Promise.all(
-        reviews.map(async (review) => {
-          try {
-            await apiFetch(`/api/operator/reviews/${review.id}`, {
-              method: "PATCH",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ status: action === "approve" ? "approved" : "rejected" }),
-            });
-            return { review, success: true as const };
-          } catch (cause) {
-            return {
-              review,
-              success: false as const,
-              error: cause instanceof Error ? cause.message : "Unable to moderate review.",
-            };
-          }
-        }),
-      );
-      const failures = results.filter((result) => !result.success);
+      const results = await runOperatorBulkAction({
+        resource: "reviews",
+        action: "moderate",
+        status: action === "approve" ? "approved" : "rejected",
+        ids: reviews.map((review) => review.id),
+      });
+      const failures = results.failed;
       if (failures.length)
         setActionError(
-          `${failures.length} of ${results.length} reviews could not be moderated: ${failures
-            .map(({ review, error }) => `${review.id}: ${error}`)
+          `${failures.length} of ${reviews.length} reviews could not be moderated: ${failures
+            .map(({ id, message }) => `${id}: ${message}`)
             .join("; ")}`,
         );
       await collection.retry();

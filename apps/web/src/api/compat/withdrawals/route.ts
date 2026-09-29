@@ -4,6 +4,8 @@ import { apiError, authenticatedPrincipal } from "../http";
 import { getContainer } from "@/infrastructure/container";
 import { presentWithdrawal, presentWithdrawalPolicy } from "./presentation";
 import { validationErrorPayload } from "@/api/error";
+import type { ApiPrincipal } from "@/modules/identity/api/principal";
+import type { ApplicationContainer } from "@/infrastructure/container";
 const schema = z
   .object({
     amount_minor: z.string().regex(/^\d+$/),
@@ -13,7 +15,8 @@ const schema = z
   .strict();
 export async function POST(request: Request) {
   const principal = await authenticatedPrincipal(request);
-  if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (principal.kind === "anonymous")
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (principal.kind === "api_key" && !principal.scopes.has("withdrawals:create"))
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   try {
@@ -37,11 +40,19 @@ export async function POST(request: Request) {
 }
 export async function GET(request: Request) {
   const principal = await authenticatedPrincipal(request);
-  if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (principal.kind === "anonymous")
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (principal.kind === "api_key" && !principal.scopes.has("withdrawals:read"))
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
+  return listOwnedWithdrawals(request, principal, getContainer());
+}
+
+export async function listOwnedWithdrawals(
+  request: Request,
+  principal: Exclude<ApiPrincipal, { kind: "anonymous" }>,
+  container: ApplicationContainer,
+) {
   try {
-    const container = getContainer();
     const search = new URL(request.url).searchParams;
     const query = z
       .object({
@@ -79,7 +90,8 @@ export async function GET(request: Request) {
 
 export async function policy(request: Request) {
   const principal = await authenticatedPrincipal(request);
-  if (!principal) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (principal.kind === "anonymous")
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (principal.kind === "api_key" && !principal.scopes.has("withdrawals:read"))
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   try {

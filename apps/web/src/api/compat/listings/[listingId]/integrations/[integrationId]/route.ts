@@ -1,18 +1,8 @@
 import { z } from "zod";
-import { apiError, authenticatedAccount } from "../../../../http";
-import { getContainer } from "@/infrastructure/container";
+import { apiError } from "../../../../http";
+import { authorizeListingIntegration } from "../../../integrations/access";
 
 const schema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
-
-async function ownedIntegration(request: Request, listingId: string, integrationId: string) {
-  const account = await authenticatedAccount(request);
-  if (!account) return { response: Response.json({ error: "Unauthorized" }, { status: 401 }) };
-  const container = getContainer();
-  await container.listingService.getOwner(account, listingId);
-  const integration = await container.integrations.find(account.id, integrationId);
-  if (!integration.listing_ids.includes(listingId)) throw new Error("Integration not found");
-  return { account, container };
-}
 
 export async function GET(
   request: Request,
@@ -20,11 +10,22 @@ export async function GET(
 ) {
   try {
     const values = await params;
-    const result = await ownedIntegration(request, values.listingId, values.integrationId);
+    const result = await authorizeListingIntegration(request, values.listingId);
     if ("response" in result) return result.response;
-    return Response.json(
-      await result.container.integrations.find(result.account.id, values.integrationId),
+    if (result.access === "manager") {
+      const integration = (
+        await result.container.integrations.listForListing(values.listingId)
+      ).find((item) => item.id === values.integrationId);
+      if (!integration) return Response.json({ error: "Integration not found" }, { status: 404 });
+      return Response.json(integration);
+    }
+    const integration = await result.container.integrations.find(
+      result.principal.account.id,
+      values.integrationId,
     );
+    if (!integration.listing_ids.includes(values.listingId))
+      return Response.json({ error: "Integration not found" }, { status: 404 });
+    return Response.json(integration);
   } catch (error) {
     return apiError(error);
   }
@@ -36,11 +37,23 @@ export async function PATCH(
 ) {
   try {
     const values = await params;
-    const result = await ownedIntegration(request, values.listingId, values.integrationId);
+    const result = await authorizeListingIntegration(request, values.listingId);
     if ("response" in result) return result.response;
+    if (result.access !== "owner")
+      return Response.json({ error: "Forbidden", code: "forbidden" }, { status: 403 });
+    const integration = await result.container.integrations.find(
+      result.principal.account.id,
+      values.integrationId,
+    );
+    if (!integration.listing_ids.includes(values.listingId))
+      return Response.json({ error: "Integration not found" }, { status: 404 });
     const { name } = schema.parse(await request.json());
     return Response.json(
-      await result.container.integrations.update(result.account.id, values.integrationId, name),
+      await result.container.integrations.update(
+        result.principal.account.id,
+        values.integrationId,
+        name,
+      ),
     );
   } catch (error) {
     return apiError(error);
@@ -53,10 +66,24 @@ export async function DELETE(
 ) {
   try {
     const values = await params;
-    const result = await ownedIntegration(request, values.listingId, values.integrationId);
+    const result = await authorizeListingIntegration(request, values.listingId);
     if ("response" in result) return result.response;
+    if (result.access === "manager")
+      return Response.json(
+        await result.container.integrations.revokeForListing(
+          result.principal.account.id,
+          values.listingId,
+          values.integrationId,
+        ),
+      );
+    const integration = await result.container.integrations.find(
+      result.principal.account.id,
+      values.integrationId,
+    );
+    if (!integration.listing_ids.includes(values.listingId))
+      return Response.json({ error: "Integration not found" }, { status: 404 });
     return Response.json(
-      await result.container.integrations.revoke(result.account.id, values.integrationId),
+      await result.container.integrations.revoke(result.principal.account.id, values.integrationId),
     );
   } catch (error) {
     return apiError(error);

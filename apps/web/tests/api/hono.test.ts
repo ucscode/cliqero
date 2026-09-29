@@ -6,7 +6,6 @@ import {
   authorizeLegacyRequest,
   getLegacyRouteAccess,
   legacyApiPaths,
-  legacyRouteAccessForPattern,
 } from "@/api/legacy-dispatch";
 
 function appWith(
@@ -21,9 +20,16 @@ function appWith(
   reviewOverrides: Record<string, unknown> = {},
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
+  const resolvedPrincipal = principal ?? {
+    kind: "anonymous",
+    accountId: null,
+    account: null,
+    capabilities: [],
+    scopes: new Set<string>(),
+  };
   return createApiApp(
     {
-      principalResolver: { resolve: async () => principal },
+      principalResolver: { resolve: async () => resolvedPrincipal },
       profiles: {
         get: async () => ({
           email: "operator@example.com",
@@ -263,10 +269,21 @@ function appWith(
         }),
       },
       withdrawals: {
+        list: async () => ({ items: [], nextCursor: null }),
         approve: async () => ({}),
         reject: async () => ({}),
         cancel: async () => ({}),
         complete: async (_actorId: string, id: string, input: unknown) => ({ id, input }),
+      },
+      fundsReservation: {
+        summarize: async () => [],
+        available: async () => 0n,
+      },
+      withdrawalPolicy: {
+        getActive: async () => ({
+          minimumAmount: { minorAmount: 100n, currency: "USD" },
+          maximumAmount: null,
+        }),
       },
       listingReviews: {
         visible: async () => ({ items: [], nextCursor: null }),
@@ -334,13 +351,10 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const response = await appWith(operator).fetch(
-      new Request(
-        "http://localhost/api/operator/payments/00000000-0000-4000-8000-000000000099/reconcile",
-        {
-          method: "POST",
-          headers: { "idempotency-key": "manual-reconcile-test" },
-        },
-      ),
+      new Request("http://localhost/api/payments/00000000-0000-4000-8000-000000000099/reconcile", {
+        method: "POST",
+        headers: { "idempotency-key": "manual-reconcile-test" },
+      }),
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -348,7 +362,7 @@ describe("Hono API foundation", () => {
     });
 
     const apiKey = { ...operator, kind: "api_key" as const };
-    const paymentsPath = "http://localhost/api/operator/payments";
+    const paymentsPath = "http://localhost/api/payments";
     expect(
       (await appWith({ ...apiKey, scopes: new Set<string>() }).fetch(new Request(paymentsPath)))
         .status,
@@ -362,9 +376,9 @@ describe("Hono API foundation", () => {
     ).toBe(200);
   });
 
-  it("protects catalogue category CRUD with catalogue capability and scope", async () => {
-    const path = "http://localhost/api/operator/catalogue/categories";
-    expect((await appWith().fetch(new Request(path))).status).toBe(401);
+  it("keeps catalogue category reads public and protects mutations with capability and scope", async () => {
+    const path = "http://localhost/api/catalogue/categories";
+    expect((await appWith().fetch(new Request(path))).status).toBe(200);
     const ordinary = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: { id: "00000000-0000-4000-8000-000000000001" },
@@ -372,16 +386,16 @@ describe("Hono API foundation", () => {
       capabilities: [],
       scopes: new Set<string>(),
     };
-    expect((await appWith(ordinary).fetch(new Request(path))).status).toBe(403);
-    const manager = { ...ordinary, capabilities: ["catalogue.manage"] };
-    expect((await appWith(manager).fetch(new Request(path))).status).toBe(200);
-    const created = await appWith(manager).fetch(
-      new Request(path, {
+    const mutation = (origin: string) =>
+      new Request(origin, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: "Toolkit", slug: "toolkit" }),
-      }),
-    );
+      });
+    expect((await appWith(ordinary).fetch(mutation(path))).status).toBe(403);
+    const manager = { ...ordinary, capabilities: ["catalogue.manage"] };
+    expect((await appWith(manager).fetch(new Request(path))).status).toBe(200);
+    const created = await appWith(manager).fetch(mutation(path));
     expect(created.status).toBe(201);
     expect(await created.json()).toMatchObject({ name: "Toolkit", slug: "toolkit" });
   });
@@ -397,7 +411,8 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     expect(
-      (await appWith(catalogue).fetch(new Request("http://localhost/api/operator/blog"))).status,
+      (await appWith(catalogue).fetch(new Request("http://localhost/api/blog/posts?status=draft")))
+        .status,
     ).toBe(403);
     const operator = {
       ...catalogue,
@@ -406,10 +421,11 @@ describe("Hono API foundation", () => {
       scopes: new Set(["blog:read"]),
     };
     expect(
-      (await appWith(operator).fetch(new Request("http://localhost/api/operator/blog"))).status,
+      (await appWith(operator).fetch(new Request("http://localhost/api/blog/posts?status=all")))
+        .status,
     ).toBe(200);
     const oversizedPage = await appWith(operator).fetch(
-      new Request("http://localhost/api/operator/blog?limit=51"),
+      new Request("http://localhost/api/blog/posts?status=all&limit=500000"),
     );
     expect(oversizedPage.status).toBe(400);
   });
@@ -422,7 +438,7 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const oversized = await appWith(base).fetch(
-      new Request("http://localhost/api/operator/accounts?limit=500000"),
+      new Request("http://localhost/api/accounts?limit=500000"),
     );
     expect(oversized.status).toBe(400);
 
@@ -436,20 +452,20 @@ describe("Hono API foundation", () => {
         `stable API route ${path} must not expose an Operator bulk endpoint`,
       ).not.toMatch(/^\/api\/operator\/.*\/bulk$/);
     for (const path of [
-      "/api/operator/accounts/bulk",
-      "/api/operator/blog/bulk",
-      "/api/operator/blog/categories/bulk",
-      "/api/operator/catalogue/bulk",
-      "/api/operator/catalogue/categories/bulk",
+      "/api/accounts/bulk",
+      "/api/blog/posts/bulk",
+      "/api/blog/categories/bulk",
+      "/api/catalogue/bulk",
+      "/api/catalogue/categories/bulk",
     ])
       expect(document.paths).not.toHaveProperty(path);
 
     for (const path of [
-      "/api/operator/accounts/bulk",
-      "/api/operator/blog/bulk",
-      "/api/operator/blog/categories/bulk",
-      "/api/operator/catalogue/bulk",
-      "/api/operator/catalogue/categories/bulk",
+      "/api/accounts/bulk",
+      "/api/blog/posts/bulk",
+      "/api/blog/categories/bulk",
+      "/api/catalogue/bulk",
+      "/api/catalogue/categories/bulk",
     ]) {
       const response = await app.fetch(
         new Request(`http://localhost${path}`, {
@@ -488,7 +504,7 @@ describe("Hono API foundation", () => {
       undefined,
       { moderate },
     ).fetch(
-      new Request(`http://localhost/api/operator/reviews/${reviewId}`, {
+      new Request(`http://localhost/api/reviews/${reviewId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status: "approved" }),
@@ -497,7 +513,7 @@ describe("Hono API foundation", () => {
     expect(response.status).toBe(200);
     expect(moderate).toHaveBeenCalledWith(root.account, reviewId, "approved");
     const actionRoute = await appWith(root).fetch(
-      new Request(`http://localhost/api/operator/reviews/${reviewId}/approve`, { method: "POST" }),
+      new Request(`http://localhost/api/reviews/${reviewId}/approve`, { method: "POST" }),
     );
     expect(actionRoute.status).toBe(404);
   });
@@ -537,7 +553,7 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const operatorResponse = await appWith(operator, undefined, undefined, overrides).fetch(
-      new Request("http://localhost/api/operator/blog"),
+      new Request("http://localhost/api/blog/posts?status=all"),
     );
     expect((await operatorResponse.json()).items[0]).toEqual(publicPost);
   });
@@ -550,10 +566,10 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     expect(
-      (await appWith().fetch(new Request("http://localhost/api/operator/blog/categories"))).status,
-    ).toBe(401);
+      (await appWith().fetch(new Request("http://localhost/api/blog/categories"))).status,
+    ).toBe(200);
     const categories = await appWith(user).fetch(
-      new Request("http://localhost/api/operator/blog/categories"),
+      new Request("http://localhost/api/blog/categories"),
     );
     expect(categories.status).toBe(200);
     const createPreview = vi.fn((_input, _accountId, previewId) => ({
@@ -570,7 +586,7 @@ describe("Hono API foundation", () => {
     };
     const previewApp = appWith(user, undefined, undefined, { createPreview });
     const preview = await previewApp.fetch(
-      new Request("http://localhost/api/operator/blog/preview", {
+      new Request("http://localhost/api/blog/previews", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -584,7 +600,7 @@ describe("Hono API foundation", () => {
     });
     expect(payload.url).not.toContain("?");
     const updated = await previewApp.fetch(
-      new Request("http://localhost/api/operator/blog/preview", {
+      new Request("http://localhost/api/blog/previews", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...body, preview_id: payload.previewId, title: "Changed unsaved" }),
@@ -595,7 +611,7 @@ describe("Hono API foundation", () => {
     expect(
       (
         await appWith().fetch(
-          new Request("http://localhost/api/operator/blog/preview", {
+          new Request("http://localhost/api/blog/previews", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
@@ -606,7 +622,7 @@ describe("Hono API foundation", () => {
     expect(
       (
         await appWith({ ...user, kind: "api_key" }).fetch(
-          new Request("http://localhost/api/operator/blog/preview", {
+          new Request("http://localhost/api/blog/previews", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
@@ -624,7 +640,7 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const invalid = await appWith(user).fetch(
-      new Request("http://localhost/api/operator/blog/categories", {
+      new Request("http://localhost/api/blog/categories", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: "Guides", slug: "Bad slug" }),
@@ -641,7 +657,7 @@ describe("Hono API foundation", () => {
           throw new BlogCategoryConflictError(field);
         },
       }).fetch(
-        new Request("http://localhost/api/operator/blog/categories", {
+        new Request("http://localhost/api/blog/categories", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ name: "Guides", slug: "guides" }),
@@ -676,35 +692,35 @@ describe("Hono API foundation", () => {
     expect(paths["/api/wallet/fund/{id}/transaction"].post.description ?? "").not.toContain(
       "Authentication:",
     );
-    expect(paths["/api/operator/treasury/entries"]).toBeDefined();
+    expect(paths["/api/treasury/entries"]).toBeDefined();
     expect(paths["/api/api-keys"]).toBeUndefined();
-    expect(paths["/api/operator/accounts/{accountId}/api-keys"]).toBeDefined();
-    expect(paths["/api/operator/accounts/{accountId}/api-keys/{id}/revoke"]).toBeDefined();
-    expect(paths["/api/operator/api-keys"]).toBeUndefined();
+    expect(paths["/api/accounts/{accountId}/api-keys"]).toBeDefined();
+    expect(paths["/api/accounts/{accountId}/api-keys/{id}/revoke"]).toBeDefined();
+    expect(paths["/api/api-keys"]).toBeUndefined();
     expect(paths["/api/api-keys/{id}/revoke"]).toBeUndefined();
     expect(paths["/api/me/access"]).toBeDefined();
     expect(paths["/api/me/session"]).toBeDefined();
-    expect(paths["/api/operator/overview"]).toBeDefined();
-    expect(paths["/api/operator/accounts"]).toBeDefined();
-    expect(paths["/api/operator/accounts"].get).toBeDefined();
-    expect(paths["/api/operator/accounts"].post).toBeDefined();
-    expect(paths["/api/operator/accounts/{accountId}"].get).toBeDefined();
-    expect(paths["/api/operator/accounts/{accountId}"].patch).toBeDefined();
-    expect(paths["/api/operator/accounts/{accountId}"].delete).toBeDefined();
-    expect(paths["/api/operator/accounts/bulk"]).toBeUndefined();
-    expect(paths["/api/operator/payments"].get.tags).toContain("Payments (Operator)");
-    expect(paths["/api/operator/payments/{paymentId}/reconcile"].post).toBeDefined();
-    expect(paths["/api/operator/payments/events"].get).toBeDefined();
-    expect(paths).not.toHaveProperty("/api/operator/paystack/events");
-    expect(paths).not.toHaveProperty("/api/operator/paystack/reconcile");
+    expect(paths["/api/overview"]).toBeDefined();
+    expect(paths["/api/accounts"]).toBeDefined();
+    expect(paths["/api/accounts"].get).toBeDefined();
+    expect(paths["/api/accounts"].post).toBeDefined();
+    expect(paths["/api/accounts/{accountId}"].get).toBeDefined();
+    expect(paths["/api/accounts/{accountId}"].patch).toBeDefined();
+    expect(paths["/api/accounts/{accountId}"].delete).toBeDefined();
+    expect(paths["/api/accounts/bulk"]).toBeUndefined();
+    expect(paths["/api/payments"].get.tags).toEqual(["Payments"]);
+    expect(paths["/api/payments/{paymentId}/reconcile"].post).toBeDefined();
+    expect(paths["/api/payments/events"].get).toBeDefined();
+    expect(Object.keys(paths).filter((path) => path.startsWith("/api/operator/"))).toEqual([]);
     expect(paths).not.toHaveProperty("/api/payments/{provider}/ipn");
-    expect(paths["/api/operator/accounts"].post).toMatchObject({
-      "x-authentication-mode": "account",
+    expect(paths["/api/accounts"].post).toMatchObject({
+      "x-authentication-mode": "mixed",
+      "x-public-access": true,
       "x-required-api-scope": "accounts:manage",
       security: [{ CliqeroApiKey: [] }],
       requestBody: expect.any(Object),
     });
-    expect(paths["/api/operator/accounts/{accountId}"]).toMatchObject({
+    expect(paths["/api/accounts/{accountId}"]).toMatchObject({
       get: expect.any(Object),
       patch: {
         "x-authentication-mode": "account",
@@ -720,26 +736,25 @@ describe("Hono API foundation", () => {
         }),
       },
     });
-    expect(paths["/api/operator/accounts/{accountId}/capabilities"]).toMatchObject({
+    expect(paths["/api/accounts/{accountId}/capabilities"]).toMatchObject({
       get: expect.any(Object),
       post: expect.any(Object),
     });
-    expect(paths["/api/operator/accounts/{accountId}/capabilities/{capability}"]).toMatchObject({
+    expect(paths["/api/accounts/{accountId}/capabilities/{capability}"]).toMatchObject({
       delete: expect.any(Object),
     });
-    expect(paths["/api/operator/funding"]).toBeDefined();
-    expect(paths["/api/operator/funding/{fundingId}"]).toBeDefined();
-    expect(paths["/api/operator/funding/{fundingId}/confirm-bank-transfer"]).toBeDefined();
-    expect(paths["/api/operator/listings"]).toBeDefined();
-    expect(paths["/api/operator/listings/{id}"]).toBeDefined();
-    expect(paths["/api/operator/listings/{id}"].patch).toBeDefined();
-    expect(paths["/api/operator/listings/{id}/publish"]).toBeUndefined();
-    expect(paths["/api/operator/listings/{id}/restore"]).toBeUndefined();
-    expect(paths["/api/operator/listings/{id}/integrations"]).toBeDefined();
-    expect(paths["/api/operator/listings/{id}/integrations/{integrationId}/rotate"]).toBeDefined();
-    expect(paths["/api/listings/{listingId}/integrations"].get.tags).toContain(
-      "Integrations (System)",
-    );
+    expect(paths["/api/funding"]).toBeDefined();
+    expect(paths["/api/funding/{fundingId}"]).toBeDefined();
+    expect(paths["/api/funding/{fundingId}/confirm-bank-transfer"]).toBeDefined();
+    expect(paths["/api/listings"]).toBeDefined();
+    expect(paths["/api/listings/{id}"]).toBeDefined();
+    expect(paths["/api/listings/{id}"].patch).toBeDefined();
+    expect(paths["/api/listings/{id}/publish"]).toBeUndefined();
+    expect(paths["/api/listings/{id}/restore"]).toBeUndefined();
+    expect(paths["/api/listings/{id}/integrations"]).toBeUndefined();
+    expect(paths["/api/listings/{listingId}/integrations"]).toBeDefined();
+    expect(paths["/api/listings/{listingId}/integrations/{integrationId}/rotate"]).toBeDefined();
+    expect(paths["/api/listings/{listingId}/integrations"].get.tags).toEqual(["Integrations"]);
     expect(paths["/api/listings/{listingId}/integrations"].post).toBeDefined();
     const createIntegrationSchema =
       paths["/api/listings/{listingId}/integrations"].post.requestBody.content["application/json"]
@@ -754,91 +769,86 @@ describe("Hono API foundation", () => {
       paths["/api/listings/{listingId}/integrations/{integrationId}/rotate"].post,
     ).toBeDefined();
     expect(paths["/api/integrations"]).toBeUndefined();
-    expect(paths["/api/operator/overview"].get["x-authentication-mode"]).toBe("account");
-    expect(paths["/api/operator/accounts"].get).toMatchObject({
+    expect(paths["/api/overview"].get["x-authentication-mode"]).toBe("account");
+    expect(paths["/api/accounts"].get).toMatchObject({
       "x-authentication-mode": "account",
-      "x-required-api-scope": "operations:manage",
+      "x-required-api-scope": "accounts:read",
     });
-    expect(paths["/api/operator/funding"].get).toMatchObject({
+    expect(paths["/api/funding"].get).toMatchObject({
       "x-authentication-mode": "account",
-      "x-required-api-scope": "operations:manage",
+      "x-required-api-scope": "payments:read",
     });
-    expect(paths["/api/operator/distributions"].get).toMatchObject({
+    expect(paths["/api/distributions"].get).toMatchObject({
       "x-authentication-mode": "account",
-      "x-required-api-scope": "operations:manage",
+      "x-required-api-scope": "payments:read",
     });
-    expect(paths["/api/operator/distributions/{distributionId}"].get).toBeDefined();
-    expect(paths["/api/operator/earnings"].get).toMatchObject({
+    expect(paths["/api/distributions/{distributionId}"].get).toBeDefined();
+    expect(paths["/api/earnings/entries"].get).toMatchObject({
       "x-authentication-mode": "account",
-      "x-required-api-scope": "operations:manage",
+      "x-required-api-scope": "payments:read",
     });
-    expect(paths["/api/operator/withdrawals"].get).toMatchObject({
-      "x-authentication-mode": "account",
-      "x-required-api-scope": "withdrawals:manage",
-    });
-    expect(paths["/api/operator/withdrawals/{withdrawalId}"].patch).toMatchObject({
+    expect(paths["/api/withdrawals"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "withdrawals:manage",
     });
-    expect(paths["/api/operator/withdrawals/{withdrawalId}/approve"]).toBeUndefined();
-    expect(paths["/api/operator/withdrawals/{withdrawalId}/reject"]).toBeUndefined();
-    expect(paths["/api/operator/withdrawals/{withdrawalId}/complete"]).toBeUndefined();
-    expect(paths["/api/operator/withdrawals/{withdrawalId}/payout"]).toBeUndefined();
-    expect(paths["/api/operator/withdrawals/{withdrawalId}/payout/reconcile"]).toBeUndefined();
-    expect(paths["/api/operator/treasury"].get).toMatchObject({
+    expect(paths["/api/withdrawals/{withdrawalId}"].patch).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "withdrawals:manage",
+    });
+    expect(paths["/api/withdrawals/{withdrawalId}/approve"]).toBeUndefined();
+    expect(paths["/api/withdrawals/{withdrawalId}/reject"]).toBeUndefined();
+    expect(paths["/api/withdrawals/{withdrawalId}/complete"]).toBeUndefined();
+    expect(paths["/api/withdrawals/{withdrawalId}/payout"]).toBeUndefined();
+    expect(paths["/api/withdrawals/{withdrawalId}/payout/reconcile"]).toBeUndefined();
+    expect(paths["/api/treasury"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:read",
     });
-    expect(paths["/api/operator/treasury"].get.description ?? "").not.toContain("Authentication:");
-    expect(paths["/api/operator/treasury/entries"].post).toMatchObject({
+    expect(paths["/api/treasury"].get.description ?? "").not.toContain("Authentication:");
+    expect(paths["/api/treasury/entries"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:manage",
     });
     expect(paths["/api/blog/posts"]).toBeDefined();
-    expect(paths["/api/operator/blog"]).toBeDefined();
-    expect(paths["/api/operator/table-config"]).toBeUndefined();
-    expect(paths["/api/operator/catalogue/bulk"]).toBeUndefined();
-    expect(paths["/api/operator/catalogue/categories"]).toMatchObject({
-      get: {
-        "x-authentication-mode": "account",
-        "x-required-api-scope": "catalogue:manage",
-      },
+    expect(paths["/api/catalogue/bulk"]).toBeUndefined();
+    expect(paths["/api/catalogue/categories"]).toMatchObject({
+      get: { "x-authentication-mode": "anonymous", "x-public-access": true },
       post: {
         "x-authentication-mode": "account",
         "x-required-api-scope": "catalogue:manage",
       },
     });
-    expect(paths["/api/operator/catalogue/categories/{id}"]).toMatchObject({
+    expect(paths["/api/catalogue/categories/{id}"]).toMatchObject({
       get: { "x-required-api-scope": "catalogue:manage" },
       patch: { "x-required-api-scope": "catalogue:manage" },
       delete: { "x-required-api-scope": "catalogue:manage" },
     });
-    expect(paths["/api/operator/catalogue/categories/bulk"]).toBeUndefined();
-    expect(paths["/api/operator/reviews/bulk"]).toBeUndefined();
-    expect(paths["/api/operator/reviews/{reviewId}"].patch).toMatchObject({
-      tags: ["Reviews (Operator)"],
+    expect(paths["/api/catalogue/categories/bulk"]).toBeUndefined();
+    expect(paths["/api/reviews/bulk"]).toBeUndefined();
+    expect(paths["/api/reviews/{reviewId}"].patch).toMatchObject({
+      tags: ["Reviews"],
       summary: "Moderate a review",
       description: expect.stringContaining("pending review"),
       "x-authentication-mode": "account",
       "x-required-api-scope": "reviews:moderate",
     });
     expect(
-      paths["/api/operator/reviews/{reviewId}"].patch.requestBody.content["application/json"].schema
+      paths["/api/reviews/{reviewId}"].patch.requestBody.content["application/json"].schema
         .properties.status.description,
     ).toContain("supported status values and transitions");
-    expect(paths["/api/operator/reviews/{reviewId}"].patch.responses["409"].description).toBe(
+    expect(paths["/api/reviews/{reviewId}"].patch.responses["409"].description).toBe(
       "Review is not pending",
     );
-    expect(paths["/api/operator/blog/categories"].get).toMatchObject({
-      "x-authentication-mode": "account",
-      "x-required-api-scope": "blog:read",
+    expect(paths["/api/blog/categories"].get).toMatchObject({
+      "x-authentication-mode": "anonymous",
+      "x-public-access": true,
     });
-    expect(paths["/api/operator/blog/bulk"]).toBeUndefined();
-    expect(paths["/api/operator/blog/categories/bulk"]).toBeUndefined();
-    expect(paths["/api/operator/blog/preview"].post).toMatchObject({
+    expect(paths["/api/blog/posts/bulk"]).toBeUndefined();
+    expect(paths["/api/blog/categories/bulk"]).toBeUndefined();
+    expect(paths["/api/blog/previews"].post).toMatchObject({
       "x-authentication-mode": "session_only",
     });
-    expect(paths["/api/operator/blog/preview/{previewId}"].delete).toMatchObject({
+    expect(paths["/api/blog/previews/{previewId}"].delete).toMatchObject({
       "x-authentication-mode": "session_only",
     });
     const postInput = paths["/api/blog/posts"].post.requestBody.content["application/json"].schema;
@@ -846,29 +856,28 @@ describe("Hono API foundation", () => {
     expect(postInput.properties).toHaveProperty("category_ids");
     expect(postInput.properties).not.toHaveProperty("category_id");
     const categoryInput =
-      paths["/api/operator/blog/categories"].post.requestBody.content["application/json"].schema;
+      paths["/api/blog/categories"].post.requestBody.content["application/json"].schema;
     expect(categoryInput.properties).toHaveProperty("slug");
     const operatorPost =
-      paths["/api/operator/blog"].get.responses["200"].content["application/json"].schema;
+      paths["/api/blog/posts"].get.responses["200"].content["application/json"].schema;
     expect(JSON.stringify(operatorPost)).toContain("categories");
     expect(JSON.stringify(operatorPost)).not.toContain("revisionId");
     expect(paths["/api/blog/posts/{id}/publish"]).toBeUndefined();
     expect(paths["/api/blog/posts/{id}/unpublish"]).toBeUndefined();
     expect(paths["/api/listings/{id}/publish"]).toBeUndefined();
     expect(paths["/api/listings/{id}/restore"]).toBeUndefined();
-    expect(paths["/api/operator/reviews/{reviewId}/approve"]).toBeUndefined();
-    expect(paths["/api/operator/reviews/{reviewId}/reject"]).toBeUndefined();
+    expect(paths["/api/reviews/{reviewId}/approve"]).toBeUndefined();
+    expect(paths["/api/reviews/{reviewId}/reject"]).toBeUndefined();
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
     expect(paths["/api/listings"].get).toMatchObject({
       "x-authentication-mode": "anonymous",
     });
     expect(paths["/api/listings"].get.security).toBeUndefined();
-    expect(paths["/api/accounts"].post.tags).toContain("Accounts (System)");
-    expect(paths["/api/operator/accounts"].get.tags).toContain("Accounts (Operator)");
-    expect(paths["/api/listings"].get.tags).toContain("Listings (System)");
-    expect(paths["/api/operator/listings"].get.tags).toContain("Listings (Operator)");
-    expect(paths["/api/operator/payments"].get.tags).toContain("Payments (Operator)");
+    expect(paths["/api/accounts"].post.tags).toEqual(["Accounts"]);
+    expect(paths["/api/accounts"].get.tags).toEqual(["Accounts"]);
+    expect(paths["/api/listings"].get.tags).toEqual(["Listings"]);
+    expect(paths["/api/payments"].get.tags).toEqual(["Payments"]);
     for (const [path, pathItem] of Object.entries(paths))
       for (const [method, operation] of Object.entries(pathItem)) {
         if (!["get", "post", "put", "patch", "delete"].includes(method)) continue;
@@ -908,10 +917,12 @@ describe("Hono API foundation", () => {
     expect(paths["/api/listings"].get.security).toBeUndefined();
     expect(paths["/api/listings"].get.responses["401"]).toBeUndefined();
     expect(paths["/api/listings"].get.responses["403"]).toBeUndefined();
-    expect(paths["/api/accounts"].post["x-authentication-mode"]).toBe("anonymous");
-    expect(paths["/api/accounts"].post.responses["401"]).toBeUndefined();
+    expect(paths["/api/accounts"].post["x-authentication-mode"]).toBe("mixed");
+    expect(paths["/api/accounts"].post.responses["401"].description).toBe(
+      "Authentication required",
+    );
     expect(paths["/api/accounts"].post.responses["403"].description).toBe(
-      "Insufficient permissions",
+      "Account management permission required",
     );
     expect(paths["/api/access/verify"].post).toMatchObject({
       "x-authentication-mode": "integration_credential",
@@ -1065,17 +1076,17 @@ describe("Hono API foundation", () => {
       canAccessOperator: false,
     });
     expect(
-      (await appWith(ordinary).fetch(new Request("http://localhost/api/operator/overview"))).status,
+      (await appWith(ordinary).fetch(new Request("http://localhost/api/overview"))).status,
     ).toBe(403);
     const catalogueManager = { ...ordinary, capabilities: ["catalogue.manage"] };
     const catalogueResponse = await appWith(catalogueManager).fetch(
-      new Request("http://localhost/api/operator/overview"),
+      new Request("http://localhost/api/overview"),
     );
     expect(catalogueResponse.status).toBe(200);
     expect((await catalogueResponse.json()).users).toBeUndefined();
     const operator = { ...ordinary, capabilities: ["system.root"] };
     expect(
-      (await appWith(operator).fetch(new Request("http://localhost/api/operator/overview"))).status,
+      (await appWith(operator).fetch(new Request("http://localhost/api/overview"))).status,
     ).toBe(200);
     const missingScope = {
       ...operator,
@@ -1083,8 +1094,7 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     expect(
-      (await appWith(missingScope).fetch(new Request("http://localhost/api/operator/overview")))
-        .status,
+      (await appWith(missingScope).fetch(new Request("http://localhost/api/overview"))).status,
     ).toBe(403);
     const scopedOperator = {
       ...operator,
@@ -1092,8 +1102,7 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(["operations:manage"]),
     };
     expect(
-      (await appWith(scopedOperator).fetch(new Request("http://localhost/api/operator/overview")))
-        .status,
+      (await appWith(scopedOperator).fetch(new Request("http://localhost/api/overview"))).status,
     ).toBe(200);
     expect(
       (
@@ -1101,17 +1110,16 @@ describe("Hono API foundation", () => {
           ...operator,
           kind: "api_key" as const,
           scopes: new Set<string>(["catalogue:read"]),
-        }).fetch(new Request("http://localhost/api/operator/overview"))
+        }).fetch(new Request("http://localhost/api/overview"))
       ).status,
     ).toBe(403);
     const elevatedOrdinary = {
       ...ordinary,
       kind: "api_key" as const,
-      scopes: new Set<string>(["operations:manage"]),
+      scopes: new Set<string>(["payments:manage"]),
     };
     expect(
-      (await appWith(elevatedOrdinary).fetch(new Request("http://localhost/api/operator/overview")))
-        .status,
+      (await appWith(elevatedOrdinary).fetch(new Request("http://localhost/api/overview"))).status,
     ).toBe(403);
   });
   it("exposes a canonical browser session only for a linked user session", async () => {
@@ -1148,43 +1156,37 @@ describe("Hono API foundation", () => {
       capabilities: [],
       scopes: new Set<string>(),
     };
+    expect((await appWith().fetch(new Request("http://localhost/api/funding"))).status).toBe(401);
     expect(
-      (await appWith().fetch(new Request("http://localhost/api/operator/funding"))).status,
-    ).toBe(401);
-    expect(
-      (await appWith(ordinary).fetch(new Request("http://localhost/api/operator/funding"))).status,
+      (await appWith(ordinary).fetch(new Request("http://localhost/api/funding"))).status,
     ).toBe(403);
     const catalogueManager = { ...ordinary, capabilities: ["catalogue.manage"] };
     expect(
-      (await appWith(catalogueManager).fetch(new Request("http://localhost/api/operator/funding")))
-        .status,
+      (await appWith(catalogueManager).fetch(new Request("http://localhost/api/funding"))).status,
     ).toBe(403);
     const operator = { ...ordinary, capabilities: ["system.root"] };
     expect(
-      (await appWith(operator).fetch(new Request("http://localhost/api/operator/funding"))).status,
+      (await appWith(operator).fetch(new Request("http://localhost/api/funding"))).status,
     ).toBe(200);
     const operatorKey = {
       ...operator,
       kind: "api_key" as const,
-      scopes: new Set<string>(["operations:manage"]),
+      scopes: new Set<string>(["payments:read"]),
     };
     expect(
-      (await appWith(operatorKey).fetch(new Request("http://localhost/api/operator/funding")))
-        .status,
+      (await appWith(operatorKey).fetch(new Request("http://localhost/api/funding"))).status,
     ).toBe(200);
     const missingScope = { ...operator, kind: "api_key" as const, scopes: new Set<string>() };
     expect(
-      (await appWith(missingScope).fetch(new Request("http://localhost/api/operator/funding")))
-        .status,
+      (await appWith(missingScope).fetch(new Request("http://localhost/api/funding"))).status,
     ).toBe(403);
     const elevatedCatalogue = {
       ...catalogueManager,
       kind: "api_key" as const,
-      scopes: new Set<string>(["operations:manage"]),
+      scopes: new Set<string>(["payments:read"]),
     };
     expect(
-      (await appWith(elevatedCatalogue).fetch(new Request("http://localhost/api/operator/funding")))
-        .status,
+      (await appWith(elevatedCatalogue).fetch(new Request("http://localhost/api/funding"))).status,
     ).toBe(403);
   });
   it("keeps bank-transfer confirmation operator-only", async () => {
@@ -1197,7 +1199,7 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const request = () =>
-      new Request(`http://localhost/api/operator/funding/${fundingId}/confirm-bank-transfer`, {
+      new Request(`http://localhost/api/funding/${fundingId}/confirm-bank-transfer`, {
         method: "POST",
       });
     expect((await appWith(ordinary).fetch(request())).status).toBe(403);
@@ -1205,7 +1207,7 @@ describe("Hono API foundation", () => {
       (await appWith({ ...ordinary, capabilities: ["finance.manage"] }).fetch(request())).status,
     ).toBe(200);
   });
-  it("protects operator withdrawals with the withdrawals manage scope", async () => {
+  it("keeps withdrawal reads owner-scoped and operational queries capability/scope protected", async () => {
     const base = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: {},
@@ -1213,31 +1215,26 @@ describe("Hono API foundation", () => {
       capabilities: [] as string[],
       scopes: new Set<string>(),
     };
+    expect((await appWith().fetch(new Request("http://localhost/api/withdrawals"))).status).toBe(
+      401,
+    );
+    const ownedRead = new Request("http://localhost/api/withdrawals");
+    const operationalRead = new Request("http://localhost/api/withdrawals?state=all");
+    expect((await appWith(base).fetch(ownedRead)).status).toBe(200);
+    expect((await appWith(base).fetch(operationalRead)).status).toBe(403);
     expect(
-      (await appWith().fetch(new Request("http://localhost/api/operator/withdrawals"))).status,
-    ).toBe(401);
-    expect(
-      (await appWith(base).fetch(new Request("http://localhost/api/operator/withdrawals"))).status,
-    ).toBe(403);
-    expect(
-      (
-        await appWith({ ...base, capabilities: ["catalogue.manage"] }).fetch(
-          new Request("http://localhost/api/operator/withdrawals"),
-        )
-      ).status,
+      (await appWith({ ...base, capabilities: ["catalogue.manage"] }).fetch(operationalRead))
+        .status,
     ).toBe(403);
     const operator = { ...base, capabilities: ["system.root"] };
-    expect(
-      (await appWith(operator).fetch(new Request("http://localhost/api/operator/withdrawals")))
-        .status,
-    ).toBe(200);
+    expect((await appWith(operator).fetch(operationalRead)).status).toBe(200);
     expect(
       (
         await appWith({
           ...operator,
           kind: "api_key" as const,
           scopes: new Set(["withdrawals:manage"]),
-        }).fetch(new Request("http://localhost/api/operator/withdrawals"))
+        }).fetch(operationalRead)
       ).status,
     ).toBe(200);
     expect(
@@ -1246,18 +1243,15 @@ describe("Hono API foundation", () => {
           ...base,
           kind: "api_key" as const,
           scopes: new Set(["withdrawals:manage"]),
-        }).fetch(new Request("http://localhost/api/operator/withdrawals"))
+        }).fetch(operationalRead)
       ).status,
     ).toBe(403);
     const patch = () =>
-      new Request(
-        "http://localhost/api/operator/withdrawals/00000000-0000-4000-8000-000000000010",
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ status: "approved" }),
-        },
-      );
+      new Request("http://localhost/api/withdrawals/00000000-0000-4000-8000-000000000010", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "approved" }),
+      });
     expect((await appWith().fetch(patch())).status).toBe(401);
     expect((await appWith(base).fetch(patch())).status).toBe(403);
     expect((await appWith(operator).fetch(patch())).status).toBe(200);
@@ -1307,7 +1301,7 @@ describe("Hono API foundation", () => {
         (
           await appWith(operator).fetch(
             new Request(
-              `http://localhost/api/operator/withdrawals/00000000-0000-4000-8000-000000000010/${action}`,
+              `http://localhost/api/withdrawals/00000000-0000-4000-8000-000000000010/${action}`,
               { method: "POST" },
             ),
           )
@@ -1324,18 +1318,15 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const request = () =>
-      new Request(
-        "http://localhost/api/operator/withdrawals/00000000-0000-4000-8000-000000000010",
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            status: "completed",
-            external_reference: "transfer-1",
-            note: "Sent outside Cliqero",
-          }),
-        },
-      );
+      new Request("http://localhost/api/withdrawals/00000000-0000-4000-8000-000000000010", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: "completed",
+          external_reference: "transfer-1",
+          note: "Sent outside Cliqero",
+        }),
+      });
 
     expect((await appWith(ordinary).fetch(request())).status).toBe(403);
     expect(
@@ -1367,7 +1358,7 @@ describe("Hono API foundation", () => {
       capabilities: [],
       scopes: new Set<string>(),
     };
-    for (const path of ["/api/operator/distributions", "/api/operator/earnings"]) {
+    for (const path of ["/api/distributions", "/api/earnings/entries"]) {
       expect((await appWith().fetch(new Request(`http://localhost${path}`))).status).toBe(401);
       expect((await appWith(ordinary).fetch(new Request(`http://localhost${path}`))).status).toBe(
         403,
@@ -1402,7 +1393,7 @@ describe("Hono API foundation", () => {
             ...ordinary,
             capabilities: ["system.root"],
             kind: "api_key" as const,
-            scopes: new Set<string>(["operations:manage"]),
+            scopes: new Set<string>(["payments:read"]),
           }).fetch(new Request(`http://localhost${path}`))
         ).status,
       ).toBe(200);
@@ -1412,7 +1403,7 @@ describe("Hono API foundation", () => {
             ...ordinary,
             capabilities: ["catalogue.manage"],
             kind: "api_key" as const,
-            scopes: new Set<string>(["operations:manage"]),
+            scopes: new Set<string>(["payments:read"]),
           }).fetch(new Request(`http://localhost${path}`))
         ).status,
       ).toBe(403);
@@ -1463,14 +1454,11 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const response = await appWith(principal).fetch(
-      new Request(
-        "http://localhost/api/operator/accounts/00000000-0000-4000-8000-000000000001/api-keys",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: "x", scopes: ["hierachy:read"] }),
-        },
-      ),
+      new Request("http://localhost/api/accounts/00000000-0000-4000-8000-000000000001/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "x", scopes: ["hierachy:read"] }),
+      }),
     );
     expect(response.status).toBe(400);
   });
@@ -1499,37 +1487,37 @@ describe("Hono API foundation", () => {
       account: {},
       kind: "api_key" as const,
       capabilities: ["system.root"],
-      scopes: new Set<string>(["operations:manage"]),
+      scopes: new Set<string>(["payments:manage"]),
     } as any;
-    const operatorScope = getLegacyRouteAccess("/api/operator/settlement", "POST");
+    const operatorScope = getLegacyRouteAccess("/api/earnings/settlement", "POST");
     expect(operatorScope).toEqual({
       mode: "account",
-      scope: "operations:manage",
+      scope: "payments:manage",
       capability: "finance.manage",
     });
     expect(
       authorizeLegacyRequest(
-        new Request("http://localhost/api/operator/settlement", { method: "POST" }),
+        new Request("http://localhost/api/earnings/settlement", { method: "POST" }),
         operatorKey,
         operatorScope!,
       ),
     ).toBeNull();
-    const missingScope = getLegacyRouteAccess("/api/operator/settlement", "POST");
+    const missingScope = getLegacyRouteAccess("/api/earnings/settlement", "POST");
     const denied = authorizeLegacyRequest(
-      new Request("http://localhost/api/operator/settlement", { method: "POST" }),
+      new Request("http://localhost/api/earnings/settlement", { method: "POST" }),
       { ...operatorKey, scopes: new Set<string>() },
       missingScope!,
     );
     expect(denied?.status).toBe(403);
     const normalKey = authorizeLegacyRequest(
-      new Request("http://localhost/api/operator/settlement", { method: "POST" }),
-      { ...operatorKey, capabilities: [], scopes: new Set<string>(["operations:manage"]) },
+      new Request("http://localhost/api/earnings/settlement", { method: "POST" }),
+      { ...operatorKey, capabilities: [], scopes: new Set<string>(["payments:manage"]) },
       operatorScope!,
     );
     expect(normalKey?.status).toBe(403);
 
     const lowScopeKey = { ...operatorKey, scopes: new Set<string>(["wallet:read"]) };
-    const settlementRequest = new Request("http://localhost/api/operator/settlement", {
+    const settlementRequest = new Request("http://localhost/api/earnings/settlement", {
       method: "POST",
     });
     const actualDispatch = await appWith(lowScopeKey).fetch(settlementRequest);
@@ -1543,54 +1531,15 @@ describe("Hono API foundation", () => {
     };
     expect(authorizeLegacyRequest(settlementRequest, browserSession, operatorScope!)).toBeNull();
 
-    const futureOperatorAccess = legacyRouteAccessForPattern("/api/operator/unclassified", "POST");
-    expect(futureOperatorAccess).toEqual({ mode: "deny" });
-    const unclassifiedRequest = new Request("http://localhost/api/operator/unclassified", {
-      method: "POST",
-    });
-    const unclassifiedPrincipals = [
-      null,
-      { ...operatorKey, capabilities: [], scopes: new Set<string>() },
-      {
-        ...operatorKey,
-        kind: "user_session" as const,
-        capabilities: ["finance.manage"],
-        scopes: new Set<string>(),
-      },
-      {
-        ...operatorKey,
-        kind: "user_session" as const,
-        capabilities: ["system.root"],
-        scopes: new Set<string>(),
-      },
-      { ...operatorKey, scopes: new Set<string>() },
-      { ...operatorKey, scopes: new Set<string>(["operations:manage"]) },
-    ];
-    for (const principal of unclassifiedPrincipals) {
-      expect(
-        authorizeLegacyRequest(unclassifiedRequest, principal, futureOperatorAccess)?.status,
-      ).toBe(403);
-    }
-
-    for (const route of legacyApiPaths.filter((entry) => entry.path.startsWith("/api/operator/"))) {
-      for (const method of route.methods) {
-        expect(method.access.mode, `${method.method} ${route.path} is explicitly classified`).toBe(
-          "account",
-        );
-        expect(
-          method.access.capability,
-          `${method.method} ${route.path} requires capability`,
-        ).toBeTruthy();
-        expect(
-          method.access.scope,
-          `${method.method} ${route.path} requires API scope`,
-        ).toBeTruthy();
-      }
-    }
+    expect(legacyApiPaths.some((route) => route.path.startsWith("/api/operator/"))).toBe(false);
     expect(getLegacyRouteAccess("/api/operator/paystack/events", "GET")).toBeNull();
-    expect(getLegacyRouteAccess("/api/operator/distribution-policy", "GET")).toEqual({
+    expect(
+      (await appWith(operatorKey).fetch(new Request("http://localhost/api/operator/unclassified")))
+        .status,
+    ).toBe(404);
+    expect(getLegacyRouteAccess("/api/distribution-policy", "GET")).toEqual({
       mode: "account",
-      scope: "operations:manage",
+      scope: "payments:read",
       capability: "finance.read",
     });
     expect(getLegacyRouteAccess("/api/listings", "GET")).toEqual({
@@ -1614,14 +1563,10 @@ describe("Hono API foundation", () => {
     });
     expect(
       getLegacyRouteAccess(
-        "/api/operator/listings/00000000-0000-4000-8000-000000000001/integrations",
+        "/api/listings/00000000-0000-4000-8000-000000000001/integrations",
         "GET",
       ),
-    ).toEqual({
-      mode: "account",
-      scope: "catalogue:manage",
-      capability: "catalogue.manage",
-    });
+    ).toEqual({ mode: "account" });
     expect(
       getLegacyRouteAccess("/api/listings/00000000-0000-4000-8000-000000000001", "PATCH"),
     ).toEqual({
@@ -1708,12 +1653,7 @@ describe("Hono API foundation", () => {
   });
   it("keeps incomplete sessions out of unrelated account and operator APIs", async () => {
     const app = appWith();
-    for (const path of [
-      "/api/wallet",
-      "/api/purchases",
-      "/api/checkout",
-      "/api/operator/treasury",
-    ]) {
+    for (const path of ["/api/wallet", "/api/purchases", "/api/checkout", "/api/treasury"]) {
       const request =
         path === "/api/checkout"
           ? new Request(`http://localhost${path}`, { method: "POST" })
@@ -1730,14 +1670,11 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(["hierarchy:admin"]),
     } as any;
     const response = await appWith(principal).fetch(
-      new Request(
-        "http://localhost/api/operator/hierarchy/00000000-0000-4000-8000-000000000002/parent",
-        {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ parent_account_id: "00000000-0000-4000-8000-000000000003" }),
-        },
-      ),
+      new Request("http://localhost/api/hierarchy/00000000-0000-4000-8000-000000000002/parent", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parent_account_id: "00000000-0000-4000-8000-000000000003" }),
+      }),
     );
     expect(response.status).toBe(403);
   });
@@ -1749,16 +1686,14 @@ describe("Hono API foundation", () => {
       capabilities: [],
       scopes: new Set<string>(),
     };
+    expect((await appWith().fetch(new Request("http://localhost/api/accounts"))).status).toBe(401);
     expect(
-      (await appWith().fetch(new Request("http://localhost/api/operator/accounts"))).status,
-    ).toBe(401);
-    expect(
-      (await appWith(ordinary).fetch(new Request("http://localhost/api/operator/accounts"))).status,
+      (await appWith(ordinary).fetch(new Request("http://localhost/api/accounts"))).status,
     ).toBe(403);
     expect(
       (
         await appWith({ ...ordinary, capabilities: ["accounts.read"] }).fetch(
-          new Request("http://localhost/api/operator/accounts"),
+          new Request("http://localhost/api/accounts"),
         )
       ).status,
     ).toBe(200);
@@ -1768,25 +1703,25 @@ describe("Hono API foundation", () => {
           ...ordinary,
           kind: "api_key",
           capabilities: ["accounts.read"],
-          scopes: new Set(["operations:manage"]),
-        }).fetch(new Request("http://localhost/api/operator/accounts"))
+          scopes: new Set(["accounts:read"]),
+        }).fetch(new Request("http://localhost/api/accounts"))
       ).status,
     ).toBe(200);
     expect(
       (
         await appWith({ ...ordinary, capabilities: ["catalogue.manage"] }).fetch(
-          new Request("http://localhost/api/operator/accounts"),
+          new Request("http://localhost/api/accounts"),
         )
       ).status,
     ).toBe(403);
     const operator = { ...ordinary, capabilities: ["system.root"] };
     expect(
-      (await appWith(operator).fetch(new Request("http://localhost/api/operator/accounts"))).status,
+      (await appWith(operator).fetch(new Request("http://localhost/api/accounts"))).status,
     ).toBe(200);
     expect(
       (
         await appWith({ ...operator, kind: "api_key", scopes: new Set<string>() }).fetch(
-          new Request("http://localhost/api/operator/accounts"),
+          new Request("http://localhost/api/accounts"),
         )
       ).status,
     ).toBe(403);
@@ -1795,8 +1730,8 @@ describe("Hono API foundation", () => {
         await appWith({
           ...operator,
           kind: "api_key",
-          scopes: new Set(["operations:manage"]),
-        }).fetch(new Request("http://localhost/api/operator/accounts"))
+          scopes: new Set(["accounts:read"]),
+        }).fetch(new Request("http://localhost/api/accounts"))
       ).status,
     ).toBe(200);
     expect(
@@ -1804,8 +1739,8 @@ describe("Hono API foundation", () => {
         await appWith({
           ...ordinary,
           kind: "api_key",
-          scopes: new Set(["operations:manage"]),
-        }).fetch(new Request("http://localhost/api/operator/accounts"))
+          scopes: new Set(["accounts:read"]),
+        }).fetch(new Request("http://localhost/api/accounts"))
       ).status,
     ).toBe(403);
   });
@@ -1820,7 +1755,7 @@ describe("Hono API foundation", () => {
     };
     const create = (principal: any, body: object) =>
       appWith(principal).fetch(
-        new Request("http://localhost/api/operator/accounts", {
+        new Request("http://localhost/api/accounts", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
@@ -1884,7 +1819,7 @@ describe("Hono API foundation", () => {
 
     const update = (principal: any, value: object) =>
       appWith(principal).fetch(
-        new Request(`http://localhost/api/operator/accounts/${target}`, {
+        new Request(`http://localhost/api/accounts/${target}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(value),
@@ -1907,7 +1842,7 @@ describe("Hono API foundation", () => {
     expect(
       (
         await appWith({ ...base, capabilities: ["accounts.manage"] }).fetch(
-          new Request(`http://localhost/api/operator/accounts/${target}`, { method: "DELETE" }),
+          new Request(`http://localhost/api/accounts/${target}`, { method: "DELETE" }),
         )
       ).status,
     ).toBe(204);
@@ -1916,7 +1851,7 @@ describe("Hono API foundation", () => {
       ...base,
       capabilities: ["accounts.manage"],
     }).fetch(
-      new Request("http://localhost/api/operator/accounts/bulk", {
+      new Request("http://localhost/api/accounts/bulk", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -1930,14 +1865,14 @@ describe("Hono API foundation", () => {
     );
     expect(duplicateBulkIds.status).toBe(404);
 
-    const deletePath = `http://localhost/api/operator/accounts/${target}`;
+    const deletePath = `http://localhost/api/accounts/${target}`;
     expect(
       (
         await appWith({
           ...base,
           kind: "api_key",
           capabilities: ["system.root", "accounts.manage"],
-          scopes: new Set(["operations:manage"]),
+          scopes: new Set(["payments:manage"]),
         }).fetch(new Request(deletePath, { method: "DELETE" }))
       ).status,
     ).toBe(403);
@@ -1961,7 +1896,7 @@ describe("Hono API foundation", () => {
       capabilities: [],
       scopes: new Set<string>(),
     };
-    const path = `http://localhost/api/operator/accounts/${target}/capabilities`;
+    const path = `http://localhost/api/accounts/${target}/capabilities`;
     expect((await appWith().fetch(new Request(path))).status).toBe(401);
     expect(
       (await appWith({ ...ordinary, capabilities: ["accounts.read"] }).fetch(new Request(path)))
@@ -2007,7 +1942,7 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const get = (principal: any) =>
-      appWith(principal).fetch(new Request("http://localhost/api/operator/treasury"));
+      appWith(principal).fetch(new Request("http://localhost/api/treasury"));
     expect((await get(base)).status).toBe(403);
     expect((await get({ ...base, capabilities: ["catalogue.manage"] })).status).toBe(403);
     expect((await get({ ...base, capabilities: ["system.root"] })).status).toBe(200);
@@ -2026,7 +1961,7 @@ describe("Hono API foundation", () => {
     ).toBe(200);
     const post = (principal: any) =>
       appWith(principal).fetch(
-        new Request("http://localhost/api/operator/treasury/entries", {
+        new Request("http://localhost/api/treasury/entries", {
           method: "POST",
           headers: { "content-type": "application/json", "Idempotency-Key": "test-key" },
           body: JSON.stringify({ direction: "credit", amount_minor: "100", title: "Test" }),
@@ -2064,7 +1999,7 @@ describe("Hono API foundation", () => {
       capabilities: ["reviews.moderate"],
       scopes: new Set<string>(),
     };
-    const url = "http://localhost/api/operator/reviews?status=pending";
+    const url = "http://localhost/api/reviews?status=pending";
     expect((await appWith(base).fetch(new Request(url))).status).toBe(200);
     expect(
       (
@@ -2112,7 +2047,7 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const response = await appWith(principal).fetch(
-      new Request("http://localhost/api/operator/treasury/entries", {
+      new Request("http://localhost/api/treasury/entries", {
         method: "POST",
         headers: { "content-type": "application/json", "Idempotency-Key": "strict-key" },
         body: JSON.stringify({
@@ -2129,7 +2064,7 @@ describe("Hono API foundation", () => {
       (
         await appWith(principal).fetch(
           new Request(
-            "http://localhost/api/operator/treasury/entries/00000000-0000-4000-8000-000000000004",
+            "http://localhost/api/treasury/entries/00000000-0000-4000-8000-000000000004",
             {
               method: "DELETE",
             },
