@@ -240,7 +240,34 @@ Do not add numbered incremental migrations. Start preserving incremental
 migration history only when the project reaches a stage where existing deployed
 database state must be upgraded non-destructively.
 
-Normal `just dev-down` / `just prod-down` stops containers without deleting persistent volumes. `just dev-clean` runs volume removal and is destructive.
+Normal `just dev-down` / `just prod-down` stops containers without deleting
+persistent volumes. `just dev-clean` is destructive and removes all volumes
+owned by the development Compose project, including PostgreSQL, Blog, media,
+Next output, dependency, and Mailpit state. Production commands use a separate
+Compose project (`cliqero-prod`) and are not targeted by development resets.
+
+For a complete development reset, run:
+
+```bash
+just dev-clean
+just dev
+just dev-seed
+```
+
+To reset only PostgreSQL and reseed its development fixtures:
+
+```bash
+just dev-db-reset
+just dev-seed-users
+just dev-seed-catalogue
+```
+
+To reset only Blog SQLite and recreate its fixtures:
+
+```bash
+just dev-blog-reset
+just dev-seed-blog
+```
 
 ## Blog initialization
 
@@ -249,6 +276,10 @@ Apply/initialize the isolated blog schema with:
 ```bash
 just blog-migrate
 ```
+
+Blog startup intentionally rejects a database that does not match the current
+baseline rather than replacing it automatically. `just dev-blog-reset` is the
+supported recovery command for the development Compose database.
 
 ## Repository checks
 

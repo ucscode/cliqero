@@ -60,7 +60,9 @@ Grouped email and CAPTCHA settings use ignored YAML files; copy
 when enabling those capabilities.
 ```
 
-`just dev-clean` is destructive: it removes local Compose volumes and their data.
+`just dev-clean` is destructive: it removes all development Compose volumes and
+their data. Production commands use a separate Compose project and are not
+affected. Use `just dev-db-reset` or `just dev-blog-reset` for targeted resets.
 
 ## Production-like local run
 

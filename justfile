@@ -20,10 +20,25 @@ dev-build:
 dev-down:
 	docker compose down
 
-# Destructive: stop the development stack and delete all local volumes,
-# including PostgreSQL, blog/media data, Next output, and dependency volumes.
+# Destructive: remove every volume owned by the development Compose project,
+# including PostgreSQL, Blog, media, Next output, dependencies, and Mailpit.
+# Production recipes use a separate Compose project and are not affected.
 dev-clean:
-	docker compose down -v --remove-orphans
+	docker compose down --volumes --remove-orphans
+
+# Destructive: reset development PostgreSQL only, then restart the app/worker.
+# Startup re-applies database/migrations/001_initial_schema.sql to empty PGDATA.
+dev-db-reset:
+	docker compose stop main outbox-worker postgres
+	docker compose run --rm --no-deps --entrypoint sh postgres -ec 'find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
+	docker compose up -d postgres main outbox-worker
+
+# Destructive: reset development Blog SQLite only, including WAL/SHM, then
+# restart the web app. PostgreSQL, media, and dependency volumes are untouched.
+dev-blog-reset:
+	docker compose stop main
+	docker compose run --rm --no-deps --entrypoint sh main -ec 'rm -f /workspace/data/blog/blog.sqlite /workspace/data/blog/blog.sqlite-wal /workspace/data/blog/blog.sqlite-shm'
+	docker compose up -d main
 
 # Destructive: remove only the named development dependency volumes.
 dev-deps-clean:
@@ -60,27 +75,27 @@ dev-restart:
 
 # Start the production Compose stack using compose.yaml only
 prod:
-	docker compose -f compose.yaml up -d
+	docker compose -p cliqero-prod -f compose.yaml up -d
 
 # Rebuild and start the production Compose stack
 prod-build:
-	docker compose -f compose.yaml up -d --build
+	docker compose -p cliqero-prod -f compose.yaml up -d --build
 
 # Stop the production Compose stack without deleting volumes
 prod-down:
-	docker compose -f compose.yaml down
+	docker compose -p cliqero-prod -f compose.yaml down
 
 # Follow production service logs
 prod-logs:
-	docker compose -f compose.yaml logs -f
+	docker compose -p cliqero-prod -f compose.yaml logs -f
 
 # Show production service status
 prod-ps:
-	docker compose -f compose.yaml ps
+	docker compose -p cliqero-prod -f compose.yaml ps
 
 # Restart the production Compose stack
 prod-restart:
-	docker compose -f compose.yaml restart
+	docker compose -p cliqero-prod -f compose.yaml restart
 
 # Open a shell in the development main container
 dev-shell:
@@ -178,4 +193,4 @@ dev-compose-config:
 
 # Validate compose.yaml without the development override
 prod-compose-config:
-	docker compose -f compose.yaml config
+	docker compose -p cliqero-prod -f compose.yaml config

@@ -19,7 +19,13 @@ services:
     volumes:
       - ../../config:/workspace/config:ro
       - ../../config:/app/config:ro
-      - blog-data:/workspace/data/blog
+      - type: volume
+        source: blog-data
+        target: /workspace/data/blog
+        volume:
+          # In development, /workspace is a bind mount. Do not seed a newly
+          # created Blog volume from stale data/blog files beneath that mount.
+          nocopy: true
       - media-data:/var/lib/cliqero/media
 
 volumes:
