@@ -23,6 +23,13 @@ The principal is one of:
 - `user_session`, with account identity and capabilities;
 - `api_key`, with account identity, capabilities, and granted scopes.
 
+Hono middleware resolves the principal once and stores it in request context.
+Compatibility adapters reuse that same identity; direct adapter invocations
+resolve it once at their boundary. The authorizer also considers whether an
+Authorization header was supplied: the principal model currently represents an
+invalid bearer credential as `anonymous`, so that signal distinguishes invalid
+credentials (401) from an unauthenticated request to a public route.
+
 For API-key operations that carry both a capability and scope requirement, both
 must match. A scope never grants a capability the owning account does not have.
 Session requests are checked against the required capability. Public routes may

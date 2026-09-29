@@ -13,7 +13,7 @@ const entitlementSchema = z.object({
   expires_at: z.string().datetime().nullable(),
   access_available: z.boolean(),
 });
-const entitlementParams = z.object({ id: z.string().uuid() });
+const entitlementParams = z.object({ entitlementId: z.string().uuid() });
 const entitlementPatch = z
   .object({
     state: entitlementState.optional(),
@@ -31,7 +31,7 @@ export function registerPackageEntitlementRoutes(
   app.openapi(
     createRoute({
       method: "get",
-      path: "/api/package/entitlements/{id}",
+      path: "/api/package/entitlements/{entitlementId}",
       request: { params: entitlementParams },
       responses: {
         200: {
@@ -55,7 +55,7 @@ export function registerPackageEntitlementRoutes(
       try {
         const result = await container.packageEntitlements.get(
           integration,
-          c.req.valid("param").id,
+          c.req.valid("param").entitlementId,
         );
         return c.json(result, 200);
       } catch (error) {
@@ -67,7 +67,7 @@ export function registerPackageEntitlementRoutes(
   app.openapi(
     createRoute({
       method: "patch",
-      path: "/api/package/entitlements/{id}",
+      path: "/api/package/entitlements/{entitlementId}",
       request: {
         params: entitlementParams,
         body: { content: { "application/json": { schema: entitlementPatch } } },
@@ -103,7 +103,7 @@ export function registerPackageEntitlementRoutes(
         const body = c.req.valid("json");
         const result = await container.packageEntitlements.update(
           integration,
-          c.req.valid("param").id,
+          c.req.valid("param").entitlementId,
           {
             ...(body.state !== undefined ? { state: body.state } : {}),
             ...(Object.hasOwn(body, "expires_at")

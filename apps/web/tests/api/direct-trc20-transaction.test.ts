@@ -40,7 +40,7 @@ describe("Direct USDT TRC20 transaction submission API", () => {
     configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: transactionHash }), {
-      params: Promise.resolve({ id: fundingId }),
+      params: Promise.resolve({ fundingId }),
     });
 
     expect(response.status).toBe(202);
@@ -64,7 +64,7 @@ describe("Direct USDT TRC20 transaction submission API", () => {
     configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: transactionHash }), {
-      params: Promise.resolve({ id: fundingId }),
+      params: Promise.resolve({ fundingId }),
     });
 
     expect(response.status).toBe(404);
@@ -80,7 +80,7 @@ describe("Direct USDT TRC20 transaction submission API", () => {
     configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: transactionHash }), {
-      params: Promise.resolve({ id: fundingId }),
+      params: Promise.resolve({ fundingId }),
     });
 
     expect(response.status).toBe(422);
@@ -97,7 +97,7 @@ describe("Direct USDT TRC20 transaction submission API", () => {
     configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: "not-a-tron-hash" }), {
-      params: Promise.resolve({ id: fundingId }),
+      params: Promise.resolve({ fundingId }),
     });
 
     expect(response.status).toBe(422);
@@ -119,7 +119,7 @@ describe("Direct USDT TRC20 transaction submission API", () => {
     configure(submitProviderRequest);
 
     const response = await POST(request({ transaction_hash: transactionHash }), {
-      params: Promise.resolve({ id: fundingId }),
+      params: Promise.resolve({ fundingId }),
     });
 
     expect(response.status).toBe(400);

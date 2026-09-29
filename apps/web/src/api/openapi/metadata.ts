@@ -144,9 +144,9 @@ const domainDescriptions: Record<string, string> = {
   Funding:
     "Funding records are persisted before provider initialization and are processed idempotently.",
   Withdrawals:
-    "Withdrawal operations enforce account ownership, reserved-balance, and supported operator transition rules.",
+    "Withdrawal operations enforce account ownership, reserved-balance, and supported management transitions.",
   Hierarchy:
-    "Hierarchy operations return only relationships authorized for the authenticated account or operator.",
+    "Hierarchy operations return only relationships authorized for the authenticated account or hierarchy manager.",
   Referrals:
     "Referral operations use the live referral graph and preserve attribution and authorization rules.",
   Earnings:

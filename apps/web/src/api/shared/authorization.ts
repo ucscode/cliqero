@@ -15,6 +15,7 @@ export class ApiAuthorizer {
   authorize(
     principal: ApiPrincipal | null,
     policy: AccessPolicy,
+    // Anonymous principals do not distinguish absent credentials from invalid bearer credentials.
     hasAuthorizationHeader = false,
   ): "unauthorized" | "forbidden" | null {
     if (policy.mode === "deny") return "forbidden";

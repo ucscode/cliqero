@@ -1,16 +1,26 @@
 import { z } from "zod";
-import { apiError } from "../../../http";
+import { apiError, authenticatedPrincipal } from "../../../http";
 import { authorizeListingIntegration } from "../../integrations/access";
+import { getContainer, type ApplicationContainer } from "@/infrastructure/container";
 
 const bodySchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ listingId: string }> },
+  {
+    params,
+    container,
+  }: { params: Promise<{ listingId: string }>; container?: ApplicationContainer },
 ) {
   try {
     const { listingId } = await params;
-    const result = await authorizeListingIntegration(request, listingId);
+    const currentContainer = container ?? getContainer();
+    const result = await authorizeListingIntegration(
+      await authenticatedPrincipal(request, currentContainer),
+      currentContainer,
+      request,
+      listingId,
+    );
     if ("response" in result) return result.response;
     return Response.json({ items: await result.container.integrations.listForListing(listingId) });
   } catch (error) {
@@ -20,11 +30,20 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ listingId: string }> },
+  {
+    params,
+    container,
+  }: { params: Promise<{ listingId: string }>; container?: ApplicationContainer },
 ) {
   try {
     const { listingId } = await params;
-    const result = await authorizeListingIntegration(request, listingId);
+    const currentContainer = container ?? getContainer();
+    const result = await authorizeListingIntegration(
+      await authenticatedPrincipal(request, currentContainer),
+      currentContainer,
+      request,
+      listingId,
+    );
     if ("response" in result) return result.response;
     const { name } = bodySchema.parse(await request.json());
     const created = await result.container.database.transaction(() =>

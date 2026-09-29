@@ -23,7 +23,7 @@ const patchSchema = z
     (value) => value.name !== undefined || value.slug !== undefined,
     "Provide a name or slug.",
   );
-const categoryId = z.object({ id: listingCategoryIdSchema });
+const categoryId = z.object({ categoryId: listingCategoryIdSchema });
 
 function respondError(c: Parameters<typeof domainError>[0], error: unknown) {
   if (error instanceof ListingCategoryConflictError)
@@ -113,7 +113,7 @@ export function registerCatalogueCategoryRoutes(
   app.openapi(
     createRoute({
       method: "get",
-      path: "/api/catalogue/categories/{id}",
+      path: "/api/catalogue/categories/{categoryId}",
       request: { params: categoryId },
       responses: {
         200: {
@@ -137,7 +137,7 @@ export function registerCatalogueCategoryRoutes(
       const denied = requireCapabilityScope(c, principal, "catalogue.manage", "catalogue:manage");
       if (denied) return denied;
       try {
-        return c.json(await container.listingCategories.get(c.req.valid("param").id), 200);
+        return c.json(await container.listingCategories.get(c.req.valid("param").categoryId), 200);
       } catch (error) {
         if (error instanceof ListingCategoryNotFoundError)
           return c.json({ error: error.message, code: "not_found" }, 404);
@@ -149,7 +149,7 @@ export function registerCatalogueCategoryRoutes(
   app.openapi(
     createRoute({
       method: "patch",
-      path: "/api/catalogue/categories/{id}",
+      path: "/api/catalogue/categories/{categoryId}",
       request: {
         params: categoryId,
         body: { content: { "application/json": { schema: patchSchema } } },
@@ -181,7 +181,10 @@ export function registerCatalogueCategoryRoutes(
       if (denied) return denied;
       try {
         return c.json(
-          await container.listingCategories.update(c.req.valid("param").id, c.req.valid("json")),
+          await container.listingCategories.update(
+            c.req.valid("param").categoryId,
+            c.req.valid("json"),
+          ),
           200,
         );
       } catch (error) {
@@ -193,7 +196,7 @@ export function registerCatalogueCategoryRoutes(
   app.openapi(
     createRoute({
       method: "delete",
-      path: "/api/catalogue/categories/{id}",
+      path: "/api/catalogue/categories/{categoryId}",
       request: { params: categoryId },
       responses: {
         204: { description: "Category deleted" },
@@ -218,7 +221,7 @@ export function registerCatalogueCategoryRoutes(
       const denied = requireCapabilityScope(c, principal, "catalogue.manage", "catalogue:manage");
       if (denied) return denied;
       try {
-        await container.listingCategories.delete(c.req.valid("param").id);
+        await container.listingCategories.delete(c.req.valid("param").categoryId);
         return c.body(null, 204);
       } catch (error) {
         return respondError(c, error);

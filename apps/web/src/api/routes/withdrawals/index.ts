@@ -40,7 +40,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       request: { query: operatorWithdrawalQuery },
       responses: {
         200: {
-          description: "Bounded operator withdrawal inspection",
+          description: "Bounded withdrawal administration view",
           content: {
             "application/json": {
               schema: z.object({
@@ -55,7 +55,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Withdrawal management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -92,7 +92,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       request: { params: z.object({ withdrawalId: z.string().uuid() }) },
       responses: {
         200: {
-          description: "Safe operator withdrawal detail",
+          description: "Safe withdrawal administration detail",
           content: { "application/json": { schema: operatorWithdrawalDetailSchema } },
         },
         401: {
@@ -100,7 +100,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Withdrawal management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
         404: {
@@ -117,7 +117,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
         (p.kind === "user_session" || p.scopes.has("withdrawals:manage"));
       if (!canManage)
         return (await getOwnedWithdrawal(c.req.raw, {
-          params: Promise.resolve({ id: c.req.valid("param").withdrawalId }),
+          params: Promise.resolve({ withdrawalId: c.req.valid("param").withdrawalId }),
         })) as never;
       const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;
@@ -159,7 +159,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Withdrawal management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -170,7 +170,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       const body = c.req.valid("json");
       if (body.status === "cancelled")
         return (await cancelOwnedWithdrawal(c.req.raw, {
-          params: Promise.resolve({ id: c.req.valid("param").withdrawalId }),
+          params: Promise.resolve({ withdrawalId: c.req.valid("param").withdrawalId }),
         })) as never;
       const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;

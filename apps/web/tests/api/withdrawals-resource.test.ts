@@ -191,7 +191,7 @@ describe("owner withdrawal resource mutation", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status: "cancelled" }),
       }),
-      { params: Promise.resolve({ id: withdrawal.id }) },
+      { params: Promise.resolve({ withdrawalId: withdrawal.id }) },
     );
 
     expect(response.status).toBe(200);
@@ -220,7 +220,7 @@ describe("owner withdrawal resource mutation", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status: "cancelled" }),
       }),
-      { params: Promise.resolve({ id: withdrawal.id }) },
+      { params: Promise.resolve({ withdrawalId: withdrawal.id }) },
     );
 
     expect(response.status).toBe(403);

@@ -67,7 +67,7 @@ reserving available earnings atomically. Customer withdrawal history exposes
 only method/name identity, not bank or wallet fields. Completed reservations
 remain consumed by the withdrawable projection; released reservations become
 available again. User cancellation is offered only while a request is still
-`requested` and uses `PATCH /api/withdrawals/:id` with
+`requested` and uses `PATCH /api/withdrawals/{withdrawalId}` with
 `{ "status": "cancelled" }`.
 
 The Withdrawals dashboard displays only the five most recent requests as a
@@ -80,13 +80,13 @@ history into the browser.
 
 An approved withdrawal is paid manually outside Cliqero. The operator then
 records the already-sent payment, optional external reference, and note through
-`PATCH /api/withdrawals/:id`. This updates the withdrawal and completes
+`PATCH /api/withdrawals/{withdrawalId}`. This updates the withdrawal and completes
 its reservation in one transaction. External automation can use the same API;
 Cliqero itself does not call an outbound payout provider.
 
 `GET /api/withdrawal-methods` returns enabled methods eligible for the
 authenticated account country. `GET/POST /api/withdrawal-destinations` and
-`GET/PATCH /api/withdrawal-destinations/:id` manage only that account's saved
+`GET/PATCH /api/withdrawal-destinations/{destinationId}` manage only that account's saved
 destinations. A PATCH with `{ "status": "archived" }` is the supported Remove
 operation; there is no archive command URL or hard-delete UI.
 

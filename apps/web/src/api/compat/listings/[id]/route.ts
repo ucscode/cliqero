@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, authenticatedAccount } from "../../http";
+import { apiError, authenticatedAccount, authenticatedPrincipal } from "../../http";
 import { getContainer } from "@/infrastructure/container";
 import { ownerListingView, listingWithMediaView } from "@/application/listing/service";
 import { apiAuthorizer } from "@/api/shared/authorization";
@@ -23,12 +23,15 @@ const listingSchema = z
   })
   .partial()
   .strict();
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const id = (await params).id;
-  if (!z.uuid().safeParse(id).success)
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ listingId: string }> },
+) {
+  const listingId = (await params).listingId;
+  if (!z.uuid().safeParse(listingId).success)
     return Response.json({ error: "Not found" }, { status: 404 });
   const c = getContainer();
-  const principal = await c.principalResolver.resolve(request);
+  const principal = await authenticatedPrincipal(request);
   const managementFailure = apiAuthorizer.authorize(
     principal,
     { mode: "account", capability: "catalogue.manage", scope: "catalogue:manage" },
@@ -36,11 +39,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   );
   if (!managementFailure) {
     try {
-      const listing = await c.listingService.getCatalogue(id);
+      const listing = await c.listingService.getCatalogue(listingId);
       return Response.json(
         listingWithMediaView(
           listing,
-          await c.listingMediaRepository.listByListing(id),
+          await c.listingMediaRepository.listByListing(listingId),
           c.listingMedia,
           true,
           (await c.listingReviews.summariesForListings([listing.id])).get(listing.id) ?? null,
@@ -53,11 +56,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const account = await authenticatedAccount(request);
   if (account) {
     try {
-      const listing = await c.listingService.getOwner(account, id);
+      const listing = await c.listingService.getOwner(account, listingId);
       return Response.json(
         listingWithMediaView(
           listing,
-          await c.listingMediaRepository.listByListing(id),
+          await c.listingMediaRepository.listByListing(listingId),
           c.listingMedia,
           true,
           (await c.listingReviews.summariesForListings([listing.id])).get(listing.id) ?? null,
@@ -68,14 +71,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
   }
   const listing = await c.listingService.getAvailableTo(
-    id,
+    listingId,
     account ? { kind: "authenticated" } : { kind: "anonymous" },
   );
   return listing
     ? Response.json(
         listingWithMediaView(
           listing,
-          await c.listingMediaRepository.listByListing(id),
+          await c.listingMediaRepository.listByListing(listingId),
           c.listingMedia,
           false,
           (await c.listingReviews.summariesForListings([listing.id])).get(listing.id) ?? null,
@@ -87,7 +90,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         { status: 404, headers: { "Cache-Control": "private, no-store, max-age=0" } },
       );
 }
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ listingId: string }> },
+) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
@@ -100,7 +106,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ownerListingView(
           await getContainer().listingService.setCatalogueState(
             account,
-            (await params).id,
+            (await params).listingId,
             body.state,
           ),
         ),
@@ -108,7 +114,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     const listing = await getContainer().listingService.updateCatalogue(
       account,
-      (await params).id,
+      (await params).listingId,
       {
         title: body.title,
         shortDescription: body.short_description,

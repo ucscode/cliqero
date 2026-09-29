@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, authenticatedAccount } from "../http";
+import { apiError, authenticatedAccount, authenticatedPrincipal } from "../http";
 import { getContainer } from "@/infrastructure/container";
 import { listingWithMediaView } from "@/application/listing/service";
 import { loadStorefrontConfiguration } from "@/config/storefront";
@@ -68,7 +68,7 @@ export async function GET(
 ) {
   const c = context?.container ?? getContainer();
   const url = new URL(request.url);
-  const principal = await c.principalResolver.resolve(request);
+  const principal = await authenticatedPrincipal(request, c);
   const storefrontConfig = loadStorefrontConfiguration();
   const configuredLimit =
     url.searchParams.get("featured") === "true"

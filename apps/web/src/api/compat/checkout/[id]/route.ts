@@ -1,10 +1,10 @@
 import { authenticatedAccount, apiError } from "../../http";
 import { getContainer } from "@/infrastructure/container";
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ checkoutId: string }> }) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const c = await getContainer().checkoutRepository.findById((await context.params).id);
+    const c = await getContainer().checkoutRepository.findById((await context.params).checkoutId);
     if (!c || c.buyerId !== account.id)
       return Response.json({ error: "Checkout not found" }, { status: 404 });
     return Response.json({

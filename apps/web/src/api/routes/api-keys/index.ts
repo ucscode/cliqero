@@ -27,7 +27,7 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
       expires_at: z.string().nullable(),
     });
   const operatorKeyParams = z.object({ accountId: z.string().uuid() });
-  const operatorKeyIdParams = operatorKeyParams.extend({ id: z.string().uuid() });
+  const operatorKeyIdParams = operatorKeyParams.extend({ apiKeyId: z.string().uuid() });
   app.openapi(
     createRoute({
       method: "get",
@@ -148,7 +148,7 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/accounts/{accountId}/api-keys/{id}/revoke",
+      path: "/api/accounts/{accountId}/api-keys/{apiKeyId}/revoke",
       request: { params: operatorKeyIdParams },
       responses: {
         200: {
@@ -178,7 +178,7 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
         const result = await container.operatorApiKeys.revoke(
           p.accountId,
           c.req.valid("param").accountId,
-          c.req.valid("param").id,
+          c.req.valid("param").apiKeyId,
         );
         return c.json({ changed: result.changed }, 200);
       } catch (error) {

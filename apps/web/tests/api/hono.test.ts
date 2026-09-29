@@ -7,6 +7,8 @@ import {
   getLegacyRouteAccess,
   legacyApiPaths,
 } from "@/api/legacy-dispatch";
+import { legacyRoutes } from "@/api/compat/dispatch/routes";
+import { authenticatedAccount, authenticatedPrincipal } from "@/api/http";
 
 function appWith(
   principal: any = null,
@@ -18,6 +20,7 @@ function appWith(
   blogOverrides: Record<string, unknown> = {},
   categoryOverrides: Record<string, unknown> = {},
   reviewOverrides: Record<string, unknown> = {},
+  principalResolverOverride?: { resolve: (request: Request) => Promise<any> },
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
   const resolvedPrincipal = principal ?? {
@@ -29,7 +32,7 @@ function appWith(
   };
   return createApiApp(
     {
-      principalResolver: { resolve: async () => resolvedPrincipal },
+      principalResolver: principalResolverOverride ?? { resolve: async () => resolvedPrincipal },
       profiles: {
         get: async () => ({
           email: "operator@example.com",
@@ -289,15 +292,22 @@ function appWith(
         visible: async () => ({ items: [], nextCursor: null }),
         mine: async () => null,
         submit: async () => ({}),
+        summariesForListings: async () => new Map(),
         operatorQueue: async () => ({ items: [], nextCursor: null }),
         moderate: async () => ({}),
         ...reviewOverrides,
       },
       listingService: {
+        queryCatalogue: async () => ({ items: [], nextCursor: null }),
+        queryStorefront: async () => ({ items: [], nextCursor: null }),
+        getOwner: async (_account: unknown, id: string) => ({ id }),
+        getCatalogue: async (id: string) => ({ id }),
         setCatalogueState: vi.fn(async (_account: unknown, _id: string, state: string) => ({
           state,
         })),
       },
+      integrations: { listForListing: async () => [] },
+      listingMediaRepository: { listByListings: async () => new Map() },
       listingCategories: {
         list: async () => [],
         get: async (id: string) => ({ id, name: "Toolkit", slug: "toolkit" }),
@@ -342,6 +352,125 @@ function appWith(
   );
 }
 describe("Hono API foundation", () => {
+  it("resolves one principal per Hono request across native and compatibility routes", async () => {
+    const session = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session" as const,
+      capabilities: ["catalogue.manage", "accounts.read", "finance.read"],
+      scopes: new Set<string>(),
+    };
+    const cases = [
+      ["compat listing collection", "/api/listings?state=all"],
+      [
+        "compat listing integrations",
+        "/api/listings/00000000-0000-4000-8000-000000000003/integrations",
+      ],
+      ["account collection", "/api/accounts"],
+      ["payments collection", "/api/payments"],
+      ["withdrawal collection", "/api/withdrawals"],
+    ] as const;
+
+    for (const [label, path] of cases) {
+      const resolve = vi.fn(async () => session);
+      const response = await appWith(
+        session,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { resolve },
+      ).fetch(new Request(`http://localhost${path}`));
+      expect(response.status, label).toBe(200);
+      expect(resolve, label).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("preserves listing-owner and catalogue-manager integration access", async () => {
+    const listingId = "00000000-0000-4000-8000-000000000003";
+    const path = `http://localhost/api/listings/${listingId}/integrations`;
+    const owner = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session" as const,
+      capabilities: [],
+      scopes: new Set<string>(),
+    };
+    const ownerResolve = vi.fn(async () => owner);
+    const ownerResponse = await appWith(
+      owner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { resolve: ownerResolve },
+    ).fetch(new Request(path));
+    expect(ownerResponse.status).toBe(200);
+    expect(await ownerResponse.json()).toEqual({ items: [] });
+    expect(ownerResolve).toHaveBeenCalledTimes(1);
+
+    const manager = { ...owner, capabilities: ["catalogue.manage"] };
+    const managerResolve = vi.fn(async () => manager);
+    const managerResponse = await appWith(
+      manager,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { resolve: managerResolve },
+    ).fetch(new Request(path));
+    expect(managerResponse.status).toBe(200);
+    expect(await managerResponse.json()).toEqual({ items: [] });
+    expect(managerResolve).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the middleware-resolved principal into compatibility handlers", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session" as const,
+      capabilities: [],
+      scopes: new Set<string>(),
+    };
+    const route = {
+      pattern: "/api/test/principal-context",
+      module: {
+        GET: async (request: Request) => {
+          const resolved = await authenticatedPrincipal(request);
+          const account = await authenticatedAccount(request);
+          return Response.json({
+            accountId: resolved.accountId,
+            authenticatedAccountId: account?.id,
+          });
+        },
+      },
+    };
+    const resolve = vi.fn(async () => principal);
+    legacyRoutes.push(route);
+    try {
+      const response = await appWith(
+        principal,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { resolve },
+      ).fetch(new Request("http://localhost/api/test/principal-context"));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        accountId: principal.accountId,
+        authenticatedAccountId: principal.accountId,
+      });
+      expect(resolve).toHaveBeenCalledTimes(1);
+    } finally {
+      legacyRoutes.splice(legacyRoutes.indexOf(route), 1);
+    }
+  });
+
   it("exposes reconciliation through the provider-neutral payment API", async () => {
     const operator = {
       accountId: "00000000-0000-4000-8000-000000000001",
@@ -684,18 +813,18 @@ describe("Hono API foundation", () => {
     expect(paths["/api/listings"]).toBeDefined();
     expect(paths["/api/wallet"]).toBeDefined();
     expect(paths["/api/openapi.json"]).toBeUndefined();
-    expect(paths["/api/wallet/fund/{id}/transaction"].post).toMatchObject({
+    expect(paths["/api/wallet/fund/{fundingId}/transaction"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "wallet:fund",
       security: [{ CliqeroApiKey: [] }],
     });
-    expect(paths["/api/wallet/fund/{id}/transaction"].post.description ?? "").not.toContain(
+    expect(paths["/api/wallet/fund/{fundingId}/transaction"].post.description ?? "").not.toContain(
       "Authentication:",
     );
     expect(paths["/api/treasury/entries"]).toBeDefined();
     expect(paths["/api/api-keys"]).toBeUndefined();
     expect(paths["/api/accounts/{accountId}/api-keys"]).toBeDefined();
-    expect(paths["/api/accounts/{accountId}/api-keys/{id}/revoke"]).toBeDefined();
+    expect(paths["/api/accounts/{accountId}/api-keys/{apiKeyId}/revoke"]).toBeDefined();
     expect(paths["/api/api-keys"]).toBeUndefined();
     expect(paths["/api/api-keys/{id}/revoke"]).toBeUndefined();
     expect(paths["/api/me/access"]).toBeDefined();
@@ -747,11 +876,10 @@ describe("Hono API foundation", () => {
     expect(paths["/api/funding/{fundingId}"]).toBeDefined();
     expect(paths["/api/funding/{fundingId}/confirm-bank-transfer"]).toBeDefined();
     expect(paths["/api/listings"]).toBeDefined();
-    expect(paths["/api/listings/{id}"]).toBeDefined();
-    expect(paths["/api/listings/{id}"].patch).toBeDefined();
-    expect(paths["/api/listings/{id}/publish"]).toBeUndefined();
-    expect(paths["/api/listings/{id}/restore"]).toBeUndefined();
-    expect(paths["/api/listings/{id}/integrations"]).toBeUndefined();
+    expect(paths["/api/listings/{listingId}"]).toBeDefined();
+    expect(paths["/api/listings/{listingId}"].patch).toBeDefined();
+    expect(paths["/api/listings/{listingId}/publish"]).toBeUndefined();
+    expect(paths["/api/listings/{listingId}/restore"]).toBeUndefined();
     expect(paths["/api/listings/{listingId}/integrations"]).toBeDefined();
     expect(paths["/api/listings/{listingId}/integrations/{integrationId}/rotate"]).toBeDefined();
     expect(paths["/api/listings/{listingId}/integrations"].get.tags).toEqual(["Integrations"]);
@@ -765,6 +893,31 @@ describe("Hono API foundation", () => {
       "listing",
     );
     expect(paths["/api/listings/{listingId}/integrations/{integrationId}"].patch).toBeDefined();
+    expect(paths["/api/blog/posts/{postId}"]).toMatchObject({
+      get: expect.any(Object),
+      patch: expect.any(Object),
+      delete: expect.any(Object),
+    });
+    expect(paths["/api/withdrawals/{withdrawalId}"]).toMatchObject({
+      get: expect.any(Object),
+      patch: expect.any(Object),
+    });
+    expect(paths["/api/treasury/entries/{entryId}"].get).toBeDefined();
+    expect(paths["/api/catalogue/categories/{categoryId}"]).toBeDefined();
+    expect(paths["/api/package/entitlements/{entitlementId}"]).toBeDefined();
+    const normalizedPath = (path: string) => path.replace(/\{[^}]+\}/g, "{}");
+    const normalizedPaths = Object.keys(paths).map(normalizedPath);
+    expect(normalizedPaths).toHaveLength(new Set(normalizedPaths).size);
+    for (const [path, operations] of Object.entries(paths)) {
+      const expected = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]);
+      for (const operation of Object.values(operations)) {
+        const actual = ((operation.parameters ?? []) as { in: string; name: string }[])
+          .filter((parameter) => parameter.in === "path")
+          .map((parameter) => parameter.name)
+          .sort();
+        expect(actual, `path parameter names for ${path}`).toEqual([...expected].sort());
+      }
+    }
     expect(
       paths["/api/listings/{listingId}/integrations/{integrationId}/rotate"].post,
     ).toBeDefined();
@@ -818,7 +971,7 @@ describe("Hono API foundation", () => {
         "x-required-api-scope": "catalogue:manage",
       },
     });
-    expect(paths["/api/catalogue/categories/{id}"]).toMatchObject({
+    expect(paths["/api/catalogue/categories/{categoryId}"]).toMatchObject({
       get: { "x-required-api-scope": "catalogue:manage" },
       patch: { "x-required-api-scope": "catalogue:manage" },
       delete: { "x-required-api-scope": "catalogue:manage" },
@@ -862,10 +1015,10 @@ describe("Hono API foundation", () => {
       paths["/api/blog/posts"].get.responses["200"].content["application/json"].schema;
     expect(JSON.stringify(operatorPost)).toContain("categories");
     expect(JSON.stringify(operatorPost)).not.toContain("revisionId");
-    expect(paths["/api/blog/posts/{id}/publish"]).toBeUndefined();
-    expect(paths["/api/blog/posts/{id}/unpublish"]).toBeUndefined();
-    expect(paths["/api/listings/{id}/publish"]).toBeUndefined();
-    expect(paths["/api/listings/{id}/restore"]).toBeUndefined();
+    expect(paths["/api/blog/posts/{postId}/publish"]).toBeUndefined();
+    expect(paths["/api/blog/posts/{postId}/unpublish"]).toBeUndefined();
+    expect(paths["/api/listings/{listingId}/publish"]).toBeUndefined();
+    expect(paths["/api/listings/{listingId}/restore"]).toBeUndefined();
     expect(paths["/api/reviews/{reviewId}/approve"]).toBeUndefined();
     expect(paths["/api/reviews/{reviewId}/reject"]).toBeUndefined();
     expect(paths["/api/gateway"]).toBeUndefined();

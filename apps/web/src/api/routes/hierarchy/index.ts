@@ -37,7 +37,7 @@ export function registerHierarchyRoutes(app: OpenAPIHono<Env>, container: Applic
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Hierarchy management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
       },

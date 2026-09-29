@@ -2,7 +2,10 @@ import { apiError, authenticatedPrincipal } from "../../http";
 import { getContainer } from "@/infrastructure/container";
 import { presentWithdrawal } from "../presentation";
 import { z } from "zod";
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ withdrawalId: string }> },
+) {
   const principal = await authenticatedPrincipal(request);
   if (principal.kind === "anonymous")
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -11,14 +14,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     return Response.json(
       presentWithdrawal(
-        await getContainer().withdrawals.get(principal.accountId, (await params).id),
+        await getContainer().withdrawals.get(principal.accountId, (await params).withdrawalId),
       ),
     );
   } catch (error) {
     return apiError(error);
   }
 }
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ withdrawalId: string }> },
+) {
   const principal = await authenticatedPrincipal(request);
   if (principal.kind === "anonymous")
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -30,7 +36,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .parse(await request.json());
     return Response.json(
       presentWithdrawal(
-        await getContainer().withdrawals.cancel(principal.accountId, (await params).id),
+        await getContainer().withdrawals.cancel(principal.accountId, (await params).withdrawalId),
       ),
     );
   } catch (error) {

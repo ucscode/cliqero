@@ -45,7 +45,7 @@ describe("bank-transfer evidence API", () => {
         method: "POST",
         body,
       }),
-      { params: Promise.resolve({ id: fundingId }) },
+      { params: Promise.resolve({ fundingId }) },
     );
 
     expect(response.status).toBe(201);
@@ -94,7 +94,7 @@ describe("bank-transfer evidence API", () => {
         method: "POST",
         body,
       }),
-      { params: Promise.resolve({ id: fundingId }) },
+      { params: Promise.resolve({ fundingId }) },
     );
 
     expect(response.status).toBe(201);
@@ -138,7 +138,7 @@ describe("bank-transfer evidence API", () => {
         method: "POST",
         body,
       }),
-      { params: Promise.resolve({ id: fundingId }) },
+      { params: Promise.resolve({ fundingId }) },
     );
 
     expect(response.status).toBe(201);
@@ -168,7 +168,7 @@ describe("bank-transfer evidence API", () => {
         method: "POST",
         body,
       }),
-      { params: Promise.resolve({ id: fundingId }) },
+      { params: Promise.resolve({ fundingId }) },
     );
 
     expect(response.status).toBe(400);

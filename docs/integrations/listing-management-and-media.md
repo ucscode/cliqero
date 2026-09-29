@@ -22,10 +22,10 @@ Wallet transactions, funding, purchases, checkouts, distributions, ledger entrie
 - `POST /api/listings` creates a draft.
 - `GET /api/listings` returns published public projections with `search`, `cursor`, and `limit`.
 - `GET /api/me/listings` returns the authenticated owner's drafts, published, and archived listings; it additionally supports `state`.
-- `PATCH /api/listings/{id}` updates listing fields and accepts a validated
+- `PATCH /api/listings/{listingId}` updates listing fields and accepts a validated
   lifecycle `state` transition such as publishing or archiving. Restore changes
   `archived` back to `draft` through the same resource route.
-- Listing lifecycle changes use `PATCH /api/listings/{id}` with a validated
+- Listing lifecycle changes use `PATCH /api/listings/{listingId}` with a validated
   `state` value. Listing integrations are managed under
   `/api/listings/{listingId}/integrations`; the listing owner is verified for
   every operation. Credential rotation remains a command because it generates

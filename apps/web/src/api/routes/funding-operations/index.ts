@@ -32,7 +32,7 @@ export function registerFundingOperationsRoutes(
       request: { query: operatorFundingQuery },
       responses: {
         200: {
-          description: "Bounded operator funding inspection",
+          description: "Bounded funding administration view",
           content: {
             "application/json": {
               schema: z.object({
@@ -47,7 +47,7 @@ export function registerFundingOperationsRoutes(
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Funding management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -71,7 +71,7 @@ export function registerFundingOperationsRoutes(
       request: { params: z.object({ fundingId: z.string().uuid() }) },
       responses: {
         200: {
-          description: "Safe operator funding detail",
+          description: "Safe funding administration detail",
           content: { "application/json": { schema: operatorFundingDetailSchema } },
         },
         401: {
@@ -79,7 +79,7 @@ export function registerFundingOperationsRoutes(
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Funding management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
         404: {

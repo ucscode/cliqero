@@ -2,6 +2,7 @@ import { legacyRoutes } from "./compat/dispatch/routes";
 import type { ApiPrincipal } from "@/modules/identity/api/principal";
 import { apiAuthorizer, type AccessPolicy } from "./shared/authorization";
 import type { ApplicationContainer } from "@/infrastructure/container";
+import { withRequestPrincipal } from "./shared/request-principal";
 
 type RouteContext = {
   params: Promise<Record<string, string>>;
@@ -11,10 +12,10 @@ type Handler = (request: Request, context?: RouteContext) => Response | Promise<
 export type LegacyRouteAccess = AccessPolicy;
 
 const publicMethods = new Set(["GET"]);
-const publicPaths = new Set(["/api/health", "/api/listings", "/api/listings/:id"]);
+const publicPaths = new Set(["/api/health", "/api/listings", "/api/listings/:listingId"]);
 const sessionOnlyPaths = new Set([
   "/api/funding/development/verify",
-  "/api/listings/:id/access",
+  "/api/listings/:listingId/access",
   "/api/me/onboarding",
   "/api/me/profile",
 ]);
@@ -47,9 +48,9 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
     return { mode: "account", scope: "payments:manage", capability: "finance.manage" };
   if (pattern === "/api/distribution-policy")
     return { mode: "account", scope: "payments:read", capability: "finance.read" };
-  if (pattern === "/api/listings/:id/referral-url")
+  if (pattern === "/api/listings/:listingId/referral-url")
     return { mode: "session_only", apiKey: "reject" };
-  if (pattern === "/api/listings" || pattern === "/api/listings/:id")
+  if (pattern === "/api/listings" || pattern === "/api/listings/:listingId")
     return method === "GET"
       ? { mode: "account", scope: "catalogue:read" }
       : { mode: "account", scope: "catalogue:manage", capability: "catalogue.manage" };
@@ -60,18 +61,22 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
   if (pattern === "/api/wallet/transactions") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/funding/prepare") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/wallet/funding") return { mode: "account", scope: "wallet:read" };
-  if (pattern === "/api/wallet/fund/:id") return { mode: "account", scope: "wallet:read" };
-  if (pattern === "/api/wallet/fund/:id/cancel") return { mode: "account", scope: "wallet:fund" };
-  if (pattern === "/api/wallet/fund/:id/evidence") return { mode: "account", scope: "wallet:fund" };
-  if (pattern === "/api/wallet/fund/:id/initialize")
+  if (pattern === "/api/wallet/fund/:fundingId") return { mode: "account", scope: "wallet:read" };
+  if (pattern === "/api/wallet/fund/:fundingId/cancel")
     return { mode: "account", scope: "wallet:fund" };
-  if (pattern === "/api/wallet/fund/:id/transaction")
+  if (pattern === "/api/wallet/fund/:fundingId/evidence")
     return { mode: "account", scope: "wallet:fund" };
-  if (pattern === "/api/wallet/fund/:id/verify") return { mode: "account", scope: "wallet:fund" };
+  if (pattern === "/api/wallet/fund/:fundingId/initialize")
+    return { mode: "account", scope: "wallet:fund" };
+  if (pattern === "/api/wallet/fund/:fundingId/transaction")
+    return { mode: "account", scope: "wallet:fund" };
+  if (pattern === "/api/wallet/fund/:fundingId/verify")
+    return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/wallet/fund") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/checkout") return { mode: "account", scope: "checkout:create" };
-  if (pattern === "/api/checkout/:id/pay") return { mode: "account", scope: "checkout:create" };
-  if (pattern === "/api/checkout/:id" || pattern.startsWith("/api/purchases"))
+  if (pattern === "/api/checkout/:checkoutId/pay")
+    return { mode: "account", scope: "checkout:create" };
+  if (pattern === "/api/checkout/:checkoutId" || pattern.startsWith("/api/purchases"))
     return { mode: "account", scope: "purchases:read" };
   if (pattern.startsWith("/api/referrals/"))
     return {
@@ -83,14 +88,14 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
   if (pattern === "/api/withdrawal-methods") return { mode: "account", scope: "withdrawals:read" };
   if (pattern === "/api/withdrawal-destinations")
     return { mode: "account", scope: method === "GET" ? "withdrawals:read" : "withdrawals:create" };
-  if (pattern === "/api/withdrawal-destinations/:id")
+  if (pattern === "/api/withdrawal-destinations/:destinationId")
     return {
       mode: "account",
       scope: method === "PATCH" ? "withdrawals:create" : "withdrawals:read",
     };
   if (pattern === "/api/withdrawals")
     return { mode: "account", scope: method === "GET" ? "withdrawals:read" : "withdrawals:create" };
-  if (pattern === "/api/withdrawals/:id")
+  if (pattern === "/api/withdrawals/:withdrawalId")
     return {
       mode: "account",
       scope: method === "PATCH" ? "withdrawals:create" : "withdrawals:read",
@@ -166,7 +171,8 @@ export async function dispatchLegacyApi(
       );
     const denied = authorizeLegacyRequest(request, principal, access);
     if (denied) return denied;
-    return handler(request, { params: Promise.resolve(params), container });
+    const invoke = async () => handler(request, { params: Promise.resolve(params), container });
+    return principal ? withRequestPrincipal(request, principal, invoke) : invoke();
   }
   return null;
 }

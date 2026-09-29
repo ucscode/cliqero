@@ -1,16 +1,29 @@
 import { z } from "zod";
-import { apiError } from "../../../../http";
+import { apiError, authenticatedPrincipal } from "../../../../http";
 import { authorizeListingIntegration } from "../../../integrations/access";
+import { getContainer, type ApplicationContainer } from "@/infrastructure/container";
 
 const schema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ listingId: string; integrationId: string }> },
+  {
+    params,
+    container,
+  }: {
+    params: Promise<{ listingId: string; integrationId: string }>;
+    container?: ApplicationContainer;
+  },
 ) {
   try {
     const values = await params;
-    const result = await authorizeListingIntegration(request, values.listingId);
+    const currentContainer = container ?? getContainer();
+    const result = await authorizeListingIntegration(
+      await authenticatedPrincipal(request, currentContainer),
+      currentContainer,
+      request,
+      values.listingId,
+    );
     if ("response" in result) return result.response;
     if (result.access === "manager") {
       const integration = (
@@ -33,11 +46,23 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ listingId: string; integrationId: string }> },
+  {
+    params,
+    container,
+  }: {
+    params: Promise<{ listingId: string; integrationId: string }>;
+    container?: ApplicationContainer;
+  },
 ) {
   try {
     const values = await params;
-    const result = await authorizeListingIntegration(request, values.listingId);
+    const currentContainer = container ?? getContainer();
+    const result = await authorizeListingIntegration(
+      await authenticatedPrincipal(request, currentContainer),
+      currentContainer,
+      request,
+      values.listingId,
+    );
     if ("response" in result) return result.response;
     if (result.access !== "owner")
       return Response.json({ error: "Forbidden", code: "forbidden" }, { status: 403 });
@@ -62,11 +87,23 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: Promise<{ listingId: string; integrationId: string }> },
+  {
+    params,
+    container,
+  }: {
+    params: Promise<{ listingId: string; integrationId: string }>;
+    container?: ApplicationContainer;
+  },
 ) {
   try {
     const values = await params;
-    const result = await authorizeListingIntegration(request, values.listingId);
+    const currentContainer = container ?? getContainer();
+    const result = await authorizeListingIntegration(
+      await authenticatedPrincipal(request, currentContainer),
+      currentContainer,
+      request,
+      values.listingId,
+    );
     if ("response" in result) return result.response;
     if (result.access === "manager")
       return Response.json(

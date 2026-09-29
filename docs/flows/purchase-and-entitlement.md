@@ -108,8 +108,8 @@ Destination integrations may manage an entitlement they are authorized to
 verify through the listing-scoped package API:
 
 ```http
-GET /api/package/entitlements/{id}
-PATCH /api/package/entitlements/{id}
+GET /api/package/entitlements/{entitlementId}
+PATCH /api/package/entitlements/{entitlementId}
 Authorization: Bearer <integration-credential>
 ```
 

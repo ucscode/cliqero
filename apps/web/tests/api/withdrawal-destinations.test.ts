@@ -98,7 +98,7 @@ describe("withdrawal destination resources", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status: "archived" }),
       }),
-      { params: Promise.resolve({ id: "x" }) },
+      { params: Promise.resolve({ destinationId: "x" }) },
     );
     expect(response.status).toBe(403);
     expect(apiKey.update).not.toHaveBeenCalled();

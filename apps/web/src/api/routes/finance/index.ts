@@ -24,7 +24,7 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
       request: { query: operatorDistributionQuery },
       responses: {
         200: {
-          description: "Bounded operator distribution inspection",
+          description: "Bounded distribution administration view",
           content: {
             "application/json": {
               schema: z.object({
@@ -39,7 +39,7 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Finance read permission required",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -63,7 +63,7 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
       request: { params: z.object({ distributionId: z.string().uuid() }) },
       responses: {
         200: {
-          description: "Safe operator distribution detail",
+          description: "Safe distribution administration detail",
           content: { "application/json": { schema: operatorDistributionDetailSchema } },
         },
         401: {
@@ -71,7 +71,7 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Finance read permission required",
           content: { "application/json": { schema: errorSchema } },
         },
         404: {
@@ -108,7 +108,7 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
       request: { query: operatorEarningsQuery },
       responses: {
         200: {
-          description: "Bounded operator earnings ledger inspection",
+          description: "Bounded earnings administration view",
           content: {
             "application/json": {
               schema: z.object({
@@ -128,7 +128,7 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Finance read permission required",
           content: { "application/json": { schema: errorSchema } },
         },
       },

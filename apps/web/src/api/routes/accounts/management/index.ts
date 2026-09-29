@@ -139,7 +139,7 @@ export function registerAccountManagementRoutes(
       request: { query: accountListQuery },
       responses: {
         200: {
-          description: "Bounded operator account search",
+          description: "Bounded account administration search",
           content: {
             "application/json": {
               schema: z.object({
@@ -158,7 +158,7 @@ export function registerAccountManagementRoutes(
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Account administration permission required",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -186,7 +186,7 @@ export function registerAccountManagementRoutes(
       request: { params: z.object({ accountId: z.string().uuid() }) },
       responses: {
         200: {
-          description: "Safe operator account projection",
+          description: "Safe account administration projection",
           content: { "application/json": { schema: operatorAccountDetailSchema } },
         },
         400: {
@@ -198,7 +198,7 @@ export function registerAccountManagementRoutes(
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Account administration permission required",
           content: { "application/json": { schema: errorSchema } },
         },
         404: {

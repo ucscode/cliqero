@@ -4,7 +4,7 @@ import { validationErrorPayload } from "@/api/error";
 import { getContainer } from "@/infrastructure/container";
 
 const valuesSchema = z.record(z.string(), z.string());
-const paramsSchema = z.object({ id: z.string().uuid() });
+const paramsSchema = z.object({ destinationId: z.string().uuid() });
 const patchSchema = z.union([
   z.object({ status: z.literal("archived") }).strict(),
   z
@@ -13,15 +13,20 @@ const patchSchema = z.union([
     .refine((body) => body.name !== undefined || body.values !== undefined),
 ]);
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ destinationId: string }> },
+) {
   const principal = await authenticatedPrincipal(request);
   if (principal.kind === "anonymous")
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (principal.kind === "api_key" && !principal.scopes.has("withdrawals:read"))
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   try {
-    const { id } = paramsSchema.parse(await params);
-    return Response.json(await getContainer().withdrawalDestinations.get(principal.accountId, id));
+    const { destinationId } = paramsSchema.parse(await params);
+    return Response.json(
+      await getContainer().withdrawalDestinations.get(principal.accountId, destinationId),
+    );
   } catch (error) {
     if (error instanceof z.ZodError)
       return Response.json(validationErrorPayload(error), { status: 400 });
@@ -29,17 +34,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ destinationId: string }> },
+) {
   const principal = await authenticatedPrincipal(request);
   if (principal.kind === "anonymous")
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (principal.kind === "api_key" && !principal.scopes.has("withdrawals:create"))
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   try {
-    const { id } = paramsSchema.parse(await params);
+    const { destinationId } = paramsSchema.parse(await params);
     const body = patchSchema.parse(await request.json());
     return Response.json(
-      await getContainer().withdrawalDestinations.update(principal.accountId, id, body),
+      await getContainer().withdrawalDestinations.update(principal.accountId, destinationId, body),
     );
   } catch (error) {
     if (error instanceof z.ZodError)

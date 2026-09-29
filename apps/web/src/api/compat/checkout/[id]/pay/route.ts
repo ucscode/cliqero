@@ -1,15 +1,15 @@
 import { authenticatedAccount, apiError } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
 
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, context: { params: Promise<{ checkoutId: string }> }) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { id } = await context.params;
+    const { checkoutId } = await context.params;
     const result = await getContainer().walletCheckoutPayment.pay({
       buyerId: account.id,
-      checkoutId: id,
+      checkoutId,
     });
     return Response.json({
       id: result.checkout.id,

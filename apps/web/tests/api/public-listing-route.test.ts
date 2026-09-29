@@ -49,7 +49,7 @@ function configure(principal: any, ownerError = true) {
   };
 }
 
-const context = { params: Promise.resolve({ id: listing.id }) };
+const context = { params: Promise.resolve({ listingId: listing.id }) };
 
 describe("public listing detail compatibility route", () => {
   it("serves the published public projection anonymously", async () => {

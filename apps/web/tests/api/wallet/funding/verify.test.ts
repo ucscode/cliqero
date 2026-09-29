@@ -44,7 +44,7 @@ describe("wallet funding foreground verification API", () => {
     const response = await POST(
       new Request(`http://localhost/api/wallet/fund/${fundingId}/verify`),
       {
-        params: Promise.resolve({ id: fundingId }),
+        params: Promise.resolve({ fundingId }),
       },
     );
 
@@ -68,7 +68,7 @@ describe("wallet funding foreground verification API", () => {
     const response = await POST(
       new Request(`http://localhost/api/wallet/fund/${fundingId}/verify`),
       {
-        params: Promise.resolve({ id: fundingId }),
+        params: Promise.resolve({ fundingId }),
       },
     );
 

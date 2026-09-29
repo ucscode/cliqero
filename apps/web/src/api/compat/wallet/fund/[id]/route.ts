@@ -5,10 +5,13 @@ import { projectFundingStatus } from "../status";
 
 export { customerFailureMessage } from "../status";
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ fundingId: string }> },
+) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const id = (await params).id;
+  const id = (await params).fundingId;
   if (!z.uuid().safeParse(id).success)
     return Response.json({ error: "Not found" }, { status: 404 });
   try {

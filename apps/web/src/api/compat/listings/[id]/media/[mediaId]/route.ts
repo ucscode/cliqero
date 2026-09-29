@@ -10,7 +10,7 @@ const patch = z
   .strict();
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ id: string; mediaId: string }> },
+  { params }: { params: Promise<{ listingId: string; mediaId: string }> },
 ) {
   const a = await authenticatedAccount(request);
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,7 +18,7 @@ export async function GET(
     const c = getContainer();
     await c.operators.requireCapability(a.id, "catalogue.manage");
     const p = await params,
-      v = await c.listingMedia.getCatalogue(a, p.id, p.mediaId);
+      v = await c.listingMedia.getCatalogue(a, p.listingId, p.mediaId);
     return Response.json(mediaView(v, c.listingMedia.publicUrl(v)));
   } catch (e) {
     return apiError(e);
@@ -26,7 +26,7 @@ export async function GET(
 }
 export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string; mediaId: string }> },
+  { params }: { params: Promise<{ listingId: string; mediaId: string }> },
 ) {
   const a = await authenticatedAccount(request);
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,7 +35,7 @@ export async function PATCH(
     await c.operators.requireCapability(a.id, "catalogue.manage");
     const p = await params,
       b = patch.parse(await request.json()),
-      v = await c.listingMedia.updateCatalogue(a, p.id, p.mediaId, {
+      v = await c.listingMedia.updateCatalogue(a, p.listingId, p.mediaId, {
         altText: b.alt_text,
         position: b.position,
       });
@@ -46,7 +46,7 @@ export async function PATCH(
 }
 export async function DELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string; mediaId: string }> },
+  { params }: { params: Promise<{ listingId: string; mediaId: string }> },
 ) {
   const a = await authenticatedAccount(request);
   if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -54,7 +54,7 @@ export async function DELETE(
     const c = getContainer();
     await c.operators.requireCapability(a.id, "catalogue.manage");
     const p = await params,
-      v = await c.listingMedia.requestDeletionCatalogue(a, p.id, p.mediaId);
+      v = await c.listingMedia.requestDeletionCatalogue(a, p.listingId, p.mediaId);
     return Response.json({ id: v.id, state: v.state }, { status: 202 });
   } catch (e) {
     return apiError(e);

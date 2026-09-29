@@ -70,7 +70,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
           },
         },
         403: {
-          description: "Operator session required",
+          description: "Content-management browser session required",
           content: { "application/json": { schema: errorSchema } },
         },
         400: {
@@ -102,7 +102,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       responses: {
         204: { description: "Owned preview removed" },
         403: {
-          description: "Operator session required",
+          description: "Content-management browser session required",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -154,18 +154,18 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   app.openapi(
     createRoute({
       method: "get",
-      path: "/api/blog/posts/{slug}",
-      request: { params: z.object({ slug: z.string().min(1).max(160) }) },
+      path: "/api/blog/posts/{postId}",
+      request: { params: z.object({ postId: z.string().min(1).max(160) }) },
       responses: {
         200: {
-          description: "Published blog post",
+          description: "Published blog post identified by its ID or slug.",
           content: { "application/json": { schema: blogPostSchema } },
         },
         404: { description: "Not found", content: { "application/json": { schema: errorSchema } } },
       },
     }),
     (c) => {
-      const post = container.blog.get(c.req.valid("param").slug, true);
+      const post = container.blog.get(c.req.valid("param").postId, true);
       return post
         ? c.json(blogJson(post), 200)
         : c.json({ error: "Blog post not found", code: "not_found" }, 404);
@@ -377,9 +377,9 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   app.openapi(
     createRoute({
       method: "patch",
-      path: "/api/blog/posts/{id}",
+      path: "/api/blog/posts/{postId}",
       request: {
-        params: z.object({ id: z.string().uuid() }),
+        params: z.object({ postId: z.string().uuid() }),
         body: { content: { "application/json": { schema: blogWriteBody.partial() } } },
       },
       responses: {
@@ -409,13 +409,13 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
-        const current = container.blog.get(c.req.valid("param").id);
+        const current = container.blog.get(c.req.valid("param").postId);
         if ((body.status ?? current?.status) === "published") {
           const publishDenied = requireCapabilityScope(c, p, "content.manage", "blog:publish");
           if (publishDenied) return publishDenied;
         }
         return c.json(
-          operatorBlogJson(container.blog.save(c.req.valid("param").id, body, p.accountId)),
+          operatorBlogJson(container.blog.save(c.req.valid("param").postId, body, p.accountId)),
           200,
         );
       } catch (error) {
@@ -426,8 +426,8 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   app.openapi(
     createRoute({
       method: "delete",
-      path: "/api/blog/posts/{id}",
-      request: { params: z.object({ id: z.string().uuid() }) },
+      path: "/api/blog/posts/{postId}",
+      request: { params: z.object({ postId: z.string().uuid() }) },
       responses: {
         204: { description: "Blog article and its relations deleted" },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
@@ -443,7 +443,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
       if (denied) return denied;
       try {
-        container.blog.delete(c.req.valid("param").id);
+        container.blog.delete(c.req.valid("param").postId);
         return c.body(null, 204);
       } catch (error) {
         return domainError(c, error);

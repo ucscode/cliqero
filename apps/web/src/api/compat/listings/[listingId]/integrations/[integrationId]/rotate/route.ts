@@ -1,13 +1,27 @@
 import { apiError } from "../../../../../http";
+import { authenticatedPrincipal } from "../../../../../http";
 import { authorizeListingIntegration } from "../../../../integrations/access";
+import { getContainer, type ApplicationContainer } from "@/infrastructure/container";
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ listingId: string; integrationId: string }> },
+  {
+    params,
+    container,
+  }: {
+    params: Promise<{ listingId: string; integrationId: string }>;
+    container?: ApplicationContainer;
+  },
 ) {
   try {
     const values = await params;
-    const access = await authorizeListingIntegration(request, values.listingId);
+    const currentContainer = container ?? getContainer();
+    const access = await authorizeListingIntegration(
+      await authenticatedPrincipal(request, currentContainer),
+      currentContainer,
+      request,
+      values.listingId,
+    );
     if ("response" in access) return access.response;
     if (access.access === "manager")
       return Response.json(

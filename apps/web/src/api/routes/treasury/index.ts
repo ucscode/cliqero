@@ -30,7 +30,7 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Treasury management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -54,7 +54,7 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
       request: { query: treasuryEntryQuery },
       responses: {
         200: {
-          description: "Bounded operator treasury entries",
+          description: "Bounded treasury administration entries",
           content: {
             "application/json": {
               schema: z.object({
@@ -69,7 +69,7 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Treasury management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -101,7 +101,7 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Treasury management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
         404: {
@@ -155,7 +155,7 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Operator access required",
+          description: "Treasury management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
         409: {

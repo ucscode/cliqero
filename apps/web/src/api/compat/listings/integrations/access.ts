@@ -1,11 +1,14 @@
 import { apiAuthorizer } from "@/api/shared/authorization";
-import { authenticatedPrincipal } from "@/api/http";
-import { getContainer } from "@/infrastructure/container";
+import type { ApiPrincipal } from "@/modules/identity/api/principal";
+import type { ApplicationContainer } from "@/infrastructure/container";
 import { isAuthenticatedPrincipal } from "@/modules/identity/api/principal";
 
-export async function authorizeListingIntegration(request: Request, listingId: string) {
-  const container = getContainer();
-  const principal = await authenticatedPrincipal(request);
+export async function authorizeListingIntegration(
+  principal: ApiPrincipal,
+  container: ApplicationContainer,
+  request: Request,
+  listingId: string,
+) {
   if (!isAuthenticatedPrincipal(principal))
     return {
       response: Response.json({ error: "Unauthorized", code: "unauthorized" }, { status: 401 }),

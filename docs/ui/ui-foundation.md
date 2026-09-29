@@ -1,7 +1,7 @@
 # Cliqero UI foundation
 
 The first user-facing UI is a catalogue-first Next.js experience. The storefront and listing
-detail pages consume the public Hono API (`GET /api/listings` and `GET /api/listings/:id`) through a
+detail pages consume the public Hono API (`GET /api/listings` and `GET /api/listings/{listingId}`) through a
 small browser API client; UI code does not import repositories or application services.
 
 Better Auth remains the only browser authentication mechanism. The header resolves the session and
@@ -14,7 +14,7 @@ second checkout on retry.
 
 `/dashboard` is an authenticated shell with real wallet and purchase sections. Wallet reads use
 `GET /api/wallet` and `GET /api/wallet/transactions`; funding is initiated with
-`POST /api/wallet/fund` and observed through `GET /api/wallet/fund/{id}`. The provider's browser
+`POST /api/wallet/fund` and observed through `GET /api/wallet/fund/{fundingId}`. The provider's browser
 return is never treated as proof: the UI observes persisted funding state, and confirmed funding
 then becomes spendable only through the existing wallet-credit and availability workers.
 Funding opens at `/dashboard/wallet/fund`; the page keeps provider instructions visible after

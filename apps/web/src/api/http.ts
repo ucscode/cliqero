@@ -3,14 +3,21 @@ import { isAuthenticatedPrincipal, type ApiPrincipal } from "@/modules/identity/
 import { getContainer } from "@/infrastructure/container";
 import { apiErrorResult, publicErrorPayload, validationErrorPayload } from "./error";
 import { logDevelopmentError } from "@/infrastructure/development-log";
+import { resolvedRequestPrincipal } from "./shared/request-principal";
+import type { ApplicationContainer } from "@/infrastructure/container";
 
 /** Shared authentication boundary for capability routes migrating to Hono. */
-export async function authenticatedPrincipal(request: Request): Promise<ApiPrincipal> {
-  return getContainer().principalResolver.resolve(request);
+export async function authenticatedPrincipal(
+  request: Request,
+  container?: Pick<ApplicationContainer, "principalResolver">,
+): Promise<ApiPrincipal> {
+  const resolved = resolvedRequestPrincipal(request);
+  if (resolved) return resolved;
+  return (container ?? getContainer()).principalResolver.resolve(request);
 }
 
 export async function authenticatedAccount(request: Request): Promise<Account | null> {
-  const principal = await getContainer().principalResolver.resolve(request);
+  const principal = await authenticatedPrincipal(request);
   return isAuthenticatedPrincipal(principal) ? principal.account : null;
 }
 

@@ -43,13 +43,18 @@ protocol handler remains a Next.js exception because it owns its protocol, and
 Paystack webhook ingress remains provider-specific so raw-body/signature
 verification is preserved. Browser navigation routes such as
 `/access/{purchaseId}` remain outside the JSON API; the legacy
-`/api/listings/{id}/access` redirect alias is dispatched through Hono with the
+`/api/listings/{listingId}/access` redirect alias is dispatched through Hono with the
 same session-only guard as the canonical browser route.
 
 All ordinary Cliqero application API paths (catalogue, wallet, checkout,
 purchases, referrals, earnings, withdrawals, treasury, integrations, and
 operator commands) are represented in the generated OpenAPI document and enter
 through the single Hono catch-all before the shared application handlers run.
+Hono resolves the request principal once; compatibility dispatch makes that
+resolved principal available to legacy-shaped adapters for the duration of the
+request, and the API authentication helpers reuse it instead of querying
+Better Auth or the API-key store again. Direct adapter calls outside Hono retain
+the one-time resolver fallback.
 The complete route/resource classification and current normalization debt are
 recorded in [`docs/api/resource-api-audit.md`](../api/resource-api-audit.md).
 
