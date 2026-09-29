@@ -16,10 +16,10 @@ import { CopyValue } from "../copy-value";
 import { Money } from "../money";
 import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
 import { OperatorFilterField } from "./ui/toolbar";
-import { CrudIndex } from "./crud/index-page";
-import { CrudDetail } from "./crud/detail";
-import { useCrudCollection } from "./crud/use-collection";
-import type { CrudColumn } from "./crud/table";
+import { CrudIndex } from "@/components/crud/index-page";
+import { CrudDetail } from "@/components/crud/detail";
+import { useCrudCollection } from "@/components/crud/use-collection";
+import type { CrudColumn } from "@/components/crud/table";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
 
@@ -163,7 +163,7 @@ export function OperatorWithdrawalList() {
         </Button>
       }
       items={collection.items}
-      pageSize={collection.pageSizeControl}
+      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(item) => item.id}
       actions={(item) => [

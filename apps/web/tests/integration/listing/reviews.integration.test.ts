@@ -138,4 +138,66 @@ suite("listing review visibility", () => {
     expect(visible.items.map((review) => review.id)).toEqual([pending.id, approved.id]);
     expect(summary.get(listing.id)).toEqual({ average: 4, count: 1 });
   });
+
+  it("bulk moderation changes only pending reviews and refuses later invalid transitions", async () => {
+    const owner = await app.authentication.register({
+      email: "bulk-review-owner@example.com",
+      username: "bulk_review_owner",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const authorA = await app.authentication.register({
+      email: "bulk-review-a@example.com",
+      username: "bulk_review_a",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const authorB = await app.authentication.register({
+      email: "bulk-review-b@example.com",
+      username: "bulk_review_b",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const listing = await app.listingService.createPublished(owner, {
+      title: "Bulk moderation listing",
+      shortDescription: "Listing for bulk review moderation",
+      longDescription: "A published listing.",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.com/bulk-review",
+    });
+    const first = await app.listingReviews.submit(authorA, listing.id, { rating: 4 });
+    const second = await app.listingReviews.submit(authorB, listing.id, { rating: 5 });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [owner.id],
+    );
+
+    const results = await app.listingReviews.moderateMany(owner, [first.id, second.id], "approved");
+    expect(results).toEqual([
+      { id: first.id, success: true },
+      { id: second.id, success: true },
+    ]);
+    await expect(app.listingReviews.moderateMany(owner, [first.id], "rejected")).resolves.toEqual([
+      {
+        id: first.id,
+        success: false,
+        error: "Review not found or is no longer pending",
+      },
+    ]);
+
+    const approved = await app.listingReviews.operatorQueue(owner, {
+      status: "approved",
+      limit: 10,
+    });
+    expect(approved.items.map((review) => review.id)).toEqual(
+      expect.arrayContaining([first.id, second.id]),
+    );
+    expect(approved.items).toHaveLength(2);
+    expect(approved.items.every((review) => review.moderatedBy === owner.id)).toBe(true);
+    await expect(app.listingReviews.moderateMany(authorA, [second.id], "rejected")).rejects.toThrow(
+      "Forbidden",
+    );
+  });
 });

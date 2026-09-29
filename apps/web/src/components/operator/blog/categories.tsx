@@ -8,11 +8,11 @@ import type { BlogCategory } from "@/modules/blog/domain/blog";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
-import { CrudEdit } from "../crud/edit";
-import { CrudIndex } from "../crud/index-page";
-import type { CrudColumn } from "../crud/table";
+import { CrudEdit } from "@/components/crud/edit";
+import { CrudIndex } from "@/components/crud/index-page";
+import type { CrudColumn } from "@/components/crud/table";
 import { OperatorPrimaryCell } from "../ui/data-cells";
-import { useCrudCollection } from "../crud/use-collection";
+import { useCrudCollection } from "@/components/crud/use-collection";
 
 export function OperatorBlogCategories() {
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +47,7 @@ export function OperatorBlogCategories() {
       description="Manage categories assigned to public articles. Categories in use cannot be removed."
       createAction={{ label: "New category", href: "/operator/blog/categories/new" }}
       items={collection.items}
+      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(category) => category.id}
       actions={(category) => [

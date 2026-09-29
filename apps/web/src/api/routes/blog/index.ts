@@ -19,7 +19,7 @@ import {
   operatorBlogPageSchema,
   operatorBlogPostSchema,
 } from "./contracts";
-import { loadOperatorTableConfiguration } from "@/config/operator-tables";
+import { crudMaxRows } from "@/config/crud";
 
 const blogCategorySchema = z.object({ id: z.string().uuid(), slug: z.string(), name: z.string() });
 const blogCategoryCreateSchema = z
@@ -45,7 +45,7 @@ function categoryConflict(c: Parameters<typeof domainError>[0], error: unknown) 
 }
 
 export function registerBlogRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
-  const tableConfiguration = loadOperatorTableConfiguration().tables;
+  const maxRows = crudMaxRows();
   const blogListQuery = z.object({
     search: z.string().max(100).optional(),
     status: z.enum(["draft", "published"]).optional(),
@@ -134,7 +134,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
                   ids: z
                     .array(z.string().uuid())
                     .min(1)
-                    .max(tableConfiguration.max_bulk_selection)
+                    .max(maxRows)
                     .refine((ids) => new Set(ids).size === ids.length, "ids must be unique"),
                 })
                 .strict(),
@@ -266,12 +266,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       ),
   );
   const blogAdminListQuery = blogListQuery.extend({
-    limit: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(tableConfiguration.max_page_size)
-      .default(tableConfiguration.default_page_size),
+    limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });
   app.openapi(
     createRoute({

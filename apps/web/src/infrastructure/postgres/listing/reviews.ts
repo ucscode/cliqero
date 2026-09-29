@@ -58,7 +58,7 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
     const row = (
       await this.sql.query<ReviewRow>(
         `with updated as (update listing_capability.reviews set status=$2,moderated_at=now(),moderated_by=(select id from identity_capability.accounts where uuid=$3),updated_at=now()
-         where uuid=$1 returning *)
+         where uuid=$1 and status='pending' returning *)
          select u.uuid as id,l.uuid as listing_id,a.uuid as account_id,u.rating,u.body,u.status,u.created_at,u.updated_at,u.moderated_at,moderator.uuid as moderated_by
          from updated u join listing_capability.listings l on l.id=u.listing_id join identity_capability.accounts a on a.id=u.account_id left join identity_capability.accounts moderator on moderator.id=u.moderated_by`,
         [id, status, moderatorId],

@@ -256,6 +256,20 @@ function appWith(
         submit: async () => ({}),
         operatorQueue: async () => ({ items: [], nextCursor: null }),
         moderate: async () => ({}),
+        moderateMany: async (_account: unknown, ids: string[], status: string) =>
+          ids.map((id, index) =>
+            index === 0
+              ? { id, success: true }
+              : { id, success: false, error: `Cannot ${status} non-pending review.` },
+          ),
+      },
+      listingService: {
+        bulkCatalogueState: async (_account: unknown, action: string, ids: string[]) =>
+          ids.map((id, index) =>
+            index === 0
+              ? { id, success: true }
+              : { id, success: false, error: `Invalid ${action} transition.` },
+          ),
       },
       blog: {
         list: () => ({ items: [], nextCursor: null, limit: 25 }),
@@ -311,6 +325,86 @@ describe("Hono API foundation", () => {
       new Request("http://localhost/api/operator/blog?limit=51"),
     );
     expect(oversizedPage.status).toBe(400);
+  });
+  it("enforces site CRUD maxRows for list requests and authorizes resource bulk routes", async () => {
+    const base = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session" as const,
+      capabilities: ["system.root"],
+      scopes: new Set<string>(),
+    };
+    const oversized = await appWith(base).fetch(
+      new Request("http://localhost/api/operator/accounts?limit=500000"),
+    );
+    expect(oversized.status).toBe(400);
+
+    const catalogue = await appWith(base).fetch(
+      new Request("http://localhost/api/operator/catalogue/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "archive",
+          ids: ["00000000-0000-4000-8000-000000000010", "00000000-0000-4000-8000-000000000011"],
+        }),
+      }),
+    );
+    expect(catalogue.status).toBe(200);
+    expect(await catalogue.json()).toMatchObject({
+      results: [{ success: true }, { success: false, error: "Invalid archive transition." }],
+    });
+
+    const reviewResponse = await appWith({ ...base, capabilities: ["reviews.moderate"] }).fetch(
+      new Request("http://localhost/api/operator/reviews/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "approve",
+          ids: ["00000000-0000-4000-8000-000000000012"],
+        }),
+      }),
+    );
+    expect(reviewResponse.status).toBe(200);
+    expect(await reviewResponse.json()).toMatchObject({ results: [{ success: true }] });
+
+    const denied = await appWith({ ...base, capabilities: [] }).fetch(
+      new Request("http://localhost/api/operator/reviews/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "approve", ids: ["00000000-0000-4000-8000-000000000012"] }),
+      }),
+    );
+    expect(denied.status).toBe(403);
+  });
+  it("keeps Blog bulk deletion bounded and reports each item's outcome", async () => {
+    const deleted: string[] = [];
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session" as const,
+      capabilities: ["content.manage"],
+      scopes: new Set<string>(),
+    };
+    const response = await appWith(principal, undefined, undefined, {
+      delete: (id: string) => {
+        if (id.endsWith("002")) throw new Error("Article is in use.");
+        deleted.push(id);
+      },
+    }).fetch(
+      new Request("http://localhost/api/operator/blog/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          ids: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      results: [{ success: true }, { success: false, error: "Article is in use." }],
+    });
+    expect(deleted).toEqual(["00000000-0000-4000-8000-000000000001"]);
   });
   it("returns the same canonical post shape from public and operator Blog APIs", async () => {
     const post = {
@@ -575,7 +669,15 @@ describe("Hono API foundation", () => {
     });
     expect(paths["/api/blog/posts"]).toBeDefined();
     expect(paths["/api/operator/blog"]).toBeDefined();
-    expect(paths["/api/operator/table-config"].get).toBeDefined();
+    expect(paths["/api/operator/table-config"]).toBeUndefined();
+    expect(paths["/api/operator/catalogue/bulk"].post).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "catalogue:manage",
+    });
+    expect(paths["/api/operator/reviews/bulk"].post).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "reviews:moderate",
+    });
     expect(paths["/api/operator/blog/categories"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "blog:read",

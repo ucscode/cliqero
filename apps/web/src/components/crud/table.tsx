@@ -1,10 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/table";
-import { OperatorActionsMenu, type OperatorAction } from "../ui/actions-menu";
-import { OperatorActionCell } from "../ui/data-cells";
-import { OperatorTableSurface } from "../ui/table-surface";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { OperatorActionsMenu, type OperatorAction } from "../operator/ui/actions-menu";
+import { OperatorActionCell } from "../operator/ui/data-cells";
+import { OperatorTableSurface } from "../operator/ui/table-surface";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef } from "react";
 
@@ -23,10 +23,23 @@ export type CrudColumn<T> = {
 export type CrudSelection<T> = {
   selectedKeys: ReadonlySet<string>;
   onChange: (selectedKeys: Set<string>) => void;
-  max: number;
   labelForItem: (item: T) => string;
-  onLimitReached?: () => void;
 };
+
+export function visibleSelection<T>(
+  items: readonly T[],
+  getRowKey: (item: T) => string,
+  selectedKeys: ReadonlySet<string>,
+  checked: boolean,
+) {
+  const keys = new Set(selectedKeys);
+  for (const item of items) {
+    const key = getRowKey(item);
+    if (checked) keys.add(key);
+    else keys.delete(key);
+  }
+  return keys;
+}
 
 export function CrudTable<T>({
   items,
@@ -60,10 +73,6 @@ export function CrudTable<T>({
     if (!selection) return;
     const key = getRowKey(item);
     const keys = new Set(selection.selectedKeys);
-    if (checked && !keys.has(key) && keys.size >= selection.max) {
-      selection.onLimitReached?.();
-      return;
-    }
     if (checked) keys.add(key);
     else keys.delete(key);
     selection.onChange(keys);
@@ -71,18 +80,7 @@ export function CrudTable<T>({
 
   function toggleVisible(checked: boolean) {
     if (!selection) return;
-    const keys = new Set(selection.selectedKeys);
-    for (const item of items) {
-      const key = getRowKey(item);
-      if (checked && !keys.has(key)) {
-        if (keys.size >= selection.max) {
-          selection.onLimitReached?.();
-          break;
-        }
-        keys.add(key);
-      } else if (!checked) keys.delete(key);
-    }
-    selection.onChange(keys);
+    selection.onChange(visibleSelection(items, getRowKey, selection.selectedKeys, checked));
   }
 
   return (

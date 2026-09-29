@@ -1,9 +1,21 @@
-import { OpenAPIHono, z } from "@hono/zod-openapi";
+import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { requireCapabilityScope, requirePrincipal, type Env } from "../../shared/context";
 import { reviewJson } from "./serialization";
+import { crudMaxRows } from "@/config/crud";
 
 export function registerReviewRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
+  const maxRows = crudMaxRows();
+  const reviewBulkBody = z
+    .object({
+      action: z.enum(["approve", "reject"]),
+      ids: z
+        .array(z.string().uuid())
+        .min(1)
+        .max(maxRows)
+        .refine((ids) => new Set(ids).size === ids.length),
+    })
+    .strict();
   app.get("/api/listings/:listingId/reviews", async (c) => {
     const listingId = c.req.param("listingId");
     if (!z.uuid().safeParse(listingId).success)
@@ -46,14 +58,19 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
     if (!(p instanceof Object) || !("accountId" in p)) return p;
     const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
     if (denied) return denied;
-    const status = z
-      .enum(["pending", "approved", "rejected"])
-      .optional()
-      .parse(c.req.query("status") || undefined);
+    const query = z
+      .object({
+        status: z.enum(["pending", "approved", "rejected"]).optional(),
+        cursor: z.string().max(512).optional(),
+        limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
+      })
+      .parse({
+        status: c.req.query("status") || undefined,
+        cursor: c.req.query("cursor") || undefined,
+        limit: c.req.query("limit") || undefined,
+      });
     const page = await container.listingReviews.operatorQueue(p.account, {
-      status,
-      cursor: c.req.query("cursor") || undefined,
-      limit: 25,
+      ...query,
     });
     return c.json({
       items: page.items.map((review) => reviewJson(review)),
@@ -78,4 +95,43 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
       return c.json({ item: reviewJson(review) });
     });
   }
+
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/operator/reviews/bulk",
+      request: { body: { content: { "application/json": { schema: reviewBulkBody } } } },
+      responses: {
+        200: {
+          description: "Per-review moderation outcomes",
+          content: {
+            "application/json": {
+              schema: z.object({
+                results: z.array(
+                  z.object({
+                    id: z.string().uuid(),
+                    success: z.boolean(),
+                    error: z.string().optional(),
+                  }),
+                ),
+              }),
+            },
+          },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
+      if (denied) return denied;
+      const { action, ids } = c.req.valid("json");
+      const results = await container.listingReviews.moderateMany(
+        p.account,
+        ids,
+        action === "approve" ? "approved" : "rejected",
+      );
+      return c.json({ results }, 200);
+    },
+  );
 }

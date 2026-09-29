@@ -1,13 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "../../ui/button";
+import { Button } from "../ui/button";
 
 export type CrudBulkAction<T> = {
   label: string;
   destructive?: boolean;
   onSelect: (items: readonly T[]) => void | boolean | Promise<void | boolean>;
 };
+
+export async function runCrudBulkAction<T>(
+  action: CrudBulkAction<T>,
+  items: readonly T[],
+  onComplete: () => void,
+) {
+  const completed = await action.onSelect(items);
+  if (completed !== false) onComplete();
+}
 
 export function CrudBulkActions<T>({
   items,
@@ -25,8 +34,7 @@ export function CrudBulkActions<T>({
     if (busy) return;
     setBusy(true);
     try {
-      const completed = await action.onSelect(items);
-      if (completed !== false) onComplete();
+      await runCrudBulkAction(action, items, onComplete);
     } finally {
       setBusy(false);
     }

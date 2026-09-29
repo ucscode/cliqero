@@ -97,6 +97,8 @@ describe("architectural boundaries", () => {
     expect(existsSync(join(components, "storefront/catalogue.tsx"))).toBe(true);
     expect(existsSync(join(components, "storefront/featured.tsx"))).toBe(true);
     expect(existsSync(join(components, "storefront/grid.tsx"))).toBe(true);
+    expect(existsSync(join(components, "crud/index-page.tsx"))).toBe(true);
+    expect(existsSync(join(components, "operator/crud"))).toBe(false);
     expect(existsSync(join(components, "dashboard-shell.tsx"))).toBe(false);
     expect(existsSync(join(components, "settings-panel.tsx"))).toBe(false);
     expect(existsSync(join(components, "storefront.tsx"))).toBe(false);

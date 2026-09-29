@@ -23,14 +23,13 @@ the account's capabilities.
 optional Operator console link in the user dashboard. It contains no secrets or
 authorization credentials.
 
-Operator collection limits are centralized in the commented
-`config/operator.yaml`. The API enforces its configured maximum page size and
-the shared table UI uses the validated page-size options exposed by
-`GET /api/operator/table-config`. Filtered tables provide a shared Clear action;
-the displayed results change only after a successful request. Selection is
-limited to visible rows and is cleared on filter/page changes. Only content
-articles currently expose bounded bulk deletion operations;
-financial records, reviews, and accounts do not expose unsafe bulk actions.
+The site-wide cursor-page maximum is configured as `parameters.crud.table.max_rows`
+in `config/site.yaml`. Server list routes enforce the same limit; the browser
+does not fetch a CRUD-configuration endpoint or expose a rows-per-page control.
+Filtered tables provide a shared Clear action and selection is confined to the
+visible page, then cleared on filter/page changes. Blog articles support bulk
+deletion, catalogue listings support lifecycle actions, and reviews support
+moderation. Users and sensitive financial tables remain without bulk selection.
 
 Blog categories are managed under Operator → Blog → Categories and posts may
 select multiple existing categories; categories assigned to posts cannot be

@@ -7,9 +7,10 @@ import { Select } from "../ui/select";
 import { Button } from "../ui/button";
 import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
 import { OperatorFilterField } from "./ui/toolbar";
-import { CrudIndex } from "./crud/index-page";
-import { useCrudCollection } from "./crud/use-collection";
-import type { CrudColumn } from "./crud/table";
+import { CrudIndex } from "@/components/crud/index-page";
+import { useCrudCollection } from "@/components/crud/use-collection";
+import type { CrudColumn } from "@/components/crud/table";
+import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 
 type Review = ListingReview & { reviewer?: string; listing_title?: string };
 type ReviewPage = { items: Review[]; next_cursor: string | null };
@@ -35,6 +36,35 @@ export function OperatorReviews() {
       setActionError(errorMessage(cause));
     }
   }
+  async function moderateMany(reviews: readonly Review[], action: "approve" | "reject") {
+    try {
+      setActionError(null);
+      const { results } = await apiFetch<{
+        results: Array<{ id: string; success: boolean; error?: string }>;
+      }>("/api/operator/reviews/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, ids: reviews.map((review) => review.id) }),
+      });
+      const failures = results.filter((result) => !result.success);
+      if (failures.length)
+        setActionError(
+          `${failures.length} of ${results.length} reviews could not be moderated: ${failures
+            .map((result) => result.error)
+            .filter(Boolean)
+            .join("; ")}`,
+        );
+      await collection.retry();
+      return true;
+    } catch (cause) {
+      setActionError(errorMessage(cause));
+      return false;
+    }
+  }
+  const bulkActions: readonly CrudBulkAction<Review>[] = [
+    { label: "Approve", onSelect: (items) => moderateMany(items, "approve") },
+    { label: "Reject", destructive: true, onSelect: (items) => moderateMany(items, "reject") },
+  ];
   const columns: readonly CrudColumn<Review>[] = [
     {
       key: "listing",
@@ -108,9 +138,13 @@ export function OperatorReviews() {
         </Button>
       }
       items={collection.items}
-      pageSize={collection.pageSizeControl}
+      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(review) => review.id}
+      selection={{
+        labelForItem: (review) => `review by ${review.reviewer ?? "customer"}`,
+        bulkActions,
+      }}
       actions={(review) =>
         review.status === "pending"
           ? [

@@ -1,5 +1,12 @@
+# Public site identity and internal site-wide CRUD table limits.
 parameters:
-  name: Cliqero
-  url: "%env(APP_URL)%"
-  support_email: support@cliqero.com
-  description: "Catalogue commerce, wallet access and referrals."
+  site:
+    # Public identity values used by metadata and customer-facing pages.
+    name: Cliqero
+    url: "%env(APP_URL)%"
+    support_email: support@cliqero.com
+    description: "Catalogue commerce, wallet access and referrals."
+  crud:
+    table:
+      # Maximum records returned/rendered in one cursor-paginated table page (1–200).
+      max_rows: 50

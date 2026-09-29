@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CrudIndex } from "@/components/operator/crud/index-page";
+import { CrudIndex } from "@/components/crud/index-page";
 
 const columns = [
   { key: "name", label: "Name", render: (item: { id: string; name: string }) => item.name },
@@ -24,7 +24,7 @@ function render(
   );
 }
 
-describe("operator CRUD index", () => {
+describe("shared CRUD index", () => {
   it("does not repeat the page title as a collection heading", () => {
     const page = render({ title: "Records", sectionTitle: "Records" });
     expect(page).toContain(">Records</h2>");
@@ -103,17 +103,28 @@ describe("operator CRUD index", () => {
     expect(page).not.toContain("Loading records");
   });
 
-  it("renders Clear only for filtered collections and exposes configured page sizes", () => {
+  it("renders Clear for filtered collections and never renders a rows-per-page control", () => {
     const plain = render();
     expect(plain).not.toContain(">Clear</button>");
     const filtered = render({
       filters: <input aria-label="Search" />,
       filtersDirty: true,
       onFiltersReset: () => true,
-      pageSize: { value: 25, options: [25, 50], onChange: vi.fn() },
     });
     expect(filtered).toContain(">Clear</button>");
-    expect(filtered).toContain('aria-label="Rows per page"');
-    expect(filtered).toContain('<option value="50">50</option>');
+    expect(filtered).not.toContain("Rows per page");
+    expect(filtered).not.toContain(">Rows</label>");
+  });
+
+  it("supports a maxRows override and renders no more than that many rows", () => {
+    const page = render({
+      maxRows: 1,
+      items: [
+        { id: "1", name: "First" },
+        { id: "2", name: "Second" },
+      ],
+    });
+    expect(page).toContain("First");
+    expect(page).not.toContain("Second");
   });
 });

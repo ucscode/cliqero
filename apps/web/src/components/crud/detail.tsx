@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { OperatorErrorState } from "../ui/error-state";
-import { OperatorLoadingState } from "../ui/loading-state";
-import { OperatorPage, OperatorPageHeader } from "../ui/page";
-import { OperatorSection } from "../ui/section";
+import { OperatorErrorState } from "../operator/ui/error-state";
+import { OperatorLoadingState } from "../operator/ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "../operator/ui/page";
+import { OperatorSection } from "../operator/ui/section";
 import { CrudFieldList, type CrudField } from "./field-list";
 
 export type { CrudField } from "./field-list";

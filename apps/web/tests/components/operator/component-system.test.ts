@@ -44,8 +44,8 @@ describe("operator component-system migration", () => {
   it("uses CrudFieldList terminology without retaining CrudDetails references", () => {
     const sourceFiles = [
       resolve(operatorRoot, "users.tsx"),
-      resolve(operatorRoot, "crud/detail.tsx"),
-      resolve(operatorRoot, "crud/field-list.tsx"),
+      resolve(__dirname, "../../../src/components/crud/detail.tsx"),
+      resolve(__dirname, "../../../src/components/crud/field-list.tsx"),
     ];
     const sources = sourceFiles.map((path) => readFileSync(path, "utf8")).join("\n");
     expect(sources).toContain("CrudFieldList");

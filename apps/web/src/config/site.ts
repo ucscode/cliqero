@@ -1,12 +1,14 @@
 import {
   loadSiteConfiguration,
-  siteConfigurationSchema,
+  publicSiteConfigurationSchema,
   toPublicSiteConfiguration,
 } from "./site-loader";
 
 const publicConfiguration = (() => {
   try {
-    return siteConfigurationSchema.parse(JSON.parse(process.env.NEXT_PUBLIC_SITE_CONFIG ?? ""));
+    return publicSiteConfigurationSchema.parse(
+      JSON.parse(process.env.NEXT_PUBLIC_SITE_CONFIG ?? ""),
+    );
   } catch {
     return null;
   }

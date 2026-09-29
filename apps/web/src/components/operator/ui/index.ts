@@ -1,5 +1,4 @@
 export { OperatorActionsMenu, type OperatorAction } from "./actions-menu";
-export { CursorHistory } from "./cursor-history";
 export {
   OperatorActionCell,
   OperatorPrimaryCell,

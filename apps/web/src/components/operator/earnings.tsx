@@ -10,9 +10,9 @@ import { Select } from "../ui/select";
 import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
 import { OperatorMetricCard } from "./ui/metric-card";
 import { OperatorFilterField } from "./ui/toolbar";
-import { CrudIndex } from "./crud/index-page";
-import { useCrudCollection } from "./crud/use-collection";
-import type { CrudColumn } from "./crud/table";
+import { CrudIndex } from "@/components/crud/index-page";
+import { useCrudCollection } from "@/components/crud/use-collection";
+import type { CrudColumn } from "@/components/crud/table";
 
 const formatDate = (value: string) => new Date(value).toLocaleString();
 const label = (value: string) =>
@@ -154,7 +154,7 @@ export function OperatorEarningsList() {
         </Button>
       }
       items={collection.items}
-      pageSize={collection.pageSizeControl}
+      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(entry) => entry.id}
       actions={(entry) => [

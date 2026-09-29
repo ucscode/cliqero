@@ -5,24 +5,19 @@ import { domainError } from "../../../shared/error";
 import { errorSchema } from "../../../shared/schemas";
 import { jsonSafe } from "../../../shared/serialization";
 import { operatorTreasuryEntrySchema, operatorTreasurySummarySchema } from "./contracts";
-import { loadOperatorTableConfiguration } from "@/config/operator-tables";
+import { crudMaxRows } from "@/config/crud";
 
 export function registerOperatorTreasuryRoutes(
   app: OpenAPIHono<Env>,
   container: ApplicationContainer,
 ) {
-  const tableConfiguration = loadOperatorTableConfiguration().tables;
+  const maxRows = crudMaxRows();
   const treasuryEntryQuery = z.object({
     search: z.string().max(100).optional(),
     direction: z.enum(["credit", "debit"]).optional(),
     source: z.enum(["automatic", "manual"]).optional(),
     cursor: z.string().max(512).optional(),
-    limit: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(tableConfiguration.max_page_size)
-      .default(tableConfiguration.default_page_size),
+    limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });
   app.openapi(
     createRoute({

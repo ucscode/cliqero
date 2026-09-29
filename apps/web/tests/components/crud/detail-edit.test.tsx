@@ -1,11 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { FormEvent } from "react";
 import { describe, expect, it } from "vitest";
-import { CrudDetail } from "@/components/operator/crud/detail";
-import { CrudEdit } from "@/components/operator/crud/edit";
-import { CrudFieldList } from "@/components/operator/crud/field-list";
+import { CrudDetail } from "@/components/crud/detail";
+import { CrudEdit } from "@/components/crud/edit";
+import { CrudFieldList } from "@/components/crud/field-list";
 
-describe("operator CRUD detail", () => {
+describe("shared CRUD detail", () => {
   it("exports the unambiguous reusable CrudFieldList name", () => {
     const html = renderToStaticMarkup(
       <CrudFieldList fields={[{ label: "State", value: "Active" }]} />,
@@ -56,7 +56,7 @@ describe("operator CRUD detail", () => {
   });
 });
 
-describe("operator CRUD edit", () => {
+describe("shared CRUD edit", () => {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => event.preventDefault();
 
   it("supports create and edit shells with resource slots and custom actions", () => {

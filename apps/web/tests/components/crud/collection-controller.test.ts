@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { CrudCollectionController } from "@/components/operator/crud/collection-controller";
-import type { CrudPage } from "@/components/operator/crud/use-collection";
+import { CrudCollectionController } from "@/components/crud/collection-controller";
+import type { CrudPage } from "@/components/crud/use-collection";
 
-describe("operator CRUD collection controller", () => {
+describe("CRUD collection controller", () => {
   it("keeps edited filters out of cursor requests until a successful apply", async () => {
     const reads: Array<{ filter: string; cursor: string | null }> = [];
     let failedFilter: string | null = null;
@@ -67,10 +67,10 @@ describe("operator CRUD collection controller", () => {
     await controller.apply("applied");
     expect(await controller.next()).toBe(false);
     expect(controller.hasPrevious).toBe(false);
-    expect(reader.mock.calls.at(-1)).toEqual(["applied", "page-2", 25]);
+    expect(reader.mock.calls.at(-1)).toEqual(["applied", "page-2", 50]);
 
     await controller.retry();
-    expect(reader.mock.calls.at(-1)).toEqual(["applied", null, 25]);
+    expect(reader.mock.calls.at(-1)).toEqual(["applied", null, 50]);
     reader.mockImplementation(async (filter, cursor) => ({
       items: [`${filter}:${cursor ?? "first"}`],
       nextCursor: cursor ? null : "page-2",
@@ -78,7 +78,7 @@ describe("operator CRUD collection controller", () => {
     await controller.next();
     expect(controller.hasPrevious).toBe(true);
     await controller.previous();
-    expect(reader.mock.calls.at(-1)).toEqual(["applied", null, 25]);
+    expect(reader.mock.calls.at(-1)).toEqual(["applied", null, 50]);
   });
 
   it("does not advance or discard cursor history after a failed Previous request", async () => {
@@ -117,26 +117,28 @@ describe("operator CRUD collection controller", () => {
     expect(reader).toHaveBeenCalledTimes(1);
   });
 
-  it("tracks initialization and preserves valid rows after failed refreshes", async () => {
+  it("uses one fixed maxRows limit for initial load and every cursor request", async () => {
     let fail = false;
+    const sizes: number[] = [];
     const controller = new CrudCollectionController<string, string>(
       async (filter, cursor, size) => {
+        sizes.push(size);
         if (fail) throw new Error("refresh unavailable");
         return { items: [`${filter}:${cursor ?? "first"}:${size}`], nextCursor: null };
       },
       "default",
-      25,
+      31,
     );
     expect(controller.initialized).toBe(false);
-    await controller.setPageSize(50);
+    await controller.apply("default");
     expect(controller.initialized).toBe(true);
-    expect(controller.items).toEqual(["default:first:50"]);
-    expect(controller.currentPageSize).toBe(50);
+    expect(controller.items).toEqual(["default:first:31"]);
     const accepted = controller.items;
     fail = true;
     expect(await controller.apply("new-filter")).toBe(false);
     expect(controller.items).toBe(accepted);
     expect(controller.error).toBe("refresh unavailable");
+    expect(sizes).toEqual([31, 31]);
   });
 
   it("keeps successful empty results distinct from uninitialized collections", async () => {

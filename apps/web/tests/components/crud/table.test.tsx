@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CrudTable, type CrudColumn } from "@/components/operator/crud/table";
+import { CrudTable, type CrudColumn, visibleSelection } from "@/components/crud/table";
 
-describe("operator CRUD table", () => {
+describe("shared CRUD table", () => {
   it("renders desktop semantic columns and mobile record fields from the same definitions", () => {
     type Record = { id: string; name: string; state: string };
     const columns: readonly CrudColumn<Record>[] = [
@@ -67,7 +67,6 @@ describe("operator CRUD table", () => {
         selection={{
           selectedKeys: new Set(["r-1"]),
           onChange: () => {},
-          max: 10,
           labelForItem: (item) => item.name,
         }}
       />,
@@ -76,5 +75,25 @@ describe("operator CRUD table", () => {
     expect(html).toContain('aria-label="Select Ada"');
     expect(html.match(/aria-label="Select Ada"/g)).toHaveLength(2);
     expect(html).toMatch(/<th[^>]*>.*?Select all visible records/s);
+  });
+
+  it("selects and deselects exactly the visible cursor-page rows without a separate cap", () => {
+    const visible = Array.from({ length: 37 }, (_, index) => ({ id: `row-${index}` }));
+    const selectAll = visibleSelection(visible, (row) => row.id, new Set(), true);
+    expect(selectAll.size).toBe(37);
+    expect([...selectAll]).toEqual(visible.map((row) => row.id));
+    expect(visibleSelection(visible, (row) => row.id, selectAll, false).size).toBe(0);
+  });
+
+  it("does not render selection controls when the resource has no bulk actions", () => {
+    const html = renderToStaticMarkup(
+      <CrudTable
+        items={[{ id: "read-only" }]}
+        columns={[{ key: "id", label: "ID", render: (item) => item.id }]}
+        getRowKey={(item) => item.id}
+      />,
+    );
+    expect(html).not.toContain("Select all visible records");
+    expect(html).not.toContain('type="checkbox"');
   });
 });

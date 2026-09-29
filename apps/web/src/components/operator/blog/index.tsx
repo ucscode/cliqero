@@ -15,11 +15,11 @@ import { HoneypotField } from "../../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { OperatorPrimaryCell, OperatorStatusCell } from "../ui/data-cells";
 import { OperatorFilterField } from "../ui/toolbar";
-import { CrudIndex } from "../crud/index-page";
-import { useCrudCollection } from "../crud/use-collection";
-import type { CrudColumn } from "../crud/table";
-import { CrudEdit } from "../crud/edit";
-import type { CrudBulkAction } from "../crud/bulk-actions";
+import { CrudIndex } from "@/components/crud/index-page";
+import { useCrudCollection } from "@/components/crud/use-collection";
+import type { CrudColumn } from "@/components/crud/table";
+import { CrudEdit } from "@/components/crud/edit";
+import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 
 export function OperatorBlogList() {
   const [search, setSearch] = useState("");
@@ -152,19 +152,10 @@ export function OperatorBlogList() {
         </Button>
       }
       items={collection.items}
-      pageSize={collection.pageSizeControl}
+      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(post) => post.id}
-      selection={
-        collection.maxBulkSelection
-          ? {
-              enabled: true,
-              max: collection.maxBulkSelection,
-              labelForItem: (post) => `Select article ${post.title}`,
-              bulkActions,
-            }
-          : undefined
-      }
+      selection={{ labelForItem: (post) => `article ${post.title}`, bulkActions }}
       actions={(post) => [
         { type: "link", label: "View / edit", href: `/operator/blog/${post.id}` },
         { type: "action", label: "Delete", destructive: true, onSelect: () => void remove(post) },

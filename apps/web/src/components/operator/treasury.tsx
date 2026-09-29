@@ -21,9 +21,9 @@ import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui
 import { OperatorMetricCard } from "./ui/metric-card";
 import { OperatorFilterField } from "./ui/toolbar";
 import { OperatorSection } from "./ui/section";
-import { CrudIndex } from "./crud/index-page";
-import { useCrudCollection } from "./crud/use-collection";
-import type { CrudColumn } from "./crud/table";
+import { CrudIndex } from "@/components/crud/index-page";
+import { useCrudCollection } from "@/components/crud/use-collection";
+import type { CrudColumn } from "@/components/crud/table";
 import type { OperatorAction } from "./ui/actions-menu";
 
 function errorMessage(error: unknown) {
@@ -308,7 +308,7 @@ export function OperatorTreasuryPage() {
         void collection.apply({ search: search.trim(), direction, source });
       }}
       items={collection.items}
-      pageSize={collection.pageSizeControl}
+      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(entry) => entry.id}
       actions={actions}

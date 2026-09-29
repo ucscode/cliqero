@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CursorHistory } from "@/components/operator/ui/cursor-history";
+import { CursorHistory } from "@/components/crud/cursor-history";
 
-describe("Operator cursor history", () => {
+describe("CRUD cursor history", () => {
   it("starts without a previous cursor and traverses forward/backward", () => {
     const first = CursorHistory.firstPage();
     expect(first.current).toBeNull();
@@ -23,7 +23,7 @@ describe("Operator cursor history", () => {
     const first = CursorHistory.firstPage();
     const requestedNextCursor = "cursor-2";
 
-    // The component commits afterNext/afterPrevious only after a successful fetch.
+    // The controller commits afterNext/afterPrevious only after a successful fetch.
     expect(first.current).toBeNull();
     expect(first.hasPrevious).toBe(false);
     expect(first.afterNext(requestedNextCursor).current).toBe(requestedNextCursor);

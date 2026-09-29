@@ -754,4 +754,47 @@ suite("listing management and media", () => {
     await app.integrations.rotate(owner.id, integration.id);
     await app.integrations.revoke(owner.id, integration.id);
   });
+
+  it("applies bulk catalogue lifecycle actions per listing through the domain service", async () => {
+    const { owner } = await accounts("bulk");
+    const makeDraft = (title: string) =>
+      app.listingService.create(owner, {
+        title,
+        shortDescription: `${title} summary`,
+        longDescription: `${title} details`,
+        priceMinor: "100",
+        currency: "USD",
+        destination: `https://example.com/${title.toLowerCase().replaceAll(" ", "-")}`,
+      });
+    const draft = await makeDraft("Bulk draft");
+    const archived = await makeDraft("Bulk archived");
+    const unrelated = await makeDraft("Unrelated draft");
+    await app.listingService.archiveCatalogue(owner, archived.id);
+
+    const published = await app.listingService.bulkCatalogueState(owner, "publish", [
+      draft.id,
+      archived.id,
+    ]);
+    expect(published).toEqual([
+      { id: draft.id, success: true },
+      {
+        id: archived.id,
+        success: false,
+        error: "Only a draft listing can be published",
+      },
+    ]);
+    expect((await app.listingService.getCatalogue(draft.id)).state).toBe("published");
+    expect((await app.listingService.getCatalogue(archived.id)).state).toBe("archived");
+    expect((await app.listingService.getCatalogue(unrelated.id)).state).toBe("draft");
+
+    expect(await app.listingService.bulkCatalogueState(owner, "archive", [draft.id])).toEqual([
+      { id: draft.id, success: true },
+    ]);
+    expect((await app.listingService.getCatalogue(draft.id)).state).toBe("archived");
+    expect(await app.listingService.bulkCatalogueState(owner, "restore", [archived.id])).toEqual([
+      { id: archived.id, success: true },
+    ]);
+    expect((await app.listingService.getCatalogue(archived.id)).state).toBe("draft");
+    expect((await app.listingService.getCatalogue(unrelated.id)).state).toBe("draft");
+  });
 });

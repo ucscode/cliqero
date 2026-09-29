@@ -26,10 +26,11 @@ import { Toast } from "../toast";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { OperatorFilterField } from "./ui/toolbar";
 import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
-import { CrudIndex } from "./crud/index-page";
-import { CrudEdit } from "./crud/edit";
-import { useCrudCollection } from "./crud/use-collection";
-import type { CrudColumn } from "./crud/table";
+import { CrudIndex } from "@/components/crud/index-page";
+import { CrudEdit } from "@/components/crud/edit";
+import { useCrudCollection } from "@/components/crud/use-collection";
+import type { CrudColumn } from "@/components/crud/table";
+import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import type { OperatorAction } from "./ui/actions-menu";
 import { OperatorEmptyState } from "./ui/empty-state";
 import { OperatorErrorState } from "./ui/error-state";
@@ -95,6 +96,49 @@ export function OperatorCatalogueList() {
       setActionError(errorMessage(cause));
     }
   }
+
+  async function bulkState(
+    listings: readonly OperatorListing[],
+    action: "publish" | "archive" | "restore",
+  ) {
+    if (
+      action === "archive" &&
+      !window.confirm(
+        `Archive ${listings.length} selected listing${listings.length === 1 ? "" : "s"}?`,
+      )
+    )
+      return false;
+    setActionError(null);
+    try {
+      const { results } = await apiFetch<{
+        results: Array<{ id: string; success: boolean; error?: string }>;
+      }>("/api/operator/catalogue/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, ids: listings.map((listing) => listing.id) }),
+      });
+      const failures = results.filter((result) => !result.success);
+      const pastTense = { publish: "published", archive: "archived", restore: "restored" }[action];
+      if (failures.length)
+        setActionError(
+          `${failures.length} of ${results.length} listings could not be ${pastTense}: ${failures
+            .map((result) => result.error)
+            .filter(Boolean)
+            .join("; ")}`,
+        );
+      await collection.retry();
+      return true;
+    } catch (cause) {
+      setActionError(errorMessage(cause));
+      return false;
+    }
+  }
+
+  const bulkActions: readonly CrudBulkAction<OperatorListing>[] = [
+    { label: "Publish", onSelect: (items) => bulkState(items, "publish") },
+    { label: "Archive", destructive: true, onSelect: (items) => bulkState(items, "archive") },
+    { label: "Restore", onSelect: (items) => bulkState(items, "restore") },
+  ];
 
   async function importFile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -304,9 +348,10 @@ export function OperatorCatalogueList() {
         </details>
       }
       items={collection.items}
-      pageSize={collection.pageSizeControl}
+      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(listing) => listing.id}
+      selection={{ labelForItem: (listing) => `listing ${listing.title}`, bulkActions }}
       actions={actions}
       actionLabel={(listing) => `Actions for ${listing.title}`}
       loading={collection.loading}

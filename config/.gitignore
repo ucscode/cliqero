@@ -3,4 +3,3 @@
 *.yml
 !*.example.yaml
 !*.example.yml
-!operator.yaml

@@ -26,12 +26,12 @@ import { OperatorLoadingState } from "./ui/loading-state";
 import { OperatorMetricCard } from "./ui/metric-card";
 import { OperatorSection } from "./ui/section";
 import { OperatorFilterField } from "./ui/toolbar";
-import { CrudIndex } from "./crud/index-page";
-import { CrudDetail } from "./crud/detail";
-import { CrudFieldList } from "./crud/field-list";
-import { CrudEdit } from "./crud/edit";
-import { useCrudCollection } from "./crud/use-collection";
-import type { CrudColumn } from "./crud/table";
+import { CrudIndex } from "@/components/crud/index-page";
+import { CrudDetail } from "@/components/crud/detail";
+import { CrudFieldList } from "@/components/crud/field-list";
+import { CrudEdit } from "@/components/crud/edit";
+import { useCrudCollection } from "@/components/crud/use-collection";
+import type { CrudColumn } from "@/components/crud/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -94,9 +94,7 @@ export function OperatorUsersList({ canManage = false }: { canManage?: boolean }
       hasPrevious={collection.hasPrevious}
       onPrevious={() => void collection.previous()}
       onNext={() => void collection.next()}
-      pageSize={collection.pageSize}
-      pageSizeOptions={collection.pageSizeOptions}
-      onPageSizeChange={(value) => void collection.changePageSize(value)}
+      maxRows={collection.maxRows}
       filtersDirty={Boolean(search.trim())}
       onFiltersReset={async () => {
         const ok = await collection.apply("");
@@ -119,9 +117,7 @@ export function OperatorUsersListView({
   hasPrevious,
   onPrevious,
   onNext,
-  pageSize,
-  pageSizeOptions,
-  onPageSizeChange,
+  maxRows,
   filtersDirty,
   onFiltersReset,
 }: {
@@ -136,9 +132,7 @@ export function OperatorUsersListView({
   hasPrevious: boolean;
   onPrevious: () => void;
   onNext: () => void;
-  pageSize?: number | null;
-  pageSizeOptions?: readonly number[];
-  onPageSizeChange?: (value: number) => void;
+  maxRows?: number;
   filtersDirty?: boolean;
   onFiltersReset?: () => boolean | void | Promise<boolean | void>;
 }) {
@@ -222,6 +216,7 @@ export function OperatorUsersListView({
       }
       toolbarClassName="max-w-2xl"
       items={page?.items ?? []}
+      maxRows={maxRows}
       columns={columns}
       getRowKey={(account) => account.id}
       actions={(account) => operatorUserRowActions(account, Boolean(canManage))}
@@ -241,15 +236,6 @@ export function OperatorUsersListView({
               onPrevious,
               onNext,
               summary: `Showing ${page.items.length} users`,
-            }
-          : undefined
-      }
-      pageSize={
-        pageSize && pageSizeOptions?.length && onPageSizeChange
-          ? {
-              value: pageSize,
-              options: pageSizeOptions,
-              onChange: onPageSizeChange,
             }
           : undefined
       }

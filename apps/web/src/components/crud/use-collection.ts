@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CrudCollectionController } from "./collection-controller";
-import { apiFetch } from "@/lib/api-client";
+import { useCrudMaxRows } from "./configuration";
 
 export type CrudPage<T> = { items: T[]; nextCursor: string | null };
 export type CrudPageReader<TFilters, TItem> = (
@@ -15,8 +15,12 @@ export type CrudPageReader<TFilters, TItem> = (
 export function useCrudCollection<TFilters, TItem>(
   readPage: CrudPageReader<TFilters, TItem>,
   initialFilters: TFilters,
+  maxRowsOverride?: number,
 ) {
-  const [controller] = useState(() => new CrudCollectionController(readPage, initialFilters, 1));
+  const maxRows = useCrudMaxRows(maxRowsOverride);
+  const [controller] = useState(
+    () => new CrudCollectionController(readPage, initialFilters, maxRows),
+  );
   useEffect(() => controller.setReader(readPage), [controller, readPage]);
   const [items, setItems] = useState<TItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -24,46 +28,20 @@ export function useCrudCollection<TFilters, TItem>(
   const [hasPrevious, setHasPrevious] = useState(false);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
-  const [pageSize, setPageSize] = useState<number | null>(null);
-  const [pageSizeOptions, setPageSizeOptions] = useState<number[]>([]);
-  const [maxBulkSelection, setMaxBulkSelection] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    let configurationError: string | null = null;
-    void apiFetch<{
-      tables: {
-        defaultPageSize: number;
-        pageSizeOptions: number[];
-        maxBulkSelection: number;
-      };
-    }>("/api/operator/table-config")
-      .then(async ({ tables }) => {
-        if (!active) return;
-        controller.setInitialPageSize(tables.defaultPageSize);
-        setPageSizeOptions(tables.pageSizeOptions);
-        setMaxBulkSelection(tables.maxBulkSelection);
-        setLoading(true);
-        await controller.apply(initialFilters, tables.defaultPageSize);
-      })
-      .catch((cause) => {
-        if (active) {
-          configurationError =
-            cause instanceof Error ? cause.message : "Operator table settings unavailable.";
-        }
-      })
-      .finally(() => {
-        if (!active) return;
-        setItems([...controller.items]);
-        setNextCursor(controller.hasNext ? controller.nextCursorValue : null);
-        setHasNext(controller.hasNext);
-        setHasPrevious(controller.hasPrevious);
-        setError(controller.error ?? configurationError);
-        setInitialized(controller.initialized);
-        setPageSize(controller.currentPageSize || null);
-        setLoading(false);
-      });
+    void controller.apply(initialFilters).finally(() => {
+      if (!active) return;
+      setItems([...controller.items]);
+      setNextCursor(controller.hasNext ? controller.nextCursorValue : null);
+      setHasNext(controller.hasNext);
+      setHasPrevious(controller.hasPrevious);
+      setError(controller.error);
+      setInitialized(controller.initialized);
+      setLoading(false);
+    });
     return () => {
       active = false;
     };
@@ -84,7 +62,6 @@ export function useCrudCollection<TFilters, TItem>(
         setError(controller.error);
         setLoading(false);
         setInitialized(controller.initialized);
-        setPageSize(controller.currentPageSize);
       }
     },
     [controller],
@@ -98,16 +75,6 @@ export function useCrudCollection<TFilters, TItem>(
   const previous = useCallback(() => run(() => controller.previous()), [controller, run]);
   const retry = useCallback(() => run(() => controller.retry()), [controller, run]);
   const refresh = useCallback(() => run(() => controller.refresh()), [controller, run]);
-  const changePageSize = useCallback(
-    (value: number) => run(() => controller.setPageSize(value)),
-    [controller, run],
-  );
-
-  const pageSizeControl =
-    pageSize !== null && pageSizeOptions.length
-      ? { value: pageSize, options: pageSizeOptions, onChange: changePageSize }
-      : undefined;
-
   return {
     items,
     nextCursor,
@@ -115,16 +82,12 @@ export function useCrudCollection<TFilters, TItem>(
     hasPrevious,
     loading,
     initialized,
-    pageSize,
-    pageSizeOptions,
-    maxBulkSelection,
-    pageSizeControl,
+    maxRows,
     error,
     apply,
     next,
     previous,
     retry,
     refresh,
-    changePageSize,
   };
 }

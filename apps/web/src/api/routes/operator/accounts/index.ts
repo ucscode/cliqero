@@ -5,22 +5,17 @@ import { domainError } from "../../../shared/error";
 import { errorSchema } from "../../../shared/schemas";
 import { usernameSchema } from "@/modules/identity/username";
 import { operatorAccountDetailSchema, operatorAccountSummarySchema } from "./contracts";
-import { loadOperatorTableConfiguration } from "@/config/operator-tables";
+import { crudMaxRows } from "@/config/crud";
 
 export function registerOperatorAccountRoutes(
   app: OpenAPIHono<Env>,
   container: ApplicationContainer,
 ) {
-  const tableConfiguration = loadOperatorTableConfiguration().tables;
+  const maxRows = crudMaxRows();
   const accountListQuery = z.object({
     search: z.string().max(100).optional(),
     cursor: z.string().max(512).optional(),
-    limit: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(tableConfiguration.max_page_size)
-      .default(tableConfiguration.default_page_size),
+    limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });
   const accountCreateBody = z
     .object({

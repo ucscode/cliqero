@@ -1,16 +1,16 @@
-import { useMemo, useState, type FormEventHandler, type ReactNode } from "react";
+import { useState, type FormEventHandler, type ReactNode } from "react";
 import Link from "next/link";
-import { Button } from "../../ui/button";
-import { OperatorEmptyState } from "../ui/empty-state";
-import { OperatorErrorState } from "../ui/error-state";
-import { OperatorLoadingState } from "../ui/loading-state";
-import { OperatorPage, OperatorPageHeader } from "../ui/page";
-import { OperatorPagination } from "../ui/pagination";
-import { OperatorSection } from "../ui/section";
-import { OperatorToolbar } from "../ui/toolbar";
+import { Button } from "../ui/button";
+import { OperatorEmptyState } from "../operator/ui/empty-state";
+import { OperatorErrorState } from "../operator/ui/error-state";
+import { OperatorLoadingState } from "../operator/ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "../operator/ui/page";
+import { OperatorPagination } from "../operator/ui/pagination";
+import { OperatorSection } from "../operator/ui/section";
+import { OperatorToolbar } from "../operator/ui/toolbar";
 import { CrudTable, type CrudColumn } from "./table";
 import { CrudBulkActions, type CrudBulkAction } from "./bulk-actions";
-import type { OperatorAction } from "../ui/actions-menu";
+import type { OperatorAction } from "../operator/ui/actions-menu";
 
 export type CrudPagination = {
   hasPrevious: boolean;
@@ -52,7 +52,7 @@ export function CrudIndex<T>({
   emptyAction,
   empty,
   pagination,
-  pageSize,
+  maxRows,
   selection,
   sectionTitle,
   sectionDescription,
@@ -88,34 +88,25 @@ export function CrudIndex<T>({
   emptyAction?: ReactNode;
   empty?: ReactNode;
   pagination?: CrudPagination;
-  pageSize?: { value: number; options: readonly number[]; onChange: (value: number) => void };
+  maxRows?: number;
   selection?: {
-    enabled: boolean;
-    max: number;
     labelForItem: (item: T) => string;
-    bulkActions?: readonly CrudBulkAction<T>[];
+    bulkActions: readonly CrudBulkAction<T>[];
   };
   sectionTitle?: string;
   sectionDescription?: string;
 }) {
   const collectionInitialized = initialized ?? !loading;
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
-  const [selectionLimitReached, setSelectionLimitReached] = useState(false);
-  const clearSelection = () => {
-    setSelectedKeys(new Set());
-    setSelectionLimitReached(false);
-  };
-  const selectedItems = useMemo(
-    () => items.filter((item) => selectedKeys.has(getRowKey(item))),
-    [getRowKey, items, selectedKeys],
-  );
+  const clearSelection = () => setSelectedKeys(new Set());
+  const visibleRows = maxRows ? items.slice(0, maxRows) : items;
+  const selectedItems = visibleRows.filter((item) => selectedKeys.has(getRowKey(item)));
   const handleFilterSubmit: FormEventHandler<HTMLFormElement> = (event) => {
     clearSelection();
     onFiltersSubmit?.(event);
   };
   async function resetFilters() {
     if (!onFiltersReset) return;
-    setSelectionLimitReached(false);
     const completed = await onFiltersReset();
     if (completed !== false) clearSelection();
   }
@@ -138,25 +129,16 @@ export function CrudIndex<T>({
         columns={columns.length + Number(Boolean(actions))}
         label={loadingLabel ?? `Loading ${title.toLowerCase()}`}
       />
-    ) : items.length ? (
+    ) : visibleRows.length ? (
       <CrudTable
-        items={items}
+        items={visibleRows}
         columns={columns}
         getRowKey={getRowKey}
         actions={actions}
         actionLabel={actionLabel}
         selection={
-          selection?.enabled
-            ? {
-                selectedKeys,
-                onChange: (keys) => {
-                  setSelectionLimitReached(false);
-                  setSelectedKeys(keys);
-                },
-                max: selection.max,
-                labelForItem: selection.labelForItem,
-                onLimitReached: () => setSelectionLimitReached(true),
-              }
+          selection?.bulkActions.length
+            ? { selectedKeys, onChange: setSelectedKeys, labelForItem: selection.labelForItem }
             : undefined
         }
         footer={
@@ -195,7 +177,7 @@ export function CrudIndex<T>({
         description={description}
         actions={headerActions || createAction ? headingActions : undefined}
       />
-      {filters || sort || toolbarActions || onFiltersReset || pageSize ? (
+      {filters || sort || toolbarActions || onFiltersReset ? (
         <OperatorToolbar
           onSubmit={handleFilterSubmit}
           actions={
@@ -210,27 +192,6 @@ export function CrudIndex<T>({
                 >
                   {resetLabel ?? "Clear"}
                 </Button>
-              )}
-              {pageSize && (
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  Rows
-                  <select
-                    aria-label="Rows per page"
-                    value={pageSize.value}
-                    disabled={loading}
-                    onChange={(event) => {
-                      clearSelection();
-                      pageSize.onChange(Number(event.target.value));
-                    }}
-                    className="h-10 rounded-md border border-slate-300 bg-white px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
-                  >
-                    {pageSize.options.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
               )}
             </>
           }
@@ -249,12 +210,7 @@ export function CrudIndex<T>({
         </p>
       )}
       {error && <OperatorErrorState message={error} retry={onRetry} />}
-      {selectionLimitReached && (
-        <p role="status" className="text-sm text-amber-800">
-          You can select up to {selection?.max} records at a time.
-        </p>
-      )}
-      {selection?.enabled && selection.bulkActions?.length ? (
+      {selection?.bulkActions.length ? (
         <CrudBulkActions
           items={selectedItems}
           actions={selection.bulkActions}

@@ -2,11 +2,11 @@
 
 import { useId, type FormEventHandler, type ReactNode } from "react";
 import Link from "next/link";
-import { Button } from "../../ui/button";
-import { OperatorErrorState } from "../ui/error-state";
-import { OperatorLoadingState } from "../ui/loading-state";
-import { OperatorPage, OperatorPageHeader } from "../ui/page";
-import { OperatorSection } from "../ui/section";
+import { Button } from "../ui/button";
+import { OperatorErrorState } from "../operator/ui/error-state";
+import { OperatorLoadingState } from "../operator/ui/loading-state";
+import { OperatorPage, OperatorPageHeader } from "../operator/ui/page";
+import { OperatorSection } from "../operator/ui/section";
 
 export function CrudEdit({
   mode,
