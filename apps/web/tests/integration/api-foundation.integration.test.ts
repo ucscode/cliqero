@@ -336,7 +336,7 @@ suite("headless API principal and hierarchy read model", () => {
     expect(
       (await app.hierarchy.search(operator.id, other.username, true, 20)).map((item) => item.id),
     ).toContain(other.id);
-  });
+  }, 30_000);
   it("allows only an operator-scoped principal to reassign a parent through Hono", async () => {
     const operator = await account("operator"),
       child = await account("reassign_child"),

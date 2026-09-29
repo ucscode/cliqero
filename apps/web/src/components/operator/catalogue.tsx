@@ -86,12 +86,12 @@ export function OperatorCatalogueList() {
     if (action === "archive" && !window.confirm(`Archive “${listing.title}”?`)) return;
     setActionError(null);
     try {
-      const endpoint =
-        action === "archive"
-          ? `/api/operator/listings/${listing.id}`
-          : `/api/operator/listings/${listing.id}/${action}`;
-      await apiFetch(endpoint, {
-        method: action === "archive" ? "DELETE" : "POST",
+      await apiFetch(`/api/operator/listings/${listing.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          state: action === "publish" ? "published" : action === "archive" ? "archived" : "draft",
+        }),
       });
       await collection.retry();
     } catch (cause) {
@@ -113,20 +113,33 @@ export function OperatorCatalogueList() {
       return false;
     setActionError(null);
     try {
-      const { results } = await apiFetch<{
-        results: Array<{ id: string; success: boolean; error?: string }>;
-      }>("/api/operator/catalogue/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action, ids: listings.map((listing) => listing.id) }),
-      });
+      const results = await Promise.all(
+        listings.map(async (listing) => {
+          try {
+            await apiFetch(`/api/operator/listings/${listing.id}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                state:
+                  action === "publish" ? "published" : action === "archive" ? "archived" : "draft",
+              }),
+            });
+            return { listing, success: true as const };
+          } catch (cause) {
+            return {
+              listing,
+              success: false as const,
+              error: cause instanceof Error ? cause.message : "Unable to update listing state.",
+            };
+          }
+        }),
+      );
       const failures = results.filter((result) => !result.success);
       const pastTense = { publish: "published", archive: "archived", restore: "restored" }[action];
       if (failures.length)
         setActionError(
           `${failures.length} of ${results.length} listings could not be ${pastTense}: ${failures
-            .map((result) => result.error)
-            .filter(Boolean)
+            .map(({ listing, error }) => `${listing.title}: ${error}`)
             .join("; ")}`,
         );
       await collection.retry();

@@ -52,18 +52,25 @@ export function OperatorBlogList() {
     if (!window.confirm(`Delete ${posts.length} selected articles?`)) return false;
     setActionError(null);
     try {
-      const { results } = await apiFetch<{ results: Array<{ success: boolean }> }>(
-        "/api/operator/blog/bulk",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "delete", ids: posts.map((post) => post.id) }),
-        },
+      const results = await Promise.all(
+        posts.map(async (post) => {
+          try {
+            await apiFetch(`/api/blog/posts/${post.id}`, { method: "DELETE" });
+            return { post, success: true as const };
+          } catch (cause) {
+            return {
+              post,
+              success: false as const,
+              error: cause instanceof Error ? cause.message : "Unable to delete article.",
+            };
+          }
+        }),
       );
-      if (results.some((result) => !result.success))
-        setActionError("Some selected articles could not be deleted.");
+      const failures = results.filter((result) => !result.success);
+      if (failures.length)
+        setActionError(failures.map(({ post, error }) => `${post.title}: ${error}`).join(" "));
       await collection.retry();
-      return !results.some((result) => !result.success);
+      return failures.length === 0;
     } catch (cause) {
       setActionError(
         cause instanceof Error ? cause.message : "Unable to delete selected articles.",

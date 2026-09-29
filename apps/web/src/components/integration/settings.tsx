@@ -43,22 +43,29 @@ export function IntegrationSettings() {
     setLoading(true);
     setError(null);
     try {
-      const [integrations, ownedListings] = await Promise.all([
-        apiFetch<{ items: Integration[] }>("/api/integrations"),
-        apiFetch<ListingPage>("/api/me/listings?state=published&limit=100").catch(() => ({
-          items: [],
-          next_cursor: null,
-        })),
-      ]);
-      setItems(integrations.items);
+      const ownedListings = await apiFetch<ListingPage>("/api/me/listings?limit=100").catch(() => ({
+        items: [],
+        next_cursor: null,
+      }));
       setListings(ownedListings.items);
-      setListingId((current) => current || ownedListings.items[0]?.id || "");
+      const selectedListingId = ownedListings.items.some((item) => item.id === listingId)
+        ? listingId
+        : (ownedListings.items[0]?.id ?? "");
+      setListingId(selectedListingId);
+      if (!selectedListingId) {
+        setItems([]);
+        return;
+      }
+      const integrations = await apiFetch<{ items: Integration[] }>(
+        `/api/listings/${selectedListingId}/integrations`,
+      );
+      setItems(integrations.items);
     } catch (cause) {
       setError(errorMessage(cause, "We couldn’t load your integrations."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [listingId]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
@@ -71,14 +78,17 @@ export function IntegrationSettings() {
     setError(null);
     setMessage(null);
     try {
-      const result = await apiFetch<IntegrationCredential>("/api/integrations", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+      const result = await apiFetch<IntegrationCredential>(
+        `/api/listings/${listingId}/integrations`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
+          },
+          body: JSON.stringify({ name }),
         },
-        body: JSON.stringify({ name, listing_id: listingId }),
-      });
+      );
       setCredential(result.credential);
       setName("");
       setMessage("Integration created. Save the credential now; it is shown once.");
@@ -95,7 +105,7 @@ export function IntegrationSettings() {
     setBusy(item.id);
     setError(null);
     try {
-      await apiFetch(`/api/integrations/${item.id}`, {
+      await apiFetch(`/api/listings/${listingId}/integrations/${item.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: next }),
@@ -112,7 +122,7 @@ export function IntegrationSettings() {
     setBusy(item.id);
     setError(null);
     try {
-      await apiFetch(`/api/integrations/${item.id}`, { method: "DELETE" });
+      await apiFetch(`/api/listings/${listingId}/integrations/${item.id}`, { method: "DELETE" });
       await load();
     } catch (cause) {
       setError(errorMessage(cause, "We couldn’t revoke that integration."));
@@ -126,9 +136,10 @@ export function IntegrationSettings() {
     setBusy(item.id);
     setError(null);
     try {
-      const result = await apiFetch<IntegrationCredential>(`/api/integrations/${item.id}/rotate`, {
-        method: "POST",
-      });
+      const result = await apiFetch<IntegrationCredential>(
+        `/api/listings/${listingId}/integrations/${item.id}/rotate`,
+        { method: "POST" },
+      );
       setCredential(result.credential);
     } catch (cause) {
       setError(errorMessage(cause, "We couldn’t rotate that credential."));

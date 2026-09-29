@@ -7,17 +7,15 @@ import * as earnings from "@/api/compat/earnings/route";
 import * as earningsEntries from "@/api/compat/earnings/entries/route";
 import * as developmentFundingVerify from "@/api/compat/funding/development/verify/route";
 import * as health from "@/api/compat/health/route";
-import * as integrations from "@/api/compat/integrations/route";
-import * as integrationById from "@/api/compat/integrations/[id]/route";
-import * as integrationRotate from "@/api/compat/integrations/[id]/rotate/route";
 import * as listings from "@/api/compat/listings/route";
 import * as listingById from "@/api/compat/listings/[id]/route";
 import * as listingAccess from "@/api/compat/listings/[id]/access/route";
+import * as listingIntegrations from "@/api/compat/listings/[listingId]/integrations/route";
+import * as listingIntegration from "@/api/compat/listings/[listingId]/integrations/[integrationId]/route";
+import * as listingIntegrationRotate from "@/api/compat/listings/[listingId]/integrations/[integrationId]/rotate/route";
 import * as listingMedia from "@/api/compat/listings/[id]/media/route";
 import * as listingMediaById from "@/api/compat/listings/[id]/media/[mediaId]/route";
-import * as listingPublish from "@/api/compat/listings/[id]/publish/route";
 import * as listingReferralUrl from "@/api/compat/listings/[id]/referral-url/route";
-import * as listingRestore from "@/api/compat/listings/[id]/restore/route";
 import * as listingExport from "@/api/compat/listings/export/route";
 import * as listingImport from "@/api/compat/listings/import/route";
 import * as myListings from "@/api/compat/me/listings/route";
@@ -31,8 +29,6 @@ import * as operatorListingMediaById from "@/api/compat/operator/listings/[id]/m
 import * as operatorListingIntegrations from "@/api/compat/operator/listings/[id]/integrations/route";
 import * as operatorListingIntegration from "@/api/compat/operator/listings/[id]/integrations/[integrationId]/route";
 import * as operatorListingIntegrationRotate from "@/api/compat/operator/listings/[id]/integrations/[integrationId]/rotate/route";
-import * as operatorListingPublish from "@/api/compat/operator/listings/[id]/publish/route";
-import * as operatorListingRestore from "@/api/compat/operator/listings/[id]/restore/route";
 import * as operatorListingExport from "@/api/compat/operator/listings/export/route";
 import * as operatorListingImport from "@/api/compat/operator/listings/import/route";
 import * as operatorPurchaseReverse from "@/api/compat/operator/purchases/reverse/route";
@@ -84,15 +80,19 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/earnings", module: earnings },
   { pattern: "/api/funding/development/verify", module: developmentFundingVerify },
   { pattern: "/api/health", module: health },
-  { pattern: "/api/integrations/:id/rotate", module: integrationRotate },
-  { pattern: "/api/integrations/:id", module: integrationById },
-  { pattern: "/api/integrations", module: integrations },
+  {
+    pattern: "/api/listings/:listingId/integrations/:integrationId/rotate",
+    module: listingIntegrationRotate,
+  },
+  {
+    pattern: "/api/listings/:listingId/integrations/:integrationId",
+    module: listingIntegration,
+  },
+  { pattern: "/api/listings/:listingId/integrations", module: listingIntegrations },
   { pattern: "/api/listings/:id/media/:mediaId", module: listingMediaById },
   { pattern: "/api/listings/:id/media", module: listingMedia },
   { pattern: "/api/listings/:id/access", module: listingAccess },
-  { pattern: "/api/listings/:id/publish", module: listingPublish },
   { pattern: "/api/listings/:id/referral-url", module: listingReferralUrl },
-  { pattern: "/api/listings/:id/restore", module: listingRestore },
   { pattern: "/api/listings/export", module: listingExport },
   { pattern: "/api/listings/import", module: listingImport },
   { pattern: "/api/listings/:id", module: listingById },
@@ -112,8 +112,6 @@ export const legacyRoutes: LegacyRoute[] = [
     module: operatorListingIntegration,
   },
   { pattern: "/api/operator/listings/:id/integrations", module: operatorListingIntegrations },
-  { pattern: "/api/operator/listings/:id/publish", module: operatorListingPublish },
-  { pattern: "/api/operator/listings/:id/restore", module: operatorListingRestore },
   { pattern: "/api/operator/listings/export", module: operatorListingExport },
   { pattern: "/api/operator/listings/import", module: operatorListingImport },
   { pattern: "/api/operator/listings/:id", module: operatorListingById },

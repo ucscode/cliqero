@@ -21,9 +21,9 @@ const publicPaths = new Set(["/api/health", "/api/listings", "/api/listings/:id"
 const sessionOnlyPaths = new Set([
   "/api/funding/development/verify",
   "/api/listings/:id/access",
-  "/api/integrations",
-  "/api/integrations/:id",
-  "/api/integrations/:id/rotate",
+  "/api/listings/:listingId/integrations",
+  "/api/listings/:listingId/integrations/:integrationId",
+  "/api/listings/:listingId/integrations/:integrationId/rotate",
   "/api/me/onboarding",
   "/api/me/profile",
 ]);

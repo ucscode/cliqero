@@ -4,7 +4,7 @@ Cliqero is a platform catalogue, not a multi-seller marketplace. Ordinary accoun
 
 ## Listing lifecycle
 
-Listings transition explicitly through `draft → published → archived`; restore returns an archived listing to draft. Only published listings are public. Operator catalogue APIs are capability-protected, and delete means archive.
+Listings transition explicitly through `draft → published → archived`; restore returns an archived listing to draft. Only published listings are public. Operator catalogue APIs are capability-protected; lifecycle state is changed through the listing PATCH operation rather than a delete/archive route.
 
 ## Commission policy
 

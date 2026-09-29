@@ -49,14 +49,12 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     lockForDeletion: vi.fn(async () => ({
       accountId: target.id,
       deletedAt: null,
-      parentId: "00000000-0000-4000-8000-000000000003",
-      childCount: 0,
       isSystemRoot: false,
       actorIsSystemRoot: false,
       systemRootCount: 1,
       ...options.deletionContext,
     })),
-    reparentChildren: vi.fn(async () => 2),
+    detachChildren: vi.fn(async () => 2),
     archiveOwnedListings: vi.fn(async () => 1),
     anonymizeWithdrawalDestinations: vi.fn(async () => 1),
     revokeReferralAttributions: vi.fn(async () => undefined),
@@ -136,10 +134,10 @@ describe("OperatorAccountManagementService", () => {
     const { service, audits, deletion, authentication } = fixture();
     await service.delete(actorId, target.id);
 
-    expect(deletion.reparentChildren).toHaveBeenCalledWith(
-      target.id,
-      "00000000-0000-4000-8000-000000000003",
+    expect(deletion.tombstone.mock.invocationCallOrder[0]).toBeLessThan(
+      deletion.detachChildren.mock.invocationCallOrder[0],
     );
+    expect(deletion.detachChildren).toHaveBeenCalledWith(target.id);
     expect(deletion.archiveOwnedListings).toHaveBeenCalledWith(target.id);
     expect(deletion.anonymizeWithdrawalDestinations).toHaveBeenCalledWith(target.id);
     expect(deletion.tombstone).toHaveBeenCalledWith(target.id);
@@ -151,7 +149,7 @@ describe("OperatorAccountManagementService", () => {
         subjectId: target.id,
         newState: {
           deleted: true,
-          childrenReparented: 2,
+          childrenDetached: 2,
           listingsArchived: 1,
           usernameReusable: true,
         },
@@ -170,7 +168,7 @@ describe("OperatorAccountManagementService", () => {
     expect(deletion.lockForDeletion).not.toHaveBeenCalled();
   });
 
-  it("protects the final root account and hierarchy roots with descendants", async () => {
+  it("protects the final system root account but allows hierarchy roots with descendants", async () => {
     const finalRoot = fixture({
       deletionContext: { isSystemRoot: true, actorIsSystemRoot: true, systemRootCount: 1 },
     });
@@ -178,13 +176,9 @@ describe("OperatorAccountManagementService", () => {
       code: "last_root_account",
       status: 409,
     });
-    const hierarchyRoot = fixture({
-      deletionContext: { parentId: null, childCount: 1 },
-    });
-    await expect(hierarchyRoot.service.delete(actorId, target.id)).rejects.toMatchObject({
-      code: "hierarchy_root_has_descendants",
-      status: 409,
-    });
+    const hierarchyRoot = fixture();
+    await expect(hierarchyRoot.service.delete(actorId, target.id)).resolves.toBeUndefined();
+    expect(hierarchyRoot.deletion.detachChildren).toHaveBeenCalledWith(target.id);
   });
 
   it("allows deleting another root only when an independent root remains", async () => {

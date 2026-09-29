@@ -49,17 +49,19 @@ enforced by the domain and database. The list's Add user and Edit account
 actions are shown only to principals with account-management authority.
 
 Authorized account managers can delete an account from its row, detail page, or
-the bounded bulk action. Deletion is transactional and tombstones the canonical
-account identity: Better Auth identity and sessions are removed, API keys and
-integrations are revoked, profile metadata and saved payout-destination details
-are cleared, and the public username is released for reuse. Historical purchase, payment, ledger, withdrawal,
-distribution, and audit facts retain their account UUID and project the identity
-as `Deleted user` where a profile is shown. Owned listings are archived. A
-non-root account's direct referrals are reparented to its current parent; a
-hierarchy root with descendants must first be reassigned. Operators cannot
-delete themselves or the final `system.root` account. Deletion is exposed as
-`DELETE /api/operator/accounts/{accountId}` and bounded
-`POST /api/operator/accounts/bulk` (`action: delete`).
+the bounded bulk action. Deletion tombstones the canonical account identity:
+Better Auth identity and sessions are removed, API keys and integrations are
+revoked, profile metadata and saved payout-destination details are cleared, and
+the public username is released for reuse. Historical purchase, payment,
+ledger, withdrawal, distribution, and audit facts retain their account UUID and
+project the identity as `Deleted user` where a profile is shown. Owned listings
+are archived. Immediate children of the deleted account become parentless roots;
+their descendants stay attached to them, and no ancestor is substituted. Future
+commission shares for hierarchy levels that no longer exist go to the platform.
+Operators cannot delete themselves or the final `system.root` account.
+Deletion uses `DELETE /api/operator/accounts/{accountId}`. The UI's bounded bulk
+action repeats that canonical operation per selected account, reports individual
+failures, and does not require a bulk API endpoint.
 
 Capability changes use explicit, idempotent grant/revoke operations:
 

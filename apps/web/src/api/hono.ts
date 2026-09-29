@@ -13,7 +13,6 @@ import { domainError } from "./shared/error";
 import { errorSchema } from "./shared/schemas";
 import { registerBlogRoutes } from "./routes/blog";
 import { registerOperatorOperationsRoutes } from "./routes/operator/operations";
-import { registerOperatorCatalogueRoutes } from "./routes/operator/catalogue";
 import { registerOperatorListingCategoryRoutes } from "./routes/operator/catalogue/categories";
 import { registerOperatorFinanceRoutes } from "./routes/operator/finance";
 import { registerOperatorWithdrawalRoutes } from "./routes/operator/withdrawal";
@@ -67,31 +66,11 @@ export function createApiApp(
     (c) => {
       if (!canReadOpenApiSchema(schemaAccess, c.req.header("x-openapi-key")))
         return c.json({ error: "Not found", code: "not_found" }, 404) as never;
-      const document = app.getOpenAPIDocument({
-        openapi: "3.0.0",
-        info: { title: "Cliqero API", version: "1.0.0" },
-        servers: [{ url: "/" }],
-      }) as unknown as OpenApiDocument;
-      applyOpenApiMetadata(document, legacyApiPaths, [
-        accountAccessOpenApiMetadata,
-        blogOpenApiMetadata,
-        hierarchyOpenApiMetadata,
-        operatorAccountsOpenApiMetadata,
-        operatorFinanceOpenApiMetadata,
-        operatorFundingOpenApiMetadata,
-        operatorTreasuryOpenApiMetadata,
-        operatorWithdrawalOpenApiMetadata,
-        operatorReviewOpenApiMetadata,
-        operatorCatalogueOpenApiMetadata,
-        operatorPaymentsOpenApiMetadata,
-      ]);
-      delete document.paths["/api/openapi.json"];
-      return c.json(document, 200) as never;
+      return c.json(generateOpenApiDocument(app), 200) as never;
     },
   );
   registerBlogRoutes(app, container);
   registerOperatorOperationsRoutes(app, container);
-  registerOperatorCatalogueRoutes(app, container);
   registerOperatorListingCategoryRoutes(app, container);
   registerOperatorFinanceRoutes(app, container);
   registerOperatorWithdrawalRoutes(app, container);
@@ -113,4 +92,28 @@ export function createApiApp(
     return response ?? c.json({ error: "Not found", code: "not_found" }, 404);
   });
   return app;
+}
+
+/** Builds the only Cliqero OpenAPI specification consumed by JSON and Swagger. */
+export function generateOpenApiDocument(app: OpenAPIHono<Env>) {
+  const document = app.getOpenAPIDocument({
+    openapi: "3.0.0",
+    info: { title: "Cliqero API", version: "1.0.0" },
+    servers: [{ url: "/" }],
+  }) as unknown as OpenApiDocument;
+  applyOpenApiMetadata(document, legacyApiPaths, [
+    accountAccessOpenApiMetadata,
+    blogOpenApiMetadata,
+    hierarchyOpenApiMetadata,
+    operatorAccountsOpenApiMetadata,
+    operatorFinanceOpenApiMetadata,
+    operatorFundingOpenApiMetadata,
+    operatorTreasuryOpenApiMetadata,
+    operatorWithdrawalOpenApiMetadata,
+    operatorReviewOpenApiMetadata,
+    operatorCatalogueOpenApiMetadata,
+    operatorPaymentsOpenApiMetadata,
+  ]);
+  delete document.paths["/api/openapi.json"];
+  return document;
 }

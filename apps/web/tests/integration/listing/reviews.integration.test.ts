@@ -234,7 +234,7 @@ suite("listing review visibility", () => {
     ).toEqual(new Map());
   });
 
-  it("bulk moderation changes only pending reviews and refuses later invalid transitions", async () => {
+  it("moderates reviews through individual resource operations and refuses invalid transitions", async () => {
     const owner = await app.authentication.register({
       email: "bulk-review-owner@example.com",
       username: "bulk_review_owner",
@@ -269,18 +269,14 @@ suite("listing review visibility", () => {
       [owner.id],
     );
 
-    const results = await app.listingReviews.moderateMany(owner, [first.id, second.id], "approved");
-    expect(results).toEqual([
-      { id: first.id, success: true },
-      { id: second.id, success: true },
+    const results = await Promise.all([
+      app.listingReviews.moderate(owner, first.id, "approved"),
+      app.listingReviews.moderate(owner, second.id, "approved"),
     ]);
-    await expect(app.listingReviews.moderateMany(owner, [first.id], "rejected")).resolves.toEqual([
-      {
-        id: first.id,
-        success: false,
-        error: "Review not found or is no longer pending",
-      },
-    ]);
+    expect(results.map((review) => review.id)).toEqual([first.id, second.id]);
+    await expect(app.listingReviews.moderate(owner, first.id, "rejected")).rejects.toThrow(
+      "Review not found or is no longer pending",
+    );
 
     const approved = await app.listingReviews.operatorQueue(owner, {
       status: "approved",
@@ -291,7 +287,7 @@ suite("listing review visibility", () => {
     );
     expect(approved.items).toHaveLength(2);
     expect(approved.items.every((review) => review.moderatedBy === owner.id)).toBe(true);
-    await expect(app.listingReviews.moderateMany(authorA, [second.id], "rejected")).rejects.toThrow(
+    await expect(app.listingReviews.moderate(authorA, second.id, "rejected")).rejects.toThrow(
       "Forbidden",
     );
   });

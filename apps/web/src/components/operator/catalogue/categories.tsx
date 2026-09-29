@@ -41,18 +41,27 @@ export function OperatorListingCategories() {
     if (!window.confirm(`Delete ${categories.length} selected catalogue categories?`)) return false;
     setError(null);
     try {
-      const { results } = await apiFetch<{
-        results: Array<{ id: string; success: boolean; error?: string }>;
-      }>("/api/operator/catalogue/categories/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "delete", ids: categories.map(({ id }) => id) }),
-      });
+      const results = await Promise.all(
+        categories.map(async (category) => {
+          try {
+            await apiFetch(`/api/operator/catalogue/categories/${category.id}`, {
+              method: "DELETE",
+            });
+            return { category, success: true as const };
+          } catch (cause) {
+            return {
+              category,
+              success: false as const,
+              error: cause instanceof Error ? cause.message : "Unable to delete category.",
+            };
+          }
+        }),
+      );
       const failures = results.filter((result) => !result.success);
       if (failures.length)
         setError(
           `${failures.length} of ${results.length} categories could not be deleted: ${failures
-            .map(({ error }) => error)
+            .map(({ category, error }) => `${category.name}: ${error}`)
             .filter(Boolean)
             .join("; ")}`,
         );

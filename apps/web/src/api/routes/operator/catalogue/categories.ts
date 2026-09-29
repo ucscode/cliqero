@@ -4,7 +4,6 @@ import type { Env } from "../../../shared/context";
 import { requireCapabilityScope, requirePrincipal } from "../../../shared/context";
 import { domainError } from "../../../shared/error";
 import { errorSchema } from "../../../shared/schemas";
-import { crudMaxRows } from "@/config/crud";
 import {
   ListingCategoryConflictError,
   ListingCategoryInUseError,
@@ -40,72 +39,6 @@ export function registerOperatorListingCategoryRoutes(
   app: OpenAPIHono<Env>,
   container: ApplicationContainer,
 ) {
-  const bulkBody = z
-    .object({
-      action: z.literal("delete"),
-      ids: z
-        .array(z.string().uuid())
-        .min(1)
-        .max(crudMaxRows())
-        .refine((ids) => new Set(ids).size === ids.length, "ids must be unique"),
-    })
-    .strict();
-
-  app.openapi(
-    createRoute({
-      method: "post",
-      path: "/api/operator/catalogue/categories/bulk",
-      request: { body: { content: { "application/json": { schema: bulkBody } } } },
-      responses: {
-        200: {
-          description: "Per-category deletion outcomes",
-          content: {
-            "application/json": {
-              schema: z.object({
-                results: z.array(
-                  z.object({
-                    id: z.string().uuid(),
-                    success: z.boolean(),
-                    error: z.string().optional(),
-                  }),
-                ),
-              }),
-            },
-          },
-        },
-        401: {
-          description: "Authentication required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        403: {
-          description: "Catalogue management permission required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const principal = requirePrincipal(c);
-      if (!(principal instanceof Object) || !("accountId" in principal)) return principal;
-      const denied = requireCapabilityScope(c, principal, "catalogue.manage", "catalogue:manage");
-      if (denied) return denied;
-      const { ids } = c.req.valid("json");
-      const results = [];
-      for (const id of ids) {
-        try {
-          await container.listingCategories.delete(id);
-          results.push({ id, success: true as const });
-        } catch (error) {
-          results.push({
-            id,
-            success: false as const,
-            error: error instanceof Error ? error.message : "Unable to delete category.",
-          });
-        }
-      }
-      return c.json({ results }, 200);
-    },
-  );
-
   app.openapi(
     createRoute({
       method: "get",

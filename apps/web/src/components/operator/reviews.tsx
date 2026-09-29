@@ -38,7 +38,11 @@ export function OperatorReviews() {
   async function moderate(id: string, action: "approve" | "reject") {
     try {
       setActionError(null);
-      await apiFetch(`/api/operator/reviews/${id}/${action}`, { method: "POST" });
+      await apiFetch(`/api/operator/reviews/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: action === "approve" ? "approved" : "rejected" }),
+      });
       await collection.retry();
     } catch (cause) {
       setActionError(errorMessage(cause));
@@ -47,19 +51,29 @@ export function OperatorReviews() {
   async function moderateMany(reviews: readonly Review[], action: "approve" | "reject") {
     try {
       setActionError(null);
-      const { results } = await apiFetch<{
-        results: Array<{ id: string; success: boolean; error?: string }>;
-      }>("/api/operator/reviews/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action, ids: reviews.map((review) => review.id) }),
-      });
+      const results = await Promise.all(
+        reviews.map(async (review) => {
+          try {
+            await apiFetch(`/api/operator/reviews/${review.id}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ status: action === "approve" ? "approved" : "rejected" }),
+            });
+            return { review, success: true as const };
+          } catch (cause) {
+            return {
+              review,
+              success: false as const,
+              error: cause instanceof Error ? cause.message : "Unable to moderate review.",
+            };
+          }
+        }),
+      );
       const failures = results.filter((result) => !result.success);
       if (failures.length)
         setActionError(
           `${failures.length} of ${results.length} reviews could not be moderated: ${failures
-            .map((result) => result.error)
-            .filter(Boolean)
+            .map(({ review, error }) => `${review.id}: ${error}`)
             .join("; ")}`,
         );
       await collection.retry();

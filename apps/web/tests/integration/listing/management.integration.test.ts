@@ -913,7 +913,7 @@ suite("listing management and media", () => {
     await app.integrations.revoke(owner.id, integration.id);
   });
 
-  it("applies bulk catalogue lifecycle actions per listing through the domain service", async () => {
+  it("validates each catalogue lifecycle change through the domain service", async () => {
     const { owner } = await accounts("bulk");
     const makeDraft = (title: string) =>
       app.listingService.create(owner, {
@@ -929,29 +929,17 @@ suite("listing management and media", () => {
     const unrelated = await makeDraft("Unrelated draft");
     await app.listingService.archiveCatalogue(owner, archived.id);
 
-    const published = await app.listingService.bulkCatalogueState(owner, "publish", [
-      draft.id,
-      archived.id,
-    ]);
-    expect(published).toEqual([
-      { id: draft.id, success: true },
-      {
-        id: archived.id,
-        success: false,
-        error: "Only a draft listing can be published",
-      },
-    ]);
+    await app.listingService.setCatalogueState(owner, draft.id, "published");
+    await expect(
+      app.listingService.setCatalogueState(owner, archived.id, "published"),
+    ).rejects.toThrow("Only a draft listing can be published");
     expect((await app.listingService.getCatalogue(draft.id)).state).toBe("published");
     expect((await app.listingService.getCatalogue(archived.id)).state).toBe("archived");
     expect((await app.listingService.getCatalogue(unrelated.id)).state).toBe("draft");
 
-    expect(await app.listingService.bulkCatalogueState(owner, "archive", [draft.id])).toEqual([
-      { id: draft.id, success: true },
-    ]);
+    await app.listingService.setCatalogueState(owner, draft.id, "archived");
     expect((await app.listingService.getCatalogue(draft.id)).state).toBe("archived");
-    expect(await app.listingService.bulkCatalogueState(owner, "restore", [archived.id])).toEqual([
-      { id: archived.id, success: true },
-    ]);
+    await app.listingService.setCatalogueState(owner, archived.id, "draft");
     expect((await app.listingService.getCatalogue(archived.id)).state).toBe("draft");
     expect((await app.listingService.getCatalogue(unrelated.id)).state).toBe("draft");
   });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApiApp } from "@/api/hono";
+import { swaggerUiResponse } from "@/api/openapi/swagger-ui";
 import { BlogCategoryConflictError } from "@/modules/blog/domain/blog";
 import {
   authorizeLegacyRequest,
@@ -17,6 +18,7 @@ function appWith(
   hierarchySearch: (...args: any[]) => Promise<unknown[]> = async () => [],
   blogOverrides: Record<string, unknown> = {},
   categoryOverrides: Record<string, unknown> = {},
+  reviewOverrides: Record<string, unknown> = {},
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
   return createApiApp(
@@ -272,20 +274,12 @@ function appWith(
         submit: async () => ({}),
         operatorQueue: async () => ({ items: [], nextCursor: null }),
         moderate: async () => ({}),
-        moderateMany: async (_account: unknown, ids: string[], status: string) =>
-          ids.map((id, index) =>
-            index === 0
-              ? { id, success: true }
-              : { id, success: false, error: `Cannot ${status} non-pending review.` },
-          ),
+        ...reviewOverrides,
       },
       listingService: {
-        bulkCatalogueState: async (_account: unknown, action: string, ids: string[]) =>
-          ids.map((id, index) =>
-            index === 0
-              ? { id, success: true }
-              : { id, success: false, error: `Invalid ${action} transition.` },
-          ),
+        setCatalogueState: vi.fn(async (_account: unknown, _id: string, state: string) => ({
+          state,
+        })),
       },
       listingCategories: {
         list: async () => [],
@@ -419,7 +413,7 @@ describe("Hono API foundation", () => {
     );
     expect(oversizedPage.status).toBe(400);
   });
-  it("enforces site CRUD maxRows for list requests and authorizes resource bulk routes", async () => {
+  it("enforces site CRUD maxRows and exposes no UI-only bulk API routes", async () => {
     const base = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: { id: "00000000-0000-4000-8000-000000000001" },
@@ -432,74 +426,42 @@ describe("Hono API foundation", () => {
     );
     expect(oversized.status).toBe(400);
 
-    const catalogue = await appWith(base).fetch(
-      new Request("http://localhost/api/operator/catalogue/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "archive",
-          ids: ["00000000-0000-4000-8000-000000000010", "00000000-0000-4000-8000-000000000011"],
-        }),
-      }),
-    );
-    expect(catalogue.status).toBe(200);
-    expect(await catalogue.json()).toMatchObject({
-      results: [{ success: true }, { success: false, error: "Invalid archive transition." }],
-    });
+    const app = appWith(base);
+    const document = await (
+      await app.fetch(new Request("http://localhost/api/openapi.json"))
+    ).json();
+    for (const path of Object.keys(document.paths))
+      expect(
+        path,
+        `stable API route ${path} must not expose an Operator bulk endpoint`,
+      ).not.toMatch(/^\/api\/operator\/.*\/bulk$/);
+    for (const path of [
+      "/api/operator/accounts/bulk",
+      "/api/operator/blog/bulk",
+      "/api/operator/blog/categories/bulk",
+      "/api/operator/catalogue/bulk",
+      "/api/operator/catalogue/categories/bulk",
+    ])
+      expect(document.paths).not.toHaveProperty(path);
 
-    const reviewResponse = await appWith({ ...base, capabilities: ["reviews.moderate"] }).fetch(
-      new Request("http://localhost/api/operator/reviews/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "approve",
-          ids: ["00000000-0000-4000-8000-000000000012"],
+    for (const path of [
+      "/api/operator/accounts/bulk",
+      "/api/operator/blog/bulk",
+      "/api/operator/blog/categories/bulk",
+      "/api/operator/catalogue/bulk",
+      "/api/operator/catalogue/categories/bulk",
+    ]) {
+      const response = await app.fetch(
+        new Request(`http://localhost${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "delete", ids: [] }),
         }),
-      }),
-    );
-    expect(reviewResponse.status).toBe(200);
-    expect(await reviewResponse.json()).toMatchObject({ results: [{ success: true }] });
-
-    const denied = await appWith({ ...base, capabilities: [] }).fetch(
-      new Request("http://localhost/api/operator/reviews/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "approve", ids: ["00000000-0000-4000-8000-000000000012"] }),
-      }),
-    );
-    expect(denied.status).toBe(403);
+      );
+      expect(response.status).toBe(404);
+    }
   });
-  it("keeps Blog bulk deletion bounded and reports each item's outcome", async () => {
-    const deleted: string[] = [];
-    const principal = {
-      accountId: "00000000-0000-4000-8000-000000000001",
-      account: { id: "00000000-0000-4000-8000-000000000001" },
-      kind: "user_session" as const,
-      capabilities: ["content.manage"],
-      scopes: new Set<string>(),
-    };
-    const response = await appWith(principal, undefined, undefined, {
-      delete: (id: string) => {
-        if (id.endsWith("002")) throw new Error("Article is in use.");
-        deleted.push(id);
-      },
-    }).fetch(
-      new Request("http://localhost/api/operator/blog/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "delete",
-          ids: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
-        }),
-      }),
-    );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      results: [{ success: true }, { success: false, error: "Article is in use." }],
-    });
-    expect(deleted).toEqual(["00000000-0000-4000-8000-000000000001"]);
-  });
-  it("keeps bulk category deletion bounded, authorized, and restricted per category", async () => {
+  it("keeps canonical category deletion and review moderation resource-scoped", async () => {
     const root = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: { id: "00000000-0000-4000-8000-000000000001" },
@@ -507,66 +469,37 @@ describe("Hono API foundation", () => {
       capabilities: ["catalogue.manage", "content.manage"],
       scopes: new Set<string>(),
     };
-    const deletedCatalogue: string[] = [];
-    const catalogue = await appWith(root, undefined, undefined, undefined, {
-      delete: async (id: string) => {
-        if (id.endsWith("002")) throw new Error("Category is assigned to listings.");
-        deletedCatalogue.push(id);
-      },
-    }).fetch(
-      new Request("http://localhost/api/operator/catalogue/categories/bulk", {
-        method: "POST",
+    const reviewId = "00000000-0000-4000-8000-000000000012";
+    const moderate = vi.fn(async (_account: unknown, id: string, status: string) => ({
+      id,
+      status,
+      body: "Review",
+      rating: 5,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      listingId: "00000000-0000-4000-8000-000000000013",
+      accountId: "00000000-0000-4000-8000-000000000014",
+    }));
+    const response = await appWith(
+      { ...root, capabilities: ["reviews.moderate"] },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { moderate },
+    ).fetch(
+      new Request(`http://localhost/api/operator/reviews/${reviewId}`, {
+        method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "delete",
-          ids: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
-        }),
+        body: JSON.stringify({ status: "approved" }),
       }),
     );
-    expect(catalogue.status).toBe(200);
-    expect(await catalogue.json()).toMatchObject({
-      results: [{ success: true }, { success: false, error: "Category is assigned to listings." }],
-    });
-    expect(deletedCatalogue).toEqual(["00000000-0000-4000-8000-000000000001"]);
-
-    const deletedBlog: string[] = [];
-    const blog = await appWith(root, undefined, undefined, {
-      deleteCategory: (id: string) => deletedBlog.push(id),
-    }).fetch(
-      new Request("http://localhost/api/operator/blog/categories/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "delete", ids: ["00000000-0000-4000-8000-000000000003"] }),
-      }),
+    expect(response.status).toBe(200);
+    expect(moderate).toHaveBeenCalledWith(root.account, reviewId, "approved");
+    const actionRoute = await appWith(root).fetch(
+      new Request(`http://localhost/api/operator/reviews/${reviewId}/approve`, { method: "POST" }),
     );
-    expect(blog.status).toBe(200);
-    expect(deletedBlog).toEqual(["00000000-0000-4000-8000-000000000003"]);
-
-    const denied = await appWith({ ...root, capabilities: [] }, undefined, undefined, undefined, {
-      delete: vi.fn(),
-    }).fetch(
-      new Request("http://localhost/api/operator/catalogue/categories/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "delete", ids: ["00000000-0000-4000-8000-000000000001"] }),
-      }),
-    );
-    expect(denied.status).toBe(403);
-
-    const oversized = await appWith(root).fetch(
-      new Request("http://localhost/api/operator/blog/categories/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "delete",
-          ids: Array.from(
-            { length: 51 },
-            (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-          ),
-        }),
-      }),
-    );
-    expect(oversized.status).toBe(400);
+    expect(actionRoute.status).toBe(404);
   });
   it("returns the same canonical post shape from public and operator Blog APIs", async () => {
     const post = {
@@ -722,7 +655,7 @@ describe("Hono API foundation", () => {
     const response = await appWith().fetch(new Request("http://localhost/api/openapi.json"));
     expect(response.status).toBe(200);
     const document = await response.json();
-    const paths = document.paths;
+    const paths = document.paths as Record<string, Record<string, any>>;
     expect(document.components.securitySchemes.CliqeroApiKey).toMatchObject({
       type: "http",
       scheme: "bearer",
@@ -758,8 +691,8 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/accounts/{accountId}"].get).toBeDefined();
     expect(paths["/api/operator/accounts/{accountId}"].patch).toBeDefined();
     expect(paths["/api/operator/accounts/{accountId}"].delete).toBeDefined();
-    expect(paths["/api/operator/accounts/bulk"].post).toBeDefined();
-    expect(paths["/api/operator/payments"].get.tags).toContain("Payments");
+    expect(paths["/api/operator/accounts/bulk"]).toBeUndefined();
+    expect(paths["/api/operator/payments"].get.tags).toContain("Payments (Operator)");
     expect(paths["/api/operator/payments/{paymentId}/reconcile"].post).toBeDefined();
     expect(paths["/api/operator/payments/events"].get).toBeDefined();
     expect(paths).not.toHaveProperty("/api/operator/paystack/events");
@@ -799,8 +732,28 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/funding/{fundingId}/confirm-bank-transfer"]).toBeDefined();
     expect(paths["/api/operator/listings"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}"]).toBeDefined();
+    expect(paths["/api/operator/listings/{id}"].patch).toBeDefined();
+    expect(paths["/api/operator/listings/{id}/publish"]).toBeUndefined();
+    expect(paths["/api/operator/listings/{id}/restore"]).toBeUndefined();
     expect(paths["/api/operator/listings/{id}/integrations"]).toBeDefined();
     expect(paths["/api/operator/listings/{id}/integrations/{integrationId}/rotate"]).toBeDefined();
+    expect(paths["/api/listings/{listingId}/integrations"].get.tags).toContain(
+      "Integrations (System)",
+    );
+    expect(paths["/api/listings/{listingId}/integrations"].post).toBeDefined();
+    const createIntegrationSchema =
+      paths["/api/listings/{listingId}/integrations"].post.requestBody.content["application/json"]
+        .schema;
+    expect(createIntegrationSchema.properties).toHaveProperty("name");
+    expect(createIntegrationSchema.properties).not.toHaveProperty("listing_id");
+    expect(paths["/api/listings/{listingId}/integrations"].get.parameters[0].description).toContain(
+      "listing",
+    );
+    expect(paths["/api/listings/{listingId}/integrations/{integrationId}"].patch).toBeDefined();
+    expect(
+      paths["/api/listings/{listingId}/integrations/{integrationId}/rotate"].post,
+    ).toBeDefined();
+    expect(paths["/api/integrations"]).toBeUndefined();
     expect(paths["/api/operator/overview"].get["x-authentication-mode"]).toBe("account");
     expect(paths["/api/operator/accounts"].get).toMatchObject({
       "x-authentication-mode": "account",
@@ -844,10 +797,7 @@ describe("Hono API foundation", () => {
     expect(paths["/api/blog/posts"]).toBeDefined();
     expect(paths["/api/operator/blog"]).toBeDefined();
     expect(paths["/api/operator/table-config"]).toBeUndefined();
-    expect(paths["/api/operator/catalogue/bulk"].post).toMatchObject({
-      "x-authentication-mode": "account",
-      "x-required-api-scope": "catalogue:manage",
-    });
+    expect(paths["/api/operator/catalogue/bulk"]).toBeUndefined();
     expect(paths["/api/operator/catalogue/categories"]).toMatchObject({
       get: {
         "x-authentication-mode": "account",
@@ -863,26 +813,28 @@ describe("Hono API foundation", () => {
       patch: { "x-required-api-scope": "catalogue:manage" },
       delete: { "x-required-api-scope": "catalogue:manage" },
     });
-    expect(paths["/api/operator/catalogue/categories/bulk"].post).toMatchObject({
-      "x-authentication-mode": "account",
-      "x-required-api-scope": "catalogue:manage",
-    });
-    expect(paths["/api/operator/reviews/bulk"].post).toMatchObject({
+    expect(paths["/api/operator/catalogue/categories/bulk"]).toBeUndefined();
+    expect(paths["/api/operator/reviews/bulk"]).toBeUndefined();
+    expect(paths["/api/operator/reviews/{reviewId}"].patch).toMatchObject({
+      tags: ["Reviews (Operator)"],
+      summary: "Moderate a review",
+      description: expect.stringContaining("pending review"),
       "x-authentication-mode": "account",
       "x-required-api-scope": "reviews:moderate",
     });
+    expect(
+      paths["/api/operator/reviews/{reviewId}"].patch.requestBody.content["application/json"].schema
+        .properties.status.description,
+    ).toContain("supported status values and transitions");
+    expect(paths["/api/operator/reviews/{reviewId}"].patch.responses["409"].description).toBe(
+      "Review is not pending",
+    );
     expect(paths["/api/operator/blog/categories"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "blog:read",
     });
-    expect(paths["/api/operator/blog/bulk"].post).toMatchObject({
-      "x-authentication-mode": "account",
-      "x-required-api-scope": "blog:manage",
-    });
-    expect(paths["/api/operator/blog/categories/bulk"].post).toMatchObject({
-      "x-authentication-mode": "account",
-      "x-required-api-scope": "blog:manage",
-    });
+    expect(paths["/api/operator/blog/bulk"]).toBeUndefined();
+    expect(paths["/api/operator/blog/categories/bulk"]).toBeUndefined();
     expect(paths["/api/operator/blog/preview"].post).toMatchObject({
       "x-authentication-mode": "session_only",
     });
@@ -902,12 +854,28 @@ describe("Hono API foundation", () => {
     expect(JSON.stringify(operatorPost)).not.toContain("revisionId");
     expect(paths["/api/blog/posts/{id}/publish"]).toBeUndefined();
     expect(paths["/api/blog/posts/{id}/unpublish"]).toBeUndefined();
+    expect(paths["/api/listings/{id}/publish"]).toBeUndefined();
+    expect(paths["/api/listings/{id}/restore"]).toBeUndefined();
+    expect(paths["/api/operator/reviews/{reviewId}/approve"]).toBeUndefined();
+    expect(paths["/api/operator/reviews/{reviewId}/reject"]).toBeUndefined();
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
     expect(paths["/api/listings"].get).toMatchObject({
       "x-authentication-mode": "anonymous",
     });
     expect(paths["/api/listings"].get.security).toBeUndefined();
+    expect(paths["/api/accounts"].post.tags).toContain("Accounts (System)");
+    expect(paths["/api/operator/accounts"].get.tags).toContain("Accounts (Operator)");
+    expect(paths["/api/listings"].get.tags).toContain("Listings (System)");
+    expect(paths["/api/operator/listings"].get.tags).toContain("Listings (Operator)");
+    expect(paths["/api/operator/payments"].get.tags).toContain("Payments (Operator)");
+    for (const [path, pathItem] of Object.entries(paths))
+      for (const [method, operation] of Object.entries(pathItem)) {
+        if (!["get", "post", "put", "patch", "delete"].includes(method)) continue;
+        expect(operation.summary, `${method.toUpperCase()} ${path} summary`).toBeTruthy();
+        expect(operation.description, `${method.toUpperCase()} ${path} description`).toBeTruthy();
+        expect(operation.tags, `${method.toUpperCase()} ${path} tags`).not.toHaveLength(0);
+      }
     expect(paths["/api/wallet"].get).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "wallet:read",
@@ -952,6 +920,24 @@ describe("Hono API foundation", () => {
       "Authentication required",
     );
     expect(paths["/api/access/verify"].post.responses["403"]).toBeUndefined();
+  });
+  it("renders the exact generated OpenAPI document in Swagger", async () => {
+    const app = appWith();
+    const schemaResponse = await app.fetch(new Request("http://localhost/api/openapi.json"));
+    const schema = await schemaResponse.json();
+    const docsResponse = await swaggerUiResponse(
+      new Request("http://localhost/docs"),
+      { environment: "development", key: null },
+      () => app.fetch(new Request("http://localhost/api/openapi.json")),
+    );
+    const html = await docsResponse.text();
+    const embeddedSpec = html.match(
+      /<script id="openapi-spec" type="application\/json">([\s\S]*?)<\/script>/,
+    )?.[1];
+
+    expect(docsResponse.status).toBe(200);
+    expect(embeddedSpec).toBeDefined();
+    expect(JSON.parse(embeddedSpec!)).toEqual(schema);
   });
   it("keeps development schema discovery convenient with or without a key", async () => {
     expect((await appWith().fetch(new Request("http://localhost/api/openapi.json"))).status).toBe(
@@ -1942,7 +1928,7 @@ describe("Hono API foundation", () => {
         }),
       }),
     );
-    expect(duplicateBulkIds.status).toBe(400);
+    expect(duplicateBulkIds.status).toBe(404);
 
     const deletePath = `http://localhost/api/operator/accounts/${target}`;
     expect(

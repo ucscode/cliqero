@@ -2,20 +2,9 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { requireCapabilityScope, requirePrincipal, type Env } from "../../shared/context";
 import { reviewJson } from "./serialization";
-import { crudMaxRows } from "@/config/crud";
+import { errorSchema } from "../../shared/schemas";
 
 export function registerReviewRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
-  const maxRows = crudMaxRows();
-  const reviewBulkBody = z
-    .object({
-      action: z.enum(["approve", "reject"]),
-      ids: z
-        .array(z.string().uuid())
-        .min(1)
-        .max(maxRows)
-        .refine((ids) => new Set(ids).size === ids.length),
-    })
-    .strict();
   app.get("/api/listings/:listingId/reviews", async (c) => {
     const listingId = c.req.param("listingId");
     if (!z.uuid().safeParse(listingId).success)
@@ -58,6 +47,7 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
     if (!(p instanceof Object) || !("accountId" in p)) return p;
     const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
     if (denied) return denied;
+    const maxRows = 100;
     const query = z
       .object({
         status: z.enum(["pending", "approved", "rejected"]).optional(),
@@ -78,45 +68,48 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
     });
   });
 
-  for (const [verb, status] of [
-    ["approve", "approved"],
-    ["reject", "rejected"],
-  ] as const) {
-    app.post(`/api/operator/reviews/:reviewId/${verb}`, async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
-      if (denied) return denied;
-      const review = await container.listingReviews.moderate(
-        p.account,
-        c.req.param("reviewId"),
-        status,
-      );
-      return c.json({ item: reviewJson(review) });
-    });
-  }
-
   app.openapi(
     createRoute({
-      method: "post",
-      path: "/api/operator/reviews/bulk",
-      request: { body: { content: { "application/json": { schema: reviewBulkBody } } } },
-      responses: {
-        200: {
-          description: "Per-review moderation outcomes",
+      method: "patch",
+      path: "/api/operator/reviews/{reviewId}",
+      tags: ["Reviews (Operator)"],
+      summary: "Moderate a review",
+      description:
+        "Changes a pending review to approved or rejected. The review service rejects unsupported transitions.",
+      request: {
+        params: z.object({ reviewId: z.uuid().describe("ID of the review to moderate.") }),
+        body: {
           content: {
             "application/json": {
-              schema: z.object({
-                results: z.array(
-                  z.object({
-                    id: z.string().uuid(),
-                    success: z.boolean(),
-                    error: z.string().optional(),
-                  }),
-                ),
-              }),
+              schema: z.object({ status: z.enum(["approved", "rejected"]) }).strict(),
             },
           },
+        },
+      },
+      responses: {
+        200: {
+          description: "Review moderation state updated",
+          content: { "application/json": { schema: z.object({ item: z.any() }) } },
+        },
+        400: {
+          description: "Invalid moderation status",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Review moderation permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Review not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Review is not pending",
+          content: { "application/json": { schema: errorSchema } },
         },
       },
     }),
@@ -125,13 +118,13 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
       if (denied) return denied;
-      const { action, ids } = c.req.valid("json");
-      const results = await container.listingReviews.moderateMany(
+      const { status } = c.req.valid("json");
+      const review = await container.listingReviews.moderate(
         p.account,
-        ids,
-        action === "approve" ? "approved" : "rejected",
+        c.req.valid("param").reviewId,
+        status,
       );
-      return c.json({ results }, 200);
+      return c.json({ item: reviewJson(review) }, 200);
     },
   );
 }

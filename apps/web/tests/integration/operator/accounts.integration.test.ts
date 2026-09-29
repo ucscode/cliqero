@@ -105,7 +105,7 @@ suite("operator account index PostgreSQL projection", () => {
     });
   });
 
-  it("tombstones identity, reparents live descendants, archives listings, and retains history", async () => {
+  it("tombstones identity, detaches children without changing their descendants, and retains history", async () => {
     const actor = await app.authentication.register({
       email: "ops.delete.actor@example.test",
       username: "ops_delete_actor",
@@ -130,6 +130,12 @@ suite("operator account index PostgreSQL projection", () => {
       password: "correct-horse-battery",
       country: "US",
     });
+    const sibling = await app.authentication.register({
+      email: "ops.delete.sibling@example.test",
+      username: "ops_delete_sibling",
+      password: "correct-horse-battery",
+      country: "US",
+    });
     const grandchild = await app.authentication.register({
       email: "ops.delete.grandchild@example.test",
       username: "ops_delete_grandchild",
@@ -141,8 +147,9 @@ suite("operator account index PostgreSQL projection", () => {
       `insert into referral_capability.account_referrals(child_account_id,parent_account_id)
        values ((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2)),
               ((select id from identity_capability.accounts where uuid=$3),(select id from identity_capability.accounts where uuid=$1)),
-              ((select id from identity_capability.accounts where uuid=$4),(select id from identity_capability.accounts where uuid=$3))`,
-      [target.id, parent.id, child.id, grandchild.id],
+              ((select id from identity_capability.accounts where uuid=$4),(select id from identity_capability.accounts where uuid=$1)),
+              ((select id from identity_capability.accounts where uuid=$5),(select id from identity_capability.accounts where uuid=$3))`,
+      [target.id, parent.id, child.id, sibling.id, grandchild.id],
     );
 
     const listing = (
@@ -171,6 +178,11 @@ suite("operator account index PostgreSQL projection", () => {
       [target.id, purchaseId],
     );
     const destinationId = "00000000-0000-4000-8000-000000000022";
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'finance.read')`,
+      [actor.id],
+    );
     await app.database.query(
       `insert into withdrawal_capability.destinations(uuid,account_id,method_key,name,details)
        values($1,(select id from identity_capability.accounts where uuid=$2),'bank_transfer','Private destination','[]'::jsonb)`,
@@ -255,13 +267,30 @@ suite("operator account index PostgreSQL projection", () => {
       ),
     ).resolves.toMatchObject({ rows: [{ state: "revoked" }] });
 
-    const relationship = (
+    const detachedRelationship = (
       await app.database.query<{ parent: string }>(
         `select parent.uuid parent from referral_capability.account_referrals relation join identity_capability.accounts parent on parent.id=relation.parent_account_id where relation.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
         [child.id],
       )
-    ).rows[0];
-    expect(relationship.parent).toBe(parent.id);
+    ).rows;
+    expect(detachedRelationship).toEqual([]);
+    const remainingTargetEdges = await app.database.query(
+      `select 1 from referral_capability.account_referrals
+        where child_account_id=(select id from identity_capability.accounts where uuid=$1)
+           or parent_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [target.id],
+    );
+    expect(remainingTargetEdges.rowCount).toBe(0);
+    const childRelationships = await app.database.query<{ child: string; parent: string | null }>(
+      `select child.uuid child,parent.uuid parent
+         from identity_capability.accounts child
+         left join referral_capability.account_referrals edge on edge.child_account_id=child.id
+         left join identity_capability.accounts parent on parent.id=edge.parent_account_id
+        where child.uuid=any($1::uuid[]) order by child.uuid`,
+      [[child.id, sibling.id]],
+    );
+    expect(childRelationships.rows).toHaveLength(2);
+    expect(childRelationships.rows.every((row) => row.parent === null)).toBe(true);
     const nestedRelationship = (
       await app.database.query<{ parent: string }>(
         `select parent.uuid parent from referral_capability.account_referrals relation join identity_capability.accounts parent on parent.id=relation.parent_account_id where relation.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
@@ -274,6 +303,17 @@ suite("operator account index PostgreSQL projection", () => {
       [listing],
     );
     expect(listingState.rows[0].state).toBe("archived");
+    await expect(app.operatorPayments.get(actor.id, paymentId)).resolves.toMatchObject({
+      buyer_username: "Deleted user",
+    });
+    const withdrawalId = (
+      await app.database.query<{ uuid: string }>(
+        `select uuid from withdrawal_capability.withdrawals where idempotency_key='history-withdrawal-key'`,
+      )
+    ).rows[0].uuid;
+    await expect(app.operatorWithdrawals.get(withdrawalId)).resolves.toMatchObject({
+      account: { id: target.id, username: "Deleted user", email: null },
+    });
     const destination = await app.database.query<{
       name: string;
       details: unknown;
@@ -298,6 +338,12 @@ suite("operator account index PostgreSQL projection", () => {
       ]);
       expect(retained.rowCount).toBe(1);
     }
+    const deletionAudit = await app.database.query<{ new_state: { childrenDetached: number } }>(
+      `select new_state from kernel.audit_records
+        where subject_id=$1 and action='operator.account_deleted'`,
+      [target.id],
+    );
+    expect(deletionAudit.rows[0].new_state.childrenDetached).toBe(2);
     await expect(
       app.database.query<{ action: string }>(
         `select action from kernel.audit_records where subject_id=$1 and action='operator.account_deleted'`,
@@ -312,5 +358,55 @@ suite("operator account index PostgreSQL projection", () => {
       country: "NG",
     });
     expect(reusedUsername.username).toBe("ops_delete_target");
+  });
+
+  it("deletes a hierarchy root and leaves each immediate child parentless", async () => {
+    const actor = await app.authentication.register({
+      email: "ops.rootdelete.actor@example.test",
+      username: "ops_rootdelete_actor",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const root = await app.authentication.register({
+      email: "ops.rootdelete.root@example.test",
+      username: "ops_rootdelete_root",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const left = await app.authentication.register({
+      email: "ops.rootdelete.left@example.test",
+      username: "ops_rootdelete_left",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const right = await app.authentication.register({
+      email: "ops.rootdelete.right@example.test",
+      username: "ops_rootdelete_right",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [actor.id],
+    );
+    await app.database.query(
+      `insert into referral_capability.account_referrals(child_account_id,parent_account_id)
+       values ((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2)),
+              ((select id from identity_capability.accounts where uuid=$3),(select id from identity_capability.accounts where uuid=$2))`,
+      [left.id, root.id, right.id],
+    );
+
+    await app.operatorAccountManagement.delete(actor.id, root.id);
+
+    const remaining = await app.database.query<{ child: string; parent: string }>(
+      `select child.uuid child, parent.uuid parent
+         from referral_capability.account_referrals edge
+         join identity_capability.accounts child on child.id=edge.child_account_id
+         join identity_capability.accounts parent on parent.id=edge.parent_account_id
+        where child.uuid in ($1,$2) or parent.uuid=$3`,
+      [left.id, right.id, root.id],
+    );
+    expect(remaining.rows).toEqual([]);
   });
 });

@@ -34,13 +34,11 @@ export interface OperatorAccountDeletionRepository {
   ): Promise<{
     accountId: string;
     deletedAt: string | null;
-    parentId: string | null;
-    childCount: number;
     isSystemRoot: boolean;
     actorIsSystemRoot: boolean;
     systemRootCount: number;
   } | null>;
-  reparentChildren(accountId: string, parentId: string): Promise<number>;
+  detachChildren(accountId: string): Promise<number>;
   archiveOwnedListings(accountId: string): Promise<number>;
   anonymizeWithdrawalDestinations(accountId: string): Promise<number>;
   revokeReferralAttributions(accountId: string): Promise<void>;
@@ -139,22 +137,13 @@ export class OperatorAccountManagementService {
           "last_root_account",
           409,
         );
-      if (target.parentId === null && target.childCount > 0)
-        throw new PublicApplicationError(
-          "A hierarchy root with descendants cannot be deleted. Reassign the hierarchy first.",
-          "hierarchy_root_has_descendants",
-          409,
-        );
-
-      const childrenReparented = target.parentId
-        ? await this.deletion.reparentChildren(accountId, target.parentId)
-        : 0;
       const listingsArchived = await this.deletion.archiveOwnedListings(accountId);
       await this.deletion.anonymizeWithdrawalDestinations(accountId);
       await this.deletion.revokeReferralAttributions(accountId);
       await this.deletion.revokeApiKeysAndSessions(accountId);
       await this.deletion.removeCapabilities(accountId);
       await this.deletion.tombstone(accountId);
+      const childrenDetached = await this.deletion.detachChildren(accountId);
       await this.deletion.removeHierarchyEdge(accountId);
       await this.authentication.removeAccountIdentity(accountId);
       await this.audit.record({
@@ -165,7 +154,7 @@ export class OperatorAccountManagementService {
         previousState: null,
         newState: {
           deleted: true,
-          childrenReparented,
+          childrenDetached,
           listingsArchived,
           usernameReusable: true,
         },

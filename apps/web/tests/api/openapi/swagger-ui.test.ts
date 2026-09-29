@@ -36,10 +36,14 @@ describe("Swagger UI documentation", () => {
     expect(document.paths["/business"].get.description).not.toContain("Authentication:");
     expect(document.paths["/business"].get.security).toEqual([{ CliqeroApiKey: [] }]);
     expect(document.paths["/business"].get["x-required-api-scope"]).toBe("treasury:read");
-    expect(document.paths["/unclassified-description"].get.description).toBeUndefined();
-    expect(document.paths["/anonymous"].get.description).toBeUndefined();
+    expect(document.paths["/unclassified-description"].get.description).toContain(
+      "System operations",
+    );
+    expect(document.paths["/anonymous"].get.description).toContain("System operations");
+    expect(document.paths["/anonymous"].get.description).not.toContain("Authentication:");
     expect(document.paths["/anonymous"].get.security).toBeUndefined();
-    expect(document.paths["/session"].get.description).toBeUndefined();
+    expect(document.paths["/session"].get.description).toContain("System operations");
+    expect(document.paths["/session"].get.description).not.toContain("API-key scope");
     expect(document.paths["/session"].get.security).toBeUndefined();
   });
 

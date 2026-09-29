@@ -227,7 +227,7 @@ CREATE FUNCTION referral_capability.prevent_account_referral_delete() RETURNS tr
 begin
   if exists (
     select 1 from identity_capability.accounts
-    where id=old.child_account_id and deleted_at is not null
+    where id in (old.child_account_id, old.parent_account_id) and deleted_at is not null
   ) then
     return old;
   end if;

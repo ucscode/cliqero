@@ -158,24 +158,27 @@ export function OperatorUsersList({
           )
         )
           return false;
-        const result = await apiFetch<{
-          results: { id: string; deleted: boolean; error?: { error: string } }[];
-        }>("/api/operator/accounts/bulk", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "delete", ids: accounts.map((account) => account.id) }),
-        });
+        const results = await Promise.all(
+          accounts.map(async (account) => {
+            try {
+              await apiFetch(`/api/operator/accounts/${account.id}`, { method: "DELETE" });
+              return { account, deleted: true as const };
+            } catch (error) {
+              return { account, deleted: false as const, error: message(error) };
+            }
+          }),
+        );
         await collection.refresh();
-        const failures = result.results.filter((item) => !item.deleted);
+        const failures = results.filter((item) => !item.deleted);
         if (failures.length) {
           setActionError(
-            failures.map((failure) => failure.error?.error ?? "Account deletion failed.").join(" "),
+            failures.map(({ account, error }) => `@${account.username}: ${error}`).join(" "),
           );
           return false;
         }
         setActionError(null);
         setSuccessNotice(
-          `${accounts.length} account(s) deleted. Historical platform records remain.`,
+          `${results.length} account(s) deleted. Historical platform records remain.`,
         );
         return true;
       }}

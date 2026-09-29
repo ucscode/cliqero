@@ -150,17 +150,11 @@ export class PostgresOperatorAccountDeletionRepository {
       await this.sql.query<{
         id: string;
         deleted_at: string | null;
-        parent_id: string | null;
-        child_count: number;
         is_system_root: boolean;
         actor_is_system_root: boolean;
         system_root_count: number;
       }>(
         `select account.id::text,account.deleted_at,
-          (select parent.uuid from referral_capability.account_referrals edge
-             join identity_capability.accounts parent on parent.id=edge.parent_account_id
-            where edge.child_account_id=account.id) parent_id,
-          (select count(*)::int from referral_capability.account_referrals edge where edge.parent_account_id=account.id) child_count,
           exists(select 1 from identity_capability.account_capabilities capability where capability.account_id=account.id and capability.capability='system.root') is_system_root,
           exists(select 1 from identity_capability.account_capabilities capability join identity_capability.accounts actor on actor.id=capability.account_id where actor.uuid=$2 and capability.capability='system.root') actor_is_system_root,
           (select count(*)::int from identity_capability.account_capabilities where capability='system.root') system_root_count
@@ -172,8 +166,6 @@ export class PostgresOperatorAccountDeletionRepository {
       ? {
           accountId: row.id,
           deletedAt: row.deleted_at,
-          parentId: row.parent_id,
-          childCount: row.child_count,
           isSystemRoot: row.is_system_root,
           actorIsSystemRoot: row.actor_is_system_root,
           systemRootCount: row.system_root_count,
@@ -181,12 +173,11 @@ export class PostgresOperatorAccountDeletionRepository {
       : null;
   }
 
-  async reparentChildren(accountId: string, parentId: string) {
+  async detachChildren(accountId: string) {
     const result = await this.sql.query(
-      `update referral_capability.account_referrals
-          set parent_account_id=(select id from identity_capability.accounts where uuid=$2)
+      `delete from referral_capability.account_referrals
         where parent_account_id=(select id from identity_capability.accounts where uuid=$1)`,
-      [accountId, parentId],
+      [accountId],
     );
     return result.rowCount ?? 0;
   }

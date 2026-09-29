@@ -249,28 +249,10 @@ export class ListingService {
       return listing;
     });
   }
-  async bulkCatalogueState(
-    actor: Account,
-    action: "publish" | "archive" | "restore",
-    ids: readonly Id[],
-  ) {
-    const results: Array<{ id: Id; success: true } | { id: Id; success: false; error: string }> =
-      [];
-    for (const id of ids) {
-      try {
-        if (action === "publish") await this.publishCatalogue(actor, id);
-        else if (action === "archive") await this.archiveCatalogue(actor, id);
-        else await this.restoreCatalogue(actor, id);
-        results.push({ id, success: true });
-      } catch (cause) {
-        results.push({
-          id,
-          success: false,
-          error: cause instanceof Error ? cause.message : "The listing could not be updated.",
-        });
-      }
-    }
-    return results;
+  async setCatalogueState(actor: Account, id: Id, state: "draft" | "published" | "archived") {
+    if (state === "published") return this.publishCatalogue(actor, id);
+    if (state === "archived") return this.archiveCatalogue(actor, id);
+    return this.restoreCatalogue(actor, id);
   }
   async getCatalogue(id: Id) {
     const listing = await this.listings.findById(id);

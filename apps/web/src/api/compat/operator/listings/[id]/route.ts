@@ -14,6 +14,7 @@ const schema = z
     featured_position: z.number().int().positive().nullable(),
     compare_at_price_minor: z.string().regex(/^\d+$/).nullable(),
     visibility: z.enum(["public", "authenticated"]),
+    state: z.enum(["draft", "published", "archived"]),
     category_ids: z
       .array(z.uuid())
       .max(30)
@@ -47,34 +48,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const c = getContainer();
     await c.operators.requireCapability(a.id, "catalogue.manage");
-    const b = schema.parse(await request.json()),
-      l = await c.listingService.updateCatalogue(a, (await params).id, {
-        title: b.title,
-        shortDescription: b.short_description,
-        longDescription: b.long_description,
-        priceMinor: b.price_minor,
-        currency: b.currency,
-        destination: b.destination,
-        metadata: b.metadata,
-        featuredPosition: b.featured_position,
-        compareAtPriceMinor: b.compare_at_price_minor,
-        visibility: b.visibility,
-        categoryIds: b.category_ids,
-      });
+    const b = schema.parse(await request.json());
+    if (b.state !== undefined) {
+      if (Object.keys(b).length !== 1)
+        return Response.json({ error: "State changes must be sent alone." }, { status: 400 });
+      return Response.json(
+        ownerListingView(await c.listingService.setCatalogueState(a, (await params).id, b.state)),
+      );
+    }
+    const l = await c.listingService.updateCatalogue(a, (await params).id, {
+      title: b.title,
+      shortDescription: b.short_description,
+      longDescription: b.long_description,
+      priceMinor: b.price_minor,
+      currency: b.currency,
+      destination: b.destination,
+      metadata: b.metadata,
+      featuredPosition: b.featured_position,
+      compareAtPriceMinor: b.compare_at_price_minor,
+      visibility: b.visibility,
+      categoryIds: b.category_ids,
+    });
     return Response.json(ownerListingView(l));
-  } catch (e) {
-    return apiError(e);
-  }
-}
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const a = await authenticatedAccount(request);
-  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  try {
-    const c = getContainer();
-    await c.operators.requireCapability(a.id, "catalogue.manage");
-    return Response.json(
-      ownerListingView(await c.listingService.archiveCatalogue(a, (await params).id)),
-    );
   } catch (e) {
     return apiError(e);
   }

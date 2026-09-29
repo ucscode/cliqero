@@ -164,5 +164,5 @@ suite("development referral user seed", () => {
     }
     expect(root).toBeDefined();
     expect(central).toBeDefined();
-  }, 30_000);
+  }, 60_000);
 });

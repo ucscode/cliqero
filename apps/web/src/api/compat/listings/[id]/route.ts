@@ -14,6 +14,7 @@ const listingSchema = z
     metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
     compare_at_price_minor: z.string().regex(/^\d+$/).nullable(),
     visibility: z.enum(["public", "authenticated"]),
+    state: z.enum(["draft", "published", "archived"]),
     category_ids: z
       .array(z.uuid())
       .max(30)
@@ -63,25 +64,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         { status: 404, headers: { "Cache-Control": "private, no-store, max-age=0" } },
       );
 }
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const account = await authenticatedAccount(request);
-  if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  try {
-    const c = getContainer();
-    await c.operators.requireCapability(account.id, "catalogue.manage");
-    return Response.json(
-      ownerListingView(await c.listingService.archiveCatalogue(account, (await params).id)),
-    );
-  } catch (error) {
-    return apiError(error);
-  }
-}
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     await getContainer().operators.requireCapability(account.id, "catalogue.manage");
     const body = listingSchema.parse(await request.json());
+    if (body.state !== undefined) {
+      if (Object.keys(body).length !== 1)
+        return Response.json({ error: "State changes must be sent alone." }, { status: 400 });
+      return Response.json(
+        ownerListingView(
+          await getContainer().listingService.setCatalogueState(
+            account,
+            (await params).id,
+            body.state,
+          ),
+        ),
+      );
+    }
     const listing = await getContainer().listingService.updateCatalogue(
       account,
       (await params).id,

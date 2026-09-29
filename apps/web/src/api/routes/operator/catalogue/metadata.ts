@@ -11,16 +11,4 @@ export const operatorCatalogueOpenApiMetadata = [
     mode: "account" as const,
     scope: "catalogue:manage",
   })),
-  {
-    path: "/api/operator/catalogue/categories/bulk",
-    method: "post",
-    mode: "account",
-    scope: "catalogue:manage",
-  },
-  {
-    path: "/api/operator/catalogue/bulk",
-    method: "post",
-    mode: "account",
-    scope: "catalogue:manage",
-  },
 ] as const;

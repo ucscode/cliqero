@@ -52,25 +52,6 @@ export class ListingReviewService {
     if (!review) throw new Error("Review not found or is no longer pending");
     return review;
   }
-  async moderateMany(account: Account, reviewIds: readonly Id[], status: "approved" | "rejected") {
-    await this.operators.requireCapability(account.id, "reviews.moderate");
-    const results: Array<{ id: Id; success: true } | { id: Id; success: false; error: string }> =
-      [];
-    for (const id of reviewIds) {
-      try {
-        const review = await this.reviews.moderate(id, status, account.id);
-        if (!review) throw new Error("Review not found or is no longer pending");
-        results.push({ id, success: true });
-      } catch (cause) {
-        results.push({
-          id,
-          success: false,
-          error: cause instanceof Error ? cause.message : "The review could not be moderated.",
-        });
-      }
-    }
-    return results;
-  }
   async operatorQueue(
     account: Account,
     input: { status?: ReviewStatus; cursor?: string; limit: number },

@@ -45,12 +45,33 @@ provider-named because those routes implement external provider protocols.
 
 ## OpenAPI organization
 
-The main document is grouped by Cliqero domains, including Accounts and
-Payments. Provider ingress is excluded from the main Core/System document;
-protocol handlers are not added to the published automation contract. Do not
-add vendor tags or vendor-named operator routes for ordinary payment
-administration. Compatibility endpoints should be classified before they are
-added to the published contract.
+`/api/openapi.json` is the single generated specification and `/docs` renders
+that exact document. Operations use flat, context-aware tags such as `Accounts
+(System)` and `Accounts (Operator)`; a context appears only when routes for it
+exist. Every documented operation has a meaningful tag, action-oriented summary,
+and description. Provider ingress retains provider-specific wire-protocol names
+and is identified separately from System and Operator domain APIs. Do not add
+vendor-named operator routes for ordinary payment administration.
+
+## Resource routes and state changes
+
+Stable APIs do not expose Operator table bulk-selection endpoints. Bulk actions
+in the UI repeat canonical single-resource operations and report per-item
+failures. Ordinary lifecycle/status changes use `PATCH` on the resource with a
+validated state/status field; dedicated action routes are reserved for genuine
+commands with distinct side effects, such as rotating a credential.
+
+Listing-associated integration credentials are nested under their owning
+listing: System routes use `/api/listings/{listingId}/integrations/...`, while
+Operator routes use `/api/operator/listings/{listingId}/integrations/...`.
+System routes verify listing ownership, and the listing ID is not repeated in
+the create body.
+
+Deleting an account removes its parent edge and detaches its immediate children
+by deleting their edges to the account. Those children become roots; their own
+descendants remain connected. The graph is not compressed or reparented. Future
+commission shares for configured referral levels absent from the live graph go
+to the platform rather than a substitute upline.
 
 ## Compatibility route classification
 
