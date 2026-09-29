@@ -89,9 +89,9 @@ export function OperatorDistributionList() {
           />
         </OperatorFilterField>
       }
-      onFiltersSubmit={(event) => {
+      onFiltersSubmit={async (event) => {
         event.preventDefault();
-        void collection.apply(search.trim());
+        return collection.apply(search.trim());
       }}
       onFiltersReset={async () => {
         const ok = await collection.apply("");
@@ -107,6 +107,7 @@ export function OperatorDistributionList() {
       items={collection.items}
       columns={columns}
       getRowKey={(item) => item.id}
+      selection={{ labelForItem: (item) => `distribution ${item.id}` }}
       actions={actions}
       actionLabel={(item) => `Actions for distribution ${item.id}`}
       loading={collection.loading}

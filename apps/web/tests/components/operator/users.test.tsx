@@ -70,7 +70,8 @@ describe("operator users list", () => {
     const headers = Array.from(html.matchAll(/<th\b[^>]*>(.*?)<\/th>/g), (match) => match[1]);
 
     expect(html).toContain("<table");
-    expect(headers).toEqual(["User", "Email", "Direct referrals", "Country", "Actions"]);
+    expect(headers.slice(1)).toEqual(["User", "Email", "Direct referrals", "Country", "Actions"]);
+    expect(headers[0]).toContain('aria-label="Select all visible records"');
     expect(html).toContain("@reviewer_three");
     expect(html).toContain("Reviewer Three");
     expect(html).toContain("reviewer.three@example.test");

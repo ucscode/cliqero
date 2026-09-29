@@ -20,6 +20,12 @@ export const blogOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     apiKey: "reject",
   },
   { path: "/api/operator/blog/bulk", method: "post", mode: "account", scope: "blog:manage" },
+  {
+    path: "/api/operator/blog/categories/bulk",
+    method: "post",
+    mode: "account",
+    scope: "blog:manage",
+  },
   { path: "/api/operator/blog/categories", method: "get", mode: "account", scope: "blog:read" },
   { path: "/api/operator/blog/categories", method: "post", mode: "account", scope: "blog:write" },
   {

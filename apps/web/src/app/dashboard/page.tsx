@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { DashboardShell } from "@/components/dashboard";
+import { DashboardLoadingState, DashboardShell } from "@/components/dashboard";
 import { canonicalWalletFundingUrl, safeContinuation } from "@/lib/api-client";
 
 type DashboardSearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -27,7 +27,7 @@ export default async function DashboardPage({
     return redirect(canonicalWalletFundingUrl(returnTo));
   }
   return (
-    <Suspense fallback={<div className="page-loading" />}>
+    <Suspense fallback={<DashboardLoadingState stage="session" />}>
       <DashboardShell />
     </Suspense>
   );

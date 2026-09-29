@@ -180,9 +180,9 @@ export function OperatorFundingList() {
           </OperatorFilterField>
         </>
       }
-      onFiltersSubmit={(event) => {
+      onFiltersSubmit={async (event) => {
         event.preventDefault();
-        void collection.apply({ search: search.trim(), state, provider: provider.trim() });
+        return collection.apply({ search: search.trim(), state, provider: provider.trim() });
       }}
       onFiltersReset={async () => {
         const ok = await collection.apply({ search: "", state: "", provider: "" });
@@ -202,6 +202,7 @@ export function OperatorFundingList() {
       items={collection.items}
       columns={columns}
       getRowKey={(funding) => funding.id}
+      selection={{ labelForItem: (funding) => `funding ${funding.id}` }}
       actions={actions}
       actionLabel={(funding) => `Actions for funding ${funding.id}`}
       loading={collection.loading}

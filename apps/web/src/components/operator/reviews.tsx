@@ -17,14 +17,11 @@ type ReviewPage = { items: Review[]; next_cursor: string | null };
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Review queue is temporarily unavailable.";
 
-export function reviewQueueSelection<T>(
+export function reviewQueueBulkActions<T>(
   appliedStatus: string,
-  selection: {
-    labelForItem: (item: T) => string;
-    bulkActions: readonly CrudBulkAction<T>[];
-  },
+  bulkActions: readonly CrudBulkAction<T>[],
 ) {
-  return appliedStatus === "pending" ? selection : undefined;
+  return appliedStatus === "pending" ? bulkActions : [];
 }
 
 export function OperatorReviews() {
@@ -66,15 +63,20 @@ export function OperatorReviews() {
             .join("; ")}`,
         );
       await collection.retry();
-      return true;
+      return failures.length === 0;
     } catch (cause) {
       setActionError(errorMessage(cause));
       return false;
     }
   }
   const bulkActions: readonly CrudBulkAction<Review>[] = [
-    { label: "Approve", onSelect: (items) => moderateMany(items, "approve") },
-    { label: "Reject", destructive: true, onSelect: (items) => moderateMany(items, "reject") },
+    { value: "approve", label: "Approve", onSelect: (items) => moderateMany(items, "approve") },
+    {
+      value: "reject",
+      label: "Reject",
+      destructive: true,
+      onSelect: (items) => moderateMany(items, "reject"),
+    },
   ];
   const columns: readonly CrudColumn<Review>[] = [
     {
@@ -142,12 +144,12 @@ export function OperatorReviews() {
         return ok;
       }}
       filtersDirty={status !== "pending"}
-      onFiltersSubmit={(event) => {
+      onFiltersSubmit={async (event) => {
         event.preventDefault();
         const requestedStatus = status;
-        void collection.apply(requestedStatus).then((applied) => {
-          if (applied) setAppliedStatus(requestedStatus);
-        });
+        const applied = await collection.apply(requestedStatus);
+        if (applied) setAppliedStatus(requestedStatus);
+        return applied;
       }}
       toolbarActions={
         <Button type="submit" variant="secondary" disabled={collection.loading}>
@@ -157,10 +159,8 @@ export function OperatorReviews() {
       items={collection.items}
       columns={columns}
       getRowKey={(review) => review.id}
-      selection={reviewQueueSelection(appliedStatus, {
-        labelForItem: (review) => `review by ${review.reviewer ?? "customer"}`,
-        bulkActions,
-      })}
+      selection={{ labelForItem: (review) => `review by ${review.reviewer ?? "customer"}` }}
+      bulkActions={reviewQueueBulkActions(appliedStatus, bulkActions)}
       actions={(review) =>
         review.status === "pending"
           ? [

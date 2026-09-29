@@ -13,6 +13,7 @@ import { CrudIndex } from "@/components/crud/index-page";
 import type { CrudColumn } from "@/components/crud/table";
 import { OperatorPrimaryCell } from "@/components/operator/ui/data-cells";
 import { useCrudCollection } from "@/components/crud/use-collection";
+import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 
 export function OperatorListingCategories() {
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,35 @@ export function OperatorListingCategories() {
       setError(cause instanceof Error ? cause.message : "Unable to delete category.");
     }
   }
+  async function removeMany(categories: readonly ListingCategory[]) {
+    if (!window.confirm(`Delete ${categories.length} selected catalogue categories?`)) return false;
+    setError(null);
+    try {
+      const { results } = await apiFetch<{
+        results: Array<{ id: string; success: boolean; error?: string }>;
+      }>("/api/operator/catalogue/categories/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "delete", ids: categories.map(({ id }) => id) }),
+      });
+      const failures = results.filter((result) => !result.success);
+      if (failures.length)
+        setError(
+          `${failures.length} of ${results.length} categories could not be deleted: ${failures
+            .map(({ error }) => error)
+            .filter(Boolean)
+            .join("; ")}`,
+        );
+      await collection.retry();
+      return failures.length === 0;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to delete selected categories.");
+      return false;
+    }
+  }
+  const bulkActions: readonly CrudBulkAction<ListingCategory>[] = [
+    { value: "delete", label: "Delete", destructive: true, onSelect: removeMany },
+  ];
 
   const columns: readonly CrudColumn<ListingCategory>[] = [
     {
@@ -57,6 +87,8 @@ export function OperatorListingCategories() {
       items={collection.items}
       columns={columns}
       getRowKey={(category) => category.id}
+      selection={{ labelForItem: (category) => `catalogue category ${category.name}` }}
+      bulkActions={bulkActions}
       actions={(category) => [
         { type: "link", label: "Edit", href: `/operator/catalogue/categories/${category.id}` },
         {

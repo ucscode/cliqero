@@ -130,7 +130,7 @@ export function OperatorCatalogueList() {
             .join("; ")}`,
         );
       await collection.retry();
-      return true;
+      return failures.length === 0;
     } catch (cause) {
       setActionError(errorMessage(cause));
       return false;
@@ -138,9 +138,14 @@ export function OperatorCatalogueList() {
   }
 
   const bulkActions: readonly CrudBulkAction<OperatorListing>[] = [
-    { label: "Publish", onSelect: (items) => bulkState(items, "publish") },
-    { label: "Archive", destructive: true, onSelect: (items) => bulkState(items, "archive") },
-    { label: "Restore", onSelect: (items) => bulkState(items, "restore") },
+    { value: "publish", label: "Publish", onSelect: (items) => bulkState(items, "publish") },
+    {
+      value: "archive",
+      label: "Archive",
+      destructive: true,
+      onSelect: (items) => bulkState(items, "archive"),
+    },
+    { value: "restore", label: "Restore", onSelect: (items) => bulkState(items, "restore") },
   ];
 
   async function importFile(event: FormEvent<HTMLFormElement>) {
@@ -319,9 +324,9 @@ export function OperatorCatalogueList() {
           </OperatorFilterField>
         </>
       }
-      onFiltersSubmit={(event) => {
+      onFiltersSubmit={async (event) => {
         event.preventDefault();
-        void collection.apply({ search: search.trim(), state, visibility });
+        return collection.apply({ search: search.trim(), state, visibility });
       }}
       onFiltersReset={async () => {
         const ok = await collection.apply({ search: "", state: "", visibility: "" });
@@ -393,7 +398,8 @@ export function OperatorCatalogueList() {
       items={collection.items}
       columns={columns}
       getRowKey={(listing) => listing.id}
-      selection={{ labelForItem: (listing) => `listing ${listing.title}`, bulkActions }}
+      selection={{ labelForItem: (listing) => `listing ${listing.title}` }}
+      bulkActions={bulkActions}
       actions={actions}
       actionLabel={(listing) => `Actions for ${listing.title}`}
       loading={collection.loading}

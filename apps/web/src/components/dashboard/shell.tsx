@@ -35,6 +35,7 @@ import { SettingsPanel } from "../settings";
 import { BrandLink } from "../brand-identity";
 import { CheckoutFlow } from "../checkout/flow";
 import { DashboardOverview } from "./overview";
+import { DashboardLoadingState } from "./loading";
 import { dashboardSectionTitle, DashboardNavigation, resolveDashboardSection } from "./navigation";
 import { DashboardSignOut, EmailVerificationNotice } from "./account-controls";
 import {
@@ -49,8 +50,8 @@ import {
 
 type CanonicalApplicationState = {
   userId: string;
-  session: CanonicalApplicationSession | null;
-  error: string | null;
+  session?: CanonicalApplicationSession | null;
+  error?: string | null;
 };
 
 export function DashboardShell({
@@ -97,6 +98,7 @@ export function DashboardShell({
   const [canonicalState, setCanonicalState] = useState<CanonicalApplicationState | null>(null);
   const [listing, setListing] = useState<Listing | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canonicalRequest = useRef<{ userId: string; promise: Promise<void> } | null>(null);
   const canonicalStateForUser = userId && canonicalState?.userId === userId ? canonicalState : null;
   const canonicalSession = canonicalStateForUser?.session;
   const canonicalSessionError = canonicalStateForUser?.error ?? null;
@@ -114,22 +116,18 @@ export function DashboardShell({
     router.refresh();
   }, [router]);
 
-  useEffect(() => {
-    if (!userId) {
-      invalidationStarted.current = false;
-      return;
-    }
-    let cancelled = false;
-    invalidationStarted.current = false;
-    void fetchCanonicalApplicationSession()
+  const verifyCanonicalSession = useCallback(() => {
+    if (!userId) return Promise.resolve();
+    if (canonicalRequest.current?.userId === userId) return canonicalRequest.current.promise;
+    setCanonicalState({ userId });
+    const request = Promise.resolve()
+      .then(fetchCanonicalApplicationSession)
       .then((value) => {
-        if (cancelled) return;
         setProfile(null);
         setAccountAccess(null);
         setCanonicalState({ userId, session: value, error: null });
       })
       .catch((cause: unknown) => {
-        if (cancelled) return;
         if (cause instanceof ApiClientError && cause.status === 401) {
           setCanonicalState({ userId, session: null, error: null });
           void invalidateApplicationSession();
@@ -140,11 +138,22 @@ export function DashboardShell({
           session: null,
           error: "We couldn’t verify your Cliqero account. Please try again.",
         });
+      })
+      .finally(() => {
+        if (canonicalRequest.current?.promise === request) canonicalRequest.current = null;
       });
-    return () => {
-      cancelled = true;
-    };
+    canonicalRequest.current = { userId, promise: request };
+    return request;
   }, [invalidateApplicationSession, userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      invalidationStarted.current = false;
+      return;
+    }
+    invalidationStarted.current = false;
+    void verifyCanonicalSession();
+  }, [userId, verifyCanonicalSession]);
 
   useEffect(() => {
     if (!canonicalSession) return;
@@ -184,11 +193,7 @@ export function DashboardShell({
   }, [buy, canonicalSession]);
 
   if (session.isPending)
-    return (
-      <div className="min-h-screen p-6">
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
+    return <DashboardLoadingState stage="session" onRetry={() => refetchSession()} />;
   if (!session.data?.user)
     return (
       <main className="mx-auto grid max-w-2xl gap-4 px-4 py-12">
@@ -202,26 +207,21 @@ export function DashboardShell({
       </main>
     );
   if (canonicalSession === undefined)
-    return (
-      <div className="min-h-screen p-6">
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
+    return <DashboardLoadingState stage="account" onRetry={verifyCanonicalSession} />;
   if (!canonicalSession) {
     if (canonicalSessionError)
       return (
         <main className="mx-auto grid max-w-2xl gap-4 px-4 py-12">
           <EmptyState title="We couldn’t verify your account" description={canonicalSessionError} />
+          <Button type="button" variant="secondary" onClick={() => void verifyCanonicalSession()}>
+            Try again
+          </Button>
           <Button asChild>
             <Link href="/login">Return to sign in</Link>
           </Button>
         </main>
       );
-    return (
-      <div className="min-h-screen p-6">
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
+    return <DashboardLoadingState stage="account" />;
   }
 
   const title =

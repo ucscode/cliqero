@@ -123,9 +123,12 @@ describe("earnings panel presentation", () => {
     const output = renderToStaticMarkup(
       createElement(OverviewEarningsCard, {
         earnings: {
-          balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
-          withdrawal_currency: "USD",
-          withdrawable_balances: [{ currency: "USD", amount_minor: "230" }],
+          status: "success",
+          data: {
+            balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
+            withdrawal_currency: "USD",
+            withdrawable_balances: [{ currency: "USD", amount_minor: "230" }],
+          },
         },
       }),
     );
@@ -136,36 +139,44 @@ describe("earnings panel presentation", () => {
     expect(output).toContain("View earnings");
   });
 
-  it("shows unavailable when the overview earnings summary is null", () => {
-    const output = renderToStaticMarkup(createElement(OverviewEarningsCard, { earnings: null }));
+  it("shows unavailable when the overview earnings request fails", () => {
+    const output = renderToStaticMarkup(
+      createElement(OverviewEarningsCard, { earnings: { status: "error" } }),
+    );
 
     expect(output).toContain("Available earnings");
-    expect(output).toContain(">—</h2>");
+    expect(output).toContain(">Unavailable</h2>");
   });
 
   it("keeps overview safe when a stale response omits withdrawable balances", () => {
     const staleSummary = {
-      balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
-      withdrawal_currency: "USD",
+      status: "success" as const,
+      data: {
+        balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
+        withdrawal_currency: "USD",
+      },
     } as unknown as Parameters<typeof OverviewEarningsCard>[0]["earnings"];
     const output = renderToStaticMarkup(
       createElement(OverviewEarningsCard, { earnings: staleSummary }),
     );
 
-    expect(output).toContain(">—</h2>");
+    expect(output).toContain(">Unavailable</h2>");
     expect(output).not.toContain("$3.40");
   });
 
   it("keeps overview safe when a stale response omits withdrawal currency", () => {
     const staleSummary = {
-      balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
-      withdrawable_balances: [{ currency: "USD", amount_minor: "230" }],
+      status: "success" as const,
+      data: {
+        balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
+        withdrawable_balances: [{ currency: "USD", amount_minor: "230" }],
+      },
     } as unknown as Parameters<typeof OverviewEarningsCard>[0]["earnings"];
     const output = renderToStaticMarkup(
       createElement(OverviewEarningsCard, { earnings: staleSummary }),
     );
 
-    expect(output).toContain(">—</h2>");
+    expect(output).toContain(">Unavailable</h2>");
   });
 
   it("keeps the earnings summary selector safe for partial runtime responses", () => {
@@ -191,15 +202,18 @@ describe("earnings panel presentation", () => {
     const output = renderToStaticMarkup(
       createElement(OverviewEarningsCard, {
         earnings: {
-          balances: [
-            { currency: "USD", state: "available", amount_minor: "900" },
-            { currency: "NGN", state: "available", amount_minor: "1000" },
-          ],
-          withdrawal_currency: "NGN",
-          withdrawable_balances: [
-            { currency: "NGN", amount_minor: "230" },
-            { currency: "USD", amount_minor: "800" },
-          ],
+          status: "success",
+          data: {
+            balances: [
+              { currency: "USD", state: "available", amount_minor: "900" },
+              { currency: "NGN", state: "available", amount_minor: "1000" },
+            ],
+            withdrawal_currency: "NGN",
+            withdrawable_balances: [
+              { currency: "NGN", amount_minor: "230" },
+              { currency: "USD", amount_minor: "800" },
+            ],
+          },
         },
       }),
     );

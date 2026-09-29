@@ -404,6 +404,69 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   );
   app.openapi(
     createRoute({
+      method: "post",
+      path: "/api/operator/blog/categories/bulk",
+      description: "Bounded deletion of unused blog categories. Requires blog management access.",
+      request: {
+        body: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({
+                  action: z.literal("delete"),
+                  ids: z
+                    .array(z.string().uuid())
+                    .min(1)
+                    .max(crudMaxRows())
+                    .refine((ids) => new Set(ids).size === ids.length, "ids must be unique"),
+                })
+                .strict(),
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Per-category deletion outcomes",
+          content: {
+            "application/json": {
+              schema: z.object({
+                results: z.array(
+                  z.object({
+                    id: z.string().uuid(),
+                    success: z.boolean(),
+                    error: z.string().optional(),
+                  }),
+                ),
+              }),
+            },
+          },
+        },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
+      if (denied) return denied;
+      const { ids } = c.req.valid("json");
+      const results = ids.map((id) => {
+        try {
+          container.blog.deleteCategory(id);
+          return { id, success: true as const };
+        } catch (error) {
+          return {
+            id,
+            success: false as const,
+            error: error instanceof Error ? error.message : "Unable to delete blog category.",
+          };
+        }
+      });
+      return c.json({ results }, 200);
+    },
+  );
+  app.openapi(
+    createRoute({
       method: "get",
       path: "/api/operator/blog",
       request: { query: blogAdminListQuery },

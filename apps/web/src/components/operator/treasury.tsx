@@ -303,13 +303,14 @@ export function OperatorTreasuryPage() {
         return ok;
       }}
       filtersDirty={Boolean(search.trim() || direction || source)}
-      onFiltersSubmit={(event) => {
+      onFiltersSubmit={async (event) => {
         event.preventDefault();
-        void collection.apply({ search: search.trim(), direction, source });
+        return collection.apply({ search: search.trim(), direction, source });
       }}
       items={collection.items}
       columns={columns}
       getRowKey={(entry) => entry.id}
+      selection={{ labelForItem: (entry) => `treasury entry ${entry.id}` }}
       actions={actions}
       actionLabel={(entry) => `Actions for treasury entry ${entry.id}`}
       loading={collection.loading}

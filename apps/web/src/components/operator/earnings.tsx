@@ -144,9 +144,9 @@ export function OperatorEarningsList() {
         return ok;
       }}
       filtersDirty={Boolean(search.trim() || state)}
-      onFiltersSubmit={(event) => {
+      onFiltersSubmit={async (event) => {
         event.preventDefault();
-        void collection.apply({ search: search.trim(), state });
+        return collection.apply({ search: search.trim(), state });
       }}
       toolbarActions={
         <Button type="submit" variant="secondary" disabled={collection.loading}>
@@ -156,6 +156,7 @@ export function OperatorEarningsList() {
       items={collection.items}
       columns={columns}
       getRowKey={(entry) => entry.id}
+      selection={{ labelForItem: (entry) => `earnings entry ${entry.id}` }}
       actions={(entry) => [
         { type: "link", label: "View account", href: `/operator/users/${entry.account.id}` },
         ...(entry.distributionId

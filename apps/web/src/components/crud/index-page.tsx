@@ -1,4 +1,4 @@
-import { useState, type FormEventHandler, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "../ui/button";
 import { OperatorEmptyState } from "../operator/ui/empty-state";
@@ -19,6 +19,10 @@ export type CrudPagination = {
   onNext: () => void;
   summary?: ReactNode;
 };
+
+export function crudFilterAppliedSuccessfully(result: void | boolean) {
+  return result !== false;
+}
 
 export function CrudIndex<T>({
   eyebrow,
@@ -53,6 +57,7 @@ export function CrudIndex<T>({
   empty,
   pagination,
   selection,
+  bulkActions,
   sectionTitle,
   sectionDescription,
 }: {
@@ -63,7 +68,7 @@ export function CrudIndex<T>({
   createAction?: { label: string; href: string };
   filters?: ReactNode;
   sort?: ReactNode;
-  onFiltersSubmit?: FormEventHandler<HTMLFormElement>;
+  onFiltersSubmit?: (event: FormEvent<HTMLFormElement>) => void | boolean | Promise<void | boolean>;
   onFiltersReset?: () => boolean | void | Promise<boolean | void>;
   filtersDirty?: boolean;
   resetLabel?: string;
@@ -87,10 +92,8 @@ export function CrudIndex<T>({
   emptyAction?: ReactNode;
   empty?: ReactNode;
   pagination?: CrudPagination;
-  selection?: {
-    labelForItem: (item: T) => string;
-    bulkActions: readonly CrudBulkAction<T>[];
-  };
+  selection?: { labelForItem: (item: T) => string };
+  bulkActions?: readonly CrudBulkAction<T>[];
   sectionTitle?: string;
   sectionDescription?: string;
 }) {
@@ -98,14 +101,14 @@ export function CrudIndex<T>({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const clearSelection = () => setSelectedKeys(new Set());
   const selectedItems = items.filter((item) => selectedKeys.has(getRowKey(item)));
-  const handleFilterSubmit: FormEventHandler<HTMLFormElement> = (event) => {
-    clearSelection();
-    onFiltersSubmit?.(event);
-  };
+  async function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
+    const completed = await onFiltersSubmit?.(event);
+    if (crudFilterAppliedSuccessfully(completed)) clearSelection();
+  }
   async function resetFilters() {
     if (!onFiltersReset) return;
     const completed = await onFiltersReset();
-    if (completed !== false) clearSelection();
+    if (crudFilterAppliedSuccessfully(completed)) clearSelection();
   }
   const headingActions = (
     <>
@@ -134,7 +137,7 @@ export function CrudIndex<T>({
         actions={actions}
         actionLabel={actionLabel}
         selection={
-          selection?.bulkActions.length
+          selection
             ? { selectedKeys, onChange: setSelectedKeys, labelForItem: selection.labelForItem }
             : undefined
         }
@@ -207,10 +210,11 @@ export function CrudIndex<T>({
         </p>
       )}
       {error && <OperatorErrorState message={error} retry={onRetry} />}
-      {selection?.bulkActions.length ? (
+      {selection ? (
         <CrudBulkActions
           items={selectedItems}
-          actions={selection.bulkActions}
+          selectedCount={selectedItems.length}
+          actions={bulkActions ?? []}
           onComplete={clearSelection}
         />
       ) : null}

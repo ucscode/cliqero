@@ -447,6 +447,75 @@ describe("Hono API foundation", () => {
     });
     expect(deleted).toEqual(["00000000-0000-4000-8000-000000000001"]);
   });
+  it("keeps bulk category deletion bounded, authorized, and restricted per category", async () => {
+    const root = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session" as const,
+      capabilities: ["catalogue.manage", "content.manage"],
+      scopes: new Set<string>(),
+    };
+    const deletedCatalogue: string[] = [];
+    const catalogue = await appWith(root, undefined, undefined, undefined, {
+      delete: async (id: string) => {
+        if (id.endsWith("002")) throw new Error("Category is assigned to listings.");
+        deletedCatalogue.push(id);
+      },
+    }).fetch(
+      new Request("http://localhost/api/operator/catalogue/categories/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          ids: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+        }),
+      }),
+    );
+    expect(catalogue.status).toBe(200);
+    expect(await catalogue.json()).toMatchObject({
+      results: [{ success: true }, { success: false, error: "Category is assigned to listings." }],
+    });
+    expect(deletedCatalogue).toEqual(["00000000-0000-4000-8000-000000000001"]);
+
+    const deletedBlog: string[] = [];
+    const blog = await appWith(root, undefined, undefined, {
+      deleteCategory: (id: string) => deletedBlog.push(id),
+    }).fetch(
+      new Request("http://localhost/api/operator/blog/categories/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "delete", ids: ["00000000-0000-4000-8000-000000000003"] }),
+      }),
+    );
+    expect(blog.status).toBe(200);
+    expect(deletedBlog).toEqual(["00000000-0000-4000-8000-000000000003"]);
+
+    const denied = await appWith({ ...root, capabilities: [] }, undefined, undefined, undefined, {
+      delete: vi.fn(),
+    }).fetch(
+      new Request("http://localhost/api/operator/catalogue/categories/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "delete", ids: ["00000000-0000-4000-8000-000000000001"] }),
+      }),
+    );
+    expect(denied.status).toBe(403);
+
+    const oversized = await appWith(root).fetch(
+      new Request("http://localhost/api/operator/blog/categories/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          ids: Array.from(
+            { length: 51 },
+            (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          ),
+        }),
+      }),
+    );
+    expect(oversized.status).toBe(400);
+  });
   it("returns the same canonical post shape from public and operator Blog APIs", async () => {
     const post = {
       id: "00000000-0000-4000-8000-000000000011",
@@ -730,6 +799,10 @@ describe("Hono API foundation", () => {
       patch: { "x-required-api-scope": "catalogue:manage" },
       delete: { "x-required-api-scope": "catalogue:manage" },
     });
+    expect(paths["/api/operator/catalogue/categories/bulk"].post).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "catalogue:manage",
+    });
     expect(paths["/api/operator/reviews/bulk"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "reviews:moderate",
@@ -739,6 +812,10 @@ describe("Hono API foundation", () => {
       "x-required-api-scope": "blog:read",
     });
     expect(paths["/api/operator/blog/bulk"].post).toMatchObject({
+      "x-authentication-mode": "account",
+      "x-required-api-scope": "blog:manage",
+    });
+    expect(paths["/api/operator/blog/categories/bulk"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "blog:manage",
     });

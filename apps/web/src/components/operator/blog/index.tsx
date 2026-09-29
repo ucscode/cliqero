@@ -63,7 +63,7 @@ export function OperatorBlogList() {
       if (results.some((result) => !result.success))
         setActionError("Some selected articles could not be deleted.");
       await collection.retry();
-      return true;
+      return !results.some((result) => !result.success);
     } catch (cause) {
       setActionError(
         cause instanceof Error ? cause.message : "Unable to delete selected articles.",
@@ -72,7 +72,7 @@ export function OperatorBlogList() {
     }
   }
   const bulkActions: readonly CrudBulkAction<BlogPost>[] = [
-    { label: "Delete", destructive: true, onSelect: bulk },
+    { value: "delete", label: "Delete", destructive: true, onSelect: bulk },
   ];
   const columns: readonly CrudColumn<BlogPost>[] = [
     {
@@ -132,10 +132,10 @@ export function OperatorBlogList() {
           </OperatorFilterField>
         </>
       }
-      onFiltersSubmit={(event) => {
+      onFiltersSubmit={async (event) => {
         event.preventDefault();
         setActionError(null);
-        void collection.apply({ search: search.trim(), status });
+        return collection.apply({ search: search.trim(), status });
       }}
       onFiltersReset={async () => {
         const ok = await collection.apply({ search: "", status: "" });
@@ -154,7 +154,8 @@ export function OperatorBlogList() {
       items={collection.items}
       columns={columns}
       getRowKey={(post) => post.id}
-      selection={{ labelForItem: (post) => `article ${post.title}`, bulkActions }}
+      selection={{ labelForItem: (post) => `article ${post.title}` }}
+      bulkActions={bulkActions}
       actions={(post) => [
         { type: "link", label: "View / edit", href: `/operator/blog/${post.id}` },
         { type: "action", label: "Delete", destructive: true, onSelect: () => void remove(post) },

@@ -30,6 +30,18 @@ describe("operator component-system migration", () => {
     }
   });
 
+  it.each([
+    ["users.tsx", "Users"],
+    ["treasury.tsx", "Treasury"],
+    ["earnings.tsx", "Earnings"],
+    ["distributions.tsx", "Distributions"],
+    ["withdrawals.tsx", "Withdrawals"],
+  ])("keeps %s selectable without adding unsafe bulk deletion", (file) => {
+    const source = readFileSync(resolve(operatorRoot, file), "utf8");
+    expect(source, file).toContain("selection={{");
+    expect(source, file).not.toContain('value: "delete"');
+  });
+
   it("uses the shared Sidebar composition for operator navigation", () => {
     const source = readFileSync(resolve(operatorRoot, "shell.tsx"), "utf8");
     expect(source).toContain("SidebarProvider");

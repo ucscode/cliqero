@@ -153,9 +153,9 @@ export function OperatorWithdrawalList() {
         return ok;
       }}
       filtersDirty={Boolean(search.trim() || state || attention)}
-      onFiltersSubmit={(event) => {
+      onFiltersSubmit={async (event) => {
         event.preventDefault();
-        void collection.apply({ search: search.trim(), state, attention });
+        return collection.apply({ search: search.trim(), state, attention });
       }}
       toolbarActions={
         <Button type="submit" variant="secondary" disabled={collection.loading}>
@@ -165,6 +165,7 @@ export function OperatorWithdrawalList() {
       items={collection.items}
       columns={columns}
       getRowKey={(item) => item.id}
+      selection={{ labelForItem: (item) => `withdrawal ${item.id}` }}
       actions={(item) => [
         { type: "link", label: "Inspect withdrawal", href: `/operator/withdrawals/${item.id}` },
         { type: "link", label: "View account", href: `/operator/users/${item.account.id}` },

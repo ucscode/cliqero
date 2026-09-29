@@ -92,12 +92,12 @@ export function OperatorUsersList({ canManage = false }: { canManage?: boolean }
       error={collection.error}
       canManage={canManage}
       onSearchChange={setSearch}
-      onSearch={(event) => {
+      onSearch={async (event) => {
         event.preventDefault();
         const nextSearch = search.trim();
-        void collection.apply(nextSearch).then((applied) => {
-          if (applied) setAppliedSearch(nextSearch);
-        });
+        const applied = await collection.apply(nextSearch);
+        if (applied) setAppliedSearch(nextSearch);
+        return applied;
       }}
       onRetry={() => void collection.retry()}
       hasPrevious={collection.hasPrevious}
@@ -139,7 +139,7 @@ export function OperatorUsersListView({
   error: string | null;
   canManage?: boolean;
   onSearchChange: (value: string) => void;
-  onSearch: (event: FormEvent<HTMLFormElement>) => void;
+  onSearch: (event: FormEvent<HTMLFormElement>) => boolean | Promise<boolean>;
   onRetry: () => void;
   hasPrevious: boolean;
   onPrevious: () => void;
@@ -229,6 +229,7 @@ export function OperatorUsersListView({
       items={page?.items ?? []}
       columns={columns}
       getRowKey={(account) => account.id}
+      selection={{ labelForItem: (account) => `account ${account.username}` }}
       actions={(account) => operatorUserRowActions(account, Boolean(canManage))}
       actionLabel={(account) => `Actions for @${account.username}`}
       loading={loading}

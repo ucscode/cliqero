@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CrudIndex } from "@/components/crud/index-page";
+import { crudFilterAppliedSuccessfully, CrudIndex } from "@/components/crud/index-page";
 
 const columns = [
   { key: "name", label: "Name", render: (item: { id: string; name: string }) => item.name },
@@ -125,5 +125,34 @@ describe("shared CRUD index", () => {
     });
     expect(page).toContain("First");
     expect(page).toContain("Second");
+  });
+
+  it("keeps bulk controls stable with zero selection and disables Apply", () => {
+    const page = render({
+      selection: { labelForItem: (item) => item.name },
+      bulkActions: [{ value: "delete", label: "Delete", onSelect: vi.fn() }],
+    });
+    expect(page).toContain('aria-label="Bulk actions"');
+    expect(page).toContain(">Bulk actions</option>");
+    expect(page).toContain(">0 items selected</span>");
+    expect(page).toMatch(/<button[^>]*disabled=""[^>]*>Apply<\/button>/);
+  });
+
+  it("renders row selection and a count without inventing an action", () => {
+    const page = render({
+      items: [{ id: "1", name: "Ada" }],
+      selection: { labelForItem: (item) => item.name },
+    });
+    expect(page).toContain('aria-label="Select all visible records"');
+    expect(page).toContain('aria-label="Select Ada"');
+    expect(page).toContain(">0 items selected</p>");
+    expect(page).not.toContain('aria-label="Bulk actions"');
+    expect(page).not.toContain(">Delete</option>");
+  });
+
+  it("only clears a collection selection after a successful filter result", () => {
+    expect(crudFilterAppliedSuccessfully(true)).toBe(true);
+    expect(crudFilterAppliedSuccessfully(undefined)).toBe(true);
+    expect(crudFilterAppliedSuccessfully(false)).toBe(false);
   });
 });
