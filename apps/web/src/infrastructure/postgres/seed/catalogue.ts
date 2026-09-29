@@ -3,6 +3,7 @@ import { newId } from "@/kernel/ids";
 import { Account } from "@/modules/identity/account";
 import { getContainer } from "@/infrastructure/container";
 import { fixturePng } from "@/infrastructure/postgres/seed/fixture-media";
+import { AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE } from "@/infrastructure/postgres/seed/catalogue-visual-fixture";
 import {
   CatalogueListingSeeder,
   FREE_CATALOGUE_LISTINGS,
@@ -223,7 +224,9 @@ try {
   }
   const listingCategories: Record<string, string[]> = {
     "toolkit-03": ["api", "toolkit"],
-    "toolkit-08": ["operations", "product"],
+    [AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.externalKey]: [
+      ...AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.categorySlugs,
+    ],
     "toolkit-09": ["research", "product"],
     "toolkit-10": ["product", "research", "toolkit"],
     "toolkit-12": ["product", "templates"],
@@ -231,12 +234,32 @@ try {
     "toolkit-25": ["writing", "templates"],
   };
   for (const [key, title, longDescription, price] of records) {
-    const state = key === "toolkit-16" ? "archived" : key === "toolkit-15" ? "draft" : "published";
+    const state =
+      key === AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.externalKey
+        ? AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.state
+        : key === "toolkit-16"
+          ? "archived"
+          : key === "toolkit-15"
+            ? "draft"
+            : "published";
     const numericKey = Number(key.slice(-2));
     const featuredPosition = [1, 2, 3, 6, 11, 18].indexOf(numericKey) + 1 || null;
-    const createdAt = new Date(Date.UTC(2025, 0, 1 + numericKey)).toISOString();
-    const visibility = ["toolkit-08", "toolkit-09"].includes(key) ? "authenticated" : "public";
-    const compareAtPrice = key === "toolkit-03" ? "4000" : key === "toolkit-08" ? "1500" : null;
+    // Keep the reviewed members-only visual fixture near the top of the
+    // authenticated default (newest-first) catalogue.
+    const createdAt =
+      key === AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.externalKey
+        ? AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.createdAt
+        : new Date(Date.UTC(2025, 0, 1 + numericKey)).toISOString();
+    const visibility =
+      key === AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.externalKey || key === "toolkit-09"
+        ? AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.visibility
+        : "public";
+    const compareAtPrice =
+      key === "toolkit-03"
+        ? "4000"
+        : key === AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.externalKey
+          ? AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.compareAtPriceMinor
+          : null;
     await pool.query(
       `insert into listing_capability.listings(uuid,seller_id,title,short_description,long_description,price_minor,price_currency,compare_at_price_minor,visibility,destination_url,state,metadata,external_key,featured_position,created_at,updated_at)
        values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,'USD',$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$14)
@@ -312,7 +335,13 @@ try {
       "A concise reference for our API design review.",
       "approved",
     ],
-    ["toolkit-08", reviewers[1][0], 5, "The sessions are practical and welcoming.", "approved"],
+    [
+      AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.externalKey,
+      reviewers[1][0],
+      AUTHENTICATED_REVIEWED_CATALOGUE_FIXTURE.approvedRating,
+      "The sessions are practical and welcoming.",
+      "approved",
+    ],
     ["toolkit-06", reviewers[1][0], 5, "", "approved"],
     [
       "toolkit-11",

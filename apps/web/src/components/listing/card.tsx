@@ -30,51 +30,63 @@ export function ListingCard({
   const image = listing.media[0];
   return (
     <Card className="flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5 hover:border-emerald-300">
-      <Link href={`/listings/${listing.id}`} className="block">
-        {image ? (
-          <img
-            src={image.url}
-            alt={image.alt_text || listing.title}
-            className="block aspect-[1.34] w-full object-cover"
-          />
-        ) : (
-          <div className="grid aspect-[1.34] place-items-center bg-slate-100 text-4xl font-bold text-slate-400">
-            <span>{listing.title.slice(0, 1).toUpperCase()}</span>
-          </div>
+      <div className="relative">
+        <Link href={`/listings/${listing.id}`} className="block">
+          {image ? (
+            <img
+              src={image.url}
+              alt={image.alt_text || listing.title}
+              className="block aspect-[1.34] w-full object-cover"
+            />
+          ) : (
+            <div className="grid aspect-[1.34] place-items-center bg-slate-100 text-4xl font-bold text-slate-400">
+              <span>{listing.title.slice(0, 1).toUpperCase()}</span>
+            </div>
+          )}
+        </Link>
+        {listing.visibility === "authenticated" && (
+          <span
+            className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-slate-950/90 px-2.5 py-1 text-xs font-medium text-white shadow-sm"
+            aria-label="Members only: sign in required to view this listing"
+          >
+            <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />
+            Members only
+          </span>
         )}
-      </Link>
+      </div>
       <div className="flex flex-1 flex-col gap-4 p-5">
         <div className="flex min-h-5 items-center justify-between gap-3">
-          {listing.categories.length > 0 ? (
+          {listing.categories.length > 0 && (
             <p
-              className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-slate-500"
+              className="min-w-0 truncate whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-slate-500"
               title={listing.categories.map((category) => category.name).join(" · ")}
               aria-label={`Categories: ${listing.categories.map((category) => category.name).join(", ")}`}
             >
               {compactCategoryLabel(listing.categories)}
             </p>
-          ) : (
-            <span />
           )}
-          <div className="flex shrink-0 items-center gap-3">
-            {listing.visibility === "authenticated" && (
-              <span
-                className="inline-flex items-center gap-1 text-xs font-medium text-slate-600"
-                aria-label="Members only"
-              >
-                <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> Members only
-              </span>
-            )}
-            {reviewsVisible && (listing.rating?.count ?? 0) > 0 && listing.rating && (
-              <span
-                className="inline-flex items-center gap-1 text-sm text-slate-600"
-                aria-label={`${listing.rating.average} out of 5 stars`}
-              >
-                <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
-                <span className="font-medium">{listing.rating.average.toFixed(1)}</span>
-              </span>
-            )}
-          </div>
+          <span
+            className="ml-auto inline-flex shrink-0 items-center gap-1 text-sm text-slate-600"
+            aria-label={
+              reviewsVisible && (listing.rating?.count ?? 0) > 0 && listing.rating
+                ? `${listing.rating.average.toFixed(1)} out of 5 stars`
+                : "No reviews yet"
+            }
+          >
+            <Star
+              className={
+                reviewsVisible && (listing.rating?.count ?? 0) > 0 && listing.rating
+                  ? "h-4 w-4 fill-amber-400 text-amber-500"
+                  : "h-4 w-4 text-slate-400"
+              }
+              aria-hidden="true"
+            />
+            <span className="font-medium">
+              {reviewsVisible && (listing.rating?.count ?? 0) > 0 && listing.rating
+                ? listing.rating.average.toFixed(1)
+                : "0.0"}
+            </span>
+          </span>
         </div>
         <h3 className="mb-0 line-clamp-2 break-words text-lg font-semibold tracking-tight">
           <Link href={`/listings/${listing.id}`}>{listing.title}</Link>

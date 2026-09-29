@@ -65,6 +65,100 @@ describe("PostgresListingRepository descriptions", () => {
     expect(statements[1]).not.toContain("l.visibility='authenticated'");
   });
 
+  it.each(["asc", "desc"] as const)(
+    "sorts rating from approved aggregate facts with unrated rows last (%s)",
+    async (direction) => {
+      let statement = "";
+      const repository = new PostgresListingRepository({
+        query: async <T extends object>(sql: string) => {
+          statement = sql;
+          return { rows: [] as T[], rowCount: 0 };
+        },
+      });
+      await repository.query({
+        sort: "rating",
+        direction,
+        publicOnly: true,
+        visibility: "public",
+        limit: 12,
+      });
+
+      expect(statement).toContain("where r.status='approved'");
+      expect(statement).toContain("round(avg(r.rating)::numeric,2)");
+      expect(statement).toContain("l.has_rating desc");
+      expect(statement).toContain(`l.rating_average ${direction} nulls last`);
+      expect(statement).toContain("l.rating_count desc,l.id asc");
+      expect(statement).not.toContain("average_rating::text as rating_average");
+      expect(statement).toContain("l.visibility='public'");
+    },
+  );
+
+  it("does not aggregate every review when the selected sort does not use ratings", async () => {
+    let statement = "";
+    const repository = new PostgresListingRepository({
+      query: async <T extends object>(sql: string) => {
+        statement = sql;
+        return { rows: [] as T[], rowCount: 0 };
+      },
+    });
+    await repository.query({ sort: "date", direction: "desc", limit: 12 });
+    expect(statement).not.toContain("approved_review_summary");
+  });
+
+  it("uses query-bound opaque rating cursors and rejects a different sort direction", async () => {
+    const rows = [
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+    ].map((id) => ({
+      id,
+      seller_id: "00000000-0000-4000-8000-000000000010",
+      seller_pk: 1,
+      title: "Listing",
+      short_description: "Summary",
+      long_description: "Details",
+      price_minor: "100",
+      price_currency: "USD",
+      compare_at_price_minor: null,
+      visibility: "public" as const,
+      destination_url: "https://example.test/listing",
+      metadata: {},
+      state: "published" as const,
+      external_key: null,
+      featured_position: null,
+      categories: "[]",
+    }));
+    const repository = new PostgresListingRepository({
+      query: async <T extends object>() => ({ rows: rows as T[], rowCount: rows.length }),
+    });
+    const firstPage = await repository.query({ sort: "rating", direction: "desc", limit: 1 });
+    expect(firstPage.nextCursor).toBeTruthy();
+
+    let nextSql = "";
+    const pagedRepository = new PostgresListingRepository({
+      query: async <T extends object>(sql: string) => {
+        nextSql = sql;
+        return { rows: [] as T[], rowCount: 0 };
+      },
+    });
+    await pagedRepository.query({
+      sort: "rating",
+      direction: "desc",
+      cursor: firstPage.nextCursor!,
+      limit: 1,
+    });
+    expect(nextSql).toContain("cursor_listing.has_rating");
+    expect(nextSql).toContain("cursor_listing.rating_average");
+    expect(nextSql).toContain("cursor_listing.rating_count");
+    await expect(
+      pagedRepository.query({
+        sort: "rating",
+        direction: "asc",
+        cursor: firstPage.nextCursor!,
+        limit: 1,
+      }),
+    ).rejects.toThrow("Listing cursor does not match this catalogue query");
+  });
+
   it("replaces category memberships as part of the listing repository transaction", async () => {
     const calls: string[] = [];
     const executor = {

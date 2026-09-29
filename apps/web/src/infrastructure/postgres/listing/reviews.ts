@@ -5,6 +5,7 @@ import type {
   ReviewStatus,
 } from "@/modules/listing/reviews/review";
 import type { QueryExecutor } from "../shared/database";
+import { approvedReviewSummaryCte } from "./approved-review-summary";
 
 type ReviewRow = {
   id: string;
@@ -134,8 +135,10 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
     if (!listingIds.length) return new Map<string, RatingSummary>();
     const rows = (
       await this.sql.query<{ listing_id: string; average: string; count: string }>(
-        `select l.uuid as listing_id,round(avg(r.rating)::numeric,2)::text as average,count(*)::text as count
-         from listing_capability.reviews r join listing_capability.listings l on l.id=r.listing_id where r.status='approved' and l.uuid=any($1::uuid[]) group by l.uuid`,
+        `with ${approvedReviewSummaryCte}
+         select l.uuid as listing_id,s.average_rating::text as average,s.approved_count::text as count
+         from approved_review_summary s join listing_capability.listings l on l.id=s.listing_id
+         where l.uuid=any($1::uuid[])`,
         [listingIds],
       )
     ).rows;

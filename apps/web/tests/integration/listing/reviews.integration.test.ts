@@ -1,5 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createContainer } from "@/infrastructure/container";
+import { newId } from "@/kernel/ids";
+import { Account } from "@/modules/identity/account";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -137,6 +139,99 @@ suite("listing review visibility", () => {
 
     expect(visible.items.map((review) => review.id)).toEqual([pending.id, approved.id]);
     expect(summary.get(listing.id)).toEqual({ average: 4, count: 1 });
+  });
+
+  it("orders rating by approved average then review count and paginates without gaps", async () => {
+    const owner = await app.authentication.register({
+      email: "rating-sort-owner@example.com",
+      username: "rating_sort_owner",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [owner.id],
+    );
+    const createListing = (externalKey: string) =>
+      app.listingService.createPublished(owner, {
+        title: `Rating listing ${externalKey}`,
+        shortDescription: "Listing used to verify rating sort",
+        longDescription: "Rating sort integration fixture.",
+        priceMinor: "100",
+        currency: "USD",
+        destination: `https://example.test/${externalKey}`,
+        externalKey,
+      });
+    const highFour = await createListing("rating-high-four");
+    const highOne = await createListing("rating-high-one");
+    const midTen = await createListing("rating-mid-ten");
+    const noReviews = await createListing("rating-unrated-none");
+    const pendingOnly = await createListing("rating-unrated-pending");
+    const rejectedOnly = await createListing("rating-unrated-rejected");
+    const authors = Array.from({ length: 16 }, (_, index) => {
+      const id = newId();
+      const username = `rating_author_${index}`;
+      return new Account(id, username);
+    });
+    for (const author of authors)
+      await app.database.query(
+        "insert into identity_capability.accounts(uuid,username) values($1,$2)",
+        [author.id, author.username],
+      );
+
+    const approvedRatings = [
+      ...Array.from({ length: 4 }, (_, index) => [highFour, authors[index]!, 5] as const),
+      [highOne, authors[4]!, 5] as const,
+      ...[5, 5, 5, 5, 5, 4, 4, 4, 4, 4].map(
+        (rating, index) => [midTen, authors[index + 5]!, rating] as const,
+      ),
+    ];
+    for (const [listing, author, rating] of approvedRatings) {
+      const review = await app.listingReviews.submit(author, listing.id, { rating });
+      await app.listingReviews.moderate(owner, review.id, "approved");
+    }
+    const pending = await app.listingReviews.submit(authors[15]!, pendingOnly.id, { rating: 1 });
+    const rejected = await app.listingReviews.submit(authors[14]!, rejectedOnly.id, { rating: 5 });
+    await app.listingReviews.moderate(owner, rejected.id, "rejected");
+    expect(pending.status).toBe("pending");
+
+    const collect = async (direction: "asc" | "desc") => {
+      const ids: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await app.listingService.queryPublic({
+          sort: "rating",
+          direction,
+          cursor,
+          limit: 2,
+        });
+        ids.push(...page.items.map((listing) => listing.id));
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor);
+      return ids;
+    };
+    const descending = await collect("desc");
+    const ascending = await collect("asc");
+    const unrated = [noReviews.id, pendingOnly.id, rejectedOnly.id].sort();
+
+    expect(descending).toEqual([highFour.id, highOne.id, midTen.id, ...unrated]);
+    expect(ascending).toEqual([midTen.id, highFour.id, highOne.id, ...unrated]);
+    expect(new Set(descending).size).toBe(6);
+    expect(new Set(ascending).size).toBe(6);
+    await expect(
+      app.listingService.queryPublic({
+        sort: "rating",
+        direction: "asc",
+        cursor: (
+          await app.listingService.queryPublic({ sort: "rating", direction: "desc", limit: 1 })
+        ).nextCursor!,
+        limit: 1,
+      }),
+    ).rejects.toThrow("Listing cursor does not match this catalogue query");
+    expect(
+      await app.listingReviews.summariesForListings([pendingOnly.id, rejectedOnly.id]),
+    ).toEqual(new Map());
   });
 
   it("bulk moderation changes only pending reviews and refuses later invalid transitions", async () => {

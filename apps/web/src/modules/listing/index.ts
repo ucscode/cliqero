@@ -5,7 +5,8 @@ import { Money } from "@/modules/money/money";
 export type ListingState = "draft" | "published" | "archived";
 export type ListingVisibility = "public" | "authenticated";
 export type ListingCategorySummary = Readonly<{ id: Id; name: string; slug: string }>;
-export type ListingSort = "newest" | "oldest" | "price_asc" | "price_desc" | "title_asc";
+export type ListingSort = "date" | "price" | "title" | "rating";
+export type ListingSortDirection = "asc" | "desc";
 export type ListingMetadata = Readonly<Record<string, string | number | boolean | null>>;
 export const LISTING_SHORT_DESCRIPTION_MAX_LENGTH = 200;
 
@@ -218,6 +219,7 @@ export interface ListingRepository {
     search?: string;
     cursor?: string;
     sort?: ListingSort;
+    direction?: ListingSortDirection;
     featuredOnly?: boolean;
     visibility?: ListingVisibility | "all";
     limit: number;

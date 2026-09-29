@@ -22,6 +22,7 @@ describe("listing price presentation", () => {
       }),
     );
     expect(paid).toContain("<del");
+    expect(paid).toContain('class="text-sm font-normal text-rose-600/70"');
     expect(paid).toContain("$40.00");
     expect(paid).toContain("$24.00");
     const free = renderToStaticMarkup(

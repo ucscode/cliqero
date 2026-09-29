@@ -286,6 +286,7 @@ export class ListingService {
     cursor?: string;
     limit: number;
     sort?: import("@/modules/listing").ListingSort;
+    direction?: import("@/modules/listing").ListingSortDirection;
     featuredOnly?: boolean;
   }) {
     return this.listings.query({ ...input, publicOnly: true, visibility: "public" });
@@ -297,6 +298,7 @@ export class ListingService {
       cursor?: string;
       limit: number;
       sort?: import("@/modules/listing").ListingSort;
+      direction?: import("@/modules/listing").ListingSortDirection;
       featuredOnly?: boolean;
     },
   ) {
@@ -314,6 +316,7 @@ export class ListingService {
       cursor?: string;
       limit: number;
       sort?: import("@/modules/listing").ListingSort;
+      direction?: import("@/modules/listing").ListingSortDirection;
     },
   ) {
     return this.listings.query({ ...input, sellerId: actor.id });
@@ -324,6 +327,7 @@ export class ListingService {
     cursor?: string;
     limit: number;
     sort?: import("@/modules/listing").ListingSort;
+    direction?: import("@/modules/listing").ListingSortDirection;
     visibility?: ListingVisibility;
   }) {
     return this.listings.query(input);

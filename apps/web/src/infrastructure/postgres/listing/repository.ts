@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+import { PublicApplicationError } from "@/kernel/errors";
 import { Money } from "@/modules/money/money";
 import {
   Listing,
@@ -9,6 +11,7 @@ import {
 } from "@/modules/listing";
 import type { QueryExecutor } from "../shared/database";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
+import { approvedReviewSummaryCte } from "./approved-review-summary";
 
 interface ListingRow {
   id: string;
@@ -26,6 +29,9 @@ interface ListingRow {
   external_key: string | null;
   featured_position: number | null;
   categories: ListingCategorySummary[] | string;
+  rating_average?: string | null;
+  rating_count?: string;
+  has_rating?: boolean;
 }
 
 export class PostgresListingRepository implements ListingRepository {
@@ -55,6 +61,7 @@ export class PostgresListingRepository implements ListingRepository {
     search?: string;
     cursor?: string;
     sort?: import("@/modules/listing").ListingSort;
+    direction?: import("@/modules/listing").ListingSortDirection;
     featuredOnly?: boolean;
     visibility?: ListingVisibility | "all";
     limit: number;
@@ -67,7 +74,7 @@ export class PostgresListingRepository implements ListingRepository {
     };
     if (input.sellerId)
       where.push(
-        `seller_id=(select id from identity_capability.accounts where uuid=${add(input.sellerId)})`,
+        `seller_pk=(select id from identity_capability.accounts where uuid=${add(input.sellerId)})`,
       );
     if (input.publicOnly) where.push(`l.state='published'`);
     else if (input.state) where.push(`state=${add(input.state)}`);
@@ -78,52 +85,69 @@ export class PostgresListingRepository implements ListingRepository {
         `to_tsvector('simple',title||' '||short_description||' '||long_description) @@ plainto_tsquery('simple',${add(input.search)})`,
       );
     if (input.featuredOnly) where.push("featured_position is not null");
-    const sort = input.featuredOnly ? "featured" : (input.sort ?? "newest");
-    const ordering: Record<string, { order: string; after: string }> = {
-      newest: {
-        order: "l.created_at desc,l.id desc",
-        after:
-          "(l.created_at,l.id)<(select cursor_listing.created_at,cursor_listing.id from listing_capability.listings cursor_listing where cursor_listing.uuid=",
-      },
-      oldest: {
-        order: "l.created_at asc,l.id asc",
-        after:
-          "(l.created_at,l.id)>(select cursor_listing.created_at,cursor_listing.id from listing_capability.listings cursor_listing where cursor_listing.uuid=",
-      },
-      price_asc: {
-        order: "l.price_minor asc,l.id asc",
-        after:
-          "(l.price_minor,l.id)>(select cursor_listing.price_minor,cursor_listing.id from listing_capability.listings cursor_listing where cursor_listing.uuid=",
-      },
-      price_desc: {
-        order: "l.price_minor desc,l.id desc",
-        after:
-          "(l.price_minor,l.id)<(select cursor_listing.price_minor,cursor_listing.id from listing_capability.listings cursor_listing where cursor_listing.uuid=",
-      },
-      title_asc: {
-        order: "lower(l.title) asc,l.id asc",
-        after:
-          "(lower(l.title),l.id)>(select lower(cursor_listing.title),cursor_listing.id from listing_capability.listings cursor_listing where cursor_listing.uuid=",
-      },
-      featured: {
-        order: "l.featured_position asc,l.id asc",
-        after:
-          "(l.featured_position,l.id)>(select cursor_listing.featured_position,cursor_listing.id from listing_capability.listings cursor_listing where cursor_listing.uuid=",
-      },
-    };
-    const order = ordering[sort] ?? ordering.newest;
-    if (input.cursor) where.push(`${order.after}${add(input.cursor)})`);
+    const sort = input.featuredOnly ? "featured" : (input.sort ?? "date");
+    const direction = input.featuredOnly ? "asc" : (input.direction ?? "desc");
+    const cursorScope = this.cursorScope(input, sort, direction);
+    let cursorId: string | undefined;
+    if (input.cursor) cursorId = this.decodeCursor(input.cursor, cursorScope);
+    const comparator = direction === "asc" ? ">" : "<";
+    const order =
+      sort === "rating"
+        ? `l.has_rating desc,l.rating_average ${direction} nulls last,l.rating_count desc,l.id asc`
+        : sort === "price"
+          ? `l.price_minor ${direction},l.id ${direction}`
+          : sort === "title"
+            ? `lower(l.title) ${direction},l.id ${direction}`
+            : sort === "featured"
+              ? "l.featured_position asc,l.id asc"
+              : `l.created_at ${direction},l.id ${direction}`;
+    if (cursorId) {
+      const cursorParameter = add(cursorId);
+      if (sort === "rating") {
+        const ratingComparator = direction === "asc" ? ">" : "<";
+        where.push(`exists (
+          select 1 from catalogue cursor_listing where cursor_listing.id=${cursorParameter} and (
+            (not cursor_listing.has_rating and not l.has_rating and l.id>cursor_listing.id)
+            or (cursor_listing.has_rating and (
+              not l.has_rating
+              or (l.has_rating and (
+                l.rating_average ${ratingComparator} cursor_listing.rating_average
+                or (l.rating_average=cursor_listing.rating_average and l.rating_count<cursor_listing.rating_count)
+                or (l.rating_average=cursor_listing.rating_average and l.rating_count=cursor_listing.rating_count and l.id>cursor_listing.id)
+              ))
+            ))
+          )
+        )`);
+      } else {
+        const field =
+          sort === "price"
+            ? "price_minor"
+            : sort === "title"
+              ? "lower_title"
+              : sort === "featured"
+                ? "featured_position"
+                : "created_at";
+        where.push(
+          `(l.${field},l.id) ${comparator} (select cursor_listing.${field},cursor_listing.id from catalogue cursor_listing where cursor_listing.id=${cursorParameter})`,
+        );
+      }
+    }
     values.push(input.limit + 1);
     const rows = (
       await this.sql.query<ListingRow>(
-        `${this.selectListings()} ${where.length ? `where ${where.join(" and ")}` : ""} order by ${order.order} limit $${values.length}`,
+        `with ${sort === "rating" ? `${approvedReviewSummaryCte},` : ""} catalogue as (
+          ${this.selectListings(sort === "rating")}
+        )
+        select l.* from catalogue l
+        ${where.length ? `where ${where.join(" and ")}` : ""} order by ${order} limit $${values.length}`,
         values,
       )
     ).rows;
     const visible = rows.slice(0, input.limit);
     return {
       items: visible.map((row) => this.restore(row)),
-      nextCursor: rows.length > input.limit ? visible.at(-1)!.id : null,
+      nextCursor:
+        rows.length > input.limit ? this.encodeCursor(visible.at(-1)!.id, cursorScope) : null,
     };
   }
   async save(listing: Listing): Promise<void> {
@@ -194,10 +218,11 @@ export class PostgresListingRepository implements ListingRepository {
     });
   }
 
-  private selectListings() {
-    return `select l.uuid as id,seller.uuid as seller_id,l.title,l.short_description,l.long_description,
-      l.price_minor,l.price_currency,l.compare_at_price_minor,l.visibility,l.destination_url,l.metadata,l.state,
-      l.external_key,l.featured_position,coalesce(category_data.categories,'[]'::json) as categories
+  private selectListings(includeRating = false) {
+    return `select l.uuid as id,seller.uuid as seller_id,l.seller_id as seller_pk,l.title,lower(l.title) as lower_title,l.created_at,l.price_minor,l.featured_position,l.short_description,l.long_description,
+      l.price_currency,l.compare_at_price_minor,l.visibility,l.destination_url,l.metadata,l.state,
+      l.external_key,coalesce(category_data.categories,'[]'::json) as categories
+      ${includeRating ? ",review_summary.average_rating as rating_average,coalesce(review_summary.approved_count,0) as rating_count,(review_summary.listing_id is not null) as has_rating" : ""}
       from listing_capability.listings l
       join identity_capability.accounts seller on seller.id=l.seller_id
       left join lateral (
@@ -205,6 +230,54 @@ export class PostgresListingRepository implements ListingRepository {
         from listing_capability.listing_categories lc
         join listing_capability.categories c on c.id=lc.category_id
         where lc.listing_id=l.id
-      ) category_data on true`;
+      ) category_data on true
+      ${includeRating ? "left join approved_review_summary review_summary on review_summary.listing_id=l.id" : ""}`;
+  }
+
+  private cursorScope(
+    input: {
+      sellerId?: string;
+      publicOnly?: boolean;
+      state?: ListingState;
+      search?: string;
+      featuredOnly?: boolean;
+      visibility?: ListingVisibility | "all";
+    },
+    sort: string,
+    direction: string,
+  ) {
+    return JSON.stringify({
+      sellerId: input.sellerId ?? null,
+      publicOnly: input.publicOnly ?? false,
+      state: input.state ?? null,
+      search: input.search ?? null,
+      featuredOnly: input.featuredOnly ?? false,
+      visibility: input.visibility ?? null,
+      sort,
+      direction,
+    });
+  }
+
+  private encodeCursor(id: string, scope: string) {
+    return Buffer.from(JSON.stringify({ version: 1, id, scope })).toString("base64url");
+  }
+
+  private decodeCursor(cursor: string, scope: string) {
+    try {
+      const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+        version?: unknown;
+        id?: unknown;
+        scope?: unknown;
+      };
+      if (value.version === 1 && typeof value.id === "string" && value.scope === scope)
+        return value.id;
+    } catch {
+      // Treat malformed and cross-query cursors identically as invalid input.
+    }
+    throw new PublicApplicationError(
+      "Listing cursor does not match this catalogue query",
+      "invalid_listing_cursor",
+      400,
+    );
   }
 }

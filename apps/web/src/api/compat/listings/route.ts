@@ -4,7 +4,8 @@ import { getContainer } from "@/infrastructure/container";
 import { listingWithMediaView } from "@/application/listing/service";
 import { loadStorefrontConfiguration } from "@/config/storefront";
 
-const sorts = ["newest", "oldest", "price_asc", "price_desc", "title_asc"] as const;
+const sorts = ["date", "price", "title", "rating"] as const;
+const directions = ["asc", "desc"] as const;
 
 const listingSchema = z
   .object({
@@ -62,7 +63,12 @@ export async function GET(request: Request) {
   const featuredOnly = url.searchParams.get("featured") === "true";
   const sort = sorts.includes(url.searchParams.get("sort") as (typeof sorts)[number])
     ? (url.searchParams.get("sort") as (typeof sorts)[number])
-    : "newest";
+    : "date";
+  const direction = directions.includes(
+    url.searchParams.get("direction") as (typeof directions)[number],
+  )
+    ? (url.searchParams.get("direction") as (typeof directions)[number])
+    : "desc";
   try {
     const principal = await c.principalResolver.resolve(request);
     const storefrontConfig = loadStorefrontConfiguration();
@@ -81,6 +87,7 @@ export async function GET(request: Request) {
         cursor: url.searchParams.get("cursor") ?? undefined,
         limit,
         sort,
+        direction,
         featuredOnly,
       },
     );

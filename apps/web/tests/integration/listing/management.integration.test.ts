@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import type { ObjectStorageProvider } from "@/modules/storage/object-storage";
+import type { Listing } from "@/modules/listing";
 import { ListingTransferService, serializeTransfer } from "@/application/listing/transfer";
 const url = process.env.TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -174,6 +175,75 @@ suite("listing management and media", () => {
     await app.listingService.update(owner, membersOnly.id, { categoryIds: [] });
     expect((await app.listingService.getOwner(owner, membersOnly.id)).categories).toEqual([]);
     await app.listingCategories.delete(api.id);
+  });
+
+  it("applies date, actual-price, and case-insensitive title sort fields in both directions", async () => {
+    const { owner } = await accounts("sorting");
+    const fixtures = [
+      { key: "sort-free", title: "Alpha", priceMinor: "0", compareAtPriceMinor: "500" },
+      { key: "sort-low", title: "beta", priceMinor: "100", compareAtPriceMinor: null },
+      { key: "sort-mid", title: "Gamma", priceMinor: "400", compareAtPriceMinor: null },
+      { key: "sort-high", title: "zeta", priceMinor: "900", compareAtPriceMinor: null },
+    ];
+    const listings: Listing[] = [];
+    for (const [index, fixture] of fixtures.entries()) {
+      const listing = await app.listingService.createPublished(owner, {
+        ...fixture,
+        shortDescription: "Sort fixture summary",
+        longDescription: "Sort fixture details.",
+        currency: "USD",
+        destination: `https://example.test/${fixture.key}`,
+      });
+      listings.push(listing);
+      await app.database.query(
+        "update listing_capability.listings set created_at=$2::timestamptz where uuid=$1",
+        [listing.id, `2026-01-0${index + 1}T00:00:00.000Z`],
+      );
+    }
+    const query = async (sort: "date" | "price" | "title", direction: "asc" | "desc") =>
+      (await app.listingService.queryPublic({ sort, direction, limit: 20 })).items.map(
+        (listing) => listing.id,
+      );
+    const ids = Object.fromEntries(
+      fixtures.map((fixture, index) => [fixture.key, listings[index]!.id]),
+    );
+
+    expect(await query("date", "asc")).toEqual([
+      ids["sort-free"],
+      ids["sort-low"],
+      ids["sort-mid"],
+      ids["sort-high"],
+    ]);
+    expect(await query("date", "desc")).toEqual([
+      ids["sort-high"],
+      ids["sort-mid"],
+      ids["sort-low"],
+      ids["sort-free"],
+    ]);
+    expect(await query("price", "asc")).toEqual([
+      ids["sort-free"],
+      ids["sort-low"],
+      ids["sort-mid"],
+      ids["sort-high"],
+    ]);
+    expect(await query("price", "desc")).toEqual([
+      ids["sort-high"],
+      ids["sort-mid"],
+      ids["sort-low"],
+      ids["sort-free"],
+    ]);
+    expect(await query("title", "asc")).toEqual([
+      ids["sort-free"],
+      ids["sort-low"],
+      ids["sort-mid"],
+      ids["sort-high"],
+    ]);
+    expect(await query("title", "desc")).toEqual([
+      ids["sort-high"],
+      ids["sort-mid"],
+      ids["sort-low"],
+      ids["sort-free"],
+    ]);
   });
 
   it("converges every import lifecycle target and remains idempotent", async () => {

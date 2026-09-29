@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { apiFetch, ApiClientError, type ListingPage } from "@/lib/api-client";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -13,50 +13,59 @@ import { Toast } from "../toast";
 import { HoneypotField } from "../honeypot-field";
 import { LoadingGrid, ListingGrid } from "./grid";
 import {
+  catalogueListRequestUrl,
+  catalogueNavigationUrlState,
+  catalogueSortUrlState,
   listingPageRequestFailed,
   listingPageRequestForKey,
   listingPageRequestStarted,
   listingPageRequestSucceeded,
   type ListingPageRequestState,
+  type CatalogueSortDirection,
+  type CatalogueSortField,
 } from "./request-state";
 
-const sortOptions = [
-  ["newest", "Newest"],
-  ["oldest", "Oldest"],
-  ["price_asc", "Price: low to high"],
-  ["price_desc", "Price: high to low"],
-  ["title_asc", "Title: A–Z"],
-] as const;
+const sortOptions: CatalogueSortField[] = ["date", "price", "title", "rating"];
+const directions: CatalogueSortDirection[] = ["asc", "desc"];
 
 export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const query = searchParams.get("q") ?? "";
-  const sort = searchParams.get("sort") ?? "newest";
+  const sort = sortOptions.includes(searchParams.get("sort") as CatalogueSortField)
+    ? (searchParams.get("sort") as CatalogueSortField)
+    : "date";
+  const direction = directions.includes(searchParams.get("direction") as CatalogueSortDirection)
+    ? (searchParams.get("direction") as CatalogueSortDirection)
+    : "desc";
   const cursor = searchParams.get("cursor") ?? "";
   const trail = searchParams.get("trail")?.split(",").filter(Boolean) ?? [];
   const [draft, setDraft] = useState(query);
+  const [draftSort, setDraftSort] = useState<CatalogueSortField>(sort);
+  const [draftDirection, setDraftDirection] = useState<CatalogueSortDirection>(direction);
   const [request, setRequest] = useState<ListingPageRequestState>(() =>
     listingPageRequestStarted(""),
   );
   const [retryVersion, setRetryVersion] = useState(0);
-  const requestKey = JSON.stringify([query, sort, cursor]);
+  const requestKey = JSON.stringify([query, sort, direction, cursor]);
   useEffect(() => {
     // The address bar is the catalogue state authority after navigation.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(query);
   }, [query]);
   useEffect(() => {
+    // The address bar remains authoritative when the user navigates history.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraftSort(sort);
+    setDraftDirection(direction);
+  }, [sort, direction]);
+  useEffect(() => {
     let active = true;
     // The address bar is the catalogue state authority after navigation.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRequest(listingPageRequestStarted(requestKey));
-    const params = new URLSearchParams();
-    if (query) params.set("search", query);
-    if (sort !== "newest") params.set("sort", sort);
-    if (cursor) params.set("cursor", cursor);
-    void apiFetch<ListingPage>(`/api/listings?${params}`)
+    void apiFetch<ListingPage>(catalogueListRequestUrl(query, sort, direction, cursor))
       .then((result) => {
         if (active) setRequest(listingPageRequestSucceeded(requestKey, result));
       })
@@ -72,14 +81,10 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
     return () => {
       active = false;
     };
-  }, [query, sort, cursor, requestKey, retryVersion]);
+  }, [query, sort, direction, cursor, requestKey, retryVersion]);
   const currentRequest = listingPageRequestForKey(request, requestKey);
   function navigate(next: Record<string, string | null>) {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, value] of Object.entries(next)) {
-      if (value) params.set(key, value);
-      else params.delete(key);
-    }
+    const params = catalogueNavigationUrlState(searchParams.toString(), next);
     router.push(`${pathname}?${params}`);
   }
   function next() {
@@ -91,6 +96,10 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
   }
   function previous() {
     navigate({ cursor: trail.at(-1) ?? null, trail: trail.slice(0, -1).join(",") || null });
+  }
+  function applySorting() {
+    const params = catalogueSortUrlState(searchParams.toString(), draftSort, draftDirection);
+    router.push(`${pathname}?${params}`);
   }
   return (
     <section className="grid gap-8" aria-labelledby="catalogue-heading">
@@ -127,24 +136,43 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
         </form>
       </div>
       <div className="flex justify-end">
-        <Select
-          value={sort}
-          onChange={(event) =>
-            navigate({
-              sort: event.target.value === "newest" ? null : event.target.value,
-              cursor: null,
-              trail: null,
-            })
-          }
-          className="w-[210px]"
-          aria-label="Sort catalogue"
-        >
-          {sortOptions.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </Select>
+        <div className="flex flex-wrap items-end justify-end gap-2">
+          <label className="grid gap-1 text-xs font-medium text-slate-600">
+            Sort by
+            <Select
+              value={draftSort}
+              onChange={(event) => setDraftSort(event.target.value as CatalogueSortField)}
+              className="w-32"
+              aria-label="Sort by"
+            >
+              <option value="date">Date</option>
+              <option value="price">Price</option>
+              <option value="title">Title</option>
+              <option value="rating">Rating</option>
+            </Select>
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">
+            Direction
+            <Select
+              value={draftDirection}
+              onChange={(event) => setDraftDirection(event.target.value as CatalogueSortDirection)}
+              className="w-36"
+              aria-label="Direction"
+            >
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </Select>
+          </label>
+          <Button
+            type="button"
+            variant="secondary"
+            aria-label="Apply sorting"
+            className="focus-visible:ring-2 focus-visible:ring-emerald-600"
+            onClick={applySorting}
+          >
+            <Check className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>
       </div>
       {currentRequest.status === "loading" ? (
         <LoadingGrid />

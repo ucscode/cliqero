@@ -16,7 +16,7 @@ export function ListingPrice({
   return (
     <span className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-1">
       {compareAtMinorAmount != null && (
-        <del className="text-sm font-normal text-slate-500">
+        <del className="text-sm font-normal text-rose-600/70">
           <Money minor={compareAtMinorAmount} currency={currency} />
         </del>
       )}
