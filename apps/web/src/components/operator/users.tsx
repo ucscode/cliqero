@@ -94,7 +94,6 @@ export function OperatorUsersList({ canManage = false }: { canManage?: boolean }
       hasPrevious={collection.hasPrevious}
       onPrevious={() => void collection.previous()}
       onNext={() => void collection.next()}
-      maxRows={collection.maxRows}
       filtersDirty={Boolean(search.trim())}
       onFiltersReset={async () => {
         const ok = await collection.apply("");
@@ -117,7 +116,6 @@ export function OperatorUsersListView({
   hasPrevious,
   onPrevious,
   onNext,
-  maxRows,
   filtersDirty,
   onFiltersReset,
 }: {
@@ -132,7 +130,6 @@ export function OperatorUsersListView({
   hasPrevious: boolean;
   onPrevious: () => void;
   onNext: () => void;
-  maxRows?: number;
   filtersDirty?: boolean;
   onFiltersReset?: () => boolean | void | Promise<boolean | void>;
 }) {
@@ -216,7 +213,6 @@ export function OperatorUsersListView({
       }
       toolbarClassName="max-w-2xl"
       items={page?.items ?? []}
-      maxRows={maxRows}
       columns={columns}
       getRowKey={(account) => account.id}
       actions={(account) => operatorUserRowActions(account, Boolean(canManage))}

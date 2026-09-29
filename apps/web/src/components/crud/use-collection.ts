@@ -82,7 +82,6 @@ export function useCrudCollection<TFilters, TItem>(
     hasPrevious,
     loading,
     initialized,
-    maxRows,
     error,
     apply,
     next,

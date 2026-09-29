@@ -200,7 +200,6 @@ export function OperatorFundingList() {
         </Button>
       }
       items={collection.items}
-      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(funding) => funding.id}
       actions={actions}

@@ -116,15 +116,14 @@ describe("shared CRUD index", () => {
     expect(filtered).not.toContain(">Rows</label>");
   });
 
-  it("supports a maxRows override and renders no more than that many rows", () => {
+  it("renders exactly all supplied items", () => {
     const page = render({
-      maxRows: 1,
       items: [
         { id: "1", name: "First" },
         { id: "2", name: "Second" },
       ],
     });
     expect(page).toContain("First");
-    expect(page).not.toContain("Second");
+    expect(page).toContain("Second");
   });
 });

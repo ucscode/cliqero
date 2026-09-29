@@ -1,4 +1,5 @@
 import { CursorHistory } from "./cursor-history";
+import { validateCrudMaxRows } from "./max-rows";
 import type { CrudPage, CrudPageReader } from "./use-collection";
 
 /** Owns the accepted filters and cursor history for one CRUD collection. */
@@ -18,7 +19,7 @@ export class CrudCollectionController<TFilters, TItem> {
   constructor(reader: CrudPageReader<TFilters, TItem>, initialFilters: TFilters, maxRows = 50) {
     this.reader = reader;
     this.appliedFilters = initialFilters;
-    this.maxRows = maxRows;
+    this.maxRows = validateCrudMaxRows(maxRows);
   }
 
   setReader(reader: CrudPageReader<TFilters, TItem>) {

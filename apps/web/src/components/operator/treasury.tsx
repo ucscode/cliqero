@@ -308,7 +308,6 @@ export function OperatorTreasuryPage() {
         void collection.apply({ search: search.trim(), direction, source });
       }}
       items={collection.items}
-      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(entry) => entry.id}
       actions={actions}

@@ -348,7 +348,6 @@ export function OperatorCatalogueList() {
         </details>
       }
       items={collection.items}
-      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(listing) => listing.id}
       selection={{ labelForItem: (listing) => `listing ${listing.title}`, bulkActions }}

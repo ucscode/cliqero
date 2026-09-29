@@ -47,7 +47,6 @@ export function OperatorBlogCategories() {
       description="Manage categories assigned to public articles. Categories in use cannot be removed."
       createAction={{ label: "New category", href: "/operator/blog/categories/new" }}
       items={collection.items}
-      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(category) => category.id}
       actions={(category) => [

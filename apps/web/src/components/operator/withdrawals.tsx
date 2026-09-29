@@ -163,7 +163,6 @@ export function OperatorWithdrawalList() {
         </Button>
       }
       items={collection.items}
-      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(item) => item.id}
       actions={(item) => [

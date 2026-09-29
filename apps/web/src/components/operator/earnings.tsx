@@ -154,7 +154,6 @@ export function OperatorEarningsList() {
         </Button>
       }
       items={collection.items}
-      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(entry) => entry.id}
       actions={(entry) => [

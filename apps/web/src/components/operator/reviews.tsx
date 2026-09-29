@@ -17,8 +17,19 @@ type ReviewPage = { items: Review[]; next_cursor: string | null };
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Review queue is temporarily unavailable.";
 
+export function reviewQueueSelection<T>(
+  appliedStatus: string,
+  selection: {
+    labelForItem: (item: T) => string;
+    bulkActions: readonly CrudBulkAction<T>[];
+  },
+) {
+  return appliedStatus === "pending" ? selection : undefined;
+}
+
 export function OperatorReviews() {
   const [status, setStatus] = useState("pending");
+  const [appliedStatus, setAppliedStatus] = useState("pending");
   const [actionError, setActionError] = useState<string | null>(null);
   const collection = useCrudCollection(async (appliedStatus: string, cursor, pageSize) => {
     const params = new URLSearchParams({ status: appliedStatus, limit: String(pageSize) });
@@ -124,13 +135,19 @@ export function OperatorReviews() {
       }
       onFiltersReset={async () => {
         const ok = await collection.apply("pending");
-        if (ok) setStatus("pending");
+        if (ok) {
+          setStatus("pending");
+          setAppliedStatus("pending");
+        }
         return ok;
       }}
       filtersDirty={status !== "pending"}
       onFiltersSubmit={(event) => {
         event.preventDefault();
-        void collection.apply(status);
+        const requestedStatus = status;
+        void collection.apply(requestedStatus).then((applied) => {
+          if (applied) setAppliedStatus(requestedStatus);
+        });
       }}
       toolbarActions={
         <Button type="submit" variant="secondary" disabled={collection.loading}>
@@ -138,13 +155,12 @@ export function OperatorReviews() {
         </Button>
       }
       items={collection.items}
-      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(review) => review.id}
-      selection={{
+      selection={reviewQueueSelection(appliedStatus, {
         labelForItem: (review) => `review by ${review.reviewer ?? "customer"}`,
         bulkActions,
-      }}
+      })}
       actions={(review) =>
         review.status === "pending"
           ? [

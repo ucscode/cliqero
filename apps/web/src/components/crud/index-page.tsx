@@ -52,7 +52,6 @@ export function CrudIndex<T>({
   emptyAction,
   empty,
   pagination,
-  maxRows,
   selection,
   sectionTitle,
   sectionDescription,
@@ -88,7 +87,6 @@ export function CrudIndex<T>({
   emptyAction?: ReactNode;
   empty?: ReactNode;
   pagination?: CrudPagination;
-  maxRows?: number;
   selection?: {
     labelForItem: (item: T) => string;
     bulkActions: readonly CrudBulkAction<T>[];
@@ -99,8 +97,7 @@ export function CrudIndex<T>({
   const collectionInitialized = initialized ?? !loading;
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const clearSelection = () => setSelectedKeys(new Set());
-  const visibleRows = maxRows ? items.slice(0, maxRows) : items;
-  const selectedItems = visibleRows.filter((item) => selectedKeys.has(getRowKey(item)));
+  const selectedItems = items.filter((item) => selectedKeys.has(getRowKey(item)));
   const handleFilterSubmit: FormEventHandler<HTMLFormElement> = (event) => {
     clearSelection();
     onFiltersSubmit?.(event);
@@ -129,9 +126,9 @@ export function CrudIndex<T>({
         columns={columns.length + Number(Boolean(actions))}
         label={loadingLabel ?? `Loading ${title.toLowerCase()}`}
       />
-    ) : visibleRows.length ? (
+    ) : items.length ? (
       <CrudTable
-        items={visibleRows}
+        items={items}
         columns={columns}
         getRowKey={getRowKey}
         actions={actions}

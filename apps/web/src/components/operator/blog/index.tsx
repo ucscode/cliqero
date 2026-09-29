@@ -152,7 +152,6 @@ export function OperatorBlogList() {
         </Button>
       }
       items={collection.items}
-      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(post) => post.id}
       selection={{ labelForItem: (post) => `article ${post.title}`, bulkActions }}

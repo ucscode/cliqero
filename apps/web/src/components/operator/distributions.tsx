@@ -105,7 +105,6 @@ export function OperatorDistributionList() {
         </Button>
       }
       items={collection.items}
-      maxRows={collection.maxRows}
       columns={columns}
       getRowKey={(item) => item.id}
       actions={actions}

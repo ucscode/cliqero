@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CrudCollectionController } from "@/components/crud/collection-controller";
+import { resolveCrudMaxRows } from "@/components/crud/max-rows";
 import type { CrudPage } from "@/components/crud/use-collection";
 
 describe("CRUD collection controller", () => {
@@ -139,6 +140,54 @@ describe("CRUD collection controller", () => {
     expect(controller.items).toBe(accepted);
     expect(controller.error).toBe("refresh unavailable");
     expect(sizes).toEqual([31, 31]);
+  });
+
+  it("keeps the configured page limit on every cursor page without skipping rows", async () => {
+    const requests: Array<{ cursor: string | null; limit: number }> = [];
+    const reader = vi.fn(async (_filter: string, cursor: string | null, limit: number) => {
+      requests.push({ cursor, limit });
+      const start = cursor ? Number(cursor) : 0;
+      const end = Math.min(start + limit, 50);
+      return {
+        items: Array.from({ length: end - start }, (_, index) => start + index + 1),
+        nextCursor: end < 50 ? String(end) : null,
+      };
+    });
+    const configuredMaxRows = resolveCrudMaxRows(25);
+    const controller = new CrudCollectionController(reader, "all", configuredMaxRows);
+
+    expect(await controller.apply("all")).toBe(true);
+    const firstPage = controller.items;
+    expect(firstPage).toEqual(Array.from({ length: 25 }, (_, index) => index + 1));
+    expect(await controller.next()).toBe(true);
+
+    expect(reader.mock.calls.map(([, cursor, limit]) => [cursor, limit])).toEqual([
+      [null, 25],
+      ["25", 25],
+    ]);
+    expect([...firstPage, ...controller.items]).toEqual(
+      Array.from({ length: 50 }, (_, index) => index + 1),
+    );
+    expect(requests).toEqual([
+      { cursor: null, limit: configuredMaxRows },
+      { cursor: "25", limit: configuredMaxRows },
+    ]);
+  });
+
+  it("uses the configured site limit when there is no collection override", async () => {
+    const reader = vi.fn(async () => ({ items: ["row"], nextCursor: null }));
+    const configuredMaxRows = resolveCrudMaxRows(37);
+    const controller = new CrudCollectionController(reader, "all", configuredMaxRows);
+
+    expect(await controller.apply("all")).toBe(true);
+    expect(reader).toHaveBeenCalledWith("all", null, 37);
+  });
+
+  it.each([0, -1, 1.5, 201])("rejects invalid maxRows value %s", (maxRows) => {
+    expect(
+      () =>
+        new CrudCollectionController(async () => ({ items: [], nextCursor: null }), "all", maxRows),
+    ).toThrow("CRUD maxRows must be an integer between 1 and 200");
   });
 
   it("keeps successful empty results distinct from uninitialized collections", async () => {
