@@ -43,10 +43,39 @@ describe("checkout status presentation", () => {
     "uses the real CTA policy for %s",
     (_name, busy, restoring, walletLoaded, shortfall, label) => {
       expect(
-        checkoutPrimaryAction({ busy, restoring, walletLoaded, shortfallMinor: shortfall }),
+        checkoutPrimaryAction({
+          busy,
+          restoring,
+          free: false,
+          walletLoaded,
+          shortfallMinor: shortfall,
+        }),
       ).toBe(label);
     },
   );
+
+  it("uses a payment-free acquisition action and status for zero-price listings", () => {
+    expect(
+      checkoutPrimaryAction({
+        busy: false,
+        restoring: false,
+        free: true,
+        walletLoaded: false,
+        shortfallMinor: "0",
+      }),
+    ).toBe("Get free");
+    expect(
+      checkoutPrimaryAction({
+        busy: true,
+        restoring: false,
+        free: true,
+        walletLoaded: false,
+        shortfallMinor: "0",
+      }),
+    ).toBe("Getting access…");
+    expect(checkoutStatusPresentation("paid", true).label).toBe("Access ready");
+    expect(checkoutStatusPresentation("paid").label).toBe("Paid");
+  });
 
   it("refreshes wallet availability while checkout is pending", async () => {
     const firstWallet = {

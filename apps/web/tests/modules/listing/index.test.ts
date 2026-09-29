@@ -12,6 +12,21 @@ const create = () =>
     destination: "https://example.com",
   });
 describe("Listing lifecycle", () => {
+  it("allows a published zero-price listing while rejecting negative prices", () => {
+    const free = Listing.create({
+      id: "free-listing",
+      sellerId: "seller",
+      title: "Free listing",
+      shortDescription: "No charge",
+      longDescription: "Free access.",
+      price: Money.of(0n, "USD"),
+      destination: "https://example.com/free",
+    });
+    free.publish();
+    expect(free.commercialSnapshot().price.minorAmount).toBe("0");
+    expect(() => Money.of(-1n, "USD")).toThrow("Money cannot be negative");
+  });
+
   it("uses explicit draft, publish, archive, and draft restore transitions", () => {
     const listing = create();
     expect(listing.state).toBe("draft");

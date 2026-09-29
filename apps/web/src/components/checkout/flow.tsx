@@ -18,6 +18,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Toast } from "../toast";
 import { Money } from "../money";
+import { ListingPrice, isFreeListingPrice } from "../listing/price";
 
 const PAID_WALLET_REFRESH_ERROR =
   "Payment is complete, but your wallet balance could not be refreshed.";
@@ -37,29 +38,35 @@ export function walletShortfallMinor(requiredMinor: string, availableMinor: stri
 export function checkoutPrimaryAction(input: {
   busy: boolean;
   restoring: boolean;
+  free: boolean;
   walletLoaded: boolean;
   shortfallMinor: string | null;
 }) {
-  if (input.busy) return "Paying…";
+  if (input.busy) return input.free ? "Getting access…" : "Paying…";
   if (input.restoring) return "Loading checkout…";
+  if (input.free) return "Get free";
   if (input.walletLoaded && input.shortfallMinor && BigInt(input.shortfallMinor) > 0n)
     return "Fund wallet";
   return "Pay now";
 }
 
-export function checkoutStatusPresentation(state: CheckoutStatus["state"]) {
+export function checkoutStatusPresentation(state: CheckoutStatus["state"], free = false) {
   switch (state) {
     case "pending":
       return {
-        label: "Ready to pay",
+        label: free ? "Completing free access" : "Ready to pay",
         variant: "warning" as const,
         className: "justify-self-start",
       };
     case "paid":
-      return { label: "Paid", variant: "default" as const, className: "justify-self-start" };
+      return {
+        label: free ? "Access ready" : "Paid",
+        variant: "default" as const,
+        className: "justify-self-start",
+      };
     case "failed":
       return {
-        label: "Payment failed",
+        label: free ? "Access not completed" : "Payment failed",
         variant: "destructive" as const,
         className: "justify-self-start",
       };
@@ -104,6 +111,7 @@ export async function applyCheckoutPollResult(
 
 export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checkoutId?: string }) {
   const router = useRouter();
+  const isFreeListing = isFreeListingPrice(listing.price.minor_amount);
   const [checkout, setCheckout] = useState<CheckoutStatus | null>(null);
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +142,14 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
     setBalanceLoading(true);
     balanceErrorRef.current = null;
     setBalanceError(null);
+    if (isFreeListing) {
+      setWallet(null);
+      setShortfallMinor("0");
+      setBalanceLoading(false);
+      return () => {
+        active = false;
+      };
+    }
     void apiFetch<CheckoutQuote>(`/api/checkout?listing_id=${encodeURIComponent(listing.id)}`)
       .then((quote) => {
         if (!active) return;
@@ -160,7 +176,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
     return () => {
       active = false;
     };
-  }, [listing.id]);
+  }, [isFreeListing, listing.id]);
 
   useEffect(() => {
     if (!checkoutId) return;
@@ -296,59 +312,68 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
 
   return (
     <div className="grid gap-4">
-      <Card className="bg-emerald-50/70 p-5 sm:p-6">
-        <p className="text-sm text-slate-600">Available wallet balance</p>
-        {balanceLoading ? (
-          <p className="mt-2 text-sm text-slate-600" role="status">
-            Loading available wallet balance…
-          </p>
-        ) : balanceError ? (
-          <p
-            className={`mt-2 text-sm ${checkout?.state === "paid" ? "text-amber-800" : "text-red-700"}`}
-            role={checkout?.state === "paid" ? "status" : "alert"}
-          >
-            {balanceError}
-          </p>
-        ) : (
-          <p className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
-            {wallet ? <Money minor={wallet.available_minor} currency="USD" /> : "Unavailable"}
-          </p>
-        )}
-      </Card>
+      {!isFreeListing && (
+        <Card className="bg-emerald-50/70 p-5 sm:p-6">
+          <p className="text-sm text-slate-600">Available wallet balance</p>
+          {balanceLoading ? (
+            <p className="mt-2 text-sm text-slate-600" role="status">
+              Loading available wallet balance…
+            </p>
+          ) : balanceError ? (
+            <p
+              className={`mt-2 text-sm ${checkout?.state === "paid" ? "text-amber-800" : "text-red-700"}`}
+              role={checkout?.state === "paid" ? "status" : "alert"}
+            >
+              {balanceError}
+            </p>
+          ) : (
+            <p className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
+              {wallet ? <Money minor={wallet.available_minor} currency="USD" /> : "Unavailable"}
+            </p>
+          )}
+        </Card>
+      )}
       <Card className="grid gap-4 p-5">
         <p className="eyebrow">Checkout</p>
         <h2 className="text-2xl font-semibold tracking-tight">{listing.title}</h2>
-        <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
+        <ListingPrice minorAmount={listing.price.minor_amount} currency={listing.price.currency} />
         {!started ? (
           <>
-            <div className="grid gap-1 text-sm text-slate-600">
-              <p>
-                Purchase total:{" "}
-                <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
-              </p>
-              {!balanceLoading &&
-                !balanceError &&
-                shortfallMinor &&
-                (BigInt(shortfallMinor) > 0n ? (
-                  <p>You need {formatMinorUsd(shortfallMinor)} more to complete this purchase.</p>
-                ) : (
-                  <p>Your wallet balance covers this purchase.</p>
-                ))}
-            </div>
+            {isFreeListing ? (
+              <p className="text-sm text-slate-600">No payment or wallet balance is required.</p>
+            ) : (
+              <div className="grid gap-1 text-sm text-slate-600">
+                <p>
+                  Purchase total:{" "}
+                  <ListingPrice
+                    minorAmount={listing.price.minor_amount}
+                    currency={listing.price.currency}
+                  />
+                </p>
+                {!balanceLoading &&
+                  !balanceError &&
+                  shortfallMinor &&
+                  (BigInt(shortfallMinor) > 0n ? (
+                    <p>You need {formatMinorUsd(shortfallMinor)} more to complete this purchase.</p>
+                  ) : (
+                    <p>Your wallet balance covers this purchase.</p>
+                  ))}
+              </div>
+            )}
             <Button
-              onClick={BigInt(shortfallMinor ?? "0") > 0n ? fundWallet : payNow}
+              onClick={!isFreeListing && BigInt(shortfallMinor ?? "0") > 0n ? fundWallet : payNow}
               disabled={
                 busy ||
-                balanceLoading ||
+                (!isFreeListing && (balanceLoading || !!balanceError)) ||
                 existingCheckoutLoading ||
-                !!balanceError ||
                 (!!checkoutId && !!error)
               }
             >
               {checkoutPrimaryAction({
                 busy,
                 restoring: existingCheckoutLoading,
-                walletLoaded: wallet !== null,
+                free: isFreeListing,
+                walletLoaded: isFreeListing || wallet !== null,
                 shortfallMinor,
               })}
             </Button>
@@ -356,32 +381,52 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         ) : checkout?.state === "pending" ? (
           <>
             <Badge
-              className={checkoutStatusPresentation(checkout.state).className}
-              variant={checkoutStatusPresentation(checkout.state).variant}
+              className={checkoutStatusPresentation(checkout.state, isFreeListing).className}
+              variant={checkoutStatusPresentation(checkout.state, isFreeListing).variant}
             >
-              {checkoutStatusPresentation(checkout.state).label}
+              {checkoutStatusPresentation(checkout.state, isFreeListing).label}
             </Badge>
-            <p>
-              {shortfallMinor && BigInt(shortfallMinor) > 0n
-                ? `You need ${formatMinorUsd(shortfallMinor)} more in your available wallet.`
-                : "Your checkout is waiting for available wallet funds."}
-            </p>
-            <p className="text-sm text-slate-500">
-              Once funds are available, choose Pay now to complete this purchase.
-            </p>
-            <Button onClick={shortfallMinor && BigInt(shortfallMinor) > 0n ? fundWallet : payNow}>
-              {shortfallMinor && BigInt(shortfallMinor) > 0n ? "Fund wallet" : "Pay now"}
+            {isFreeListing ? (
+              <p>This free acquisition is being completed. Choose Get free to continue.</p>
+            ) : (
+              <>
+                <p>
+                  {shortfallMinor && BigInt(shortfallMinor) > 0n
+                    ? `You need ${formatMinorUsd(shortfallMinor)} more in your available wallet.`
+                    : "Your checkout is waiting for available wallet funds."}
+                </p>
+                <p className="text-sm text-slate-500">
+                  Once funds are available, choose Pay now to complete this purchase.
+                </p>
+              </>
+            )}
+            <Button
+              onClick={
+                !isFreeListing && shortfallMinor && BigInt(shortfallMinor) > 0n
+                  ? fundWallet
+                  : payNow
+              }
+            >
+              {isFreeListing
+                ? "Get free"
+                : shortfallMinor && BigInt(shortfallMinor) > 0n
+                  ? "Fund wallet"
+                  : "Pay now"}
             </Button>
           </>
         ) : checkout?.state === "paid" ? (
           <>
             <Badge
-              className={checkoutStatusPresentation(checkout.state).className}
-              variant={checkoutStatusPresentation(checkout.state).variant}
+              className={checkoutStatusPresentation(checkout.state, isFreeListing).className}
+              variant={checkoutStatusPresentation(checkout.state, isFreeListing).variant}
             >
-              {checkoutStatusPresentation(checkout.state).label}
+              {checkoutStatusPresentation(checkout.state, isFreeListing).label}
             </Badge>
-            <p>Payment complete. You can view your purchase and access status in Purchases.</p>
+            <p>
+              {isFreeListing
+                ? "Free access is ready. You can view it in Purchases."
+                : "Payment complete. You can view your purchase and access status in Purchases."}
+            </p>
             <Button asChild>
               <Link href="/dashboard?section=purchases">View purchases</Link>
             </Button>
@@ -389,12 +434,17 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         ) : checkout?.state === "failed" ? (
           <>
             <Badge
-              className={checkoutStatusPresentation(checkout.state).className}
-              variant={checkoutStatusPresentation(checkout.state).variant}
+              className={checkoutStatusPresentation(checkout.state, isFreeListing).className}
+              variant={checkoutStatusPresentation(checkout.state, isFreeListing).variant}
             >
-              {checkoutStatusPresentation(checkout.state).label}
+              {checkoutStatusPresentation(checkout.state, isFreeListing).label}
             </Badge>
-            <p>{error ?? "This payment could not be completed."}</p>
+            <p>
+              {error ??
+                (isFreeListing
+                  ? "Free access could not be completed."
+                  : "This payment could not be completed.")}
+            </p>
             <Button variant="secondary" onClick={() => setStarted(false)}>
               Try again
             </Button>

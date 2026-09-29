@@ -11,6 +11,10 @@ listing -> pending checkout --customer Pay now--> wallet debit -> paid purchase
                                       |-> insufficient -> customer Fund wallet
                                                    |-> entitlement -> access
                                                    `-> seller/referral/platform distribution
+
+published listing with $0 price -> pending checkout -> paid purchase (no wallet debit)
+                                                |-> entitlement -> access
+                                                `-> zero-gross distribution, no ledger entries
 ```
 
 Funding records contain provider collection and immutable FX facts but never a listing or purchase identity. A confirmed funding record does not itself change wallet balance. A unique pending credit is created from it, then separately made available.
@@ -21,9 +25,11 @@ Funding confirmation is an application-level invariant, not an assertion delegat
 
 Buyer wallet accounting is append-only, canonical USD, and distinct from earnings accounting. Available wallet credits minus checkout debits determine spendable balance. Seller/referral/platform earnings retain their own pending, settlement, reservation, withdrawal, and reversal rules; wallet deposits are not made withdrawable by this model.
 
-`POST /api/checkout` accepts one listing and creates a durable checkout/purchase snapshot in `pending` state. It never debits the wallet. When the customer explicitly chooses Pay now, `POST /api/checkout/:id/pay` checks ownership, locks the account, and either reports the current shortfall or creates exactly one wallet debit and marks the checkout and purchase paid. The account-scoped PostgreSQL advisory transaction lock plus unique debit per checkout prevent double spending. Funding the wallet alone never pays a pending checkout; the customer returns to the checkout and chooses Pay now.
+`POST /api/checkout` accepts one listing and creates a durable checkout/purchase snapshot in `pending` state. It never debits the wallet. For a positive-price listing, when the customer explicitly chooses Pay now, `POST /api/checkout/:id/pay` checks ownership, locks the account, and either reports the current shortfall or creates exactly one wallet debit and marks the checkout and purchase paid. The account-scoped PostgreSQL advisory transaction lock plus unique debit per checkout prevent double spending. Funding the wallet alone never pays a pending checkout; the customer returns to the checkout and chooses Pay now.
 
-Entitlement and distribution are independent consequences of a completed wallet-paid purchase. Entitlements may be non-expiring (`expires_at = null`) or expire at a timestamp. Access checks the timestamp directly, so correctness does not depend on an expiry worker.
+A zero-price published listing is acquired through the same checkout, purchase, entitlement, and access lifecycle. Its price is loaded from the persisted listing by the server; the client cannot declare an item free. The locked checkout transitions to paid without a wallet debit or provider interaction. The normal commercial worker issues entitlement and completes zero-gross distribution without writing zero-value earnings ledger entries. Free listings display `Free` and offer `Get free`; they do not require or display a wallet balance.
+
+Entitlement and distribution are independent consequences of a completed purchase. Entitlements may be non-expiring (`expires_at = null`) or expire at a timestamp. Access checks the timestamp directly, so correctness does not depend on an expiry worker.
 
 The commercial worker isolates both processor families and individual records. Discovery or processing failure is logged with the processor family and durable work ID, then processing continues with healthy records and unrelated capabilities. Durable state remains discoverable on the next iteration; exceptions are not silently discarded.
 

@@ -159,6 +159,128 @@ suite("wallet-first durable commerce", () => {
       ).rowCount,
     ).toBe(1);
   });
+
+  it("acquires a zero-price listing through checkout, entitlement, and access without money movement", async () => {
+    const seller = await app.authentication.register({
+      email: "free.seller@example.com",
+      username: "freeseller",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const buyer = await app.authentication.register({
+      email: "free.buyer@example.com",
+      username: "freebuyer",
+      password: "correct-horse-staple",
+      country: "NG",
+    });
+    const otherBuyer = await app.authentication.register({
+      email: "free.other@example.com",
+      username: "freeother",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const listing = await app.listingService.createPublished(seller, {
+      title: "Free access item",
+      shortDescription: "A free listing",
+      longDescription: "No payment is required.",
+      priceMinor: "0",
+      currency: "USD",
+      destination: "https://destination.example/free",
+    });
+    expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
+
+    const checkout = await app.walletCheckout.initiate({
+      buyerId: buyer.id,
+      listingId: listing.id,
+      idempotencyKey: "free-acquisition-1",
+    });
+    const retry = await app.walletCheckout.initiate({
+      buyerId: buyer.id,
+      listingId: listing.id,
+      idempotencyKey: "free-acquisition-1",
+    });
+    expect(retry.id).toBe(checkout.id);
+    expect(checkout.amount.minorAmount).toBe(0n);
+    expect((await app.purchases.findById(checkout.purchaseId))?.terms).toMatchObject({
+      price: { minorAmount: "0", currency: "USD" },
+      canonicalPrice: { minorAmount: "0", currency: "USD" },
+    });
+    await expect(
+      app.walletCheckoutPayment.pay({ buyerId: otherBuyer.id, checkoutId: checkout.id }),
+    ).rejects.toThrow("Checkout not found");
+
+    const acquired = await app.walletCheckoutPayment.pay({
+      buyerId: buyer.id,
+      checkoutId: checkout.id,
+    });
+    expect(acquired.checkout.state).toBe("paid");
+    expect(acquired.shortfall.minorAmount).toBe(0n);
+    expect((await app.purchases.findById(checkout.purchaseId))?.state).toBe("paid");
+    expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
+
+    const dispatcher = new CommercialWorkflowDispatcher(app, { error: () => {} });
+    await dispatcher.runOnce();
+    const entitlement = await app.entitlements.findByPurchaseId(checkout.purchaseId);
+    expect(entitlement?.isActive).toBe(true);
+    expect(
+      (await app.accountProjections.purchase(buyer.id, checkout.purchaseId)).access_available,
+    ).toBe(true);
+    const destination = await app.buyerAccess.handoffPurchase(
+      buyer,
+      checkout.purchaseId,
+      "free-access",
+    );
+    const integration = await app.integrations.create(seller.id, "free destination", listing.id);
+    const principal = await app.integrations.authenticate(integration.credential);
+    expect(
+      await app.access.verify(destination.searchParams.get("source")!, principal!),
+    ).toMatchObject({
+      authorized: true,
+      buyerId: buyer.id,
+      listingId: listing.id,
+    });
+
+    await app.walletCheckoutPayment.pay({ buyerId: buyer.id, checkoutId: checkout.id });
+    await dispatcher.runOnce();
+    const counts = await app.database.query<{
+      checkout_count: string;
+      purchase_count: string;
+      entitlement_count: string;
+      distribution_count: string;
+      debit_count: string;
+      credit_count: string;
+      ledger_entry_count: string;
+      payment_count: string;
+      funding_count: string;
+    }>(
+      `select
+        (select count(*) from checkout_capability.checkouts where uuid=$1) checkout_count,
+        (select count(*) from purchase_capability.purchases where uuid=$2) purchase_count,
+        (select count(*) from entitlement_capability.entitlements where purchase_id=(select id from purchase_capability.purchases where uuid=$2)) entitlement_count,
+        (select count(*) from ledger_capability.purchase_distributions where purchase_id=(select id from purchase_capability.purchases where uuid=$2)) distribution_count,
+        (select count(*) from wallet_capability.debits where checkout_id=(select id from checkout_capability.checkouts where uuid=$1)) debit_count,
+        (select count(*) from wallet_capability.credits where account_id=(select id from identity_capability.accounts where uuid=$3)) credit_count,
+        (select count(*) from ledger_capability.entries where purchase_id=(select id from purchase_capability.purchases where uuid=$2)) ledger_entry_count,
+        (select count(*) from payment_capability.payments where buyer_id=(select id from identity_capability.accounts where uuid=$3)) payment_count,
+        (select count(*) from funding_capability.funding_transactions where account_id=(select id from identity_capability.accounts where uuid=$3)) funding_count`,
+      [checkout.id, checkout.purchaseId, buyer.id],
+    );
+    expect(counts.rows[0]).toEqual({
+      checkout_count: "1",
+      purchase_count: "1",
+      entitlement_count: "1",
+      distribution_count: "1",
+      debit_count: "0",
+      credit_count: "0",
+      ledger_entry_count: "0",
+      payment_count: "0",
+      funding_count: "0",
+    });
+    expect(
+      (await app.ledger.findDistributionByPurchaseId(checkout.purchaseId))?.gross.minorAmount,
+    ).toBe(0n);
+  });
+
   it("applies the configured YAML commission depth and retains missing-upline/residual cents in the platform remainder", async () => {
     const { seller, buyer } = await setup();
     const grandparent = await app.authentication.register({

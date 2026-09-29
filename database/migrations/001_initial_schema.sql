@@ -439,7 +439,7 @@ CREATE TABLE checkout_capability.checkouts (
     buyer_id bigint NOT NULL,
     listing_id bigint NOT NULL,
     purchase_id bigint NOT NULL,
-    CONSTRAINT checkout_amount_positive CHECK ((amount_minor > 0)),
+    CONSTRAINT checkout_amount_nonnegative CHECK ((amount_minor >= 0)),
     CONSTRAINT checkout_state_valid CHECK ((state = ANY (ARRAY['pending'::text, 'paid'::text, 'failed'::text]))),
     CONSTRAINT checkout_usd CHECK ((currency = 'USD'::text))
 );

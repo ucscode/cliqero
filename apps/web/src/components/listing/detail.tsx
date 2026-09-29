@@ -13,12 +13,12 @@ import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
 import { Toast } from "../toast";
-import { Money } from "../money";
 import { canShowPromote, postAuthBuyPath } from "../interaction-model";
 import { ReferralShareActions } from "../referral/share-actions";
 import { ListingMarkdown } from "./markdown";
 import { TextLink } from "../text-link";
 import { ListingReviews } from "./reviews";
+import { ListingPrice, isFreeListingPrice } from "./price";
 import { Star } from "lucide-react";
 
 export function shouldRenderListingReviews(reviewsVisible: boolean) {
@@ -211,13 +211,15 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
             </p>
           )}
           <div className="mb-5 text-2xl font-bold tracking-tight">
-            <Money
-              minor={currentListing.price.minor_amount}
+            <ListingPrice
+              minorAmount={currentListing.price.minor_amount}
               currency={currentListing.price.currency}
             />
           </div>
           <div className="grid gap-3">
-            <Button onClick={buy}>Buy now</Button>
+            <Button onClick={buy}>
+              {isFreeListingPrice(currentListing.price.minor_amount) ? "Get free" : "Buy now"}
+            </Button>
             {canShowPromote(Boolean(session.data?.user)) && !referralUrl && (
               <Button variant="secondary" onClick={promote} disabled={promoting}>
                 Promote
@@ -241,7 +243,7 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
           </h2>
           <ListingMarkdown content={listingDetailDescription(currentListing)} />
           <Button className="mt-8" onClick={buy}>
-            Buy now
+            {isFreeListingPrice(currentListing.price.minor_amount) ? "Get free" : "Buy now"}
           </Button>
         </section>
       )}

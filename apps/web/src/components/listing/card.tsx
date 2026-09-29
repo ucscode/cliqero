@@ -6,7 +6,7 @@ import Link from "next/link";
 import type { Listing } from "@/lib/api-client";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import { Money } from "../money";
+import { ListingPrice } from "./price";
 import { ListingDescription } from "./description";
 import { Star } from "lucide-react";
 
@@ -63,7 +63,10 @@ export function ListingCard({
           description={listing.short_description}
         />
         <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
-          <Money minor={listing.price.minor_amount} currency={listing.price.currency} />
+          <ListingPrice
+            minorAmount={listing.price.minor_amount}
+            currency={listing.price.currency}
+          />
           <Button asChild size="sm">
             <Link href={`/listings/${listing.id}`}>View details</Link>
           </Button>

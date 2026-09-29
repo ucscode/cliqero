@@ -88,6 +88,23 @@ export class WalletCheckoutPaymentService {
       if (!checkout || checkout.buyerId !== input.buyerId) throw new Error("Checkout not found");
       if (checkout.state === "failed") throw new Error("Checkout failed");
 
+      // A zero-price listing is acquired through the same persisted checkout
+      // and purchase, but has no monetary wallet operation. The checkout row
+      // lock and transaction keep retries/concurrent requests idempotent.
+      if (checkout.amount.minorAmount === 0n) {
+        if (checkout.state !== "paid") {
+          checkout.state = "paid";
+          checkout.paidAt = new Date();
+          await this.checkouts.save(checkout);
+          await this.markPurchasePaid(checkout.purchaseId);
+        }
+        return {
+          checkout,
+          wallet: await this.wallet.summary(checkout.buyerId),
+          shortfall: Money.of(0n, checkout.amount.currency),
+        };
+      }
+
       await this.wallet.lockAccount(checkout.buyerId);
       if (checkout.state === "paid") {
         const wallet = await this.wallet.summary(checkout.buyerId);

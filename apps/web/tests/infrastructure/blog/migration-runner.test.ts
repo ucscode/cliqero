@@ -6,6 +6,7 @@ import {
   applyBlogMigrations,
   blogMigrationDirectory,
 } from "@/infrastructure/blog/migration-runner";
+import { SqliteBlogRepository } from "@/infrastructure/blog/repository";
 
 const databases: Database.Database[] = [];
 const migrationDirectory = path.resolve("src/infrastructure/blog/migrations");
@@ -13,18 +14,78 @@ afterEach(() => {
   for (const db of databases.splice(0)) db.close();
 });
 
-describe("Blog SQLite migrations", () => {
-  it("resolves migrations from development and standalone production roots", () => {
+describe("authoritative Blog SQLite schema", () => {
+  it("resolves the schema from development and standalone production roots", () => {
     expect(blogMigrationDirectory("/repo/apps/web")).toBe(
       "/repo/apps/web/src/infrastructure/blog/migrations",
     );
     expect(blogMigrationDirectory("/app")).toBe("/app/apps/web/src/infrastructure/blog/migrations");
   });
-  it("converts the current legacy revision database into canonical posts, categories, tags, and previews", () => {
+
+  it("creates the complete current schema from 0001 and can be safely initialized again", () => {
     const db = new Database(":memory:");
     databases.push(db);
     db.pragma("foreign_keys = ON");
-    db.exec(fs.readFileSync(path.join(migrationDirectory, "0001_initial_blog_schema.sql"), "utf8"));
+    applyBlogMigrations(db, migrationDirectory);
+    applyBlogMigrations(db, migrationDirectory);
+
+    const tables = (
+      db
+        .prepare(
+          "select name from sqlite_master where type='table' and name like 'blog_%' order by name",
+        )
+        .all() as { name: string }[]
+    ).map(({ name }) => name);
+    expect(tables).toEqual([
+      "blog_categories",
+      "blog_idempotency",
+      "blog_post_categories",
+      "blog_post_tags",
+      "blog_posts",
+      "blog_previews",
+      "blog_tags",
+    ]);
+
+    const postColumns = db.pragma("table_info(blog_posts)") as { name: string }[];
+    expect(postColumns.map(({ name }) => name)).toEqual([
+      "id",
+      "slug",
+      "title",
+      "excerpt",
+      "content_markdown",
+      "status",
+      "featured_image_url",
+      "author_account_id",
+      "seo_title",
+      "seo_description",
+      "canonical_url",
+      "published_at",
+      "created_at",
+      "updated_at",
+    ]);
+    expect(
+      db
+        .prepare("select name from sqlite_master where type='table' and name like '%revision%'")
+        .all(),
+    ).toEqual([]);
+    expect(
+      db
+        .prepare("select name from sqlite_master where type='index' and name=?")
+        .get("blog_previews_expiry_idx"),
+    ).toBeTruthy();
+    expect(
+      (db.pragma("table_info(blog_previews)") as { name: string }[]).map((column) => column.name),
+    ).toContain("expires_at");
+    expect(
+      fs.readdirSync(migrationDirectory).filter((name) => /^\d{4}_.+\.sql$/.test(name)),
+    ).toEqual(["0001_initial_blog_schema.sql"]);
+  });
+
+  it("enforces taxonomy uniqueness, relationship foreign keys, and delete behavior", () => {
+    const db = new Database(":memory:");
+    databases.push(db);
+    db.pragma("foreign_keys = ON");
+    applyBlogMigrations(db, migrationDirectory);
     db.prepare("insert into blog_categories(id,slug,name) values(?,?,?)").run(
       "cat-1",
       "guides",
@@ -36,63 +97,65 @@ describe("Blog SQLite migrations", () => {
       "Launch",
     );
     db.prepare(
-      `insert into blog_posts(id,slug,title,excerpt,content_markdown,status,author_account_id,created_at,updated_at,category_id)
-      values(?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
+      "insert into blog_posts(id,slug,title,excerpt,content_markdown,status,created_at,updated_at) values(?,?,?,?,?,?,?,?)",
+    ).run("post-1", "guide", "Guide", "Excerpt", "Body", "published", 1000, 1000);
+    db.prepare("insert into blog_post_categories(post_id,category_id) values(?,?)").run(
       "post-1",
-      "old-slug",
-      "Old title",
-      "Excerpt",
-      "Old body",
-      "published",
-      "account-1",
-      1000,
-      1200,
       "cat-1",
     );
     db.prepare("insert into blog_post_tags(post_id,tag_id) values(?,?)").run("post-1", "tag-1");
-    applyBlogMigrations(db, migrationDirectory);
-    expect(db.prepare("select id from blog_schema_migrations order by id").all()).toEqual([
-      { id: "0001_initial_blog_schema" },
-      { id: "0002_blog_revisions" },
-      { id: "0003_blog_previews" },
-      { id: "0004_blog_post_categories" },
-      { id: "0005_blog_canonical_posts" },
-    ]);
-    expect(
+
+    expect(() =>
       db
-        .prepare(
-          "select slug,title,excerpt,content_markdown,status,author_account_id,created_at from blog_posts",
-        )
-        .get(),
-    ).toEqual({
-      slug: "old-slug",
-      title: "Old title",
-      excerpt: "Excerpt",
-      content_markdown: "Old body",
-      status: "published",
-      author_account_id: "account-1",
-      created_at: 1000,
-    });
-    expect(db.prepare("select post_id,category_id from blog_post_categories").all()).toEqual([
-      { post_id: "post-1", category_id: "cat-1" },
-    ]);
-    expect(db.prepare("select post_id,tag_id from blog_post_tags").all()).toEqual([
-      { post_id: "post-1", tag_id: "tag-1" },
-    ]);
-    expect(
+        .prepare("insert into blog_categories(id,slug,name) values(?,?,?)")
+        .run("cat-2", "other", "gUiDeS"),
+    ).toThrow();
+    expect(() => db.prepare("delete from blog_categories where id=?").run("cat-1")).toThrow(
+      /FOREIGN KEY constraint failed/,
+    );
+    expect(() =>
       db
-        .prepare("select name from sqlite_master where type='table' and name like '%revision%'")
-        .all(),
-    ).toEqual([]);
-    expect(db.prepare("select count(*) count from blog_previews").get()).toEqual({ count: 0 });
+        .prepare("insert into blog_post_categories(post_id,category_id) values(?,?)")
+        .run("missing", "cat-1"),
+    ).toThrow(/FOREIGN KEY constraint failed/);
+    db.prepare("delete from blog_posts where id=?").run("post-1");
+    expect(db.prepare("select * from blog_post_categories").all()).toEqual([]);
+    expect(db.prepare("select * from blog_post_tags").all()).toEqual([]);
     expect(db.pragma("foreign_key_check")).toEqual([]);
   });
-  it("applies ordered migrations only once", () => {
+
+  it("allows the Blog repository to create and query canonical content on a fresh schema", () => {
     const db = new Database(":memory:");
     databases.push(db);
+    db.pragma("foreign_keys = ON");
     applyBlogMigrations(db, migrationDirectory);
-    applyBlogMigrations(db, migrationDirectory);
-    expect(db.prepare("select id from blog_schema_migrations order by id").all()).toHaveLength(5);
+    const repository = new SqliteBlogRepository(db);
+    const category = repository.createCategory({ name: "Guides", slug: "guides" });
+    const post = repository.create(
+      "post-1",
+      {
+        slug: "fresh-post",
+        title: "Fresh post",
+        excerpt: "Excerpt",
+        content: "## Body",
+        status: "published",
+        featuredImageUrl: null,
+        seoTitle: null,
+        seoDescription: null,
+        canonicalUrl: null,
+        categoryIds: [category.id],
+        tags: ["launch"],
+      },
+      "author-1",
+    );
+    expect(repository.get(post.id, true)).toMatchObject({
+      slug: "fresh-post",
+      status: "published",
+      categories: [category],
+      tags: [{ slug: "launch", name: "launch" }],
+    });
+    expect(repository.list({ publishedOnly: true }).items.map((item) => item.id)).toEqual([
+      "post-1",
+    ]);
   });
 });
