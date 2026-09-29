@@ -25,33 +25,32 @@ for (const fixture of posts) {
     service.categories().find((item) => item.name === fixture.category) ??
     service.createCategory(fixture.category);
   const current = service.get(fixture.slug);
-  const desiredStatus = fixture.published ? "published" : "draft";
+  const status = fixture.published ? "published" : "draft";
   if (!current) {
-    const created = service.create(
+    service.create(
       {
         slug: fixture.slug,
         title: fixture.title,
         excerpt: fixture.excerpt,
         content: fixture.content,
-        desired_status: desiredStatus,
-        category_id: category.id,
+        status,
+        category_ids: [category.id],
         tags: fixture.tags,
       },
       null,
     );
-    if (created && fixture.published) service.publish(created.id);
     continue;
   }
   const same =
     current.title === fixture.title &&
     current.excerpt === fixture.excerpt &&
     current.content === fixture.content &&
-    current.category?.id === category.id &&
+    current.categories.some((item) => item.id === category.id) &&
     current.tags
       .map((tag) => tag.name)
       .sort()
       .join(",") === [...fixture.tags].sort().join(",") &&
-    current.desiredStatus === desiredStatus;
+    current.status === status;
   if (!same) {
     service.save(
       current.id,
@@ -60,18 +59,13 @@ for (const fixture of posts) {
         title: fixture.title,
         excerpt: fixture.excerpt,
         content: fixture.content,
-        desired_status: desiredStatus,
-        category_id: category.id,
+        status,
+        category_ids: [category.id],
         tags: fixture.tags,
       },
       null,
     );
   }
-  const refreshed = service.get(current.id);
-  if (refreshed && refreshed.publicationStatus !== desiredStatus)
-    service.applyStatus(current.id, desiredStatus);
-  else if (refreshed?.hasWorkingRevision && desiredStatus === "published")
-    service.applyStatus(current.id, "published");
 }
 
 console.log(

@@ -58,10 +58,14 @@ export function BlogIndex({ category, tag, cursor, trail }: BlogIndexProps = {})
                 ) : null}
                 <div className={post.featuredImageUrl ? "sm:col-start-1 sm:row-start-1" : ""}>
                   <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {post.category && (
-                      <span className="text-emerald-700">{post.category.name}</span>
+                    {post.categories.map((category) => (
+                      <span className="text-emerald-700" key={category.id}>
+                        {category.name}
+                      </span>
+                    ))}
+                    {post.categories.length > 0 && post.publishedAt && (
+                      <span aria-hidden="true">·</span>
                     )}
-                    {post.category && post.publishedAt && <span aria-hidden="true">·</span>}
                     {post.publishedAt && (
                       <time>{post.publishedAt.toLocaleDateString("en-US")}</time>
                     )}

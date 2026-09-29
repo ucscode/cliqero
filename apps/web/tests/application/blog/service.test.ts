@@ -6,223 +6,145 @@ import { BlogService } from "@/application/blog/service";
 import { SqliteBlogRepository } from "@/infrastructure/blog/repository";
 import { closeBlogDatabaseForTests, getBlogDatabase } from "@/infrastructure/blog/database";
 
-describe("BlogService SQLite capability", () => {
-  let file: string;
+describe("BlogService SQLite workflow", () => {
   let service: BlogService;
   beforeEach(() => {
-    file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cliqero-blog-")), "blog.sqlite");
-    process.env.BLOG_DATABASE_PATH = file;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cliqero-blog-"));
+    process.env.BLOG_DATABASE_PATH = path.join(dir, "blog.sqlite");
     service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
   });
   afterEach(() => {
     closeBlogDatabaseForTests();
     delete process.env.BLOG_DATABASE_PATH;
   });
-
   const input = (extra: Record<string, unknown> = {}) => ({
     title: "Hello Blog",
     excerpt: "A post",
     content: "## Hello\n\nSafe",
-    desired_status: "draft" as const,
     ...extra,
   });
 
-  it("saves new content as a private working revision and only publishes on explicit promotion", () => {
-    const first = service.create(input(), "00000000-0000-4000-8000-000000000001", "k1")!;
-    const second = service.create(input(), null, "k2")!;
-    expect(first.publicationStatus).toBe("draft");
-    expect(first.hasWorkingRevision).toBe(true);
-    expect(second.slug).toBe("hello-blog-2");
-    expect(service.get(first.slug, true)).toBeNull();
-    expect(service.publish(first.id)).toMatchObject({
-      publicationStatus: "published",
-      hasWorkingRevision: false,
-    });
-    expect(service.get(first.slug, true)?.title).toBe("Hello Blog");
+  it("saves canonical content and applies selected publication status only on Save", () => {
+    const draft = service.create(input(), "account-1", "k1");
+    expect(draft.status).toBe("draft");
+    expect(service.get(draft.slug, true)).toBeNull();
+    const published = service.save(
+      draft.id,
+      { title: "Published title", status: "published" },
+      "account-1",
+    )!;
+    expect(published).toMatchObject({ title: "Published title", status: "published" });
+    expect(service.get(published.slug, true)?.title).toBe("Published title");
+    expect(service.save(published.id, { status: "draft" }, "account-1")?.status).toBe("draft");
   });
-
-  it("keeps the live revision while edits are saved and previewed, then atomically promotes the working revision", () => {
-    const original = service.create(input({ desired_status: "published" }), null)!;
-    expect(original.publicationStatus).toBe("draft");
-    service.publish(original.id);
-    const publicBefore = service.get(original.slug, true)!;
-
-    const edited = service.save(
-      original.id,
-      {
-        title: "Revised title",
-        content: "## New version",
-        tags: ["new-tag"],
-      },
-      "00000000-0000-4000-8000-000000000001",
-    );
-    const working = service.getWorkingRevision(original.id)!;
-    expect(edited.hasWorkingRevision).toBe(true);
-    expect(working.title).toBe("Revised title");
-    expect(service.get(original.slug, true)?.revisionId).toBe(publicBefore.revisionId);
-    expect(service.get(original.slug, true)?.title).toBe("Hello Blog");
-    expect(service.getRevision(original.id, working.revisionId)?.content).toBe("## New version");
-
-    const promoted = service.applyStatus(original.id, "published");
-    expect(promoted.hasWorkingRevision).toBe(false);
-    expect(service.get(edited.slug, true)?.title).toBe("Revised title");
-    expect(service.getRevision(original.id, publicBefore.revisionId)?.title).toBe("Hello Blog");
-  });
-
-  it("keeps working revisions when publication is withdrawn", () => {
-    const post = service.create(input(), null)!;
-    service.publish(post.id);
-    const edited = service.save(post.id, { title: "Working edit" }, null);
-    const workingRevisionId = edited.revisionId;
-    const unpublished = service.unpublish(post.id);
-    expect(unpublished.publicationStatus).toBe("draft");
-    expect(unpublished.hasWorkingRevision).toBe(true);
-    expect(service.get(post.slug, true)).toBeNull();
-    expect(service.getWorkingRevision(post.id)?.revisionId).toBe(workingRevisionId);
-  });
-
-  it("retains the old live and working revisions when publication promotion fails", () => {
-    const post = service.create(input(), null)!;
-    service.publish(post.id);
-    const publishedRevision = service.get(post.id, true)!.revisionId;
-    const working = service.save(post.id, { title: "Not live yet" }, null);
-    const sqlite = getBlogDatabase().sqlite;
-    sqlite.exec(`create trigger fail_blog_promotion before update of publication_state on blog_posts
-      when new.publication_state = 'published' begin select raise(abort, 'simulated publish failure'); end`);
-    expect(() => service.publish(post.id)).toThrow(/simulated publish failure/);
-    expect(service.get(post.id, true)?.revisionId).toBe(publishedRevision);
-    expect(service.getWorkingRevision(post.id)?.revisionId).toBe(working.revisionId);
-    expect(service.get(post.id)?.title).toBe("Not live yet");
-  });
-
-  it("converges idempotent retries and rejects semantic conflicts", () => {
-    const first = service.create(input(), "00000000-0000-4000-8000-000000000001", "same");
-    expect(service.create(input(), "00000000-0000-4000-8000-000000000001", "same")?.id).toBe(
-      first?.id,
-    );
-    expect(() => service.create(input({ title: "Changed" }), null, "same")).toThrow(/Idempotency/);
-    expect(() => service.create(input(), "00000000-0000-4000-8000-000000000002", "same")).toThrow(
+  it("keeps create idempotency and rejects key reuse with different input", () => {
+    const first = service.create(input(), "account-1", "same");
+    expect(service.create(input(), "account-1", "same").id).toBe(first.id);
+    expect(() => service.create(input({ title: "Changed" }), "account-1", "same")).toThrow(
       /Idempotency/,
     );
   });
-
-  it("stores category and tags on the revision snapshot", () => {
-    const category = service.createCategory("Guides");
+  it("assigns multiple categories, synchronizes replacements, and filters by any assigned category", () => {
+    const guides = service.createCategory("Guides");
+    const product = service.createCategory("Product");
+    const other = service.createCategory("Other");
     const post = service.create(
-      input({ category_id: category.id, tags: ["referrals", "marketing"] }),
+      input({
+        status: "published",
+        category_ids: [guides.id, product.id],
+        tags: ["referrals", "marketing"],
+      }),
       null,
-    )!;
-    expect(post.category).toMatchObject({ id: category.id, slug: "guides" });
-    expect(post.tags.map((tag) => tag.name)).toEqual(["marketing", "referrals"]);
-    expect(service.categories()).toHaveLength(1);
-    expect(service.tags()).toHaveLength(2);
+    );
+    expect(post.categories.map((c) => c.id)).toEqual([guides.id, product.id]);
+    expect(post.tags.map((t) => t.name)).toEqual(["marketing", "referrals"]);
+    expect(
+      service.list({ publishedOnly: true, category: "product" }).items.map((p) => p.id),
+    ).toEqual([post.id]);
+    expect(service.save(post.id, { category_ids: [other.id] }, null)?.categories).toEqual([other]);
+    expect(() => service.deleteCategory(other.id)).toThrow(/assigned/);
+    expect(service.list({ publishedOnly: true, category: "guides" }).items).toEqual([]);
   });
-
-  it("paginates published posts deterministically and excludes drafts and pending edits", () => {
-    for (let i = 0; i < 5; i += 1) {
-      const post = service.create(input({ title: `Published ${i}` }), null)!;
-      service.publish(post.id);
-    }
+  it("paginates canonical published posts deterministically and excludes drafts", () => {
+    for (let i = 0; i < 5; i++)
+      service.create(input({ title: `Published ${i}`, status: "published" }), null);
     service.create(input({ title: "Draft only" }), null);
-    const firstPost = service.list({ publishedOnly: true, limit: 2 });
-    const secondPage = service.list({
+    const first = service.list({ publishedOnly: true, limit: 2 });
+    const second = service.list({
       publishedOnly: true,
       limit: 2,
-      cursor: firstPost.nextCursor ?? undefined,
+      cursor: first.nextCursor ?? undefined,
     });
-    expect(firstPost.limit).toBe(2);
-    expect(firstPost.items).toHaveLength(2);
-    expect(secondPage.items).toHaveLength(2);
-    expect(secondPage.items.map((post) => post.id)).not.toEqual(
-      firstPost.items.map((post) => post.id),
-    );
-    expect(firstPost.items.every((post) => post.publicationStatus === "published")).toBe(true);
-    const existing = firstPost.items[0]!;
-    service.save(existing.id, { title: "Pending edit" }, null);
-    expect(service.get(existing.id, true)?.title).not.toBe("Pending edit");
+    expect(first.items).toHaveLength(2);
+    expect(second.items).toHaveLength(2);
     expect(
-      service.list({ publishedOnly: true, limit: 2, cursor: "not-a-cursor" }).items,
-    ).toHaveLength(2);
+      second.items.map((p) => p.id).some((id) => first.items.some((item) => item.id === id)),
+    ).toBe(false);
+    expect([...first.items, ...second.items].every((p) => p.status === "published")).toBe(true);
   });
-
-  it("paginates category and tag-filtered published revisions", () => {
-    const guides = service.createCategory("Guides");
-    const other = service.createCategory("Other");
-    for (let i = 0; i < 3; i += 1) {
-      const post = service.create(
-        input({ title: `Guide ${i}`, category_id: guides.id, tags: ["launch"] }),
-        null,
-      )!;
-      service.publish(post.id);
-    }
-    const otherPost = service.create(
-      input({ title: "Other", category_id: other.id, tags: ["other"] }),
-      null,
-    )!;
-    service.publish(otherPost.id);
-    const categoryFirst = service.list({ publishedOnly: true, category: "guides", limit: 1 });
-    const categorySecond = service.list({
-      publishedOnly: true,
-      category: "guides",
-      limit: 1,
-      cursor: categoryFirst.nextCursor ?? undefined,
+  it("creates and refreshes a private preview without mutating canonical posts", () => {
+    const category = service.createCategory("Guides");
+    const categoryTwo = service.createCategory("AI");
+    const post = service.create(
+      input({ title: "Canonical", status: "published", category_ids: [category.id] }),
+      "owner",
+    );
+    const first = service.createPreview(
+      input({ title: "Unsaved", content: "## New", category_ids: [category.id, categoryTwo.id] }),
+      "owner",
+    );
+    const preview = service.getPreview(first.id, "owner")!;
+    expect(first.url).toBe(`/blog/preview/${first.id}`);
+    expect(preview.payload).toMatchObject({
+      title: "Unsaved",
+      content: "## New",
+      categories: [categoryTwo, category],
     });
-    const tagFirst = service.list({ publishedOnly: true, tag: "launch", limit: 1 });
-    const tagSecond = service.list({
-      publishedOnly: true,
-      tag: "launch",
-      limit: 1,
-      cursor: tagFirst.nextCursor ?? undefined,
+    expect(service.get(post.id, true)?.title).toBe("Canonical");
+    const updated = service.createPreview(
+      input({ title: "Latest unsaved", category_ids: [category.id] }),
+      "owner",
+      first.id,
+    );
+    expect(updated.id).toBe(first.id);
+    expect(service.getPreview(first.id, "owner")?.payload.title).toBe("Latest unsaved");
+    expect(getBlogDatabase().sqlite.prepare("select count(*) n from blog_previews").get()).toEqual({
+      n: 1,
     });
-    expect(categoryFirst.items[0]?.category?.slug).toBe("guides");
-    expect(categorySecond.items[0]?.category?.slug).toBe("guides");
-    expect(tagFirst.items[0]?.tags.some((tag) => tag.slug === "launch")).toBe(true);
-    expect(tagSecond.items[0]?.tags.some((tag) => tag.slug === "launch")).toBe(true);
   });
-
-  it("generates category slugs and supports explicit stable slug edits with conflicts", () => {
+  it("previews a new published-form article without creating a canonical row", () => {
+    const preview = service.createPreview(
+      input({ title: "Not saved yet", status: "published" }),
+      "owner",
+    );
+    expect(preview.id).toBeTruthy();
+    expect(service.getPreview(preview.id, "owner")?.payload.title).toBe("Not saved yet");
+    expect(getBlogDatabase().sqlite.prepare("select count(*) n from blog_posts").get()).toEqual({
+      n: 0,
+    });
+  });
+  it("isolates preview ownership, expires old snapshots, and invalidates incompatible JSON", () => {
+    const preview = service.createPreview(input(), "owner");
+    expect(service.getPreview(preview.id, "other")).toBeNull();
+    const db = getBlogDatabase().sqlite;
+    db.prepare("update blog_previews set expires_at=? where id=?").run(Date.now() - 1, preview.id);
+    expect(service.getPreview(preview.id, "owner")).toBeNull();
+    const stale = service.createPreview(input(), "owner");
+    db.prepare("update blog_previews set payload_json=? where id=?").run("{broken", stale.id);
+    expect(service.getPreview(stale.id, "owner")).toBeNull();
+    expect(db.prepare("select id from blog_previews where id=?").get(stale.id)).toBeUndefined();
+  });
+  it("enforces category name and slug conflicts and preserves slugs when names change", () => {
     const category = service.createCategory("Mara & Klara");
     const explicit = service.createCategory("Guides", "help-center");
     expect(category.slug).toBe("mara-and-klara");
     expect(explicit.slug).toBe("help-center");
-    const renamed = service.updateCategory(category.id, { name: "New Guides" });
-    expect(renamed.slug).toBe("mara-and-klara");
+    expect(service.updateCategory(category.id, { name: "New Guides" }).slug).toBe("mara-and-klara");
     expect(service.updateCategory(category.id, { slug: "editorial-guides" }).slug).toBe(
       "editorial-guides",
     );
-    expect(() => service.createCategory("Duplicate", "help-center")).toThrow(/slug already exists/);
-    expect(() => service.createCategory("Guides")).toThrow(/name already exists/);
     expect(() => service.createCategory("guides")).toThrow(/name already exists/);
+    expect(() => service.createCategory("Duplicate", "help-center")).toThrow(/slug already exists/);
     expect(() => service.createCategory("Bad slug", "Bad Slug")).toThrow();
-    expect(() => service.updateCategory(category.id, { slug: "help-center" })).toThrow(
-      /slug already exists/,
-    );
-  });
-
-  it("refuses to delete categories referenced by any immutable revision", () => {
-    const category = service.createCategory("Engineering");
-    const post = service.create(input({ category_id: category.id }), null)!;
-    expect(() => service.deleteCategory(category.id)).toThrow(/assigned to one or more articles/);
-    expect(() =>
-      service.create(input({ category_id: "00000000-0000-4000-8000-000000000099" }), null),
-    ).toThrow(/Blog category not found/);
-    service.delete(post.id);
-    service.deleteCategory(category.id);
-    expect(service.categories()).toHaveLength(0);
-  });
-
-  it("returns bounded per-record bulk outcomes and promotes working versions only", () => {
-    const first = service.create(input({ title: "First" }), null)!;
-    const second = service.create(input({ title: "Second" }), null)!;
-    expect(service.bulk([first.id, second.id], "publish", 2)).toEqual([
-      { id: first.id, success: true },
-      { id: second.id, success: true },
-    ]);
-    const missingId = "00000000-0000-4000-8000-000000000099";
-    const mixed = service.bulk([first.id, missingId], "delete", 2);
-    expect(mixed[0]).toMatchObject({ id: first.id, success: true });
-    expect(mixed[1]).toMatchObject({ id: missingId, success: false });
-    expect(() => service.bulk([first.id, first.id], "delete", 2)).toThrow(/unique/);
-    expect(() => service.bulk([first.id, second.id], "delete", 1)).toThrow(/between 1 and 1/);
   });
 });

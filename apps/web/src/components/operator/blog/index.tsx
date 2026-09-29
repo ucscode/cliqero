@@ -3,24 +3,23 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { BlogEditor } from "../blog/editor";
+import { BlogEditor } from "../../blog/editor";
 import { apiFetch } from "@/lib/api-client";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Select } from "../ui/select";
-import { Label } from "../ui/label";
-import { Textarea } from "../ui/textarea";
-import type { BlogPost } from "@/modules/blog/domain/blog";
-import type { BlogCategory } from "@/modules/blog/domain/blog";
-import { HoneypotField } from "../honeypot-field";
+import { Button } from "../../ui/button";
+import { Input } from "../../ui/input";
+import { Select } from "../../ui/select";
+import { Label } from "../../ui/label";
+import { Textarea } from "../../ui/textarea";
+import type { BlogPost, BlogCategory } from "@/modules/blog/domain/blog";
+import { HoneypotField } from "../../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
-import { OperatorPrimaryCell, OperatorStatusCell } from "./ui/data-cells";
-import { OperatorFilterField } from "./ui/toolbar";
-import { CrudIndex } from "./crud/index-page";
-import { useCrudCollection } from "./crud/use-collection";
-import type { CrudColumn } from "./crud/table";
-import { CrudEdit } from "./crud/edit";
-import type { CrudBulkAction } from "./crud/bulk-actions";
+import { OperatorPrimaryCell, OperatorStatusCell } from "../ui/data-cells";
+import { OperatorFilterField } from "../ui/toolbar";
+import { CrudIndex } from "../crud/index-page";
+import { useCrudCollection } from "../crud/use-collection";
+import type { CrudColumn } from "../crud/table";
+import { CrudEdit } from "../crud/edit";
+import type { CrudBulkAction } from "../crud/bulk-actions";
 
 export function OperatorBlogList() {
   const [search, setSearch] = useState("");
@@ -39,15 +38,6 @@ export function OperatorBlogList() {
     },
     { search: "", status: "" },
   );
-  async function publication(post: BlogPost, desired: "publish" | "unpublish") {
-    setActionError(null);
-    try {
-      await apiFetch(`/api/blog/posts/${post.id}/${desired}`, { method: "POST" });
-      await collection.retry();
-    } catch (cause) {
-      setActionError(cause instanceof Error ? cause.message : "Unable to update publication.");
-    }
-  }
   async function remove(post: BlogPost) {
     if (!window.confirm(`Delete “${post.title}”?`)) return;
     setActionError(null);
@@ -58,36 +48,31 @@ export function OperatorBlogList() {
       setActionError(cause instanceof Error ? cause.message : "Unable to delete post.");
     }
   }
-  async function bulk(action: "publish" | "unpublish" | "delete", posts: readonly BlogPost[]) {
-    if (action === "delete" && !window.confirm(`Delete ${posts.length} selected articles?`))
-      return false;
+  async function bulk(posts: readonly BlogPost[]) {
+    if (!window.confirm(`Delete ${posts.length} selected articles?`)) return false;
     setActionError(null);
     try {
-      const { results } = await apiFetch<{
-        results: Array<{ id: string; success: boolean; error?: string }>;
-      }>("/api/operator/blog/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action, ids: posts.map((post) => post.id) }),
-      });
-      const failures = results.filter((result) => !result.success);
-      if (failures.length)
-        setActionError(
-          `${failures.length} article${failures.length === 1 ? "" : "s"} could not be updated.`,
-        );
+      const { results } = await apiFetch<{ results: Array<{ success: boolean }> }>(
+        "/api/operator/blog/bulk",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "delete", ids: posts.map((post) => post.id) }),
+        },
+      );
+      if (results.some((result) => !result.success))
+        setActionError("Some selected articles could not be deleted.");
       await collection.retry();
       return true;
     } catch (cause) {
       setActionError(
-        cause instanceof Error ? cause.message : "Unable to update selected articles.",
+        cause instanceof Error ? cause.message : "Unable to delete selected articles.",
       );
       return false;
     }
   }
   const bulkActions: readonly CrudBulkAction<BlogPost>[] = [
-    { label: "Publish", onSelect: (posts) => bulk("publish", posts) },
-    { label: "Unpublish", onSelect: (posts) => bulk("unpublish", posts) },
-    { label: "Delete", destructive: true, onSelect: (posts) => bulk("delete", posts) },
+    { label: "Delete", destructive: true, onSelect: bulk },
   ];
   const columns: readonly CrudColumn<BlogPost>[] = [
     {
@@ -101,24 +86,18 @@ export function OperatorBlogList() {
         />
       ),
     },
-    { key: "category", label: "Category", render: (post) => post.category?.name ?? "—" },
+    {
+      key: "categories",
+      label: "Categories",
+      render: (post) => post.categories.map((item) => item.name).join(", ") || "—",
+    },
     {
       key: "status",
       label: "Status",
       render: (post) => (
         <OperatorStatusCell
-          status={
-            post.publicationStatus === "published" && post.hasWorkingRevision
-              ? "published-pending"
-              : post.publicationStatus
-          }
-          label={
-            post.publicationStatus === "published" && post.hasWorkingRevision
-              ? "Published · pending changes"
-              : post.publicationStatus === "published"
-                ? "Published"
-                : "Draft"
-          }
+          status={post.status}
+          label={post.status === "published" ? "Published" : "Draft"}
         />
       ),
     },
@@ -140,16 +119,12 @@ export function OperatorBlogList() {
             <Input
               id="blog-search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Title, excerpt, or slug"
             />
           </OperatorFilterField>
           <OperatorFilterField label="Status" htmlFor="blog-status">
-            <Select
-              id="blog-status"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-            >
+            <Select id="blog-status" value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">All articles</option>
               <option value="draft">Draft</option>
               <option value="published">Published</option>
@@ -192,31 +167,7 @@ export function OperatorBlogList() {
       }
       actions={(post) => [
         { type: "link", label: "View / edit", href: `/operator/blog/${post.id}` },
-        ...(post.hasWorkingRevision
-          ? [
-              {
-                type: "action" as const,
-                label: post.publicationStatus === "published" ? "Publish changes" : "Publish",
-                onSelect: () => void publication(post, "publish"),
-              },
-            ]
-          : []),
-        ...(post.publicationStatus === "published"
-          ? [
-              {
-                type: "action" as const,
-                label: "Unpublish",
-                onSelect: () => void publication(post, "unpublish"),
-              },
-            ]
-          : []),
-        {
-          type: "action",
-          label: "Delete",
-          destructive: true,
-          separatorBefore: true,
-          onSelect: () => void remove(post),
-        },
+        { type: "action", label: "Delete", destructive: true, onSelect: () => void remove(post) },
       ]}
       actionLabel={(post) => `Actions for article ${post.title}`}
       loading={collection.loading}
@@ -244,17 +195,20 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   const [slug, setSlug] = useState(initial?.slug ?? "");
   const [excerpt, setExcerpt] = useState(initial?.excerpt ?? "");
   const [content, setContent] = useState(initial?.content ?? "");
-  const [categoryId, setCategoryId] = useState(initial?.category?.id ?? "");
+  const [categoryIds, setCategoryIds] = useState<string[]>(
+    initial?.categories.map((c) => c.id) ?? [],
+  );
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [tags, setTags] = useState(initial?.tags.map((t) => t.name).join(", ") ?? "");
   const [seoTitle, setSeoTitle] = useState(initial?.seoTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(initial?.seoDescription ?? "");
   const [featuredImageUrl, setFeaturedImageUrl] = useState(initial?.featuredImageUrl ?? "");
-  const [desiredStatus, setDesiredStatus] = useState(initial?.desiredStatus ?? "draft");
+  const [status, setStatus] = useState<"draft" | "published">(initial?.status ?? "draft");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<BlogPost | null>(initial ?? null);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     void apiFetch<{ items: BlogCategory[] }>("/api/operator/blog/categories")
@@ -268,21 +222,35 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
       active = false;
     };
   }, []);
-  const dirty =
-    !saved ||
-    Boolean(
-      title !== saved.title ||
-      slug !== saved.slug ||
-      excerpt !== saved.excerpt ||
-      content !== saved.content ||
-      categoryId !== (saved.category?.id ?? "") ||
-      tags !== saved.tags.map((tag) => tag.name).join(", ") ||
-      seoTitle !== (saved.seoTitle ?? "") ||
-      seoDescription !== (saved.seoDescription ?? "") ||
-      featuredImageUrl !== (saved.featuredImageUrl ?? "") ||
-      desiredStatus !== saved.desiredStatus,
-    );
-
+  const normalizedTags = tags
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  function requestBody() {
+    return {
+      title,
+      slug: slug || undefined,
+      excerpt,
+      content,
+      status,
+      category_ids: categoryIds,
+      tags: normalizedTags,
+      seo_title: seoTitle || undefined,
+      seo_description: seoDescription || undefined,
+      featured_image_url: featuredImageUrl || undefined,
+    };
+  }
+  async function clearPreview() {
+    if (previewId) {
+      try {
+        await apiFetch(`/api/operator/blog/preview/${previewId}`, { method: "DELETE" });
+      } catch {
+        /* Expiry cleanup is the safe fallback. */
+      } finally {
+        setPreviewId(null);
+      }
+    }
+  }
   async function saveCurrent(honeypot = ""): Promise<BlogPost | null> {
     const honeypotHeaders: Record<string, string> = honeypot
       ? { [HONEYPOT_HEADER_NAME]: honeypot }
@@ -290,21 +258,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
     setSaving(true);
     setError(null);
     try {
-      const body = {
-        title,
-        slug: slug || undefined,
-        excerpt,
-        content,
-        desired_status: desiredStatus,
-        category_id: categoryId || null,
-        tags: tags
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean),
-        seo_title: seoTitle || undefined,
-        seo_description: seoDescription || undefined,
-        featured_image_url: featuredImageUrl || undefined,
-      };
+      const body = requestBody();
       const post = saved
         ? await apiFetch<BlogPost>(`/api/blog/posts/${saved.id}`, {
             method: "PATCH",
@@ -322,10 +276,12 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
           });
       setSaved(post);
       setSlug(post.slug);
-      setDesiredStatus(post.desiredStatus);
+      setStatus(post.status);
+      setCategoryIds(post.categories.map((c) => c.id));
+      if (previewId) await clearPreview();
       return post;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to save post.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to save post.");
       return null;
     } finally {
       setSaving(false);
@@ -336,52 +292,39 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
     const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     await saveCurrent(honeypot);
   }
-  async function setPublication() {
-    if (!saved) return;
-    try {
-      const post = await apiFetch<BlogPost>(
-        `/api/blog/posts/${saved.id}/${desiredStatus === "published" ? "publish" : "unpublish"}`,
-        { method: "POST" },
-      );
-      setSaved(post);
-      setDesiredStatus(post.desiredStatus);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to update publication.");
-    }
-  }
   async function remove() {
     if (!saved || !window.confirm("Delete this blog post?")) return;
     try {
       await apiFetch(`/api/blog/posts/${saved.id}`, { method: "DELETE" });
       router.push("/operator/blog");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to delete post.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to delete post.");
     }
   }
   async function preview() {
-    if (previewing || saving || (saved && !saved.hasWorkingRevision && !dirty)) return;
+    if (previewing || saving) return;
     const tab = window.open("about:blank", "_blank");
     if (!tab) {
-      setError("Allow pop-ups to open the private draft preview.");
+      setError("Allow pop-ups to open the private preview.");
       return;
     }
     tab.opener = null;
     setPreviewing(true);
     setError(null);
     try {
-      const workingPost = dirty ? await saveCurrent() : saved;
-      if (!workingPost) {
-        tab.close();
-        return;
-      }
-      const result = await apiFetch<{ url: string; revisionId: string }>(
-        `/api/operator/blog/posts/${workingPost.id}/preview`,
-        { method: "POST" },
+      const result = await apiFetch<{ previewId: string; url: string }>(
+        "/api/operator/blog/preview",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...requestBody(), preview_id: previewId }),
+        },
       );
+      setPreviewId(result.previewId);
       tab.location.href = result.url;
     } catch (cause) {
       tab.close();
-      setError(cause instanceof Error ? cause.message : "Unable to open draft preview.");
+      setError(cause instanceof Error ? cause.message : "Unable to open preview.");
     } finally {
       setPreviewing(false);
     }
@@ -402,32 +345,14 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
       widthClassName="max-w-5xl"
       headerActions={
         <>
-          {saved &&
-            (saved.publicationStatus !== desiredStatus ||
-              (saved.hasWorkingRevision && desiredStatus === "published")) && (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={saving || dirty}
-                onClick={() => void setPublication()}
-              >
-                {desiredStatus === "published"
-                  ? saved.publicationStatus === "published"
-                    ? "Publish changes"
-                    : "Publish"
-                  : "Apply status"}
-              </Button>
-            )}
-          {(dirty || saved?.hasWorkingRevision) && (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={saving || previewing}
-              onClick={() => void preview()}
-            >
-              {previewing ? "Preparing preview…" : dirty ? "Save & Preview" : "Preview"}
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={saving || previewing}
+            onClick={() => void preview()}
+          >
+            {previewing ? "Preparing preview…" : "Preview"}
+          </Button>
           <Button asChild type="button" variant="outline">
             <Link href="/operator/blog/categories">Manage categories</Link>
           </Button>
@@ -471,57 +396,49 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
           <div className="mt-2 overflow-hidden rounded-md border">
             <BlogEditor markdown={content} onChange={setContent} />
           </div>
-          {saved && !saved.hasWorkingRevision && !dirty && (
-            <p className="mt-2 text-sm text-slate-600">
-              Save changes to create a private preview revision.
-            </p>
-          )}
-          {dirty && saved?.hasWorkingRevision && (
-            <p className="mt-2 text-sm text-slate-600">
-              Preview will save your changes as a new working revision first.
-            </p>
-          )}
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="blog-category">Category</Label>
+            <Label htmlFor="blog-categories">Categories</Label>
             <Select
-              id="blog-category"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              id="blog-categories"
+              multiple
+              value={categoryIds}
+              className="h-36"
+              onChange={(event) =>
+                setCategoryIds(
+                  Array.from(event.currentTarget.selectedOptions, (option) => option.value),
+                )
+              }
             >
-              <option value="">No category</option>
-              {categories.map((categoryOption) => (
-                <option key={categoryOption.id} value={categoryOption.id}>
-                  {categoryOption.name}
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
                 </option>
               ))}
             </Select>
+            <p className="mt-1 text-sm text-slate-600">
+              Select one or more existing categories. Use Ctrl/Cmd to change several.
+            </p>
           </div>
           <div>
             <Label htmlFor="blog-tags">Tags (comma separated)</Label>
             <Input id="blog-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
           </div>
         </div>
-        <div className="grid gap-2">
-          <div>
-            <Label htmlFor="blog-desired-status">Working revision status</Label>
-            <Select
-              id="blog-desired-status"
-              value={desiredStatus}
-              onChange={(event) => setDesiredStatus(event.target.value as "draft" | "published")}
-            >
-              <option value="draft">Draft / unpublished</option>
-              <option value="published">Published when applied</option>
-            </Select>
-          </div>
-          {saved && (
-            <p className="text-sm text-slate-600">
-              Current publication: {saved.publicationStatus === "published" ? "Published" : "Draft"}
-              {saved.hasWorkingRevision ? " · unpublished changes saved" : ""}. Saving never changes
-              the public article.
-            </p>
-          )}
+        <div>
+          <Label htmlFor="blog-status">Status</Label>
+          <Select
+            id="blog-status"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as "draft" | "published")}
+          >
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+          </Select>
+          <p className="mt-1 text-sm text-slate-600">
+            Saving applies the selected status and content to the canonical article.
+          </p>
         </div>
         <div>
           <Label htmlFor="blog-image">Featured image URL</Label>

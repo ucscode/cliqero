@@ -260,14 +260,15 @@ function appWith(
       blog: {
         list: () => ({ items: [], nextCursor: null, limit: 25 }),
         get: () => null,
-        getWorkingRevision: () => null,
-        getRevision: () => null,
         categories: () => [],
         tags: () => [],
         create: () => ({}),
         save: () => ({}),
-        publish: () => ({}),
-        unpublish: () => ({}),
+        createPreview: () => ({
+          id: "00000000-0000-4000-8000-000000000099",
+          url: "/blog/preview/00000000-0000-4000-8000-000000000099",
+        }),
+        deletePreview: () => {},
         delete: () => {},
         createCategory: (name: string) => ({
           id: "00000000-0000-4000-8000-000000000009",
@@ -277,7 +278,6 @@ function appWith(
         updateCategory: (id: string, name: string) => ({ id, name, slug: "sample" }),
         deleteCategory: () => {},
         categoryIsUsed: () => false,
-        bulk: () => [],
         ...blogOverrides,
       },
     } as any,
@@ -312,18 +312,14 @@ describe("Hono API foundation", () => {
     );
     expect(oversizedPage.status).toBe(400);
   });
-  it("keeps revision metadata in Operator Blog responses only", async () => {
+  it("returns the same canonical post shape from public and operator Blog APIs", async () => {
     const post = {
       id: "00000000-0000-4000-8000-000000000011",
-      revisionId: "revision-working",
       slug: "live-post",
       title: "Published version",
       excerpt: "Public excerpt",
       content: "Public Markdown",
-      desiredStatus: "published",
-      publicationStatus: "published",
-      hasWorkingRevision: true,
-      workingRevisionUpdatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      status: "published",
       featuredImageUrl: null,
       authorAccountId: null,
       seoTitle: null,
@@ -332,7 +328,7 @@ describe("Hono API foundation", () => {
       publishedAt: new Date("2025-01-01T00:00:00.000Z"),
       createdAt: new Date("2024-01-01T00:00:00.000Z"),
       updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-      category: null,
+      categories: [{ id: "00000000-0000-4000-8000-000000000012", slug: "guides", name: "Guides" }],
       tags: [],
     };
     const overrides = { list: () => ({ items: [post], nextCursor: null, limit: 25 }) };
@@ -341,10 +337,8 @@ describe("Hono API foundation", () => {
     );
     const publicPost = (await publicResponse.json()).items[0];
     expect(publicPost.title).toBe("Published version");
-    expect(publicPost).not.toHaveProperty("revisionId");
-    expect(publicPost).not.toHaveProperty("publicationStatus");
-    expect(publicPost).not.toHaveProperty("hasWorkingRevision");
-    expect(publicPost).not.toHaveProperty("workingRevisionUpdatedAt");
+    expect(publicPost.status).toBe("published");
+    expect(publicPost.categories).toHaveLength(1);
 
     const operator = {
       accountId: "00000000-0000-4000-8000-000000000001",
@@ -356,14 +350,9 @@ describe("Hono API foundation", () => {
     const operatorResponse = await appWith(operator, undefined, undefined, overrides).fetch(
       new Request("http://localhost/api/operator/blog"),
     );
-    expect((await operatorResponse.json()).items[0]).toMatchObject({
-      publicationStatus: "published",
-      hasWorkingRevision: true,
-      revisionId: "revision-working",
-    });
+    expect((await operatorResponse.json()).items[0]).toEqual(publicPost);
   });
-  it("protects managed category routes and issues revision-bound previews only to content operators", async () => {
-    const id = "00000000-0000-4000-8000-000000000099";
+  it("creates current-form previews only for authenticated content-managing sessions", async () => {
     const user = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: {},
@@ -378,34 +367,64 @@ describe("Hono API foundation", () => {
       new Request("http://localhost/api/operator/blog/categories"),
     );
     expect(categories.status).toBe(200);
-    const previousSecret = process.env.BETTER_AUTH_SECRET;
-    process.env.BETTER_AUTH_SECRET = "test-preview-secret";
-    try {
-      const preview = await appWith(user, undefined, undefined, {
-        getWorkingRevision: () => ({ id, revisionId: "revision-1" }),
-      }).fetch(
-        new Request(`http://localhost/api/operator/blog/posts/${id}/preview`, { method: "POST" }),
-      );
-      expect(preview.status).toBe(200);
-      const payload = await preview.json();
-      expect(payload.url).toMatch(/^\/blog\/preview\//);
-      expect(payload.revisionId).toBe("revision-1");
-      expect(payload.url).not.toContain("test-preview-secret");
-      expect(
-        (
-          await appWith({ ...user, kind: "api_key" }, undefined, undefined, {
-            getWorkingRevision: () => ({ id, revisionId: "revision-1" }),
-          }).fetch(
-            new Request(`http://localhost/api/operator/blog/posts/${id}/preview`, {
-              method: "POST",
-            }),
-          )
-        ).status,
-      ).toBe(403);
-    } finally {
-      if (previousSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
-      else process.env.BETTER_AUTH_SECRET = previousSecret;
-    }
+    const createPreview = vi.fn((_input, _accountId, previewId) => ({
+      id: previewId ?? "00000000-0000-4000-8000-000000000099",
+      url: `/blog/preview/${previewId ?? "00000000-0000-4000-8000-000000000099"}`,
+    }));
+    const body = {
+      title: "Unsaved",
+      excerpt: "Preview",
+      content: "## Current",
+      status: "draft",
+      category_ids: [],
+      tags: [],
+    };
+    const previewApp = appWith(user, undefined, undefined, { createPreview });
+    const preview = await previewApp.fetch(
+      new Request("http://localhost/api/operator/blog/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+    expect(preview.status).toBe(200);
+    const payload = await preview.json();
+    expect(payload).toMatchObject({
+      previewId: "00000000-0000-4000-8000-000000000099",
+      url: "/blog/preview/00000000-0000-4000-8000-000000000099",
+    });
+    expect(payload.url).not.toContain("?");
+    const updated = await previewApp.fetch(
+      new Request("http://localhost/api/operator/blog/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, preview_id: payload.previewId, title: "Changed unsaved" }),
+      }),
+    );
+    expect((await updated.json()).previewId).toBe(payload.previewId);
+    expect(createPreview.mock.calls[1]?.[2]).toBe(payload.previewId);
+    expect(
+      (
+        await appWith().fetch(
+          new Request("http://localhost/api/operator/blog/preview", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+        )
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await appWith({ ...user, kind: "api_key" }).fetch(
+          new Request("http://localhost/api/operator/blog/preview", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+        )
+      ).status,
+    ).toBe(403);
   });
   it("validates category slugs and reports duplicate names/slugs as stable conflicts", async () => {
     const user = {
@@ -423,6 +442,9 @@ describe("Hono API foundation", () => {
       }),
     );
     expect(invalid.status).toBe(400);
+    const invalidPayload = await invalid.json();
+    expect(invalidPayload).toMatchObject({ code: "validation_error" });
+    expect(typeof invalidPayload.error).toBe("string");
 
     for (const field of ["name", "slug"] as const) {
       const duplicate = await appWith(user, undefined, undefined, {
@@ -562,19 +584,25 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "account",
       "x-required-api-scope": "blog:manage",
     });
-    expect(paths["/api/operator/blog/posts/{id}/preview"].post).toMatchObject({
-      "x-authentication-mode": "account",
-      "x-required-api-scope": "blog:read",
+    expect(paths["/api/operator/blog/preview"].post).toMatchObject({
+      "x-authentication-mode": "session_only",
+    });
+    expect(paths["/api/operator/blog/preview/{previewId}"].delete).toMatchObject({
+      "x-authentication-mode": "session_only",
     });
     const postInput = paths["/api/blog/posts"].post.requestBody.content["application/json"].schema;
-    expect(postInput.properties).toHaveProperty("desired_status");
-    expect(postInput.properties).not.toHaveProperty("status");
+    expect(postInput.properties).toHaveProperty("status");
+    expect(postInput.properties).toHaveProperty("category_ids");
+    expect(postInput.properties).not.toHaveProperty("category_id");
     const categoryInput =
       paths["/api/operator/blog/categories"].post.requestBody.content["application/json"].schema;
     expect(categoryInput.properties).toHaveProperty("slug");
     const operatorPost =
       paths["/api/operator/blog"].get.responses["200"].content["application/json"].schema;
-    expect(JSON.stringify(operatorPost)).toContain("publicationStatus");
+    expect(JSON.stringify(operatorPost)).toContain("categories");
+    expect(JSON.stringify(operatorPost)).not.toContain("revisionId");
+    expect(paths["/api/blog/posts/{id}/publish"]).toBeUndefined();
+    expect(paths["/api/blog/posts/{id}/unpublish"]).toBeUndefined();
     expect(paths["/api/gateway"]).toBeUndefined();
     expect(paths["/api/auth/sessions"]).toBeUndefined();
     expect(paths["/api/listings"].get).toMatchObject({

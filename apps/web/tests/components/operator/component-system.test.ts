@@ -8,7 +8,7 @@ import {
 
 const operatorFiles = [
   "shell.tsx",
-  "blog.tsx",
+  "blog/index.tsx",
   "catalogue.tsx",
   "users.tsx",
   "network.tsx",

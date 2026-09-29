@@ -10,23 +10,30 @@ import {
   BlogCategoryNotFoundError,
   BlogPostNotFoundError,
   BlogSlugConflictError,
-  BlogPublicationConflictError,
   type BlogCategory,
   type BlogPost,
   type BlogPostInput,
+  type BlogRenderablePost,
 } from "@/modules/blog/domain/blog";
 import type {
   BlogCategoryInput,
   BlogListOptions,
   BlogRepository,
-  BlogRevisionInput,
+  BlogSaveInput,
 } from "@/application/blog/contracts";
+
+const PREVIEW_LIFETIME_MS = 60 * 60 * 1000;
+const hashRequest = (value: unknown) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const slugBase = (value: string) => slugify(value, { lower: true, strict: true, trim: true });
+const normalize = (value: string) => value.trim().replace(/\s+/g, " ");
 
 export class BlogService {
   constructor(private readonly repository: BlogRepository) {}
 
   create(input: BlogPostInput, authorAccountId: string | null, idempotencyKey?: string) {
     const parsed = blogPostInputSchema.parse(input);
+    const save = this.prepare(parsed);
     const requestHash = hashRequest({ ...parsed, author_account_id: authorAccountId });
     return this.repository.transaction(() => {
       if (idempotencyKey) {
@@ -39,136 +46,105 @@ export class BlogService {
           return existing;
         }
       }
-      const postId = newId();
-      const desiredSlug = parsed.slug ?? slugBase(parsed.title);
-      const slug = parsed.slug
+      const id = newId();
+      save.slug = parsed.slug
         ? this.requireAvailableSlug(parsed.slug)
-        : this.uniqueGeneratedSlug(desiredSlug);
-      this.requireCategory(parsed.category_id);
-      const post = this.repository.create(
-        postId,
-        this.prepare(newId(), parsed, slug),
-        authorAccountId,
-      );
-      if (!post) throw new BlogPostNotFoundError();
-      if (idempotencyKey && post)
-        this.repository.saveIdempotency(idempotencyKey, requestHash, postId);
+        : this.uniqueGeneratedSlug(save.slug);
+      this.requireCategories(save.categoryIds);
+      const post = this.repository.create(id, save, authorAccountId);
+      if (idempotencyKey) this.repository.saveIdempotency(idempotencyKey, requestHash, id);
       return post;
     });
   }
 
   save(id: string, input: Partial<BlogPostInput>, authorAccountId: string | null) {
-    const current = this.repository.get(id);
-    if (!current) throw new BlogPostNotFoundError();
-    const parsed = blogPostInputSchema.partial().parse(input);
-    const merged = {
-      title: current.title,
-      slug: current.slug,
-      excerpt: current.excerpt,
-      content: current.content,
-      desired_status: current.desiredStatus,
-      featured_image_url: current.featuredImageUrl,
-      seo_title: current.seoTitle,
-      seo_description: current.seoDescription,
-      canonical_url: current.canonicalUrl,
-      category_id: current.category?.id ?? null,
-      tags: current.tags.map((tag) => tag.name),
-      ...parsed,
-    };
-    const slug = parsed.slug ? this.requireAvailableSlug(parsed.slug, id) : current.slug;
-    this.requireCategory(merged.category_id);
-    const post = this.repository.saveRevision(
-      id,
-      this.prepare(newId(), merged, slug),
-      authorAccountId,
-    );
-    if (!post) throw new BlogPostNotFoundError();
-    return post;
-  }
-
-  applyStatus(id: string, desiredStatus: "draft" | "published") {
-    if (!this.repository.get(id)) throw new BlogPostNotFoundError();
-    const post = this.repository.applyPublication(id, desiredStatus);
-    if (!post) throw new BlogPublicationConflictError();
-    return post;
-  }
-
-  publish(id: string) {
-    return this.applyStatus(id, "published");
-  }
-
-  unpublish(id: string) {
-    return this.applyStatus(id, "draft");
+    return this.repository.transaction(() => {
+      const current = this.repository.get(id);
+      if (!current) throw new BlogPostNotFoundError();
+      const parsed = blogPostInputSchema.partial().parse(input);
+      const merged = {
+        title: current.title,
+        slug: current.slug,
+        excerpt: current.excerpt,
+        content: current.content,
+        status: current.status,
+        featured_image_url: current.featuredImageUrl,
+        seo_title: current.seoTitle,
+        seo_description: current.seoDescription,
+        canonical_url: current.canonicalUrl,
+        category_ids: current.categories.map((c) => c.id),
+        tags: current.tags.map((t) => t.name),
+        ...parsed,
+      };
+      const result = this.prepare(merged);
+      result.slug = parsed.slug ? this.requireAvailableSlug(parsed.slug, id) : current.slug;
+      this.requireCategories(result.categoryIds);
+      const post = this.repository.save(id, result, authorAccountId);
+      if (!post) throw new BlogPostNotFoundError();
+      return post;
+    });
   }
 
   delete(id: string) {
     if (!this.repository.get(id)) throw new BlogPostNotFoundError();
     this.repository.delete(id);
   }
-
-  bulk(ids: string[], action: "publish" | "unpublish" | "delete", maximum: number) {
-    const validIds = ids.every((id) =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id),
-    );
-    if (
-      !Number.isInteger(maximum) ||
-      maximum < 1 ||
-      !ids.length ||
-      !validIds ||
-      new Set(ids).size !== ids.length ||
-      ids.length > maximum
-    )
-      throw new Error(`Select between 1 and ${maximum} unique blog posts using valid IDs.`);
-    return ids.map((id) => {
-      try {
-        if (action === "delete") this.delete(id);
-        else this.applyStatus(id, action === "publish" ? "published" : "draft");
-        return { id, success: true as const };
-      } catch (error) {
-        return {
-          id,
-          success: false as const,
-          error: error instanceof Error ? error.message : "Unable to update this article.",
-        };
-      }
-    });
-  }
-
   get(idOrSlug: string, publishedOnly = false): BlogPost | null {
     return this.repository.get(idOrSlug, publishedOnly);
   }
-
-  getWorkingRevision(id: string): BlogPost | null {
-    return this.repository.getWorkingRevision(id);
-  }
-
-  getRevision(id: string, revisionId: string): BlogPost | null {
-    return this.repository.getRevision(id, revisionId);
-  }
-
   list(options: BlogListOptions = {}) {
     return this.repository.list(options);
   }
-
   categories() {
     return this.repository.categories();
+  }
+  tags() {
+    return this.repository.tags();
+  }
+
+  createPreview(input: BlogPostInput, accountId: string, previewId?: string) {
+    const parsed = blogPostInputSchema.parse(input);
+    const normalized = this.prepare(parsed);
+    normalized.slug = parsed.slug ?? (slugBase(parsed.title) || "preview");
+    this.requireCategories(normalized.categoryIds);
+    const id = previewId ?? newId();
+    const now = Date.now();
+    const payload: BlogRenderablePost = {
+      title: normalized.title,
+      slug: normalized.slug,
+      excerpt: normalized.excerpt,
+      content: normalized.content,
+      featuredImageUrl: normalized.featuredImageUrl,
+      seoTitle: normalized.seoTitle,
+      seoDescription: normalized.seoDescription,
+      canonicalUrl: normalized.canonicalUrl,
+      categories: this.repository.categories().filter((c) => normalized.categoryIds.includes(c.id)),
+      tags: normalized.tags.map((name) => ({ name, slug: slugBase(name) })),
+    };
+    this.repository.savePreview(id, accountId, payload, now, now + PREVIEW_LIFETIME_MS);
+    return { id, url: `/blog/preview/${encodeURIComponent(id)}` };
+  }
+  getPreview(id: string, accountId: string) {
+    return this.repository.getPreview(id, accountId, Date.now());
+  }
+  deletePreview(id: string, accountId: string) {
+    this.repository.deletePreview(id, accountId);
   }
 
   createCategory(name: string, suppliedSlug?: string): BlogCategory {
     return this.repository.transaction(() => {
       const normalized = blogCategoryNameSchema.parse(name);
       const slug =
-        suppliedSlug === undefined || suppliedSlug === ""
-          ? this.uniqueCategorySlug(slugBase(normalized))
+        suppliedSlug === undefined || suppliedSlug.trim() === ""
+          ? this.uniqueCategorySlug(slugBase(normalized) || "category")
           : blogCategorySlugSchema.parse(suppliedSlug);
       this.ensureCategoryValuesAvailable(normalized, slug);
       return this.repository.createCategory({ name: normalized, slug });
     });
   }
-
   updateCategory(id: string, input: BlogCategoryInput): BlogCategory {
     return this.repository.transaction(() => {
-      const current = this.repository.categories().find((category) => category.id === id);
+      const current = this.repository.categories().find((c) => c.id === id);
       if (!current) throw new BlogCategoryNotFoundError();
       const name = input.name === undefined ? undefined : blogCategoryNameSchema.parse(input.name);
       const slug = input.slug === undefined ? undefined : blogCategorySlugSchema.parse(input.slug);
@@ -178,96 +154,54 @@ export class BlogService {
       return category;
     });
   }
-
   deleteCategory(id: string): void {
-    if (!this.repository.categories().some((category) => category.id === id))
+    if (!this.repository.categories().some((c) => c.id === id))
       throw new BlogCategoryNotFoundError();
     if (this.repository.categoryIsUsed(id)) throw new BlogCategoryInUseError();
     this.repository.deleteCategory(id);
   }
 
-  tags() {
-    return this.repository.tags();
-  }
-
-  private uniqueGeneratedSlug(desired: string) {
-    const base = desired || "post";
-    let candidate = base;
-    let n = 1;
-    while (this.repository.findSlugOwner(candidate)) candidate = `${base}-${++n}`;
-    return candidate;
-  }
-
-  private uniqueCategorySlug(desired: string) {
-    const base = desired || "category";
-    let candidate = base;
-    let n = 1;
-    while (this.repository.categories().some((category) => category.slug === candidate))
-      candidate = `${base}-${++n}`;
-    return candidate;
-  }
-
-  private requireAvailableSlug(slug: string, currentPostId?: string) {
-    const owner = this.repository.findSlugOwner(slug);
-    if (owner && owner !== currentPostId) throw new BlogSlugConflictError();
-    return slug;
-  }
-
-  private prepare(
-    id: string,
-    input: {
-      title: string;
-      slug?: string;
-      excerpt: string;
-      content: string;
-      desired_status: "draft" | "published";
-      featured_image_url?: string | null;
-      seo_title?: string | null;
-      seo_description?: string | null;
-      canonical_url?: string | null;
-      category_id?: string | null;
-      tags?: string[];
-    },
-    slug: string,
-  ): BlogRevisionInput {
+  private prepare(input: BlogPostInput): BlogSaveInput {
     return {
-      id,
-      slug,
+      slug: input.slug ?? (slugBase(input.title) || "post"),
       title: input.title,
-      excerpt: input.excerpt,
+      excerpt: input.excerpt ?? "",
       content: input.content,
-      desiredStatus: input.desired_status,
+      status: input.status ?? "draft",
       featuredImageUrl: input.featured_image_url ?? null,
       seoTitle: input.seo_title ?? null,
       seoDescription: input.seo_description ?? null,
       canonicalUrl: input.canonical_url ?? null,
-      categoryId: input.category_id ?? null,
+      categoryIds: [...new Set(input.category_ids ?? [])],
       tags: [...new Set((input.tags ?? []).map(normalize).filter(Boolean))],
     };
   }
-
-  private requireCategory(categoryId: string | null | undefined) {
-    if (categoryId && !this.repository.categories().some((category) => category.id === categoryId))
-      throw new BlogCategoryNotFoundError();
+  private requireCategories(ids: string[]) {
+    const available = new Set(this.repository.categories().map((c) => c.id));
+    if (ids.some((id) => !available.has(id))) throw new BlogCategoryNotFoundError();
   }
-
+  private uniqueGeneratedSlug(base: string) {
+    let candidate = base || "post",
+      n = 1;
+    while (this.repository.findSlugOwner(candidate)) candidate = `${base || "post"}-${++n}`;
+    return candidate;
+  }
+  private uniqueCategorySlug(base: string) {
+    let candidate = base,
+      n = 1;
+    while (this.repository.categories().some((c) => c.slug === candidate))
+      candidate = `${base}-${++n}`;
+    return candidate;
+  }
+  private requireAvailableSlug(slug: string, exceptId?: string) {
+    const owner = this.repository.findSlugOwner(slug);
+    if (owner && owner !== exceptId) throw new BlogSlugConflictError();
+    return slug;
+  }
   private ensureCategoryValuesAvailable(name: string, slug: string, exceptId?: string) {
-    const categories = this.repository.categories().filter((category) => category.id !== exceptId);
-    if (categories.some((category) => category.name.toLowerCase() === name.toLowerCase()))
+    const existing = this.repository.categories().filter((c) => c.id !== exceptId);
+    if (existing.some((c) => c.name.toLowerCase() === name.toLowerCase()))
       throw new BlogCategoryConflictError("name");
-    if (categories.some((category) => category.slug === slug))
-      throw new BlogCategoryConflictError("slug");
+    if (existing.some((c) => c.slug === slug)) throw new BlogCategoryConflictError("slug");
   }
-}
-
-function hashRequest(value: unknown) {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-function slugBase(value: string) {
-  return slugify(value, { lower: true, strict: true, trim: true }) || "post";
-}
-
-function normalize(value: string | null | undefined) {
-  return (value ?? "").trim().replace(/\s+/g, " ");
 }

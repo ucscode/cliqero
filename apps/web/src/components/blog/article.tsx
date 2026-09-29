@@ -1,12 +1,16 @@
 import { BlogMarkdown } from "./markdown";
-import type { BlogPost } from "@/modules/blog/domain/blog";
+import type { BlogRenderablePost } from "@/modules/blog/domain/blog";
 
 /* eslint-disable @next/next/no-img-element -- blog media URLs are configured content. */
-export function BlogArticle({ post }: { post: BlogPost }) {
+export function BlogArticle({
+  post,
+}: {
+  post: BlogRenderablePost & { publishedAt?: Date | null };
+}) {
   return (
     <article>
       <p className="mt-8 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {post.category?.name ?? "Cliqero Journal"}
+        {post.categories.map((category) => category.name).join(" · ") || "Cliqero Journal"}
         {post.publishedAt && ` · ${post.publishedAt.toLocaleDateString("en-US")}`}
       </p>
       <h1 className="mt-3 text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">

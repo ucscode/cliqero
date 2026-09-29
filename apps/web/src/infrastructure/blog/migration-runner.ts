@@ -39,7 +39,7 @@ export function applyBlogMigrations(
     const id = name.slice(0, -".sql".length);
     if (sqlite.prepare("select 1 from blog_schema_migrations where id=?").get(id)) continue;
     const sql = fs.readFileSync(path.join(directory, name), "utf8");
-    const changesForeignKeys = id === "0002_blog_revisions";
+    const changesForeignKeys = id === "0002_blog_revisions" || id === "0005_blog_canonical_posts";
     if (changesForeignKeys) sqlite.pragma("foreign_keys = OFF");
     try {
       sqlite.transaction(() => {

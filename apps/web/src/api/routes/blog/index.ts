@@ -20,17 +20,16 @@ import {
   operatorBlogPostSchema,
 } from "./contracts";
 import { loadOperatorTableConfiguration } from "@/config/operator-tables";
-import { issueBlogPreviewToken } from "@/security/blog-preview";
 
 const blogCategorySchema = z.object({ id: z.string().uuid(), slug: z.string(), name: z.string() });
 const blogCategoryCreateSchema = z
   .object({
-    name: blogCategoryNameSchema,
-    slug: z.union([blogCategorySlugSchema, z.literal("")]).optional(),
+    name: z.string(),
+    slug: z.string().optional(),
   })
   .strict();
 const blogCategoryPatchSchema = z
-  .object({ name: blogCategoryNameSchema.optional(), slug: blogCategorySlugSchema.optional() })
+  .object({ name: z.string().optional(), slug: z.string().optional() })
   .strict()
   .refine(
     (value) => value.name !== undefined || value.slug !== undefined,
@@ -55,28 +54,29 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(25),
   });
+  const previewBody = blogPostInputSchema.extend({
+    preview_id: z.string().uuid().nullable().optional(),
+  });
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/operator/blog/posts/{id}/preview",
-      request: { params: z.object({ id: z.string().uuid() }) },
+      path: "/api/operator/blog/preview",
+      request: { body: { content: { "application/json": { schema: previewBody } } } },
       responses: {
         200: {
-          description: "Short-lived preview URL bound to one saved working revision",
+          description: "Private short-lived preview snapshot",
           content: {
-            "application/json": { schema: z.object({ url: z.string(), revisionId: z.string() }) },
+            "application/json": {
+              schema: z.object({ previewId: z.string().uuid(), url: z.string() }),
+            },
           },
         },
         403: {
-          description: "Authenticated Operator session required",
+          description: "Operator session required",
           content: { "application/json": { schema: errorSchema } },
         },
-        404: {
-          description: "Saved working revision not found",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        500: {
-          description: "Preview signing is not configured",
+        400: {
+          description: "Invalid article input",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -85,37 +85,52 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       if (p.kind !== "user_session") return c.json({ error: "Forbidden", code: "forbidden" }, 403);
-      const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
       if (denied) return denied;
-      const id = c.req.valid("param").id;
-      const post = container.blog.getWorkingRevision(id);
-      if (!post)
-        return c.json({ error: "Saved working revision not found", code: "not_found" }, 404);
-      const secret = process.env.BETTER_AUTH_SECRET?.trim();
-      if (!secret)
-        return c.json({ error: "Preview is unavailable", code: "configuration_error" }, 500);
-      const token = issueBlogPreviewToken(id, post.revisionId, p.accountId, secret);
-      return c.json(
-        {
-          revisionId: post.revisionId,
-          url: `/blog/preview/${encodeURIComponent(id)}?revision=${encodeURIComponent(post.revisionId)}&token=${encodeURIComponent(token)}`,
+      try {
+        const { preview_id, ...input } = c.req.valid("json");
+        const result = container.blog.createPreview(input, p.accountId, preview_id ?? undefined);
+        return c.json({ previewId: result.id, url: result.url }, 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "delete",
+      path: "/api/operator/blog/preview/{previewId}",
+      request: { params: z.object({ previewId: z.string().uuid() }) },
+      responses: {
+        204: { description: "Owned preview removed" },
+        403: {
+          description: "Operator session required",
+          content: { "application/json": { schema: errorSchema } },
         },
-        200,
-      );
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      if (p.kind !== "user_session") return c.json({ error: "Forbidden", code: "forbidden" }, 403);
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
+      if (denied) return denied;
+      container.blog.deletePreview(c.req.valid("param").previewId, p.accountId);
+      return c.body(null, 204);
     },
   );
   app.openapi(
     createRoute({
       method: "post",
       path: "/api/operator/blog/bulk",
-      description: "Bounded content bulk operations. Requires the blog:manage scope.",
+      description: "Bounded article deletion. Requires the blog:manage scope.",
       request: {
         body: {
           content: {
             "application/json": {
               schema: z
                 .object({
-                  action: z.enum(["publish", "unpublish", "delete"]),
+                  action: z.literal("delete"),
                   ids: z
                     .array(z.string().uuid())
                     .min(1)
@@ -145,13 +160,22 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
     (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const { action, ids } = c.req.valid("json");
+      const { ids } = c.req.valid("json");
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
       if (denied) return denied;
-      return c.json(
-        { results: container.blog.bulk(ids, action, tableConfiguration.max_bulk_selection) },
-        200,
-      );
+      const results = ids.map((id) => {
+        try {
+          container.blog.delete(id);
+          return { id, success: true as const };
+        } catch (error) {
+          return {
+            id,
+            success: false as const,
+            error: error instanceof Error ? error.message : "Unable to delete article.",
+          };
+        }
+      });
+      return c.json({ results }, 200);
     },
   );
   app.openapi(
@@ -302,7 +326,10 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
-        return c.json(container.blog.createCategory(body.name, body.slug), 201);
+        const name = blogCategoryNameSchema.parse(body.name);
+        const slug = body.slug === undefined ? undefined : body.slug.trim();
+        if (slug) blogCategorySlugSchema.parse(slug);
+        return c.json(container.blog.createCategory(name, slug), 201);
       } catch (error) {
         return categoryConflict(c, error);
       }
@@ -413,7 +440,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       },
       responses: {
         201: {
-          description: "Working revision created",
+          description: "Blog article created",
           content: { "application/json": { schema: operatorBlogPostSchema } },
         },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
@@ -434,6 +461,10 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
+        if (body.status === "published") {
+          const publishDenied = requireCapabilityScope(c, p, "content.manage", "blog:publish");
+          if (publishDenied) return publishDenied;
+        }
         const key = c.req.header("Idempotency-Key");
         if (!key) throw new Error("Idempotency-Key is required");
         return c.json(operatorBlogJson(container.blog.create(body, p.accountId, key)), 201);
@@ -452,7 +483,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       },
       responses: {
         200: {
-          description: "A new working revision was saved; any live revision remains unchanged",
+          description: "Canonical blog article saved",
           content: { "application/json": { schema: operatorBlogPostSchema } },
         },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
@@ -477,6 +508,11 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
+        const current = container.blog.get(c.req.valid("param").id);
+        if ((body.status ?? current?.status) === "published") {
+          const publishDenied = requireCapabilityScope(c, p, "content.manage", "blog:publish");
+          if (publishDenied) return publishDenied;
+        }
         return c.json(
           operatorBlogJson(container.blog.save(c.req.valid("param").id, body, p.accountId)),
           200,
@@ -486,59 +522,13 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       }
     },
   );
-  for (const [path, published] of [
-    ["/api/blog/posts/{id}/publish", true],
-    ["/api/blog/posts/{id}/unpublish", false],
-  ] as const) {
-    app.openapi(
-      createRoute({
-        method: "post",
-        path,
-        request: { params: z.object({ id: z.string().uuid() }) },
-        responses: {
-          200: {
-            description: published
-              ? "Promote the saved working revision to the public article"
-              : "Remove the article from public listing without deleting its revisions",
-            content: { "application/json": { schema: operatorBlogPostSchema } },
-          },
-          403: {
-            description: "Forbidden",
-            content: { "application/json": { schema: errorSchema } },
-          },
-          404: {
-            description: "Article not found",
-            content: { "application/json": { schema: errorSchema } },
-          },
-          409: {
-            description: "No promotable saved revision",
-            content: { "application/json": { schema: errorSchema } },
-          },
-        },
-      }),
-      (c) => {
-        const p = requirePrincipal(c);
-        if (!(p instanceof Object) || !("accountId" in p)) return p;
-        const denied = requireCapabilityScope(c, p, "content.manage", "blog:publish");
-        if (denied) return denied;
-        try {
-          const post = published
-            ? container.blog.publish(c.req.valid("param").id)
-            : container.blog.unpublish(c.req.valid("param").id);
-          return c.json(operatorBlogJson(post), 200);
-        } catch (error) {
-          return domainError(c, error);
-        }
-      },
-    );
-  }
   app.openapi(
     createRoute({
       method: "delete",
       path: "/api/blog/posts/{id}",
       request: { params: z.object({ id: z.string().uuid() }) },
       responses: {
-        204: { description: "Blog article and its revision history deleted" },
+        204: { description: "Blog article and its relations deleted" },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
         404: {
           description: "Article not found",

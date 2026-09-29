@@ -7,7 +7,7 @@ export function blogJson(post: BlogPost) {
     title: post.title,
     excerpt: post.excerpt,
     content: post.content,
-    desiredStatus: post.desiredStatus,
+    status: post.status,
     featuredImageUrl: post.featuredImageUrl,
     authorAccountId: post.authorAccountId,
     seoTitle: post.seoTitle,
@@ -16,17 +16,8 @@ export function blogJson(post: BlogPost) {
     publishedAt: post.publishedAt?.toISOString() ?? null,
     createdAt: post.createdAt.toISOString(),
     updatedAt: post.updatedAt.toISOString(),
-    category: post.category,
+    categories: post.categories,
     tags: post.tags,
   };
 }
-
-export function operatorBlogJson(post: BlogPost) {
-  return {
-    ...blogJson(post),
-    publicationStatus: post.publicationStatus,
-    hasWorkingRevision: post.hasWorkingRevision,
-    workingRevisionUpdatedAt: post.workingRevisionUpdatedAt?.toISOString() ?? null,
-    revisionId: post.revisionId,
-  };
-}
+export const operatorBlogJson = blogJson;
