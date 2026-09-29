@@ -80,4 +80,57 @@ describe("operator shell", () => {
     expect(reviewsIndex).toBeGreaterThan(catalogueIndex);
     expect(html).toContain('aria-expanded="true"');
   });
+
+  it.each([
+    { capabilities: ["accounts.read"] as const, accounts: true, network: false },
+    { capabilities: ["accounts.manage"] as const, accounts: true, network: false },
+    { capabilities: ["hierarchy.manage"] as const, accounts: false, network: true },
+    {
+      capabilities: ["accounts.read", "hierarchy.manage"] as const,
+      accounts: true,
+      network: true,
+    },
+    { capabilities: [] as const, accounts: false, network: false },
+    { capabilities: ["system.root"] as const, accounts: true, network: true },
+  ])(
+    "groups Users children by capability: $capabilities",
+    ({ capabilities, accounts, network }) => {
+      const activeSection = network ? "network" : "users";
+      const html = renderToStaticMarkup(
+        <OperatorShell
+          capabilities={[...capabilities]}
+          username="operator"
+          email={null}
+          activeSection={activeSection}
+        >
+          <main>Current page</main>
+        </OperatorShell>,
+      );
+
+      expect(html.includes('href="/operator/users"')).toBe(accounts);
+      expect(html.includes('href="/operator/network"')).toBe(network);
+      expect(html.includes(">Accounts</a>")).toBe(accounts);
+      expect(html.includes(">Network</a>")).toBe(network);
+      expect(html.includes(">Users</span>")).toBe(accounts || network);
+      if (activeSection === "users" && accounts)
+        expect(html).toMatch(
+          /<a class="[^"]*bg-emerald-100[^"]*" href="\/operator\/users">Accounts/,
+        );
+      if (activeSection === "network" && network)
+        expect(html).toMatch(
+          /<a class="[^"]*bg-emerald-100[^"]*" href="\/operator\/network">Network/,
+        );
+
+      if (accounts || network) {
+        const usersLabel = html.indexOf(">Users</span>");
+        const nestedList = html.indexOf("ml-3 border-l border-slate-200 pl-2", usersLabel);
+        const childHref = html.indexOf(
+          accounts ? 'href="/operator/users"' : 'href="/operator/network"',
+        );
+        expect(nestedList).toBeGreaterThan(usersLabel);
+        expect(childHref).toBeGreaterThan(nestedList);
+        expect(html).toContain('aria-expanded="true"');
+      }
+    },
+  );
 });

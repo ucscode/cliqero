@@ -65,8 +65,13 @@ export function operatorUserRowActions(account: OperatorAccountSummary, canManag
   ];
 }
 
+export function operatorUsersEmptyDescription(appliedSearch: string) {
+  return appliedSearch ? "No accounts matched this search." : "No accounts are available yet.";
+}
+
 export function OperatorUsersList({ canManage = false }: { canManage?: boolean }) {
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const collection = useCrudCollection(async (appliedSearch: string, cursor, pageSize) => {
     const params = new URLSearchParams({ limit: String(pageSize) });
     if (appliedSearch) params.set("search", appliedSearch);
@@ -82,22 +87,29 @@ export function OperatorUsersList({ canManage = false }: { canManage?: boolean }
           : { items: collection.items, nextCursor: collection.nextCursor }
       }
       search={search}
+      appliedSearch={appliedSearch}
       loading={collection.loading}
       error={collection.error}
       canManage={canManage}
       onSearchChange={setSearch}
       onSearch={(event) => {
         event.preventDefault();
-        void collection.apply(search.trim());
+        const nextSearch = search.trim();
+        void collection.apply(nextSearch).then((applied) => {
+          if (applied) setAppliedSearch(nextSearch);
+        });
       }}
       onRetry={() => void collection.retry()}
       hasPrevious={collection.hasPrevious}
       onPrevious={() => void collection.previous()}
       onNext={() => void collection.next()}
-      filtersDirty={Boolean(search.trim())}
+      filtersDirty={Boolean(search.trim() || appliedSearch)}
       onFiltersReset={async () => {
         const ok = await collection.apply("");
-        if (ok) setSearch("");
+        if (ok) {
+          setSearch("");
+          setAppliedSearch("");
+        }
         return ok;
       }}
     />
@@ -107,6 +119,7 @@ export function OperatorUsersList({ canManage = false }: { canManage?: boolean }
 export function OperatorUsersListView({
   page,
   search,
+  appliedSearch,
   loading,
   error,
   canManage,
@@ -121,6 +134,7 @@ export function OperatorUsersListView({
 }: {
   page: OperatorAccountPage | null;
   search: string;
+  appliedSearch: string;
   loading: boolean;
   error: string | null;
   canManage?: boolean;
@@ -223,7 +237,7 @@ export function OperatorUsersListView({
       error={error}
       onRetry={onRetry}
       emptyTitle="No users found"
-      emptyDescription="Try a different username, email, or account ID."
+      emptyDescription={operatorUsersEmptyDescription(appliedSearch)}
       pagination={
         page && (page.nextCursor || hasPrevious)
           ? {

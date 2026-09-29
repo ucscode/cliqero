@@ -92,23 +92,7 @@ export function OperatorShell({
     router.refresh();
   }
 
-  const navigation = [
-    { key: "overview", href: "/operator", label: "Overview", visible: true },
-    {
-      key: "users",
-      href: "/operator/users",
-      label: "Users",
-      visible:
-        hasCapability(capabilities, "accounts.read") ||
-        hasCapability(capabilities, "accounts.manage"),
-    },
-    {
-      key: "network",
-      href: "/operator/network",
-      label: "Network",
-      visible: hasCapability(capabilities, "hierarchy.manage"),
-    },
-  ];
+  const navigation = [{ key: "overview", href: "/operator", label: "Overview", visible: true }];
   const groups: Array<{ label: string; items: Array<SidebarNavItem & { visible?: boolean }> }> = [
     {
       label: "Catalogue",
@@ -118,6 +102,18 @@ export function OperatorShell({
           : []),
         ...(hasCapability(capabilities, "reviews.moderate")
           ? [{ key: "reviews", href: "/operator/reviews", label: "Reviews" }]
+          : []),
+      ],
+    },
+    {
+      label: "Users",
+      items: [
+        ...(hasCapability(capabilities, "accounts.read") ||
+        hasCapability(capabilities, "accounts.manage")
+          ? [{ key: "users", href: "/operator/users", label: "Accounts" }]
+          : []),
+        ...(hasCapability(capabilities, "hierarchy.manage")
+          ? [{ key: "network", href: "/operator/network", label: "Network" }]
           : []),
       ],
     },

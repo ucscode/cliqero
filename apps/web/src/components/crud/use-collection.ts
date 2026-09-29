@@ -32,7 +32,7 @@ export function useCrudCollection<TFilters, TItem>(
 
   useEffect(() => {
     let active = true;
-    void controller.apply(initialFilters).finally(() => {
+    void controller.initialize(initialFilters).finally(() => {
       if (!active) return;
       setItems([...controller.items]);
       setNextCursor(controller.hasNext ? controller.nextCursorValue : null);

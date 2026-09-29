@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   OperatorUserFormFields,
   OperatorUsersListView,
+  operatorUsersEmptyDescription,
   operatorUserRowActions,
 } from "@/components/operator/users";
 import type { OperatorAccountPage } from "@/lib/api-client";
@@ -36,6 +37,7 @@ function renderUsers(overrides: Partial<Parameters<typeof OperatorUsersListView>
     <OperatorUsersListView
       page={page}
       search="gamma"
+      appliedSearch="gamma"
       loading={false}
       error={null}
       onSearchChange={vi.fn()}
@@ -162,9 +164,38 @@ describe("operator users list", () => {
     expect(loading).toContain("<table");
     expect(empty).toContain('role="status"');
     expect(empty).toContain("No users found");
-    expect(empty).toContain("Try a different username, email, or account ID.");
+    expect(empty).toContain("No accounts matched this search.");
     expect(failed).toContain('role="alert"');
     expect(failed).toContain("Account service unavailable.");
     expect(failed).toContain("Try again");
+  });
+
+  it("shows returned users immediately after collection initialization", () => {
+    const html = renderUsers({ page, appliedSearch: "", search: "" });
+    expect(html).toContain("@reviewer_three");
+    expect(html).toContain("@gamma_one");
+    expect(html).not.toContain("Loading users");
+  });
+
+  it("keeps empty wording tied to applied search, not the editable draft", () => {
+    const draftOnly = renderUsers({
+      page: { items: [], nextCursor: null },
+      search: "central_left_1",
+      appliedSearch: "",
+    });
+    const appliedQuery = renderUsers({
+      page: { items: [], nextCursor: null },
+      search: "",
+      appliedSearch: "central_left_1",
+    });
+
+    expect(draftOnly).toContain("No accounts are available yet.");
+    expect(draftOnly).not.toContain("No accounts matched this search.");
+    expect(appliedQuery).toContain("No accounts matched this search.");
+    expect(appliedQuery).not.toContain("No accounts are available yet.");
+    expect(operatorUsersEmptyDescription("")).toBe("No accounts are available yet.");
+    expect(operatorUsersEmptyDescription("central_left_1")).toBe(
+      "No accounts matched this search.",
+    );
   });
 });

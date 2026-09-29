@@ -45,6 +45,11 @@ suite("development referral user seed", () => {
     }
     expect(second).toEqual(first);
 
+    for (const username of ["root_user", "central_user", "central_left_1"]) {
+      const indexed = await app.operatorAccounts.list({ search: username, limit: 50 });
+      expect(indexed.items.map(({ username: result }) => result)).toContain(username);
+    }
+
     const counts = await app.database.query<{ users: string; links: string; edges: string }>(
       `select
          (select count(*) from better_auth."user" where email = any($1::text[]))::text users,

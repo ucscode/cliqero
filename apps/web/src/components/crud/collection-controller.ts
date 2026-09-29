@@ -9,6 +9,7 @@ export class CrudCollectionController<TFilters, TItem> {
   private cursor: string | null = null;
   private nextCursor: string | null = null;
   private busy = false;
+  private initialization: Promise<boolean> | null = null;
   private reader: CrudPageReader<TFilters, TItem>;
   readonly maxRows: number;
   initialized = false;
@@ -35,6 +36,13 @@ export class CrudCollectionController<TFilters, TItem> {
 
   get nextCursorValue() {
     return this.nextCursor;
+  }
+
+  initialize(filters: TFilters): Promise<boolean> {
+    // React Strict Mode replays mount effects in development. Share the first
+    // request so the replay does not race the controller's busy guard.
+    this.initialization ??= this.apply(filters);
+    return this.initialization;
   }
 
   async apply(filters: TFilters): Promise<boolean> {

@@ -4,6 +4,20 @@ import { resolveCrudMaxRows } from "@/components/crud/max-rows";
 import type { CrudPage } from "@/components/crud/use-collection";
 
 describe("CRUD collection controller", () => {
+  it("shares automatic initialization across React Strict Mode effect replay", async () => {
+    const reader = vi.fn(async () => ({ items: ["root_user"], nextCursor: null }));
+    const controller = new CrudCollectionController(reader, "");
+
+    const firstMountEffect = controller.initialize("");
+    const strictModeReplay = controller.initialize("");
+
+    expect(strictModeReplay).toBe(firstMountEffect);
+    await Promise.all([firstMountEffect, strictModeReplay]);
+    expect(reader).toHaveBeenCalledTimes(1);
+    expect(controller.items).toEqual(["root_user"]);
+    expect(controller.initialized).toBe(true);
+  });
+
   it("keeps edited filters out of cursor requests until a successful apply", async () => {
     const reads: Array<{ filter: string; cursor: string | null }> = [];
     let failedFilter: string | null = null;
@@ -54,6 +68,26 @@ describe("CRUD collection controller", () => {
     expect(controller.error).toBe("read failed");
     expect(await controller.next()).toBe(true);
     expect(reads.at(-1)).toEqual({ filter: "accepted", cursor: "next" });
+  });
+
+  it("restores the unfiltered first page when a search is reset", async () => {
+    const reads: Array<{ search: string; cursor: string | null }> = [];
+    const controller = new CrudCollectionController<string, string>(async (search, cursor) => {
+      reads.push({ search, cursor });
+      return { items: [search || "all accounts"], nextCursor: search ? "search-next" : null };
+    }, "");
+
+    expect(await controller.initialize("")).toBe(true);
+    expect(await controller.apply("central_left_1")).toBe(true);
+    expect(controller.items).toEqual(["central_left_1"]);
+    expect(await controller.apply("")).toBe(true);
+    expect(controller.items).toEqual(["all accounts"]);
+    expect(controller.hasPrevious).toBe(false);
+    expect(reads).toEqual([
+      { search: "", cursor: null },
+      { search: "central_left_1", cursor: null },
+      { search: "", cursor: null },
+    ]);
   });
 
   it("uses accepted filters for next, previous and retry, without mutating history on failures", async () => {
