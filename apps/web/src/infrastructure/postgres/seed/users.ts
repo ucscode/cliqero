@@ -30,14 +30,14 @@ function developmentUser(definition: DevelopmentUserDefinition): DevelopmentUser
 
 export const DEVELOPMENT_USER_FIXTURES: readonly DevelopmentUserFixture[] = [
   developmentUser({
-    username: "tree_root",
+    username: "root_user",
     country: "NG",
     parentUsername: null,
   }),
   developmentUser({
     username: "alpha",
     country: "NG",
-    parentUsername: "tree_root",
+    parentUsername: "root_user",
   }),
   developmentUser({
     username: "alpha_one",
@@ -102,7 +102,7 @@ export const DEVELOPMENT_USER_FIXTURES: readonly DevelopmentUserFixture[] = [
   developmentUser({
     username: "beta",
     country: "NG",
-    parentUsername: "tree_root",
+    parentUsername: "root_user",
   }),
   developmentUser({
     username: "beta_one",
@@ -117,7 +117,7 @@ export const DEVELOPMENT_USER_FIXTURES: readonly DevelopmentUserFixture[] = [
   developmentUser({
     username: "gamma",
     country: "NG",
-    parentUsername: "tree_root",
+    parentUsername: "root_user",
   }),
   developmentUser({
     username: "gamma_one",
@@ -192,7 +192,7 @@ export function validateDevelopmentUserFixtures(
   const central = byUsername.get("central_user");
   if (!central) throw new Error("central_user fixture is required");
   if (depths.get(central.username) !== 3)
-    throw new Error("central_user must be exactly depth 3 below tree_root");
+    throw new Error("central_user must be exactly depth 3 below root_user");
   const childrenOf = (parentUsername: string) =>
     fixtures
       .filter((fixture) => fixture.parentUsername === parentUsername)
@@ -367,7 +367,7 @@ async function assertRootHasNoParent(
       where child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
     [rootId],
   );
-  if (result.rowCount) throw new Error("tree_root already has a referral parent");
+  if (result.rowCount) throw new Error("root_user already has a referral parent");
 }
 
 async function verifyDevelopmentLogins(

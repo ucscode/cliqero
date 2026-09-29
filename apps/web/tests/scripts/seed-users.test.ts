@@ -11,7 +11,7 @@ describe("development referral user fixture", () => {
   it("defines one connected tree with unique users and emails", () => {
     const validation = validateDevelopmentUserFixtures();
     expect(DEVELOPMENT_USER_FIXTURES).toHaveLength(19);
-    expect(validation.root.username).toBe("tree_root");
+    expect(validation.root.username).toBe("root_user");
     expect(validation.central.username).toBe("central_user");
     expect(validation.depths.get("central_user")).toBe(3);
     expect(new Set(DEVELOPMENT_USER_FIXTURES.map((fixture) => fixture.username)).size).toBe(19);
@@ -111,7 +111,7 @@ describe("development referral user fixture", () => {
     expect(() =>
       validateDevelopmentUserFixtures(
         DEVELOPMENT_USER_FIXTURES.map((fixture) =>
-          fixture.username === "tree_root" ? { ...fixture, parentUsername: "alpha" } : fixture,
+          fixture.username === "root_user" ? { ...fixture, parentUsername: "alpha" } : fixture,
         ),
       ),
     ).toThrow("one root");

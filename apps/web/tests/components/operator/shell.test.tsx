@@ -11,8 +11,8 @@ describe("operator shell", () => {
     const html = renderToStaticMarkup(
       <OperatorShell
         capabilities={[]}
-        username="tree_root"
-        email="tree_root@example.test"
+        username="root_user"
+        email="root_user@example.test"
         activeSection="users"
       >
         <main>Users page</main>

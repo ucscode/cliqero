@@ -69,7 +69,7 @@ suite("development referral user seed", () => {
 
     const root = (
       await app.database.query<{ id: string }>(
-        `select uuid as id from identity_capability.accounts where username='tree_root'`,
+        `select uuid as id from identity_capability.accounts where username='root_user'`,
       )
     ).rows[0].id;
     const central = (

@@ -57,7 +57,7 @@ and blog seeds.
 The fixture tree is:
 
 ```text
-tree_root
+root_user
 ├── alpha
 │   ├── alpha_one
 │   │   ├── central_user
@@ -88,13 +88,13 @@ Email: <username>@example.test
 Password: CliqeroTest!2026
 ```
 
-For example, `tree_root` logs in as `tree_root@example.test` and
+For example, `root_user` logs in as `root_user@example.test` and
 `central_user` logs in as `central_user@example.test`. These credentials are
 development-only; never use them outside local or development environments.
 
-`tree_root` is the development system-root/operator account for inspecting the
+`root_user` is the development system-root/operator account for inspecting the
 whole seeded hierarchy. `central_user` is a normal customer/promoter account
-at depth 3 below `tree_root`, with two seeded downline generations.
+at depth 3 below `root_user`, with two seeded downline generations.
 
 ## Development purchase distribution scenario
 

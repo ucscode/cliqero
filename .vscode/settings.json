@@ -1,0 +1,3 @@
+{
+  "yaml.disableSchemaDetection": ["file:///home/ucscode/Dev/Ucscode/cliqero/config/site.yaml"]
+}
