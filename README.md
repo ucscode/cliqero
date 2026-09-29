@@ -42,14 +42,14 @@ Useful commands:
 just help
 just dev-ps
 just dev-logs
-just shell
-just worker-shell
-just db-shell
+just dev-shell
+just dev-worker-shell
+just dev-db-shell
 just test
 just typecheck
 
-For representative local-only catalogue and blog content, run `just seed` (or
-`just seed-catalogue` / `just seed-blog`). These commands are explicit and
+For representative local-only catalogue and blog content, run `just dev-seed` (or
+`just dev-seed-catalogue` / `just dev-seed-blog`). These commands are explicit and
 never run automatically; fixture scripts refuse production mode. Development
 authentication email is delivered to Mailpit at `http://localhost:8025`.
 AdminerEvo is available at `http://localhost:8080` for local PostgreSQL inspection;

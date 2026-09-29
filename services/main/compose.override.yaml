@@ -13,8 +13,8 @@ services:
       # Mount the repository in development so source, content, package manifests,
       # lockfile, and repository scripts stay live and host-authoritative.
       - ../..:/workspace
-      # Explicit Linux-native dependency volumes; update them with `just deps`
-      # or `just npm-add` without rebuilding the application image.
+      # Explicit Linux-native dependency volumes; update them with `just dev-deps`
+      # or `just dev-npm-add` without rebuilding the application image.
       - cliqero-node-modules:/workspace/node_modules
       - cliqero-web-node-modules:/workspace/apps/web/node_modules
       # Keep Next.js dev/build output in a disposable Docker volume instead of

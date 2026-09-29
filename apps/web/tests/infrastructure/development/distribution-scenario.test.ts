@@ -284,7 +284,7 @@ describe("development distribution scenario", () => {
       new DevelopmentDistributionScenario(app, "development").run({
         buyerUsername: "missing_user",
       }),
-    ).rejects.toThrow("Run just seed-users first");
+    ).rejects.toThrow("Run just dev-seed-users first");
     expect(app.fundingService.create).not.toHaveBeenCalled();
   });
 

@@ -26,9 +26,9 @@ values intended for the browser. Funding uses canonical USD for account
 credit, while collection and selectable payment currencies are provider facts.
 
 ```text
-just seed-catalogue
-just seed-blog
-just seed
+just dev-seed-catalogue
+just dev-seed-blog
+just dev-seed
 ```
 
 The catalogue seed creates 16 listings (published, draft, archived, varied
@@ -41,17 +41,17 @@ For local identity bootstrapping, use the single application console rather
 than editing PostgreSQL manually:
 
 ```text
-just cli --help
-just cli user:create --email operator@example.test --username operator --country NG
-just cli user:capability operator@example.test system.root
+just dev-cli --help
+just dev-cli user:create --email operator@example.test --username operator --country NG
+just dev-cli user:capability operator@example.test system.root
 ```
 
 ## Development referral user tree
 
-`just seed-users` creates a deterministic, real Better Auth user hierarchy for
+`just dev-seed-users` creates a deterministic, real Better Auth user hierarchy for
 local referral, promotion, hierarchy, earnings, withdrawal, and operator-flow
 testing. It is separate from catalogue and blog fixtures, and it creates no
-financial records. `just seed` includes this user fixture before the catalogue
+financial records. `just dev-seed` includes this user fixture before the catalogue
 and blog seeds.
 
 The fixture tree is:
@@ -102,7 +102,7 @@ After preparing the local fixtures, run a real wallet-funded checkout and
 purchase distribution without logging into multiple accounts:
 
 ```text
-just seed
+just dev-seed
 just dev-distribution
 just dev-distribution central_right_1 <listing-uuid>
 ```

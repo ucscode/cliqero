@@ -43,9 +43,9 @@ session. Preview pages are dynamic, private/no-store, and marked noindex.
 
 In local Compose development, Node dependencies live in the named
 `cliqero-node-modules` and `cliqero-web-node-modules` volumes, not host
-`node_modules`. Use `just deps` after synchronizing a lockfile or `just npm-add`
-and `just npm-remove` for dependency edits; these do not rebuild the image.
+`node_modules`. Use `just dev-deps` after synchronizing a lockfile or
+`just dev-npm-add` and `just dev-npm-remove` for dependency edits; these do not rebuild the image.
 `just dev-build` is reserved for Dockerfile, base-image, OS-package, and image
-build-stage changes. `just deps-clean` removes only dependency volumes, while
+build-stage changes. `just dev-deps-clean` removes only dependency volumes, while
 `just dev-clean` removes every development volume, including database and
 blog/media data.

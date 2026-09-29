@@ -12,7 +12,7 @@ dev:
 
 # Rebuild and start the development Compose stack. Use only after Dockerfile,
 # base-image, OS-package, or development image-build changes. Dependency changes
-# use `just deps` / `just npm-add` and do not require an image build.
+# use `just dev-deps` / `just dev-npm-add` and do not require an image build.
 dev-build:
 	docker compose up -d --build
 
@@ -26,17 +26,17 @@ dev-clean:
 	docker compose down -v --remove-orphans
 
 # Destructive: remove only the named development dependency volumes.
-deps-clean:
+dev-deps-clean:
 	docker compose stop main outbox-worker
 	@docker volume rm $$(docker volume ls -q --filter label=com.docker.compose.volume=cliqero-node-modules) $$(docker volume ls -q --filter label=com.docker.compose.volume=cliqero-web-node-modules)
 
 # Add/remove npm dependencies in the Linux development container without a build.
-npm-add package workspace="@cliqero/web":
+dev-npm-add package workspace="@cliqero/web":
 	docker compose stop main outbox-worker
 	docker compose run --rm --no-deps main npm install {{package}} --workspace {{workspace}}
 	docker compose up -d --no-build main outbox-worker
 
-npm-remove package workspace="@cliqero/web":
+dev-npm-remove package workspace="@cliqero/web":
 	docker compose stop main outbox-worker
 	docker compose run --rm --no-deps main npm uninstall {{package}} --workspace {{workspace}}
 	docker compose up -d --no-build main outbox-worker
@@ -83,24 +83,24 @@ prod-restart:
 	docker compose -f compose.yaml restart
 
 # Open a shell in the development main container
-shell:
+dev-shell:
 	docker compose exec main sh
 
 # Open a shell in the development outbox worker
-worker-shell:
+dev-worker-shell:
 	docker compose exec outbox-worker sh
 
 # Open psql in the development PostgreSQL container
-db-shell:
+dev-db-shell:
 	docker compose exec postgres psql -U "$${POSTGRES_USER:-cliqero}" -d "$${POSTGRES_DB:-cliqero}"
 
 # Run npm inside the development main container
-npm *args:
+dev-npm *args:
 	docker compose exec main npm {{args}}
 
 # Reconcile persisted development dependencies exactly with package-lock.json
 # Useful after pulling dependency changes or when node_modules gets out of sync.
-deps:
+dev-deps:
 	docker compose stop main outbox-worker
 	docker compose run --rm --no-deps main npm ci
 	docker compose up -d --no-build main outbox-worker
@@ -141,7 +141,8 @@ format-check:
 build:
 	npm run build --workspace @cliqero/web -- --webpack
 
-# Initialize/apply migrations to the isolated blog SQLite database
+# Initialize/apply migrations to the Blog SQLite database selected by
+# BLOG_DATABASE_PATH (or the app's default path).
 blog-migrate:
 	npm run blog:migrate --workspace @cliqero/web
 
@@ -149,32 +150,32 @@ blog-migrate:
 # Keeping this command in Compose gives it the same Node dependencies and
 # DATABASE_URL as the running application. TTY is intentionally preserved for
 # hidden password prompts.
-cli *args:
+dev-cli *args:
 	docker compose exec main npm run cli --workspace @cliqero/web -- {{args}}
 
 # Seed development-only catalogue fixtures (never run in production)
-seed-catalogue:
+dev-seed-catalogue:
 	docker compose exec -T main sh -lc 'NODE_ENV=development npm run seed:catalogue --workspace @cliqero/web'
 
 # Seed development-only authenticatable referral users (never run in production)
-seed-users:
+dev-seed-users:
 	docker compose exec -T main sh -lc 'NODE_ENV=development npm run seed:users --workspace @cliqero/web'
 
 # Seed development-only SQLite blog fixtures (never run in production)
-seed-blog:
+dev-seed-blog:
 	docker compose exec -T main sh -lc 'NODE_ENV=development npm run seed:blog --workspace @cliqero/web'
 
 # Seed all development fixtures
-seed: seed-users seed-catalogue seed-blog
+dev-seed: dev-seed-users dev-seed-catalogue dev-seed-blog
 
 # Create a real checkout-backed development purchase and print its persisted earnings distribution
 dev-distribution buyer="central_left_1" listing="":
 	docker compose exec -T -w /workspace/apps/web main node --import tsx src/infrastructure/development/distribution-scenario.ts {{quote(buyer)}} {{quote(listing)}}
 
 # Validate the development Compose configuration
-compose-dev-config:
+dev-compose-config:
 	docker compose config
 
 # Validate compose.yaml without the development override
-compose-prod-config:
+prod-compose-config:
 	docker compose -f compose.yaml config

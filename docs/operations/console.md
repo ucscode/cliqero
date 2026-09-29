@@ -14,10 +14,10 @@ to the same command tree.
 Start the development stack first, then use:
 
 ```bash
-just cli --help
+just dev-cli --help
 ```
 
-`just cli` executes `npm run cli --workspace @cliqero/web` through
+`just dev-cli` executes `npm run cli --workspace @cliqero/web` through
 `docker compose exec main`. Compose supplies `DATABASE_URL` for the `main`
 service, pointing at the development PostgreSQL container. This is the
 canonical invocation; direct npm execution is still available for low-level
@@ -26,11 +26,11 @@ work when a caller supplies a suitable `DATABASE_URL` itself.
 Command-specific help is available with the same interface:
 
 ```bash
-just cli user:create --help
-just cli user:password --help
-just cli user:capability --help
-just cli user:list --help
-just cli user:show --help
+just dev-cli user:create --help
+just dev-cli user:password --help
+just dev-cli user:capability --help
+just dev-cli user:list --help
+just dev-cli user:show --help
 ```
 
 Passwords are never printed. When a password option is omitted, the console
@@ -51,7 +51,7 @@ Create a normal application user with a Better Auth credential and a linked
 Cliqero account.
 
 ```bash
-just cli user:create \
+just dev-cli user:create \
   --email user@example.com \
   --username example \
   --country NG
@@ -72,7 +72,7 @@ privileged capability. It does not grant any other direct capability.
 For an interactive, history-safe password setup:
 
 ```bash
-just cli user:create --email user@example.com --username example --country NG
+just dev-cli user:create --email user@example.com --username example --country NG
 # Password and Confirm password prompts follow
 ```
 
@@ -83,7 +83,7 @@ This is a trusted administrative reset, not a self-service change: the old
 password is not required and no browser session is needed.
 
 ```bash
-just cli user:password user@example.com
+just dev-cli user:password user@example.com
 ```
 
 The argument may be an email, username, or Cliqero account ID. The console
@@ -100,9 +100,9 @@ store.
 Grant or revoke an existing account capability:
 
 ```bash
-just cli user:capability user@example.com catalogue.manage
-just cli user:capability user@example.com content.manage
-just cli user:capability user@example.com content.manage --revoke
+just dev-cli user:capability user@example.com catalogue.manage
+just dev-cli user:capability user@example.com content.manage
+just dev-cli user:capability user@example.com content.manage --revoke
 ```
 
 The currently supported privileged capabilities are the identifiers in the
@@ -123,8 +123,8 @@ an operator needs both financial mutation and reporting access.
 To bootstrap the first operator:
 
 ```bash
-just cli user:create --email admin@example.com --username admin
-just cli user:capability admin@example.com system.root
+just dev-cli user:create --email admin@example.com --username admin
+just dev-cli user:capability admin@example.com system.root
 ```
 
 The console protects the installation's last root: it refuses to revoke the
@@ -137,8 +137,8 @@ object includes the canonical account ID, email, username, country, and the
 currently assigned capabilities.
 
 ```bash
-just cli user:list
-just cli user:list --limit 100
+just dev-cli user:list
+just dev-cli user:list --limit 100
 ```
 
 `--limit` defaults to 50 and is bounded to a maximum of 200. This command is
@@ -151,9 +151,9 @@ Show one account as formatted JSON, including its canonical ID, email,
 username, country, and sorted capabilities.
 
 ```bash
-just cli user:show admin@example.com
-just cli user:show admin
-just cli user:show 00000000-0000-0000-0000-000000000000
+just dev-cli user:show admin@example.com
+just dev-cli user:show admin
+just dev-cli user:show 00000000-0000-0000-0000-000000000000
 ```
 
 The identifier can be an email, username, or Cliqero account ID. The command
@@ -164,9 +164,9 @@ fails clearly when no matching account exists.
 Every command is discoverable through Commander help. Use:
 
 ```bash
-just cli <command> --help
+just dev-cli <command> --help
 ```
 
-Only commands shown by `just cli --help` and implemented in the console should
+Only commands shown by `just dev-cli --help` and implemented in the console should
 be treated as supported; this document intentionally does not list future
 commands that do not yet exist.

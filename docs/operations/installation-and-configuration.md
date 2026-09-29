@@ -267,9 +267,9 @@ The PostgreSQL integration suite is intentionally run without file parallelism b
 ## Useful container access
 
 ```bash
-just shell
-just worker-shell
-just db-shell
+just dev-shell
+just dev-worker-shell
+just dev-db-shell
 ```
 
 ## Configuration boundaries

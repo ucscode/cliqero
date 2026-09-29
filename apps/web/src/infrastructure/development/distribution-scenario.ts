@@ -78,7 +78,7 @@ export class DevelopmentDistributionScenario {
       throw new Error(
         input.listingId
           ? `Published listing ${input.listingId} was not found; supply a real listing UUID.`
-          : "Default fixture listing was not found; run just seed-catalogue first.",
+          : "Default fixture listing was not found; run just dev-seed-catalogue first.",
       );
     if (listing.state !== "published")
       throw new Error(
@@ -96,7 +96,7 @@ export class DevelopmentDistributionScenario {
       ]);
       if (byLevel.get(1) !== expected[0].id || byLevel.get(2) !== expected[1].id)
         throw new Error(
-          "The central_left_1 fixture hierarchy differs from the expected Level 1/Level 2 relationships; run just seed-users and inspect referral relationships.",
+          "The central_left_1 fixture hierarchy differs from the expected Level 1/Level 2 relationships; run just dev-seed-users and inspect referral relationships.",
         );
     }
 
@@ -215,7 +215,7 @@ export class DevelopmentDistributionScenario {
     const account = rows[0];
     if (!account)
       throw new Error(
-        `${description} account '${username}' was not found; development fixtures may be missing. Run just seed-users first.`,
+        `${description} account '${username}' was not found; development fixtures may be missing. Run just dev-seed-users first.`,
       );
     return account;
   }
@@ -228,7 +228,7 @@ export class DevelopmentDistributionScenario {
     );
     if (!listing)
       throw new Error(
-        `Default listing ${DEFAULT_SELLER_USERNAME}/${DEFAULT_LISTING_EXTERNAL_KEY} was not found; run just seed-catalogue first.`,
+        `Default listing ${DEFAULT_SELLER_USERNAME}/${DEFAULT_LISTING_EXTERNAL_KEY} was not found; run just dev-seed-catalogue first.`,
       );
     return listing;
   }

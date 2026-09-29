@@ -4,7 +4,8 @@ The blog is an independent content capability. Blog content lives in a separate
 SQLite database (`BLOG_DATABASE_PATH`, default `data/blog/blog.sqlite`) and is
 never part of the Cliqero PostgreSQL migration chain. In Docker the file is
 mounted at `/workspace/data/blog` through the persistent `blog-data` volume;
-back it up as a normal SQLite file. Run `npm run blog:migrate` to initialize it.
+back it up as a normal SQLite file. Run `just blog-migrate` to initialize the
+database selected by `BLOG_DATABASE_PATH` (or the application's default path).
 
 Posts store Markdown, rendered with `react-markdown`, `remark-gfm`, and
 `rehype-sanitize`. The public site and RSS feed expose published posts only.
