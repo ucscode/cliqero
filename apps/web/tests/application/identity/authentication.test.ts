@@ -32,6 +32,7 @@ function dependencies(
     },
     linkCompletedAuthAccount: async () => true,
     removeAuthUser: async (id) => void removedAuthUsers.push(id),
+    removeAccountAuthIdentity: async () => undefined,
     resolveAuthIdentity,
     authUserEmail: async () => "buyer@example.com",
   };

@@ -48,10 +48,6 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
   }
   if (pattern.startsWith("/api/operator/listings"))
     return { mode: "account", scope: "catalogue:manage", capability: "catalogue.manage" };
-  if (pattern === "/api/operator/paystack/events")
-    return { mode: "account", scope: "operations:manage", capability: "finance.read" };
-  if (pattern.startsWith("/api/operator/paystack"))
-    return { mode: "account", scope: "operations:manage", capability: "finance.manage" };
   if (pattern.startsWith("/api/operator/purchases") || pattern === "/api/operator/settlement")
     return { mode: "account", scope: "operations:manage", capability: "finance.manage" };
   if (pattern.startsWith("/api/operator/withdrawals"))

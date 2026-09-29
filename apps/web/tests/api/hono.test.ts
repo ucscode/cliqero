@@ -80,6 +80,7 @@ function appWith(
           email: "sample@example.com",
           country: null,
           createdAt: new Date().toISOString(),
+          deletedAt: null,
           directReferralCount: 0,
           parent: null,
           purchaseCount: 0,
@@ -95,6 +96,7 @@ function appWith(
             email: input.email,
             country: input.country ?? null,
             createdAt: new Date().toISOString(),
+            deletedAt: null,
             directReferralCount: 0,
             parent: null,
             purchaseCount: 0,
@@ -109,11 +111,13 @@ function appWith(
           email: "sample@example.com",
           country: input.country ?? null,
           createdAt: new Date().toISOString(),
+          deletedAt: null,
           directReferralCount: 0,
           parent: null,
           purchaseCount: 0,
           latestParentReassignment: null,
         }),
+        delete: async () => undefined,
       },
       capabilityAdministration: {
         inspect: async (_actorId: string, accountId: string) => ({
@@ -168,6 +172,17 @@ function appWith(
           state: "confirmed" as const,
           confirmedAt: new Date().toISOString(),
         }),
+      },
+      operatorPayments: {
+        list: async () => ({ items: [], nextCursor: null }),
+        get: async () => ({ id: ordinaryId }),
+        events: async (_actorId: string, input: any) => [
+          { provider: input.provider ?? "paystack" },
+        ],
+      },
+      paymentReconciliation: {
+        eligible: async () => [],
+        reconcile: async (input: any) => ({ paymentId: input.paymentId, state: "completed" }),
       },
       operatorDistributions: {
         list: async () => ({ items: [], nextCursor: null }),
@@ -316,6 +331,43 @@ function appWith(
   );
 }
 describe("Hono API foundation", () => {
+  it("exposes reconciliation through the provider-neutral payment API", async () => {
+    const operator = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session",
+      capabilities: ["finance.manage", "finance.read"],
+      scopes: new Set<string>(),
+    };
+    const response = await appWith(operator).fetch(
+      new Request(
+        "http://localhost/api/operator/payments/00000000-0000-4000-8000-000000000099/reconcile",
+        {
+          method: "POST",
+          headers: { "idempotency-key": "manual-reconcile-test" },
+        },
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      attempt: { paymentId: "00000000-0000-4000-8000-000000000099", state: "completed" },
+    });
+
+    const apiKey = { ...operator, kind: "api_key" as const };
+    const paymentsPath = "http://localhost/api/operator/payments";
+    expect(
+      (await appWith({ ...apiKey, scopes: new Set<string>() }).fetch(new Request(paymentsPath)))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await appWith({ ...apiKey, scopes: new Set(["payments:read"]) }).fetch(
+          new Request(paymentsPath),
+        )
+      ).status,
+    ).toBe(200);
+  });
+
   it("protects catalogue category CRUD with catalogue capability and scope", async () => {
     const path = "http://localhost/api/operator/catalogue/categories";
     expect((await appWith().fetch(new Request(path))).status).toBe(401);
@@ -701,6 +753,18 @@ describe("Hono API foundation", () => {
     expect(paths["/api/me/session"]).toBeDefined();
     expect(paths["/api/operator/overview"]).toBeDefined();
     expect(paths["/api/operator/accounts"]).toBeDefined();
+    expect(paths["/api/operator/accounts"].get).toBeDefined();
+    expect(paths["/api/operator/accounts"].post).toBeDefined();
+    expect(paths["/api/operator/accounts/{accountId}"].get).toBeDefined();
+    expect(paths["/api/operator/accounts/{accountId}"].patch).toBeDefined();
+    expect(paths["/api/operator/accounts/{accountId}"].delete).toBeDefined();
+    expect(paths["/api/operator/accounts/bulk"].post).toBeDefined();
+    expect(paths["/api/operator/payments"].get.tags).toContain("Payments");
+    expect(paths["/api/operator/payments/{paymentId}/reconcile"].post).toBeDefined();
+    expect(paths["/api/operator/payments/events"].get).toBeDefined();
+    expect(paths).not.toHaveProperty("/api/operator/paystack/events");
+    expect(paths).not.toHaveProperty("/api/operator/paystack/reconcile");
+    expect(paths).not.toHaveProperty("/api/payments/{provider}/ipn");
     expect(paths["/api/operator/accounts"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "accounts:manage",
@@ -1537,11 +1601,7 @@ describe("Hono API foundation", () => {
         ).toBeTruthy();
       }
     }
-    expect(getLegacyRouteAccess("/api/operator/paystack/events", "GET")).toEqual({
-      mode: "account",
-      scope: "operations:manage",
-      capability: "finance.read",
-    });
+    expect(getLegacyRouteAccess("/api/operator/paystack/events", "GET")).toBeNull();
     expect(getLegacyRouteAccess("/api/operator/distribution-policy", "GET")).toEqual({
       mode: "account",
       scope: "operations:manage",
@@ -1864,7 +1924,47 @@ describe("Hono API foundation", () => {
           new Request(`http://localhost/api/operator/accounts/${target}`, { method: "DELETE" }),
         )
       ).status,
-    ).toBe(404);
+    ).toBe(204);
+
+    const duplicateBulkIds = await appWith({
+      ...base,
+      capabilities: ["accounts.manage"],
+    }).fetch(
+      new Request("http://localhost/api/operator/accounts/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          ids: [
+            "00000000-0000-4000-8000-000000000007",
+            "00000000-0000-4000-8000-000000000007".toUpperCase(),
+          ],
+        }),
+      }),
+    );
+    expect(duplicateBulkIds.status).toBe(400);
+
+    const deletePath = `http://localhost/api/operator/accounts/${target}`;
+    expect(
+      (
+        await appWith({
+          ...base,
+          kind: "api_key",
+          capabilities: ["system.root", "accounts.manage"],
+          scopes: new Set(["operations:manage"]),
+        }).fetch(new Request(deletePath, { method: "DELETE" }))
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await appWith({
+          ...base,
+          kind: "api_key",
+          capabilities: ["system.root", "accounts.manage"],
+          scopes: new Set(["accounts:manage"]),
+        }).fetch(new Request(deletePath, { method: "DELETE" }))
+      ).status,
+    ).toBe(204);
   });
   it("keeps capability administration session-only and explicit", async () => {
     const target = "00000000-0000-4000-8000-000000000002";

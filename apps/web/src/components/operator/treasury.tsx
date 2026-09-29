@@ -286,7 +286,7 @@ export function OperatorTreasuryPage() {
             </Select>
           </OperatorFilterField>
           <div className="flex items-end gap-2">
-            <Button type="submit" variant="secondary" disabled={collection.loading}>
+            <Button type="submit" variant="action" disabled={collection.loading}>
               Apply filters
             </Button>
             <HoneypotField />

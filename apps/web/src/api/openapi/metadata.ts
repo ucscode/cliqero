@@ -113,6 +113,32 @@ function normalizeAuthorizationResponses(document: OpenApiDocument) {
     }
 }
 
+function defaultTag(path: string): string {
+  if (path === "/api/openapi.json") return "Internal UI";
+  if (path.startsWith("/api/webhooks/") || path.includes("/ipn")) return "Provider callbacks";
+  if (
+    path.startsWith("/api/me/") ||
+    path.startsWith("/api/operator/overview") ||
+    path.includes("/development/")
+  )
+    return "Internal UI";
+  if (path.includes("capabilities")) return "Capabilities";
+  if (path.includes("payments") || path.includes("payment-callback")) return "Payments";
+  if (path.includes("account") || path.includes("api-keys")) return "Accounts";
+  if (path.includes("listing") || path.includes("catalogue")) return "Catalogue";
+  if (path.includes("blog")) return "Blog";
+  if (path.includes("review")) return "Reviews";
+  if (path.includes("purchase") || path.includes("checkout")) return "Purchases";
+  if (path.includes("wallet") || path.includes("funding")) return "Wallet";
+  if (path.includes("withdrawal")) return "Withdrawals";
+  if (path.includes("hierarchy")) return "Hierarchy";
+  if (path.includes("referral")) return "Referrals";
+  if (path.includes("treasury")) return "Treasury";
+  if (path.includes("earning") || path.includes("distribution") || path.includes("settlement"))
+    return "Earnings";
+  return "Core/System";
+}
+
 /** Adds compatibility and capability metadata without capability policy in the API composition root. */
 export function applyOpenApiMetadata(
   document: OpenApiDocument,
@@ -153,6 +179,34 @@ export function applyOpenApiMetadata(
         addAuthenticationResponses(operation, entry);
       }
     }
+
+  for (const [path, pathItem] of Object.entries(document.paths))
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!["get", "post", "put", "patch", "delete"].includes(method)) continue;
+      if (!Array.isArray(operation.tags) || operation.tags.length === 0)
+        operation.tags = [defaultTag(path)];
+    }
+
+  if (!Array.isArray((document as Record<string, unknown>).tags)) {
+    (document as Record<string, unknown>).tags = [
+      "Accounts",
+      "Catalogue",
+      "Blog",
+      "Reviews",
+      "Payments",
+      "Purchases",
+      "Wallet",
+      "Withdrawals",
+      "Referrals",
+      "Hierarchy",
+      "Earnings",
+      "Treasury",
+      "Capabilities",
+      "Provider callbacks",
+      "Internal UI",
+      "Core/System",
+    ].map((name) => ({ name }));
+  }
 
   normalizeAuthorizationResponses(document);
 }

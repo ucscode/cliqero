@@ -152,7 +152,7 @@ export function OperatorReviews() {
         return applied;
       }}
       toolbarActions={
-        <Button type="submit" variant="secondary" disabled={collection.loading}>
+        <Button type="submit" variant="action" disabled={collection.loading}>
           Apply
         </Button>
       }

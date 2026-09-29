@@ -137,7 +137,7 @@ export function OperatorNetwork() {
           void searchAccounts();
         }}
         actions={
-          <Button type="submit" variant="secondary">
+          <Button type="submit" variant="action">
             Search
           </Button>
         }

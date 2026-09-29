@@ -194,6 +194,11 @@ export class AuthenticationService {
     await this.gateway.resetPassword(authUserId, newPassword);
   }
 
+  /** Permanently removes a deleted account's Better Auth identity and sessions. */
+  async removeAccountIdentity(accountId: string): Promise<void> {
+    await this.identity.removeAccountAuthIdentity(accountId);
+  }
+
   async hasPasswordCredential(authUserId: string): Promise<boolean> {
     return this.gateway.hasPasswordCredential(authUserId);
   }

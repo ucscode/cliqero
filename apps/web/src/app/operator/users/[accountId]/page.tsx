@@ -1,6 +1,7 @@
 import { OperatorShell } from "@/components/operator/shell";
 import { OperatorUserDetail } from "@/components/operator/users";
 import { requireOperatorPage } from "../../operator-access";
+import { hasCapability } from "@/modules/identity/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,10 @@ export default async function OperatorUserDetailPage({
   const access = await requireOperatorPage(`/operator/users/${encodeURIComponent(accountId)}`);
   return (
     <OperatorShell {...access} activeSection="users">
-      <OperatorUserDetail accountId={accountId} />
+      <OperatorUserDetail
+        accountId={accountId}
+        canManage={hasCapability(access.capabilities, "accounts.manage")}
+      />
     </OperatorShell>
   );
 }

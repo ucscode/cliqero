@@ -1,19 +1,29 @@
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
-import type {
-  PaystackPaymentStore,
-  PaymentVerificationUseCase,
-  PaystackOperationsInspection,
-  ReconciliationAttempt,
-  ReconciliationOperations,
-} from "./contracts";
+import type { PaymentRecord, PaymentRepository } from "@/modules/payment";
+import { PublicApplicationError } from "@/kernel/errors";
+import type { ReconciliationAttempt, ReconciliationOperations } from "./reconciliation-contracts";
 
+export interface ReconciliationPaymentRepository extends PaymentRepository {
+  findPendingByProviderOlderThan(
+    provider: string | undefined,
+    olderThan: Date,
+    limit: number,
+  ): Promise<readonly PaymentRecord[]>;
+}
+
+export interface PaymentVerificationUseCase {
+  process(paymentId: string): Promise<unknown>;
+}
+
+/** Reconciles a persisted payment through its registered provider adapter. */
 export class PaymentReconciliationService {
   constructor(
-    private readonly payments: PaystackPaymentStore,
+    private readonly payments: ReconciliationPaymentRepository,
     private readonly verification: PaymentVerificationUseCase,
     private readonly operations: ReconciliationOperations,
     private readonly operators: OperatorAuthorizationService,
   ) {}
+
   async reconcile(input: {
     actorId: string;
     paymentId: string;
@@ -22,9 +32,7 @@ export class PaymentReconciliationService {
   }): Promise<ReconciliationAttempt> {
     await this.operators.requireCapability(input.actorId, "finance.manage");
     const payment = await this.payments.findById(input.paymentId);
-    if (!payment) throw new Error("Payment not found");
-    if (payment.providerName !== "paystack")
-      throw new Error("Only Paystack payments can be reconciled by this operation");
+    if (!payment) throw new PublicApplicationError("Payment not found.", "not_found", 404);
     const begun = await this.operations.begin(input);
     if (!begun.created) return begun.attempt;
     if (payment.state === "verified") {
@@ -51,23 +59,18 @@ export class PaymentReconciliationService {
       throw error;
     }
   }
-  async eligible(input: { actorId: string; olderThanMinutes: number; limit: number }) {
+
+  async eligible(input: {
+    actorId: string;
+    olderThanMinutes: number;
+    limit: number;
+    provider?: string;
+  }) {
     await this.operators.requireCapability(input.actorId, "finance.manage");
     return this.payments.findPendingByProviderOlderThan(
-      "paystack",
+      input.provider,
       new Date(Date.now() - input.olderThanMinutes * 60_000),
       input.limit,
     );
-  }
-}
-
-export class PaystackOperationsInspectionService {
-  constructor(
-    private readonly operations: PaystackOperationsInspection,
-    private readonly operators: OperatorAuthorizationService,
-  ) {}
-  async listEvents(actorId: string, limit: number) {
-    await this.operators.requireCapability(actorId, "finance.read");
-    return this.operations.listProviderEvents(limit);
   }
 }

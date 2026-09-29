@@ -40,16 +40,18 @@ The development audit is reproducible with `node scripts/audit-http-api.mjs`. It
 
 These routes were exercised with an authenticated non-operator and rejected (403), proving the public authorization boundary. Their valid domain behavior is covered by PostgreSQL integration tests rather than granting operator authority in the public audit fixture.
 
-| Method | Path                               | Capability                     | Input               | Success | Persisted fact                            | Idem.            | HTTP auth result      |
-| ------ | ---------------------------------- | ------------------------------ | ------------------- | ------: | ----------------------------------------- | ---------------- | --------------------- |
-| GET    | `/api/operator/paystack/events`    | provider audit                 | limit               |     200 | none                                      | n/a              | 403                   |
-| GET    | `/api/operator/paystack/reconcile` | legacy provider reconciliation | age/limit           |     200 | none                                      | n/a              | 403                   |
-| POST   | `/api/operator/paystack/reconcile` | legacy provider reconciliation | payment id          |     200 | reconciliation attempt                    | required         | non-operator rejected |
-| POST   | `/api/operator/purchases/reverse`  | reversal                       | purchase id, reason |     200 | compensating entries/reversal             | required         | 403                   |
-| POST   | `/api/operator/settlement`         | earnings settlement            | batch size          |     200 | settlements                               | entry uniqueness | 403                   |
-| GET    | `/api/operator/withdrawals`        | withdrawal operations          | state?              |     200 | none                                      | n/a              | 403                   |
-| GET    | `/api/operator/withdrawals/:id`    | withdrawal operations          | path id             |     200 | none                                      | n/a              | 403                   |
-| PATCH  | `/api/operator/withdrawals/:id`    | withdrawal operations          | status/reason/note  |     200 | approval, rejection, or manual completion | state transition | 403                   |
+| Method | Path                                           | Capability                | Input                              | Success | Persisted fact                            | Idem.            | HTTP auth result                 |
+| ------ | ---------------------------------------------- | ------------------------- | ---------------------------------- | ------: | ----------------------------------------- | ---------------- | -------------------------------- |
+| GET    | `/api/operator/payments`                       | payment collection        | provider/state/search/cursor/limit |     200 | none                                      | n/a              | finance.read + payments:read     |
+| GET    | `/api/operator/payments/{paymentId}`           | payment detail            | payment id                         |     200 | none                                      | n/a              | finance.read + payments:read     |
+| GET    | `/api/operator/payments/events`                | provider-event projection | optional provider, limit           |     200 | none                                      | n/a              | finance.read + payments:read     |
+| GET    | `/api/operator/payments/reconcile`             | reconciliation candidates | optional provider, age, limit      |     200 | none                                      | n/a              | finance.manage + payments:manage |
+| POST   | `/api/operator/payments/{paymentId}/reconcile` | payment reconciliation    | payment id                         |     200 | reconciliation attempt                    | required         | finance.manage + payments:manage |
+| POST   | `/api/operator/purchases/reverse`              | reversal                  | purchase id, reason                |     200 | compensating entries/reversal             | required         | 403                              |
+| POST   | `/api/operator/settlement`                     | earnings settlement       | batch size                         |     200 | settlements                               | entry uniqueness | 403                              |
+| GET    | `/api/operator/withdrawals`                    | withdrawal operations     | state?                             |     200 | none                                      | n/a              | 403                              |
+| GET    | `/api/operator/withdrawals/:id`                | withdrawal operations     | path id                            |     200 | none                                      | n/a              | 403                              |
+| PATCH  | `/api/operator/withdrawals/:id`                | withdrawal operations     | status/reason/note                 |     200 | approval, rejection, or manual completion | state transition | 403                              |
 
 The audit intentionally does not call a live payment provider. Withdrawal
 execution happens outside Cliqero; the PATCH above records the completed action.

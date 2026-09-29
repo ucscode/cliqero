@@ -4,6 +4,7 @@ import type { ProfileService } from "@/application/account/profile";
 import type { AuditRecorder } from "@/application/shared/audit";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { siteConfig } from "@/config/site";
+import { PublicApplicationError } from "@/kernel/errors";
 
 export interface OperatorAccountReader {
   get(accountId: string): Promise<{
@@ -13,6 +14,7 @@ export interface OperatorAccountReader {
     email: string | null;
     country: string | null;
     createdAt: string;
+    deletedAt: string | null;
     directReferralCount: number;
     parent: { id: string; username: string; displayName: string | null } | null;
     purchaseCount: number;
@@ -23,6 +25,29 @@ export interface OperatorAccountReader {
       occurredAt: string;
     } | null;
   }>;
+}
+
+export interface OperatorAccountDeletionRepository {
+  lockForDeletion(
+    accountId: string,
+    actorId: string,
+  ): Promise<{
+    accountId: string;
+    deletedAt: string | null;
+    parentId: string | null;
+    childCount: number;
+    isSystemRoot: boolean;
+    actorIsSystemRoot: boolean;
+    systemRootCount: number;
+  } | null>;
+  reparentChildren(accountId: string, parentId: string): Promise<number>;
+  archiveOwnedListings(accountId: string): Promise<number>;
+  anonymizeWithdrawalDestinations(accountId: string): Promise<number>;
+  revokeReferralAttributions(accountId: string): Promise<void>;
+  revokeApiKeysAndSessions(accountId: string): Promise<void>;
+  removeCapabilities(accountId: string): Promise<void>;
+  tombstone(accountId: string): Promise<void>;
+  removeHierarchyEdge(accountId: string): Promise<void>;
 }
 
 export type OperatorAccountProfileUpdate = {
@@ -38,6 +63,7 @@ export class OperatorAccountManagementService {
     private readonly accounts: OperatorAccountReader,
     private readonly audit: AuditRecorder,
     private readonly uow: UnitOfWork,
+    private readonly deletion: OperatorAccountDeletionRepository,
   ) {}
 
   async create(
@@ -86,6 +112,64 @@ export class OperatorAccountManagementService {
         newState: { username: updated.username, country: updated.country },
       });
       return updated;
+    });
+  }
+
+  async delete(actorId: string, accountId: string): Promise<void> {
+    if (actorId === accountId)
+      throw new PublicApplicationError(
+        "You cannot delete the account used for this request.",
+        "account_self_delete_forbidden",
+        409,
+      );
+
+    await this.uow.transaction(async () => {
+      const target = await this.deletion.lockForDeletion(accountId, actorId);
+      if (!target || target.deletedAt)
+        throw new PublicApplicationError("Account not found", "not_found", 404);
+      if (target.isSystemRoot && !target.actorIsSystemRoot)
+        throw new PublicApplicationError(
+          "Only a root operator can delete another root account.",
+          "forbidden",
+          403,
+        );
+      if (target.isSystemRoot && target.systemRootCount <= 1)
+        throw new PublicApplicationError(
+          "The final system.root account cannot be deleted.",
+          "last_root_account",
+          409,
+        );
+      if (target.parentId === null && target.childCount > 0)
+        throw new PublicApplicationError(
+          "A hierarchy root with descendants cannot be deleted. Reassign the hierarchy first.",
+          "hierarchy_root_has_descendants",
+          409,
+        );
+
+      const childrenReparented = target.parentId
+        ? await this.deletion.reparentChildren(accountId, target.parentId)
+        : 0;
+      const listingsArchived = await this.deletion.archiveOwnedListings(accountId);
+      await this.deletion.anonymizeWithdrawalDestinations(accountId);
+      await this.deletion.revokeReferralAttributions(accountId);
+      await this.deletion.revokeApiKeysAndSessions(accountId);
+      await this.deletion.removeCapabilities(accountId);
+      await this.deletion.tombstone(accountId);
+      await this.deletion.removeHierarchyEdge(accountId);
+      await this.authentication.removeAccountIdentity(accountId);
+      await this.audit.record({
+        actorId,
+        action: "operator.account_deleted",
+        subjectType: "account",
+        subjectId: accountId,
+        previousState: null,
+        newState: {
+          deleted: true,
+          childrenReparented,
+          listingsArchived,
+          usernameReusable: true,
+        },
+      });
     });
   }
 }

@@ -373,12 +373,14 @@ suite("Paystack webhook to commerce consequence", () => {
   });
   it("operator inspection is authorized and sanitized", async () => {
     const { buyer } = await setup();
-    await expect(app.paystackInspection.listEvents(buyer.id, 10)).rejects.toThrow("Forbidden");
+    await expect(
+      app.operatorPayments.events(buyer.id, { provider: "paystack", limit: 10 }),
+    ).rejects.toThrow("Forbidden");
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'finance.read')`,
       [buyer.id],
     );
-    const rows = await app.paystackInspection.listEvents(buyer.id, 10);
+    const rows = await app.operatorPayments.events(buyer.id, { provider: "paystack", limit: 10 });
     expect(rows).toEqual([]);
     expect(JSON.stringify(rows)).not.toContain(secret);
   });

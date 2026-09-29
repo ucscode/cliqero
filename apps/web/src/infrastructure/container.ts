@@ -51,10 +51,9 @@ import {
 import { PurchaseDistributionProcessor } from "@/processors/purchase/distribution";
 import { PostgresOperatorAuthorizationService } from "@/infrastructure/postgres/identity/operator";
 import { PostgresPaymentOperationsRepository } from "./postgres/payment/operations";
-import {
-  PaymentReconciliationService,
-  PaystackOperationsInspectionService,
-} from "@/application/payment/paystack/reconciliation";
+import { PaymentReconciliationService } from "@/application/payment/reconciliation";
+import { OperatorPaymentService } from "@/application/payment/operator";
+import { PostgresOperatorPaymentReader } from "@/infrastructure/postgres/operator/payments";
 import { PostgresReversalRepository } from "./postgres/purchase/reversals";
 import { PurchaseReversalProcessor } from "@/processors/purchase/reversal";
 import { SettlementProcessor } from "@/processors/ledger/settlement";
@@ -64,7 +63,6 @@ import { PostgresLedgerFundsReservationService } from "@/infrastructure/postgres
 import { PostgresWithdrawalRepository } from "@/infrastructure/postgres/withdrawal/withdrawals";
 import { WithdrawalPolicyLoader } from "@/modules/withdrawal/policy/loader";
 import { WithdrawalService } from "@/application/withdrawal/service";
-import { PostgresPaystackOperationsRepository } from "@/infrastructure/postgres/payment/paystack/operations";
 import { ExchangeRateService } from "@/modules/money/exchange-service";
 import { FrankfurterProvider } from "@/providers/money/frankfurter/provider";
 import { FawazProvider } from "@/providers/money/fawaz/provider";
@@ -106,7 +104,10 @@ import { ApiPrincipalResolver } from "@/infrastructure/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
 import { PostgresHierarchyReader } from "@/infrastructure/postgres/hierarchy/service";
 import { OperatorOverviewService } from "@/infrastructure/postgres/operator/overview";
-import { OperatorAccountService } from "@/infrastructure/postgres/operator/accounts";
+import {
+  OperatorAccountService,
+  PostgresOperatorAccountDeletionRepository,
+} from "@/infrastructure/postgres/operator/accounts";
 import { OperatorAccountManagementService } from "@/application/operator/accounts";
 import { CapabilityAdministrationService } from "@/application/identity/capability-administration";
 import { PostgresCapabilityAssignmentStore } from "@/infrastructure/postgres/identity/capability-administration";
@@ -353,9 +354,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     const provider = nowPayments();
     return provider ? new NowPaymentsIpnIngress(provider, funding(), database) : null;
   });
-  const paystackInspectionOperations = lazy(
-    () => new PostgresPaystackOperationsRepository(database),
-  );
+  const operatorPaymentReader = lazy(() => new PostgresOperatorPaymentReader(database));
   const paymentInitialization = lazy(
     () =>
       new PaymentInitializationProcessor(
@@ -559,8 +558,8 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         operators(),
       ),
   );
-  const paystackInspection = lazy(
-    () => new PaystackOperationsInspectionService(paystackInspectionOperations(), operators()),
+  const operatorPayments = lazy(
+    () => new OperatorPaymentService(operatorPaymentReader(), operators()),
   );
   const purchaseReversal = lazy(
     () => new PurchaseReversalProcessor(purchases(), ledger(), reversals(), outbox(), database),
@@ -577,6 +576,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const accountProjections = lazy(() => new AccountProjectionService(database));
   const operatorOverview = lazy(() => new OperatorOverviewService(database));
   const operatorAccounts = lazy(() => new OperatorAccountService(database));
+  const operatorAccountDeletion = lazy(
+    () => new PostgresOperatorAccountDeletionRepository(database),
+  );
   const operatorAccountManagement = lazy(
     () =>
       new OperatorAccountManagementService(
@@ -585,6 +587,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         operatorAccounts(),
         auditRecorder(),
         database,
+        operatorAccountDeletion(),
       ),
   );
   const operatorDistributions = lazy(() => new OperatorDistributionService(database));
@@ -790,8 +793,8 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     get paymentReconciliation() {
       return paymentReconciliation();
     },
-    get paystackInspection() {
-      return paystackInspection();
+    get operatorPayments() {
+      return operatorPayments();
     },
     get settlementPolicy() {
       return settlementPolicy();

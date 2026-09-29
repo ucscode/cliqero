@@ -124,14 +124,14 @@ export class PostgresPaymentRepository implements PaymentRepository {
       : null;
   }
   async findPendingByProviderOlderThan(
-    providerName: string,
+    providerName: string | undefined,
     before: Date,
     limit: number,
   ): Promise<readonly PaymentRecord[]> {
     const rows = (
       await this.sql.query<{ id: string }>(
-        `select uuid as id from payment_capability.payments where provider_name=$1 and state='pending' and created_at<$2 order by created_at,id limit $3`,
-        [providerName, before, limit],
+        `select uuid as id from payment_capability.payments where ($1::text is null or provider_name=$1) and state in ('pending','awaiting_payment','verification_pending','verification_blocked','reconciliation_pending') and created_at<$2 order by created_at,id limit $3`,
+        [providerName ?? null, before, limit],
       )
     ).rows;
     return Promise.all(rows.map((row) => this.findById(row.id))).then((values) =>

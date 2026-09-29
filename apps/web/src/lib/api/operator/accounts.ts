@@ -9,6 +9,7 @@ export type OperatorAccountSummary = {
 };
 
 export type OperatorAccountDetail = OperatorAccountSummary & {
+  deletedAt: string | null;
   parent: { id: string; username: string; displayName: string | null } | null;
   purchaseCount: number;
   latestParentReassignment: {

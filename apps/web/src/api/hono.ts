@@ -18,6 +18,7 @@ import { registerOperatorListingCategoryRoutes } from "./routes/operator/catalog
 import { registerOperatorFinanceRoutes } from "./routes/operator/finance";
 import { registerOperatorWithdrawalRoutes } from "./routes/operator/withdrawal";
 import { registerOperatorTreasuryRoutes } from "./routes/operator/treasury";
+import { registerOperatorPaymentRoutes } from "./routes/operator/payments";
 import { registerHierarchyRoutes } from "./routes/hierarchy";
 import { registerApiKeyRoutes } from "./routes/api-keys";
 import { registerFundingRoutes } from "./routes/funding";
@@ -35,6 +36,7 @@ import { operatorTreasuryOpenApiMetadata } from "./routes/operator/treasury/meta
 import { operatorWithdrawalOpenApiMetadata } from "./routes/operator/withdrawal/metadata";
 import { operatorReviewOpenApiMetadata } from "./routes/reviews/metadata";
 import { operatorCatalogueOpenApiMetadata } from "./routes/operator/catalogue/metadata";
+import { operatorPaymentsOpenApiMetadata } from "./routes/operator/payments/metadata";
 
 export function createApiApp(
   container: ApplicationContainer,
@@ -81,6 +83,7 @@ export function createApiApp(
         operatorWithdrawalOpenApiMetadata,
         operatorReviewOpenApiMetadata,
         operatorCatalogueOpenApiMetadata,
+        operatorPaymentsOpenApiMetadata,
       ]);
       delete document.paths["/api/openapi.json"];
       return c.json(document, 200) as never;
@@ -93,6 +96,7 @@ export function createApiApp(
   registerOperatorFinanceRoutes(app, container);
   registerOperatorWithdrawalRoutes(app, container);
   registerOperatorTreasuryRoutes(app, container);
+  registerOperatorPaymentRoutes(app, container);
   registerHierarchyRoutes(app, container);
   registerApiKeyRoutes(app, container);
   registerReviewRoutes(app, container);

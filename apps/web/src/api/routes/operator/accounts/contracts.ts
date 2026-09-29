@@ -10,6 +10,7 @@ export const operatorAccountSummarySchema = z.object({
   directReferralCount: z.number().int().nonnegative(),
 });
 export const operatorAccountDetailSchema = operatorAccountSummarySchema.extend({
+  deletedAt: z.string().nullable(),
   parent: z
     .object({ id: z.string().uuid(), username: z.string(), displayName: z.string().nullable() })
     .nullable(),

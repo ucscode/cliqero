@@ -35,8 +35,6 @@ import * as operatorListingPublish from "@/api/compat/operator/listings/[id]/pub
 import * as operatorListingRestore from "@/api/compat/operator/listings/[id]/restore/route";
 import * as operatorListingExport from "@/api/compat/operator/listings/export/route";
 import * as operatorListingImport from "@/api/compat/operator/listings/import/route";
-import * as operatorPaystackEvents from "@/api/compat/operator/paystack/events/route";
-import * as operatorPaystackReconcile from "@/api/compat/operator/paystack/reconcile/route";
 import * as operatorPurchaseReverse from "@/api/compat/operator/purchases/reverse/route";
 import * as operatorSettlement from "@/api/compat/operator/settlement/route";
 import * as operatorTreasury from "@/api/compat/operator/treasury/route";
@@ -120,8 +118,6 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/operator/listings/import", module: operatorListingImport },
   { pattern: "/api/operator/listings/:id", module: operatorListingById },
   { pattern: "/api/operator/listings", module: operatorListings },
-  { pattern: "/api/operator/paystack/events", module: operatorPaystackEvents },
-  { pattern: "/api/operator/paystack/reconcile", module: operatorPaystackReconcile },
   { pattern: "/api/operator/purchases/reverse", module: operatorPurchaseReverse },
   { pattern: "/api/operator/settlement", module: operatorSettlement },
   { pattern: "/api/operator/treasury/entries/:id", module: operatorTreasuryEntry },

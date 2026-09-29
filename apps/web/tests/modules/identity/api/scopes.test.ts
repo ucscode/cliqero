@@ -14,3 +14,17 @@ describe("account management API scope", () => {
     );
   });
 });
+
+describe("payment operator API scopes", () => {
+  it("separates payment inspection from reconciliation authority", () => {
+    expect(OPERATOR_SCOPE_CAPABILITIES["payments:read"]).toEqual(["finance.read"]);
+    expect(OPERATOR_SCOPE_CAPABILITIES["payments:manage"]).toEqual(["finance.manage"]);
+    expect(grantableScopes({ capabilities: ["finance.read"] } as never)).toContain("payments:read");
+    expect(grantableScopes({ capabilities: ["finance.read"] } as never)).not.toContain(
+      "payments:manage",
+    );
+    expect(grantableScopes({ capabilities: ["finance.manage"] } as never)).toContain(
+      "payments:manage",
+    );
+  });
+});

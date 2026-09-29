@@ -48,13 +48,18 @@ password resets are not operator profile fields. Username uniqueness is
 enforced by the domain and database. The list's Add user and Edit account
 actions are shown only to principals with account-management authority.
 
-There is deliberately no Delete or Deactivate action yet. Account rows are
-referenced by financial ledgers, purchases, referral relationships, audit
-records, API keys, and authentication links. The current identity/authentication
-model has no deactivation lifecycle enforced across sessions and API keys, so a
-UI-only status or hard delete would be unsafe. A future lifecycle feature must
-define and enforce those semantics server-side before adding a destructive row
-action.
+Authorized account managers can delete an account from its row, detail page, or
+the bounded bulk action. Deletion is transactional and tombstones the canonical
+account identity: Better Auth identity and sessions are removed, API keys and
+integrations are revoked, profile metadata and saved payout-destination details
+are cleared, and the public username is released for reuse. Historical purchase, payment, ledger, withdrawal,
+distribution, and audit facts retain their account UUID and project the identity
+as `Deleted user` where a profile is shown. Owned listings are archived. A
+non-root account's direct referrals are reparented to its current parent; a
+hierarchy root with descendants must first be reassigned. Operators cannot
+delete themselves or the final `system.root` account. Deletion is exposed as
+`DELETE /api/operator/accounts/{accountId}` and bounded
+`POST /api/operator/accounts/bulk` (`action: delete`).
 
 Capability changes use explicit, idempotent grant/revoke operations:
 

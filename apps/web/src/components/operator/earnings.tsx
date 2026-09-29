@@ -149,7 +149,7 @@ export function OperatorEarningsList() {
         return collection.apply({ search: search.trim(), state });
       }}
       toolbarActions={
-        <Button type="submit" variant="secondary" disabled={collection.loading}>
+        <Button type="submit" variant="action" disabled={collection.loading}>
           Apply filters
         </Button>
       }

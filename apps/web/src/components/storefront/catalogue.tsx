@@ -163,13 +163,7 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
               <option value="desc">Descending</option>
             </Select>
           </label>
-          <Button
-            type="button"
-            variant="secondary"
-            aria-label="Apply sorting"
-            className="focus-visible:ring-2 focus-visible:ring-emerald-600"
-            onClick={applySorting}
-          >
+          <Button type="button" variant="action" aria-label="Apply sorting" onClick={applySorting}>
             <Check className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>

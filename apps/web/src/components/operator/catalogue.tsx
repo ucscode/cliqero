@@ -343,7 +343,7 @@ export function OperatorCatalogueList() {
           <Button asChild variant="secondary">
             <Link href="/operator/catalogue/categories">Manage categories</Link>
           </Button>
-          <Button type="submit" variant="secondary" disabled={collection.loading}>
+          <Button type="submit" variant="action" disabled={collection.loading}>
             Apply filters
           </Button>
         </div>

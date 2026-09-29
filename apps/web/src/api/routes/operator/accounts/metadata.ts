@@ -15,4 +15,16 @@ export const operatorAccountsOpenApiMetadata: readonly OpenApiMetadataEntry[] = 
     mode: "account",
     scope: "accounts:manage",
   },
+  {
+    path: "/api/operator/accounts/{accountId}",
+    method: "delete",
+    mode: "account",
+    scope: "accounts:manage",
+  },
+  {
+    path: "/api/operator/accounts/bulk",
+    method: "post",
+    mode: "account",
+    scope: "accounts:manage",
+  },
 ];

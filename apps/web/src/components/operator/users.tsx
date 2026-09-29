@@ -45,7 +45,11 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : "The account service is temporarily unavailable.";
 }
 
-export function operatorUserRowActions(account: OperatorAccountSummary, canManage: boolean) {
+export function operatorUserRowActions(
+  account: OperatorAccountSummary,
+  canManage: boolean,
+  onDelete?: (account: OperatorAccountSummary) => void,
+) {
   return [
     { type: "link" as const, label: "View account", href: `/operator/users/${account.id}` },
     ...(canManage
@@ -55,6 +59,17 @@ export function operatorUserRowActions(account: OperatorAccountSummary, canManag
             label: "Edit account",
             href: `/operator/users/${account.id}/edit`,
           },
+          ...(onDelete
+            ? [
+                {
+                  type: "action" as const,
+                  label: "Delete",
+                  destructive: true,
+                  separatorBefore: true,
+                  onSelect: () => onDelete(account),
+                },
+              ]
+            : []),
         ]
       : []),
     {
@@ -69,9 +84,30 @@ export function operatorUsersEmptyDescription(appliedSearch: string) {
   return appliedSearch ? "No accounts matched this search." : "No accounts are available yet.";
 }
 
-export function OperatorUsersList({ canManage = false }: { canManage?: boolean }) {
+export async function applyOperatorUserSearch(
+  apply: (search: string) => Promise<boolean>,
+  search: string,
+  setAppliedSearch: (search: string) => void,
+): Promise<boolean> {
+  const nextSearch = search.trim();
+  const applied = await apply(nextSearch);
+  if (applied) setAppliedSearch(nextSearch);
+  return applied;
+}
+
+export function OperatorUsersList({
+  canManage = false,
+  deletedNotice = false,
+}: {
+  canManage?: boolean;
+  deletedNotice?: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [successNotice, setSuccessNotice] = useState<string | null>(
+    deletedNotice ? "Account deleted. Historical platform records remain available." : null,
+  );
   const collection = useCrudCollection(async (appliedSearch: string, cursor, pageSize) => {
     const params = new URLSearchParams({ limit: String(pageSize) });
     if (appliedSearch) params.set("search", appliedSearch);
@@ -94,12 +130,55 @@ export function OperatorUsersList({ canManage = false }: { canManage?: boolean }
       onSearchChange={setSearch}
       onSearch={async (event) => {
         event.preventDefault();
-        const nextSearch = search.trim();
-        const applied = await collection.apply(nextSearch);
-        if (applied) setAppliedSearch(nextSearch);
-        return applied;
+        return applyOperatorUserSearch(collection.apply, search, setAppliedSearch);
       }}
       onRetry={() => void collection.retry()}
+      actionError={actionError}
+      successNotice={successNotice}
+      onDelete={async (account) => {
+        if (
+          !window.confirm(
+            `Delete @${account.username}? Account access and credentials will be removed; historical platform records will remain.`,
+          )
+        )
+          return;
+        try {
+          await apiFetch(`/api/operator/accounts/${account.id}`, { method: "DELETE" });
+          setActionError(null);
+          setSuccessNotice(`@${account.username} was deleted. Historical platform records remain.`);
+          await collection.refresh();
+        } catch (cause) {
+          setActionError(message(cause));
+        }
+      }}
+      onBulkDelete={async (accounts) => {
+        if (
+          !window.confirm(
+            `Delete ${accounts.length} selected account(s)? Account access and credentials will be removed; historical platform records will remain.`,
+          )
+        )
+          return false;
+        const result = await apiFetch<{
+          results: { id: string; deleted: boolean; error?: { error: string } }[];
+        }>("/api/operator/accounts/bulk", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "delete", ids: accounts.map((account) => account.id) }),
+        });
+        await collection.refresh();
+        const failures = result.results.filter((item) => !item.deleted);
+        if (failures.length) {
+          setActionError(
+            failures.map((failure) => failure.error?.error ?? "Account deletion failed.").join(" "),
+          );
+          return false;
+        }
+        setActionError(null);
+        setSuccessNotice(
+          `${accounts.length} account(s) deleted. Historical platform records remain.`,
+        );
+        return true;
+      }}
       hasPrevious={collection.hasPrevious}
       onPrevious={() => void collection.previous()}
       onNext={() => void collection.next()}
@@ -126,6 +205,10 @@ export function OperatorUsersListView({
   onSearchChange,
   onSearch,
   onRetry,
+  onDelete,
+  onBulkDelete,
+  actionError,
+  successNotice,
   hasPrevious,
   onPrevious,
   onNext,
@@ -141,6 +224,10 @@ export function OperatorUsersListView({
   onSearchChange: (value: string) => void;
   onSearch: (event: FormEvent<HTMLFormElement>) => boolean | Promise<boolean>;
   onRetry: () => void;
+  onDelete?: (account: OperatorAccountSummary) => void;
+  onBulkDelete?: (accounts: readonly OperatorAccountSummary[]) => Promise<boolean>;
+  actionError?: string | null;
+  successNotice?: string | null;
   hasPrevious: boolean;
   onPrevious: () => void;
   onNext: () => void;
@@ -219,7 +306,7 @@ export function OperatorUsersListView({
       filtersDirty={filtersDirty}
       toolbarActions={
         <>
-          <Button type="submit" variant="secondary" disabled={loading}>
+          <Button type="submit" variant="action" disabled={loading}>
             {loading ? "Searching…" : "Search"}
           </Button>
           <HoneypotField />
@@ -230,7 +317,25 @@ export function OperatorUsersListView({
       columns={columns}
       getRowKey={(account) => account.id}
       selection={{ labelForItem: (account) => `account ${account.username}` }}
-      actions={(account) => operatorUserRowActions(account, Boolean(canManage))}
+      bulkActions={
+        canManage && onBulkDelete
+          ? [
+              {
+                value: "delete",
+                label: "Delete",
+                destructive: true,
+                onSelect: onBulkDelete,
+              },
+            ]
+          : []
+      }
+      beforeTable={
+        <>
+          {actionError && <OperatorErrorState message={actionError} />}
+          {successNotice && <Toast tone="success">{successNotice}</Toast>}
+        </>
+      }
+      actions={(account) => operatorUserRowActions(account, Boolean(canManage), onDelete)}
       actionLabel={(account) => `Actions for @${account.username}`}
       loading={loading}
       initialized={page !== null}
@@ -254,7 +359,14 @@ export function OperatorUsersListView({
   );
 }
 
-export function OperatorUserDetail({ accountId }: { accountId: string }) {
+export function OperatorUserDetail({
+  accountId,
+  canManage = false,
+}: {
+  accountId: string;
+  canManage?: boolean;
+}) {
+  const router = useRouter();
   const [account, setAccount] = useState<OperatorAccountDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -274,14 +386,18 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
   const [apiKeyExpiry, setApiKeyExpiry] = useState("");
   const [apiKeyScopes, setApiKeyScopes] = useState<string[]>([]);
   const [apiKeySecret, setApiKeySecret] = useState<OperatorApiKeyCreated | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  async function load() {
+  async function load(): Promise<OperatorAccountDetail | null> {
     setLoading(true);
     setError(null);
     try {
-      setAccount(await apiFetch<OperatorAccountDetail>(`/api/operator/accounts/${accountId}`));
+      const loaded = await apiFetch<OperatorAccountDetail>(`/api/operator/accounts/${accountId}`);
+      setAccount(loaded);
+      return loaded;
     } catch (cause) {
       setError(message(cause));
+      return null;
     } finally {
       setLoading(false);
     }
@@ -330,11 +446,15 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
     }
   }
   useEffect(() => {
-    // Initial loading synchronizes this detail panel with the remote API.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-    void loadCapabilities();
-    void loadApiKeys();
+    void (async () => {
+      const loaded = await load();
+      if (!loaded || loaded.deletedAt) {
+        setCapabilityLoading(false);
+        setApiKeyLoading(false);
+        return;
+      }
+      await Promise.all([loadCapabilities(), loadApiKeys()]);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
@@ -458,6 +578,26 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
     }
   }
 
+  async function deleteAccount() {
+    if (!account || deleting) return;
+    if (
+      !window.confirm(
+        `Delete @${account.username}? Account access and credentials will be removed; historical platform records will remain.`,
+      )
+    )
+      return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/operator/accounts/${account.id}`, { method: "DELETE" });
+      router.push("/operator/users?notice=account-deleted");
+      router.refresh();
+    } catch (cause) {
+      setError(message(cause));
+      setDeleting(false);
+    }
+  }
+
   if (loading) return <CrudDetail eyebrow="Account inspection" title="User" loading />;
   if (!account)
     return (
@@ -476,6 +616,18 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
       title={account.displayName || account.username}
       description={`@${account.username} · ${account.email ?? "No authentication email"}`}
       fieldsTitle="Identity"
+      headerActions={
+        canManage && !account.deletedAt ? (
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={deleting}
+            onClick={() => void deleteAccount()}
+          >
+            {deleting ? "Deleting…" : "Delete user"}
+          </Button>
+        ) : undefined
+      }
       fields={[
         { label: "Account ID", value: account.id, className: "break-all" },
         { label: "Country", value: account.country || "Not set" },
@@ -483,20 +635,28 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
       ]}
       sections={
         <>
+          {account.deletedAt && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              This account was deleted on {new Date(account.deletedAt).toLocaleString()}. Historical
+              records remain available.
+            </div>
+          )}
           {error && <OperatorErrorState message={error} />}
           <div className="grid gap-4 lg:grid-cols-2">
-            {!capabilityLoading && capabilityView && (
+            {!account.deletedAt && !capabilityLoading && capabilityView && (
               <CapabilityCard
                 view={capabilityView}
                 saving={capabilitySaving}
                 onChange={changeCapability}
               />
             )}
-            {capabilityLoading && (
+            {!account.deletedAt && capabilityLoading && (
               <OperatorLoadingState variant="section" label="Loading platform capabilities" />
             )}
-            {capabilityError && <OperatorErrorState message={capabilityError} />}
-            {!apiKeyLoading && apiKeyPage && (
+            {!account.deletedAt && capabilityError && (
+              <OperatorErrorState message={capabilityError} />
+            )}
+            {!account.deletedAt && !apiKeyLoading && apiKeyPage && (
               <OperatorApiKeyCard
                 page={apiKeyPage}
                 name={apiKeyName}
@@ -513,8 +673,12 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
                 onDismissSecret={() => setApiKeySecret(null)}
               />
             )}
-            {apiKeyLoading && <OperatorLoadingState variant="section" label="Loading API access" />}
-            {apiKeyError && !apiKeyPage && <OperatorErrorState message={apiKeyError} />}
+            {!account.deletedAt && apiKeyLoading && (
+              <OperatorLoadingState variant="section" label="Loading API access" />
+            )}
+            {!account.deletedAt && apiKeyError && !apiKeyPage && (
+              <OperatorErrorState message={apiKeyError} />
+            )}
             <OperatorSection title="Referral context" surface>
               <CrudFieldList
                 fields={[
@@ -541,61 +705,63 @@ export function OperatorUserDetail({ accountId }: { accountId: string }) {
               value={account.purchaseCount.toLocaleString("en-US")}
             />
           </div>
-          <OperatorSection
-            title="Reassign immediate parent"
-            description="Descendants remain attached. PostgreSQL prevents cycles and the action is audited."
-            surface
-          >
-            <div className="reassignment-current">
-              <span>Current parent</span>
-              <strong>{account.parent ? `@${account.parent.username}` : "None"}</strong>
-            </div>
-            <form
-              className="reassignment-search"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void searchParent();
-              }}
+          {!account.deletedAt && (
+            <OperatorSection
+              title="Reassign immediate parent"
+              description="Descendants remain attached. PostgreSQL prevents cycles and the action is audited."
+              surface
             >
-              <label>
-                Find new parent
-                <Input
-                  value={parentSearch}
-                  onChange={(event) => setParentSearch(event.target.value)}
-                  placeholder="Username, email, or account ID"
-                />
-              </label>
-              <Button type="submit" variant="secondary">
-                Search
-              </Button>
-            </form>
-            {parentResults.length > 0 && (
-              <ul className="operator-search-results">
-                {parentResults.map((result) => (
-                  <li key={result.id}>
-                    <button
-                      type="button"
-                      className={selectedParent?.id === result.id ? "selected" : ""}
-                      onClick={() => setSelectedParent(result)}
-                    >
-                      <strong>@{result.username}</strong>
-                      <span>{result.displayName || result.email}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {selectedParent && (
-              <div className="reassignment-confirm">
-                <span>
-                  New parent: <strong>@{selectedParent.username}</strong>
-                </span>
-                <Button type="button" onClick={() => void reassign()} disabled={saving}>
-                  {saving ? "Saving…" : "Confirm reassignment"}
-                </Button>
+              <div className="reassignment-current">
+                <span>Current parent</span>
+                <strong>{account.parent ? `@${account.parent.username}` : "None"}</strong>
               </div>
-            )}
-          </OperatorSection>
+              <form
+                className="reassignment-search"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void searchParent();
+                }}
+              >
+                <label>
+                  Find new parent
+                  <Input
+                    value={parentSearch}
+                    onChange={(event) => setParentSearch(event.target.value)}
+                    placeholder="Username, email, or account ID"
+                  />
+                </label>
+                <Button type="submit" variant="action">
+                  Search
+                </Button>
+              </form>
+              {parentResults.length > 0 && (
+                <ul className="operator-search-results">
+                  {parentResults.map((result) => (
+                    <li key={result.id}>
+                      <button
+                        type="button"
+                        className={selectedParent?.id === result.id ? "selected" : ""}
+                        onClick={() => setSelectedParent(result)}
+                      >
+                        <strong>@{result.username}</strong>
+                        <span>{result.displayName || result.email}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {selectedParent && (
+                <div className="reassignment-confirm">
+                  <span>
+                    New parent: <strong>@{selectedParent.username}</strong>
+                  </span>
+                  <Button type="button" onClick={() => void reassign()} disabled={saving}>
+                    {saving ? "Saving…" : "Confirm reassignment"}
+                  </Button>
+                </div>
+              )}
+            </OperatorSection>
+          )}
           {account.latestParentReassignment && (
             <OperatorSection title="Latest hierarchy audit" surface>
               <p className="panel-note">

@@ -195,7 +195,7 @@ export function OperatorFundingList() {
       }}
       filtersDirty={Boolean(search.trim() || state || provider.trim())}
       toolbarActions={
-        <Button type="submit" variant="secondary" disabled={collection.loading}>
+        <Button type="submit" variant="action" disabled={collection.loading}>
           Apply filters
         </Button>
       }

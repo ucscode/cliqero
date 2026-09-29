@@ -19,14 +19,18 @@ export class PostgresAccountRepository
   constructor(private readonly sql: QueryExecutor) {}
   async exists(id: string): Promise<boolean> {
     return (
-      (await this.sql.query("select 1 from identity_capability.accounts where uuid = $1", [id]))
-        .rowCount === 1
+      (
+        await this.sql.query(
+          "select 1 from identity_capability.accounts where uuid = $1 and deleted_at is null",
+          [id],
+        )
+      ).rowCount === 1
     );
   }
   async findById(id: string): Promise<Account | null> {
     const row = (
       await this.sql.query<AccountRow>(
-        "select uuid as id, username, metadata->>'country' as country from identity_capability.accounts where uuid = $1",
+        "select uuid as id, username, metadata->>'country' as country from identity_capability.accounts where uuid = $1 and deleted_at is null",
         [id],
       )
     ).rows[0];
@@ -81,6 +85,25 @@ export class PostgresAccountRepository
     await this.sql.query(`delete from better_auth."user" where id=$1`, [authUserId]);
   }
 
+  async removeAccountAuthIdentity(accountId: string): Promise<void> {
+    await this.sql.query(
+      `delete from better_auth.verification verification
+       using identity_capability.auth_account_links link, better_auth."user" auth_user
+       where link.account_id=(select id from identity_capability.accounts where uuid=$1)
+         and auth_user.id=link.auth_user_id
+         and (lower(verification.identifier)=lower(auth_user.email)
+              or lower(verification.identifier) like '%:'||lower(auth_user.email))`,
+      [accountId],
+    );
+    await this.sql.query(
+      `delete from better_auth."user" auth_user
+       using identity_capability.auth_account_links link
+       where link.account_id=(select id from identity_capability.accounts where uuid=$1)
+         and auth_user.id=link.auth_user_id`,
+      [accountId],
+    );
+  }
+
   async resolveAuthIdentity(authUserId: string): Promise<AuthIdentityResolution> {
     const row = (
       await this.sql.query<{
@@ -91,7 +114,7 @@ export class PostgresAccountRepository
       }>(
         `select l.onboarding_state,a.uuid as id,a.username,a.metadata->>'country' as country
          from identity_capability.auth_account_links l
-         left join identity_capability.accounts a on a.id=l.account_id
+         left join identity_capability.accounts a on a.id=l.account_id and a.deleted_at is null
          where l.auth_user_id=$1`,
         [authUserId],
       )
@@ -140,7 +163,7 @@ export class PostgresAccountRepository
     const row = (
       await this.sql.query<{ username: string; country: string | null }>(
         `select username,metadata->>'country' country
-         from identity_capability.accounts where uuid=$1`,
+         from identity_capability.accounts where uuid=$1 and deleted_at is null`,
         [accountId],
       )
     ).rows[0];

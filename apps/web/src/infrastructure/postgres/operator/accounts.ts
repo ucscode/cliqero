@@ -37,6 +37,7 @@ export type OperatorAccountSummary = {
 };
 
 export type OperatorAccountDetail = OperatorAccountSummary & {
+  deletedAt: string | null;
   parent: { id: string; username: string; displayName: string | null } | null;
   purchaseCount: number;
   latestParentReassignment: {
@@ -59,7 +60,8 @@ export class OperatorAccountService {
         `select a.uuid id,a.email,a.username,a.display_name,a.metadata->>'country' country,a.created_at,
           (select count(*)::int from referral_capability.account_referrals r where r.parent_account_id=a.id) direct_referral_count
          from identity_capability.account_profiles a
-         where ($1::text is null or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1)
+         where a.deleted_at is null
+           and ($1::text is null or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1)
            and ($2::timestamptz is null or (a.created_at,a.id)<($2::timestamptz,(select id from identity_capability.accounts where uuid=$3)))
          order by a.created_at desc,a.id desc limit $4`,
         [search, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
@@ -78,7 +80,7 @@ export class OperatorAccountService {
   async get(accountId: string): Promise<OperatorAccountDetail> {
     const row = (
       await this.sql.query<any>(
-        `select a.uuid id,a.email,a.username,a.display_name,a.metadata->>'country' country,a.created_at,
+        `select a.uuid id,a.email,a.username,a.display_name,a.metadata->>'country' country,a.created_at,a.deleted_at,
           (select count(*)::int from referral_capability.account_referrals r where r.parent_account_id=a.id) direct_referral_count,
           p.uuid parent_id,p.username parent_username,p.display_name parent_display_name,
           (select count(*)::int from purchase_capability.purchases purchase where purchase.buyer_id=a.id) purchase_count
@@ -102,6 +104,7 @@ export class OperatorAccountService {
     ).rows[0];
     return {
       ...this.summary(row),
+      deletedAt: row.deleted_at,
       parent: row.parent_id
         ? {
             id: row.parent_id,
@@ -131,5 +134,137 @@ export class OperatorAccountService {
       createdAt: row.created_at,
       directReferralCount: Number(row.direct_referral_count ?? 0),
     };
+  }
+}
+
+/** Transactional persistence for the account tombstone lifecycle. */
+export class PostgresOperatorAccountDeletionRepository {
+  constructor(private readonly sql: QueryExecutor) {}
+
+  async lockForDeletion(accountId: string, actorId: string) {
+    await this.sql.query(`select pg_advisory_xact_lock(hashtext('cliqero:system-root'))`);
+    await this.sql.query(
+      `select pg_advisory_xact_lock(hashtext('cliqero:referral-graph-mutation'))`,
+    );
+    const row = (
+      await this.sql.query<{
+        id: string;
+        deleted_at: string | null;
+        parent_id: string | null;
+        child_count: number;
+        is_system_root: boolean;
+        actor_is_system_root: boolean;
+        system_root_count: number;
+      }>(
+        `select account.id::text,account.deleted_at,
+          (select parent.uuid from referral_capability.account_referrals edge
+             join identity_capability.accounts parent on parent.id=edge.parent_account_id
+            where edge.child_account_id=account.id) parent_id,
+          (select count(*)::int from referral_capability.account_referrals edge where edge.parent_account_id=account.id) child_count,
+          exists(select 1 from identity_capability.account_capabilities capability where capability.account_id=account.id and capability.capability='system.root') is_system_root,
+          exists(select 1 from identity_capability.account_capabilities capability join identity_capability.accounts actor on actor.id=capability.account_id where actor.uuid=$2 and capability.capability='system.root') actor_is_system_root,
+          (select count(*)::int from identity_capability.account_capabilities where capability='system.root') system_root_count
+         from identity_capability.accounts account where account.uuid=$1 for update`,
+        [accountId, actorId],
+      )
+    ).rows[0];
+    return row
+      ? {
+          accountId: row.id,
+          deletedAt: row.deleted_at,
+          parentId: row.parent_id,
+          childCount: row.child_count,
+          isSystemRoot: row.is_system_root,
+          actorIsSystemRoot: row.actor_is_system_root,
+          systemRootCount: row.system_root_count,
+        }
+      : null;
+  }
+
+  async reparentChildren(accountId: string, parentId: string) {
+    const result = await this.sql.query(
+      `update referral_capability.account_referrals
+          set parent_account_id=(select id from identity_capability.accounts where uuid=$2)
+        where parent_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [accountId, parentId],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async archiveOwnedListings(accountId: string) {
+    const result = await this.sql.query(
+      `update listing_capability.listings set state='archived',updated_at=now()
+       where seller_id=(select id from identity_capability.accounts where uuid=$1) and state<>'archived'`,
+      [accountId],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async anonymizeWithdrawalDestinations(accountId: string) {
+    const result = await this.sql.query(
+      `update withdrawal_capability.destinations
+          set name='Deleted destination',details='[]'::jsonb,status='archived',updated_at=now()
+        where account_id=(select id from identity_capability.accounts where uuid=$1)
+          and (name<>'Deleted destination' or details<>'[]'::jsonb or status<>'archived')`,
+      [accountId],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async revokeReferralAttributions(accountId: string) {
+    await this.sql.query(
+      `update referral_capability.account_attributions set state='revoked'
+       where referrer_account_id=(select id from identity_capability.accounts where uuid=$1) and state='active'`,
+      [accountId],
+    );
+    await this.sql.query(
+      `update referral_capability.listing_attributions set state='revoked'
+       where referrer_account_id=(select id from identity_capability.accounts where uuid=$1) and state='active'`,
+      [accountId],
+    );
+  }
+
+  async revokeApiKeysAndSessions(accountId: string) {
+    await this.sql.query(
+      `delete from identity_capability.api_keys
+       where account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [accountId],
+    );
+    await this.sql.query(
+      `update identity_capability.sessions set state='revoked'
+       where account_id=(select id from identity_capability.accounts where uuid=$1) and state='active'`,
+      [accountId],
+    );
+    await this.sql.query(
+      `delete from access_capability.integrations
+       where owner_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [accountId],
+    );
+  }
+
+  async removeCapabilities(accountId: string) {
+    await this.sql.query(
+      `delete from identity_capability.account_capabilities
+       where account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [accountId],
+    );
+  }
+
+  async tombstone(accountId: string) {
+    await this.sql.query(
+      `update identity_capability.accounts
+          set username='del-'||substr(replace(uuid::text,'-',''),1,28),
+              metadata='{}'::jsonb,deleted_at=now(),updated_at=now()
+        where uuid=$1 and deleted_at is null`,
+      [accountId],
+    );
+  }
+
+  async removeHierarchyEdge(accountId: string) {
+    await this.sql.query(
+      `delete from referral_capability.account_referrals
+       where child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [accountId],
+    );
   }
 }

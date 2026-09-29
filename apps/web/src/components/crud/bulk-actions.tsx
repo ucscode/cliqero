@@ -81,23 +81,20 @@ export function CrudBulkActions<T>({
   const countLabel = formatCrudSelectedCount(selectedCount);
   if (actions.length === 0)
     return (
-      <p
-        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
-        aria-live="polite"
-      >
+      <p className="text-sm text-slate-600" aria-live="polite">
         {countLabel}
       </p>
     );
 
   return (
     <div className="grid gap-2">
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Select
           aria-label="Bulk actions"
           value={selectedAction}
           disabled={busy}
           onChange={(event) => setSelectedAction(event.target.value)}
-          className="h-9 w-auto min-w-44 max-w-full"
+          className="w-auto min-w-44 max-w-full"
         >
           <option value="">Bulk actions</option>
           {actions.map((action) => (
@@ -108,7 +105,7 @@ export function CrudBulkActions<T>({
         </Select>
         <Button
           type="button"
-          variant="secondary"
+          variant="action"
           size="sm"
           disabled={!canApplyCrudBulkAction(items.length, selectedAction, busy)}
           onClick={() => void apply()}

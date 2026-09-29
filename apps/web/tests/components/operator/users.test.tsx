@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   OperatorUserFormFields,
   OperatorUsersListView,
+  applyOperatorUserSearch,
   operatorUsersEmptyDescription,
   operatorUserRowActions,
 } from "@/components/operator/users";
@@ -52,6 +53,23 @@ function renderUsers(overrides: Partial<Parameters<typeof OperatorUsersListView>
 }
 
 describe("operator users list", () => {
+  it("returns the actual search promise and changes applied search only after success", async () => {
+    let resolveSearch!: (result: boolean) => void;
+    const applied = vi.fn();
+    const apply = vi.fn(() => new Promise<boolean>((resolve) => (resolveSearch = resolve)));
+    const pending = applyOperatorUserSearch(apply, "  beta_one  ", applied);
+
+    expect(apply).toHaveBeenCalledWith("beta_one");
+    expect(applied).not.toHaveBeenCalled();
+    resolveSearch(false);
+    await expect(pending).resolves.toBe(false);
+    expect(applied).not.toHaveBeenCalled();
+
+    const succeeded = applyOperatorUserSearch(async () => true, "  beta_one  ", applied);
+    await expect(succeeded).resolves.toBe(true);
+    expect(applied).toHaveBeenCalledWith("beta_one");
+  });
+
   it("uses the shared page, header, and manual account-search toolbar", () => {
     const html = renderUsers();
 

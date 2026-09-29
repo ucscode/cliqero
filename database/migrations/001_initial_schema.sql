@@ -225,6 +225,12 @@ CREATE FUNCTION referral_capability.prevent_account_referral_delete() RETURNS tr
     LANGUAGE plpgsql
     AS $$
 begin
+  if exists (
+    select 1 from identity_capability.accounts
+    where id=old.child_account_id and deleted_at is not null
+  ) then
+    return old;
+  end if;
   raise exception 'Referral relationship deletion is not supported' using errcode='55000';
 end $$;
 
@@ -611,8 +617,11 @@ CREATE TABLE identity_capability.accounts (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     id bigint NOT NULL,
+    deleted_at timestamp with time zone,
     CONSTRAINT accounts_username_format CHECK ((username ~ '^[a-z0-9][a-z0-9_-]{2,31}$'::text))
 );
+
+COMMENT ON COLUMN identity_capability.accounts.deleted_at IS 'Tombstone timestamp for deleted identities; preserves the UUID referenced by historical commerce and financial facts while releasing the public username.';
 
 
 --
@@ -3683,13 +3692,14 @@ ALTER TABLE ONLY withdrawal_capability.withdrawals
 CREATE VIEW identity_capability.account_profiles AS
  SELECT a.id,
     a.uuid,
-    a.username,
-    a.metadata,
+    CASE WHEN a.deleted_at IS NULL THEN a.username ELSE 'Deleted user'::text END AS username,
+    CASE WHEN a.deleted_at IS NULL THEN a.metadata ELSE '{}'::jsonb END AS metadata,
     a.created_at,
     a.updated_at,
-    u.email,
-    NULLIF(btrim(u.display_name), ''::text) AS display_name,
-    u.image
+    CASE WHEN a.deleted_at IS NULL THEN u.email ELSE NULL::text END AS email,
+    CASE WHEN a.deleted_at IS NULL THEN NULLIF(btrim(u.display_name), ''::text) ELSE NULL::text END AS display_name,
+    CASE WHEN a.deleted_at IS NULL THEN u.image ELSE NULL::text END AS image,
+    a.deleted_at
    FROM ((identity_capability.accounts a
      LEFT JOIN identity_capability.auth_account_links l ON ((l.account_id = a.id)))
      LEFT JOIN better_auth."user" u ON ((u.id = l.auth_user_id)));

@@ -19,6 +19,8 @@ export const API_SCOPES = [
   "withdrawals:manage",
   "treasury:read",
   "treasury:manage",
+  "payments:read",
+  "payments:manage",
   "operations:manage",
   "accounts:manage",
   "blog:read",
@@ -43,6 +45,8 @@ export const OPERATOR_SCOPE_CAPABILITIES: Partial<Record<ApiScope, readonly Capa
   "withdrawals:manage": ["withdrawals.manage"],
   "treasury:read": ["treasury.manage"],
   "treasury:manage": ["treasury.manage"],
+  "payments:read": ["finance.read"],
+  "payments:manage": ["finance.manage"],
   // This legacy scope covers operator account inspection plus finance
   // inspection and mutations. Every authority is required for delegation;
   // downstream routes still apply their narrower capability checks.
@@ -119,6 +123,14 @@ export const API_SCOPE_METADATA = {
   "treasury:manage": {
     label: "Treasury management",
     description: "Restricts this key to treasury mutation requests.",
+  },
+  "payments:read": {
+    label: "Payment reads",
+    description: "Inspect Cliqero payment records and provider events.",
+  },
+  "payments:manage": {
+    label: "Payment reconciliation",
+    description: "Run idempotent reconciliation for persisted payments.",
   },
   "operations:manage": {
     label: "Financial operations",

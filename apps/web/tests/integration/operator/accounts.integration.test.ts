@@ -104,4 +104,213 @@ suite("operator account index PostgreSQL projection", () => {
       items: expect.arrayContaining(ids.map((id) => expect.objectContaining({ id }))),
     });
   });
+
+  it("tombstones identity, reparents live descendants, archives listings, and retains history", async () => {
+    const actor = await app.authentication.register({
+      email: "ops.delete.actor@example.test",
+      username: "ops_delete_actor",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const parent = await app.authentication.register({
+      email: "ops.delete.parent@example.test",
+      username: "ops_delete_parent",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const target = await app.authentication.register({
+      email: "ops.delete.target@example.test",
+      username: "ops_delete_target",
+      password: "correct-horse-battery",
+      country: "GH",
+    });
+    const child = await app.authentication.register({
+      email: "ops.delete.child@example.test",
+      username: "ops_delete_child",
+      password: "correct-horse-battery",
+      country: "US",
+    });
+    const grandchild = await app.authentication.register({
+      email: "ops.delete.grandchild@example.test",
+      username: "ops_delete_grandchild",
+      password: "correct-horse-battery",
+      country: "GB",
+    });
+
+    await app.database.query(
+      `insert into referral_capability.account_referrals(child_account_id,parent_account_id)
+       values ((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2)),
+              ((select id from identity_capability.accounts where uuid=$3),(select id from identity_capability.accounts where uuid=$1)),
+              ((select id from identity_capability.accounts where uuid=$4),(select id from identity_capability.accounts where uuid=$3))`,
+      [target.id, parent.id, child.id, grandchild.id],
+    );
+
+    const listing = (
+      await app.database.query<{ id: string }>(
+        `insert into listing_capability.listings(uuid,title,short_description,long_description,price_minor,price_currency,destination_url,state,seller_id)
+         values(gen_random_uuid(),'Deletion history','Summary','Long text',1200,'USD','https://example.test/item','published',(select id from identity_capability.accounts where uuid=$1))
+         returning id::text`,
+        [target.id],
+      )
+    ).rows[0].id;
+    const paymentId = "00000000-0000-4000-8000-000000000020";
+    const purchaseId = "00000000-0000-4000-8000-000000000021";
+    await app.database.query(
+      `insert into payment_capability.payments(uuid,provider_name,provider_reference,provider_amount_minor,provider_currency,canonical_amount_minor,canonical_currency,state,idempotency_key,buyer_id,listing_id)
+       values($1,'development','history-reference',1200,'USD',1200,'USD','verified','history-payment-key',(select id from identity_capability.accounts where uuid=$2),$3)`,
+      [paymentId, target.id, listing],
+    );
+    await app.database.query(
+      `insert into purchase_capability.purchases(uuid,idempotency_key,listing_title_snapshot,listing_short_description_snapshot,listing_long_description_snapshot,price_minor_snapshot,price_currency_snapshot,canonical_minor_snapshot,buyer_id,seller_id,listing_id,payment_id,state)
+       values($1,'history-purchase-key','Deletion history','Saved summary','Saved detail',1200,'USD',1200,(select id from identity_capability.accounts where uuid=$2),(select id from identity_capability.accounts where uuid=$3),$4,(select id from payment_capability.payments where uuid=$5),'completed')`,
+      [purchaseId, target.id, target.id, listing, paymentId],
+    );
+    await app.database.query(
+      `insert into ledger_capability.entries(entry_type,direction,amount_minor,currency,idempotency_key,correlation_id,account_id,purchase_id,recipient_role,basis)
+       values('purchase-earnings','credit',1200,'USD','history-ledger-key',gen_random_uuid(),(select id from identity_capability.accounts where uuid=$1),(select id from purchase_capability.purchases where uuid=$2),'seller','purchase')`,
+      [target.id, purchaseId],
+    );
+    const destinationId = "00000000-0000-4000-8000-000000000022";
+    await app.database.query(
+      `insert into withdrawal_capability.destinations(uuid,account_id,method_key,name,details)
+       values($1,(select id from identity_capability.accounts where uuid=$2),'bank_transfer','Private destination','[]'::jsonb)`,
+      [destinationId, target.id],
+    );
+    await app.database.query(
+      `insert into withdrawal_capability.withdrawals(uuid,amount_minor,currency,saved_destination_id,destination_method,destination_method_name,destination_name,destination_details,idempotency_key,correlation_id,account_id)
+       values(gen_random_uuid(),500,'USD',$1,'bank_transfer','Bank Transfer','Private destination','[]'::jsonb,'history-withdrawal-key',gen_random_uuid(),(select id from identity_capability.accounts where uuid=$2))`,
+      [destinationId, target.id],
+    );
+    await app.database.query(
+      `insert into identity_capability.api_keys(name,key_prefix,secret_hash,scopes,account_id)
+       values('deletion test','clq_test',decode(repeat('00',32),'hex'),'[]'::jsonb,(select id from identity_capability.accounts where uuid=$1))`,
+      [target.id],
+    );
+    await app.database.query(
+      `insert into identity_capability.sessions(token_hash,account_id)
+       values(decode(repeat('11',32),'hex'),(select id from identity_capability.accounts where uuid=$1))`,
+      [target.id],
+    );
+    const authUserId = (
+      await app.database.query<{ auth_user_id: string }>(
+        `select auth_user_id from identity_capability.auth_account_links where account_id=(select id from identity_capability.accounts where uuid=$1)`,
+        [target.id],
+      )
+    ).rows[0].auth_user_id;
+    await app.database.query(
+      `insert into better_auth.session(id,"userId","expiresAt",token)
+       values('delete-session-test',$1,now()+interval '1 day','delete-session-test-token')`,
+      [authUserId],
+    );
+
+    await app.operatorAccountManagement.delete(actor.id, target.id);
+
+    const tombstone = (
+      await app.database.query<any>(
+        `select account.username,account.metadata,account.deleted_at,profile.username projected_username,profile.email,profile.metadata->>'country' country
+           from identity_capability.accounts account join identity_capability.account_profiles profile on profile.id=account.id
+          where account.uuid=$1`,
+        [target.id],
+      )
+    ).rows[0];
+    expect(tombstone).toMatchObject({
+      username: expect.stringMatching(/^del-/),
+      metadata: {},
+      projected_username: "Deleted user",
+      email: null,
+      country: null,
+    });
+    expect(tombstone.deleted_at).toBeTruthy();
+    expect(tombstone.username).toHaveLength(32);
+    await expect(
+      app.operatorAccounts.list({ search: target.id, limit: 10 }),
+    ).resolves.toMatchObject({
+      items: [],
+    });
+    await expect(
+      app.authentication.login("ops.delete.target@example.test", "correct-horse-battery"),
+    ).rejects.toBeTruthy();
+    await expect(
+      app.database.query(
+        `select 1 from identity_capability.auth_account_links where account_id=(select id from identity_capability.accounts where uuid=$1)`,
+        [target.id],
+      ),
+    ).resolves.toMatchObject({ rowCount: 0 });
+    await expect(
+      app.database.query(`select 1 from better_auth.session where id='delete-session-test'`),
+    ).resolves.toMatchObject({ rowCount: 0 });
+    await expect(
+      app.database.query(`select 1 from better_auth."user" where id=$1`, [authUserId]),
+    ).resolves.toMatchObject({ rowCount: 0 });
+    await expect(
+      app.database.query(
+        `select 1 from identity_capability.api_keys where account_id=(select id from identity_capability.accounts where uuid=$1)`,
+        [target.id],
+      ),
+    ).resolves.toMatchObject({ rowCount: 0 });
+    await expect(
+      app.database.query(
+        `select state from identity_capability.sessions where account_id=(select id from identity_capability.accounts where uuid=$1)`,
+        [target.id],
+      ),
+    ).resolves.toMatchObject({ rows: [{ state: "revoked" }] });
+
+    const relationship = (
+      await app.database.query<{ parent: string }>(
+        `select parent.uuid parent from referral_capability.account_referrals relation join identity_capability.accounts parent on parent.id=relation.parent_account_id where relation.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+        [child.id],
+      )
+    ).rows[0];
+    expect(relationship.parent).toBe(parent.id);
+    const nestedRelationship = (
+      await app.database.query<{ parent: string }>(
+        `select parent.uuid parent from referral_capability.account_referrals relation join identity_capability.accounts parent on parent.id=relation.parent_account_id where relation.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+        [grandchild.id],
+      )
+    ).rows[0];
+    expect(nestedRelationship.parent).toBe(child.id);
+    const listingState = await app.database.query<{ state: string }>(
+      `select state from listing_capability.listings where id=$1`,
+      [listing],
+    );
+    expect(listingState.rows[0].state).toBe("archived");
+    const destination = await app.database.query<{
+      name: string;
+      details: unknown;
+      status: string;
+    }>(`select name,details,status from withdrawal_capability.destinations where uuid=$1`, [
+      destinationId,
+    ]);
+    expect(destination.rows[0]).toEqual({
+      name: "Deleted destination",
+      details: [],
+      status: "archived",
+    });
+
+    for (const [table, column, value] of [
+      ["purchase_capability.purchases", "uuid", purchaseId],
+      ["payment_capability.payments", "uuid", paymentId],
+      ["ledger_capability.entries", "idempotency_key", "history-ledger-key"],
+      ["withdrawal_capability.withdrawals", "idempotency_key", "history-withdrawal-key"],
+    ] as const) {
+      const retained = await app.database.query(`select 1 from ${table} where ${column}=$1`, [
+        value,
+      ]);
+      expect(retained.rowCount).toBe(1);
+    }
+    await expect(
+      app.database.query<{ action: string }>(
+        `select action from kernel.audit_records where subject_id=$1 and action='operator.account_deleted'`,
+        [target.id],
+      ),
+    ).resolves.toMatchObject({ rowCount: 1 });
+
+    const reusedUsername = await app.authentication.register({
+      email: "ops.delete.reused@example.test",
+      username: "ops_delete_target",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    expect(reusedUsername.username).toBe("ops_delete_target");
+  });
 });

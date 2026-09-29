@@ -31,7 +31,6 @@ describe("operator component-system migration", () => {
   });
 
   it.each([
-    ["users.tsx", "Users"],
     ["treasury.tsx", "Treasury"],
     ["earnings.tsx", "Earnings"],
     ["distributions.tsx", "Distributions"],
@@ -40,6 +39,13 @@ describe("operator component-system migration", () => {
     const source = readFileSync(resolve(operatorRoot, file), "utf8");
     expect(source, file).toContain("selection={{");
     expect(source, file).not.toContain('value: "delete"');
+  });
+
+  it("limits account bulk deletion to account managers", () => {
+    const source = readFileSync(resolve(operatorRoot, "users.tsx"), "utf8");
+    expect(source).toContain("canManage && onBulkDelete");
+    expect(source).toContain('value: "delete"');
+    expect(source).toContain('action: "delete"');
   });
 
   it("uses the shared Sidebar composition for operator navigation", () => {

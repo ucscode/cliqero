@@ -19,6 +19,7 @@ export interface IdentityPersistence {
   createAccount(account: Account): Promise<void>;
   linkCompletedAuthAccount(authUserId: string, accountId: string): Promise<boolean>;
   removeAuthUser(authUserId: string): Promise<void>;
+  removeAccountAuthIdentity(accountId: string): Promise<void>;
   resolveAuthIdentity(authUserId: string): Promise<AuthIdentityResolution>;
   authUserEmail(authUserId: string): Promise<string | null>;
 }

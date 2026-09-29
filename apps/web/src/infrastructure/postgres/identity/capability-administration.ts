@@ -13,7 +13,7 @@ export class PostgresCapabilityAssignmentStore implements CapabilityAssignmentSt
       `select ac.capability,ac.granted_at
        from identity_capability.account_capabilities ac
        join identity_capability.accounts a on a.id=ac.account_id
-       where a.uuid=$1 order by ac.capability`,
+       where a.uuid=$1 and a.deleted_at is null order by ac.capability`,
       [accountId],
     );
     return result.rows
@@ -28,7 +28,7 @@ export class PostgresCapabilityAssignmentStore implements CapabilityAssignmentSt
       `select ac.granted_at
        from identity_capability.account_capabilities ac
        join identity_capability.accounts a on a.id=ac.account_id
-       where a.uuid=$1 and ac.capability=$2`,
+       where a.uuid=$1 and a.deleted_at is null and ac.capability=$2`,
       [accountId, capability],
     );
     return result.rows[0]?.granted_at ?? null;
@@ -46,7 +46,7 @@ export class PostgresCapabilityAssignmentStore implements CapabilityAssignmentSt
   async grant(accountId: string, capability: Capability) {
     const inserted = await this.sql.query<{ granted_at: string }>(
       `insert into identity_capability.account_capabilities(account_id,capability)
-       values((select id from identity_capability.accounts where uuid=$1),$2)
+       values((select id from identity_capability.accounts where uuid=$1 and deleted_at is null),$2)
        on conflict (account_id,capability) do nothing
        returning granted_at`,
       [accountId, capability],
@@ -60,7 +60,7 @@ export class PostgresCapabilityAssignmentStore implements CapabilityAssignmentSt
   async revoke(accountId: string, capability: Capability): Promise<boolean> {
     const removed = await this.sql.query(
       `delete from identity_capability.account_capabilities
-       where account_id=(select id from identity_capability.accounts where uuid=$1)
+       where account_id=(select id from identity_capability.accounts where uuid=$1 and deleted_at is null)
          and capability=$2`,
       [accountId, capability],
     );
