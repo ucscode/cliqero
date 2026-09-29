@@ -13,7 +13,7 @@ const record: ListingTransferRecord = {
   price_minor: "1000",
   currency: "USD",
   destination: "https://destination.example/item",
-  metadata: { category: "course", featured: true },
+  metadata: { featured: true },
   state: "published",
   media: [
     {

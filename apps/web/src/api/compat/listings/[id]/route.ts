@@ -12,6 +12,12 @@ const listingSchema = z
     currency: z.string().length(3),
     destination: z.url(),
     metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+    compare_at_price_minor: z.string().regex(/^\d+$/).nullable(),
+    visibility: z.enum(["public", "authenticated"]),
+    category_ids: z
+      .array(z.uuid())
+      .max(30)
+      .refine((ids) => new Set(ids).size === ids.length, "Category IDs must be unique"),
   })
   .partial()
   .strict();
@@ -37,7 +43,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       /* Authenticated non-owners still receive the public projection when the listing is published. */
     }
   }
-  const listing = await c.listingService.getPublic(id);
+  const listing = await c.listingService.getAvailableTo(
+    id,
+    account ? { kind: "authenticated" } : { kind: "anonymous" },
+  );
   return listing
     ? Response.json(
         listingWithMediaView(
@@ -47,8 +56,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           false,
           (await c.listingReviews.summariesForListings([listing.id])).get(listing.id) ?? null,
         ),
+        { headers: { "Cache-Control": "private, no-store, max-age=0" } },
       )
-    : Response.json({ error: "Not found" }, { status: 404 });
+    : Response.json(
+        { error: "Not found" },
+        { status: 404, headers: { "Cache-Control": "private, no-store, max-age=0" } },
+      );
 }
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const account = await authenticatedAccount(request);
@@ -80,6 +93,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         currency: body.currency,
         destination: body.destination,
         metadata: body.metadata,
+        compareAtPriceMinor: body.compare_at_price_minor,
+        visibility: body.visibility,
+        categoryIds: body.category_ids,
       },
     );
     return Response.json(ownerListingView(listing));

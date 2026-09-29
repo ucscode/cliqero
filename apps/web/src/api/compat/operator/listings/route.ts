@@ -17,6 +17,13 @@ const schema = z
       .optional(),
     external_key: z.string().max(128).optional(),
     featured_position: z.number().int().positive().nullable().optional(),
+    compare_at_price_minor: z.string().regex(/^\d+$/).nullable().optional(),
+    visibility: z.enum(["public", "authenticated"]).optional(),
+    category_ids: z
+      .array(z.uuid())
+      .max(30)
+      .refine((ids) => new Set(ids).size === ids.length, "Category IDs must be unique")
+      .optional(),
   })
   .strict();
 export async function POST(request: Request) {
@@ -36,6 +43,9 @@ export async function POST(request: Request) {
       metadata: b.metadata,
       externalKey: b.external_key,
       featuredPosition: b.featured_position,
+      compareAtPriceMinor: b.compare_at_price_minor,
+      visibility: b.visibility,
+      categoryIds: b.category_ids,
     });
     return Response.json(ownerListingView(l), { status: 201 });
   } catch (e) {
@@ -54,17 +64,20 @@ export async function GET(request: Request) {
         .object({
           limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
           state: z.enum(["draft", "published", "archived"]).optional(),
+          visibility: z.enum(["public", "authenticated"]).optional(),
           search: z.string().max(200).optional(),
           cursor: z.string().optional(),
         })
         .parse({
           limit: u.searchParams.get("limit") ?? undefined,
           state: u.searchParams.get("state") ?? undefined,
+          visibility: u.searchParams.get("visibility") ?? undefined,
           search: u.searchParams.get("search") ?? undefined,
           cursor: u.searchParams.get("cursor") ?? undefined,
         }),
       page = await c.listingService.queryCatalogue({
         state: query.state,
+        visibility: query.visibility,
         search: query.search,
         cursor: query.cursor,
         limit: query.limit,

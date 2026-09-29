@@ -8,7 +8,17 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { ListingPrice } from "./price";
 import { ListingDescription } from "./description";
-import { Star } from "lucide-react";
+import { LockKeyhole, Star } from "lucide-react";
+
+export function compactCategoryLabel(categories: readonly { name: string }[]) {
+  const ordered = [...categories].sort((a, b) => {
+    const left = a.name.toLowerCase();
+    const right = b.name.toLowerCase();
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
+  if (ordered.length <= 2) return ordered.map((category) => category.name).join(" · ");
+  return `${ordered[0]!.name} · ${ordered[1]!.name} +${ordered.length - 2}`;
+}
 
 export function ListingCard({
   listing,
@@ -34,30 +44,41 @@ export function ListingCard({
         )}
       </Link>
       <div className="flex flex-1 flex-col gap-4 p-5">
-        {typeof listing.metadata.category === "string" && listing.metadata.category.trim() && (
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {listing.metadata.category}
-          </p>
-        )}
+        <div className="flex min-h-5 items-center justify-between gap-3">
+          {listing.categories.length > 0 ? (
+            <p
+              className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-slate-500"
+              title={listing.categories.map((category) => category.name).join(" · ")}
+              aria-label={`Categories: ${listing.categories.map((category) => category.name).join(", ")}`}
+            >
+              {compactCategoryLabel(listing.categories)}
+            </p>
+          ) : (
+            <span />
+          )}
+          <div className="flex shrink-0 items-center gap-3">
+            {listing.visibility === "authenticated" && (
+              <span
+                className="inline-flex items-center gap-1 text-xs font-medium text-slate-600"
+                aria-label="Members only"
+              >
+                <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> Members only
+              </span>
+            )}
+            {reviewsVisible && (listing.rating?.count ?? 0) > 0 && listing.rating && (
+              <span
+                className="inline-flex items-center gap-1 text-sm text-slate-600"
+                aria-label={`${listing.rating.average} out of 5 stars`}
+              >
+                <Star className="h-4 w-4 fill-amber-400 text-amber-500" aria-hidden="true" />
+                <span className="font-medium">{listing.rating.average.toFixed(1)}</span>
+              </span>
+            )}
+          </div>
+        </div>
         <h3 className="mb-0 line-clamp-2 break-words text-lg font-semibold tracking-tight">
           <Link href={`/listings/${listing.id}`}>{listing.title}</Link>
         </h3>
-        {reviewsVisible && (
-          <p
-            className="flex items-center gap-1 text-sm text-slate-600"
-            aria-label={
-              listing.rating ? `${listing.rating.average} out of 5 stars` : "No ratings yet"
-            }
-          >
-            <Star
-              className={`h-4 w-4 ${listing.rating ? "fill-amber-400 text-amber-500" : "text-slate-300"}`}
-              aria-hidden="true"
-            />
-            {listing.rating && (
-              <span className="font-medium">{listing.rating.average.toFixed(1)}</span>
-            )}
-          </p>
-        )}
         <ListingDescription
           className="min-h-[4.35rem] text-sm leading-relaxed text-slate-500"
           description={listing.short_description}
@@ -66,6 +87,7 @@ export function ListingCard({
           <ListingPrice
             minorAmount={listing.price.minor_amount}
             currency={listing.price.currency}
+            compareAtMinorAmount={listing.compare_at_price?.minor_amount}
           />
           <Button asChild size="sm">
             <Link href={`/listings/${listing.id}`}>View details</Link>

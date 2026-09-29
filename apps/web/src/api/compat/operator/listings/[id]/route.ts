@@ -12,6 +12,12 @@ const schema = z
     destination: z.url(),
     metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
     featured_position: z.number().int().positive().nullable(),
+    compare_at_price_minor: z.string().regex(/^\d+$/).nullable(),
+    visibility: z.enum(["public", "authenticated"]),
+    category_ids: z
+      .array(z.uuid())
+      .max(30)
+      .refine((ids) => new Set(ids).size === ids.length, "Category IDs must be unique"),
   })
   .partial()
   .strict();
@@ -51,6 +57,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         destination: b.destination,
         metadata: b.metadata,
         featuredPosition: b.featured_position,
+        compareAtPriceMinor: b.compare_at_price_minor,
+        visibility: b.visibility,
+        categoryIds: b.category_ids,
       });
     return Response.json(ownerListingView(l));
   } catch (e) {

@@ -15,6 +15,9 @@ const listing = {
   shortDescription: "Quick summary",
   longDescription: "Detailed description",
   price: { minorAmount: 100n, currency: "USD" },
+  compareAtPrice: null,
+  visibility: "public",
+  categories: [],
   metadata: {},
   state: "published",
   destination: "https://example.com/item",
@@ -29,7 +32,9 @@ function configure(principal: any, ownerError = true) {
         if (ownerError) throw new Error("Forbidden");
         return listing;
       }),
-      getPublic: vi.fn(async () => listing),
+      getAvailableTo: vi.fn(async (_id: string, viewer: { kind: string }) =>
+        listing.visibility === "public" || viewer.kind === "authenticated" ? listing : null,
+      ),
     },
     listingMediaRepository: { listByListing: vi.fn(async () => []) },
     listingMedia: { publicUrl: vi.fn() },
@@ -84,5 +89,18 @@ describe("public listing detail compatibility route", () => {
     const response = await GET(new Request(`http://localhost/api/listings/${listing.id}`), context);
     expect(response.status).toBe(200);
     expect(await response.json()).toHaveProperty("destination", listing.destination);
+  });
+
+  it("returns an indistinguishable not-found response for anonymous members-only detail", async () => {
+    configure(null);
+    const privateListing = { ...listing, visibility: "authenticated" };
+    fixtures.container.listingService.getAvailableTo.mockResolvedValue(null);
+    const response = await GET(
+      new Request(`http://localhost/api/listings/${privateListing.id}`),
+      context,
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Not found" });
+    expect(response.headers.get("cache-control")).toContain("no-store");
   });
 });

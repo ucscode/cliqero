@@ -24,14 +24,16 @@ export const FREE_CATALOGUE_LISTINGS = [
 export class CatalogueListingSeeder {
   constructor(private readonly listings: ListingService) {}
 
-  async seedFree(actor: Account) {
+  async seedFree(actor: Account, toolkitCategoryId?: string) {
     const seeded = [];
     for (const fixture of FREE_CATALOGUE_LISTINGS) {
       const input = {
         ...fixture,
         priceMinor: "0",
         currency: "USD",
-        metadata: { category: "Toolkit", fixture: true },
+        metadata: { fixture: true },
+        ...(toolkitCategoryId ? { categoryIds: [toolkitCategoryId] } : {}),
+        compareAtPriceMinor: fixture.externalKey === "toolkit-10" ? "1000" : null,
       };
       const existing = await this.listings.findByExternalKey(actor, fixture.externalKey);
       let listing = existing

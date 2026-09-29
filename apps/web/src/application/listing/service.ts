@@ -1,6 +1,8 @@
 import { newId, type Id } from "@/kernel/ids";
 import { Listing, type ListingMetadata, type ListingRepository } from "@/modules/listing";
 import { Money } from "@/modules/money/money";
+import type { ListingVisibility, ListingCategorySummary } from "@/modules/listing";
+import type { ListingCategoryService } from "@/application/listing/category/service";
 import type { Account } from "@/modules/identity/account";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import type { ListingMedia } from "@/modules/listing/media/media";
@@ -15,6 +17,7 @@ export class ListingService {
     private readonly authorization: AuthorizationPolicy,
     private readonly auditRecorder?: AuditRecorder,
     private readonly uow?: UnitOfWork,
+    private readonly categoryService?: ListingCategoryService,
   ) {}
   async create(
     seller: Account,
@@ -28,10 +31,14 @@ export class ListingService {
       metadata?: ListingMetadata;
       externalKey?: string | null;
       featuredPosition?: number | null;
+      compareAtPriceMinor?: string | null;
+      visibility?: ListingVisibility;
+      categoryIds?: readonly string[];
     },
   ) {
     if (input.currency.trim().toUpperCase() !== "USD")
       throw new Error("Listings must use the canonical USD currency");
+    const categories = input.categoryIds ? await this.requireCategories(input.categoryIds) : [];
     const listing = Listing.create({
       id: newId(),
       sellerId: seller.id,
@@ -43,6 +50,12 @@ export class ListingService {
       metadata: input.metadata,
       externalKey: input.externalKey,
       featuredPosition: input.featuredPosition,
+      compareAtPrice:
+        input.compareAtPriceMinor == null
+          ? null
+          : Money.of(BigInt(input.compareAtPriceMinor), input.currency),
+      visibility: input.visibility,
+      categories,
     });
     await this.listings.save(listing);
     return listing;
@@ -59,6 +72,9 @@ export class ListingService {
       metadata?: ListingMetadata;
       featuredPosition?: number | null;
       externalKey?: string | null;
+      compareAtPriceMinor?: string | null;
+      visibility?: ListingVisibility;
+      categoryIds?: readonly string[];
     },
   ) {
     const listing = await this.create(seller, input);
@@ -89,6 +105,9 @@ export class ListingService {
       destination?: string;
       metadata?: ListingMetadata;
       featuredPosition?: number | null;
+      compareAtPriceMinor?: string | null;
+      visibility?: ListingVisibility;
+      categoryIds?: readonly string[];
     },
   ) {
     const listing = await this.listings.findById(id);
@@ -96,6 +115,10 @@ export class ListingService {
     if (!this.authorization.canModifyListing(actor, listing)) throw new Error("Forbidden");
     if (input.currency !== undefined && input.currency.trim().toUpperCase() !== "USD")
       throw new Error("Listings must use the canonical USD currency");
+    const categories =
+      input.categoryIds === undefined
+        ? listing.categories
+        : await this.requireCategories(input.categoryIds);
     listing.update({
       title: input.title ?? listing.title,
       shortDescription: input.shortDescription ?? listing.shortDescription,
@@ -107,6 +130,14 @@ export class ListingService {
       destination: input.destination ?? listing.destination,
       metadata: input.metadata ?? listing.metadata,
       featuredPosition: input.featuredPosition ?? listing.featuredPosition,
+      compareAtPrice:
+        input.compareAtPriceMinor === undefined
+          ? listing.compareAtPrice
+          : input.compareAtPriceMinor === null
+            ? null
+            : Money.of(BigInt(input.compareAtPriceMinor), input.currency ?? listing.price.currency),
+      visibility: input.visibility,
+      categories,
     });
     await this.listings.save(listing);
     return listing;
@@ -123,6 +154,10 @@ export class ListingService {
         price_minor: listing.price.minorAmount.toString(),
         currency: listing.price.currency,
       };
+      const categories =
+        input.categoryIds === undefined
+          ? listing.categories
+          : await this.requireCategories(input.categoryIds);
       listing.update({
         title: input.title ?? listing.title,
         shortDescription: input.shortDescription ?? listing.shortDescription,
@@ -134,6 +169,17 @@ export class ListingService {
         destination: input.destination ?? listing.destination,
         metadata: input.metadata ?? listing.metadata,
         featuredPosition: input.featuredPosition ?? listing.featuredPosition,
+        compareAtPrice:
+          input.compareAtPriceMinor === undefined
+            ? listing.compareAtPrice
+            : input.compareAtPriceMinor === null
+              ? null
+              : Money.of(
+                  BigInt(input.compareAtPriceMinor),
+                  input.currency ?? listing.price.currency,
+                ),
+        visibility: input.visibility,
+        categories,
       });
       await this.listings.save(listing);
       await this.audit(_actor.id, "listing.updated", listing.id, previous, {
@@ -242,7 +288,23 @@ export class ListingService {
     sort?: import("@/modules/listing").ListingSort;
     featuredOnly?: boolean;
   }) {
-    return this.listings.query({ ...input, publicOnly: true });
+    return this.listings.query({ ...input, publicOnly: true, visibility: "public" });
+  }
+  queryStorefront(
+    viewer: { kind: "anonymous" } | { kind: "authenticated" },
+    input: {
+      search?: string;
+      cursor?: string;
+      limit: number;
+      sort?: import("@/modules/listing").ListingSort;
+      featuredOnly?: boolean;
+    },
+  ) {
+    return this.listings.query({
+      ...input,
+      publicOnly: true,
+      visibility: viewer.kind === "anonymous" ? "public" : "all",
+    });
   }
   queryOwner(
     actor: Account,
@@ -262,6 +324,7 @@ export class ListingService {
     cursor?: string;
     limit: number;
     sort?: import("@/modules/listing").ListingSort;
+    visibility?: ListingVisibility;
   }) {
     return this.listings.query(input);
   }
@@ -270,7 +333,12 @@ export class ListingService {
   }
   async getPublic(id: Id) {
     const listing = await this.listings.findById(id);
-    return listing?.state === "published" ? listing : null;
+    return listing?.state === "published" && listing.visibility === "public" ? listing : null;
+  }
+  async getAvailableTo(id: Id, viewer: { kind: "anonymous" } | { kind: "authenticated" }) {
+    const listing = await this.listings.findById(id);
+    if (!listing || listing.state !== "published") return null;
+    return viewer.kind === "authenticated" || listing.visibility === "public" ? listing : null;
   }
   private async owned(actor: Account, id: Id) {
     const listing = await this.listings.findById(id);
@@ -294,6 +362,15 @@ export class ListingService {
       newState,
     });
   }
+  private async requireCategories(
+    ids: readonly string[],
+  ): Promise<readonly ListingCategorySummary[]> {
+    if (!this.categoryService) {
+      if (ids.length) throw new Error("Catalogue category service is unavailable");
+      return [];
+    }
+    return this.categoryService.requireIds(ids);
+  }
   private catalogueMutation<T>(operation: () => Promise<T>) {
     return this.uow ? this.uow.transaction(operation) : operation();
   }
@@ -307,6 +384,14 @@ export function listingView(listing: Listing) {
     short_description: listing.shortDescription,
     long_description: listing.longDescription,
     price: { minor_amount: listing.price.minorAmount.toString(), currency: listing.price.currency },
+    compare_at_price: listing.compareAtPrice
+      ? {
+          minor_amount: listing.compareAtPrice.minorAmount.toString(),
+          currency: listing.compareAtPrice.currency,
+        }
+      : null,
+    visibility: listing.visibility,
+    categories: listing.categories,
     metadata: listing.metadata,
     state: listing.state,
     featured_position: listing.featuredPosition,

@@ -1063,6 +1063,8 @@ CREATE TABLE listing_capability.listings (
     long_description text DEFAULT ''::text NOT NULL,
     price_minor bigint NOT NULL,
     price_currency text NOT NULL,
+    compare_at_price_minor bigint,
+    visibility text DEFAULT 'public'::text NOT NULL,
     destination_url text NOT NULL,
     state text DEFAULT 'draft'::text NOT NULL,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -1076,10 +1078,29 @@ CREATE TABLE listing_capability.listings (
     CONSTRAINT listings_external_key_format CHECK (((external_key IS NULL) OR (external_key ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'::text))),
     CONSTRAINT listings_featured_position_positive CHECK (((featured_position IS NULL) OR (featured_position > 0))),
     CONSTRAINT listings_price_nonnegative CHECK ((price_minor >= 0)),
+    CONSTRAINT listings_compare_at_price_valid CHECK (((compare_at_price_minor IS NULL) OR (compare_at_price_minor > price_minor))),
+    CONSTRAINT listings_visibility_valid CHECK ((visibility = ANY (ARRAY['public'::text, 'authenticated'::text]))),
     CONSTRAINT listings_published_short_description_required CHECK (((state <> 'published'::text) OR (length(TRIM(BOTH FROM short_description)) > 0))),
     CONSTRAINT listings_short_description_length CHECK ((length(short_description) <= 200)),
     CONSTRAINT listings_state_valid CHECK ((state = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text]))),
     CONSTRAINT listings_title_nonempty CHECK ((length(TRIM(BOTH FROM title)) > 0))
+);
+
+-- Normalized catalogue taxonomy; category names/slugs are canonical records.
+CREATE TABLE listing_capability.categories (
+    uuid uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+    CONSTRAINT listing_categories_name_nonempty CHECK ((length(TRIM(BOTH FROM name)) > 0)),
+    CONSTRAINT listing_categories_slug_valid CHECK ((slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))
+);
+
+CREATE TABLE listing_capability.listing_categories (
+    listing_id bigint NOT NULL,
+    category_id bigint NOT NULL
 );
 
 
@@ -2238,6 +2259,20 @@ ALTER TABLE ONLY listing_capability.reviews
 ALTER TABLE ONLY listing_capability.listings
     ADD CONSTRAINT listings_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY listing_capability.categories
+    ADD CONSTRAINT listing_categories_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY listing_capability.categories
+    ADD CONSTRAINT listing_categories_uuid_unique UNIQUE (uuid);
+
+ALTER TABLE ONLY listing_capability.categories
+    ADD CONSTRAINT listing_categories_slug_unique UNIQUE (slug);
+
+CREATE UNIQUE INDEX listing_categories_name_ci_unique ON listing_capability.categories USING btree (lower(name));
+
+ALTER TABLE ONLY listing_capability.listing_categories
+    ADD CONSTRAINT listing_categories_membership_pkey PRIMARY KEY (listing_id, category_id);
+
 
 --
 -- Name: listings listings_seller_external_key_unique; Type: CONSTRAINT; Schema: listing_capability; Owner: -
@@ -2880,6 +2915,10 @@ CREATE INDEX listings_search_idx ON listing_capability.listings USING gin (to_ts
 
 CREATE INDEX listings_seller_idx ON listing_capability.listings USING btree (seller_id, created_at DESC);
 
+CREATE INDEX listing_categories_name_idx ON listing_capability.categories USING btree (name, id);
+
+CREATE INDEX listing_categories_category_idx ON listing_capability.listing_categories USING btree (category_id, listing_id);
+
 
 --
 -- Name: payment_buyer_idx; Type: INDEX; Schema: payment_capability; Owner: -
@@ -3406,6 +3445,12 @@ ALTER TABLE ONLY listing_capability.reviews
 
 ALTER TABLE ONLY listing_capability.listings
     ADD CONSTRAINT listings_seller_fk FOREIGN KEY (seller_id) REFERENCES identity_capability.accounts(id);
+
+ALTER TABLE ONLY listing_capability.listing_categories
+    ADD CONSTRAINT listing_categories_listing_fk FOREIGN KEY (listing_id) REFERENCES listing_capability.listings(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY listing_capability.listing_categories
+    ADD CONSTRAINT listing_categories_category_fk FOREIGN KEY (category_id) REFERENCES listing_capability.categories(id) ON DELETE RESTRICT;
 
 
 --

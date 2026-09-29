@@ -14,6 +14,7 @@ import { errorSchema } from "./shared/schemas";
 import { registerBlogRoutes } from "./routes/blog";
 import { registerOperatorOperationsRoutes } from "./routes/operator/operations";
 import { registerOperatorCatalogueRoutes } from "./routes/operator/catalogue";
+import { registerOperatorListingCategoryRoutes } from "./routes/operator/catalogue/categories";
 import { registerOperatorFinanceRoutes } from "./routes/operator/finance";
 import { registerOperatorWithdrawalRoutes } from "./routes/operator/withdrawal";
 import { registerOperatorTreasuryRoutes } from "./routes/operator/treasury";
@@ -88,6 +89,7 @@ export function createApiApp(
   registerBlogRoutes(app, container);
   registerOperatorOperationsRoutes(app, container);
   registerOperatorCatalogueRoutes(app, container);
+  registerOperatorListingCategoryRoutes(app, container);
   registerOperatorFinanceRoutes(app, container);
   registerOperatorWithdrawalRoutes(app, container);
   registerOperatorTreasuryRoutes(app, container);

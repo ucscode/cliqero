@@ -5,6 +5,7 @@ import { PostgresAccountRepository } from "./postgres/identity/accounts";
 import { PostgresAccessGrantRepository } from "./postgres/access/repository";
 import { PostgresEntitlementRepository } from "./postgres/entitlement/repository";
 import { PostgresListingRepository } from "./postgres/listing/repository";
+import { PostgresListingCategoryRepository } from "./postgres/listing/categories";
 import { PostgresPurchaseRepository } from "./postgres/purchase/repository";
 import { PostgresPaymentRepository } from "./postgres/payment/payments";
 import { PostgresProviderEventRepository } from "./postgres/payment/provider-events";
@@ -34,6 +35,7 @@ import { loadDirectTrc20Configuration } from "@/providers/payment/direct-trc20/c
 import { BankTransferProvider } from "@/providers/payment/bank-transfer/provider";
 import { loadBankTransferConfiguration } from "@/providers/payment/bank-transfer/config";
 import { ListingService } from "@/application/listing/service";
+import { ListingCategoryService } from "@/application/listing/category/service";
 import { CheckoutService } from "@/application/checkout/service";
 import { PaymentCompletionService } from "@/application/checkout/completion";
 import { BuyerAccessService } from "@/application/access";
@@ -146,7 +148,11 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const database = PostgresDatabase.connect(databaseUrl);
   const auditRecorder = lazy(() => new PostgresAuditRecorder(database));
   const accounts = lazy(() => new PostgresAccountRepository(database));
-  const listings = lazy(() => new PostgresListingRepository(database));
+  const listings = lazy(() => new PostgresListingRepository(database, database));
+  const listingCategories = lazy(() => new PostgresListingCategoryRepository(database));
+  const listingCategoryService = lazy(
+    () => new ListingCategoryService(listingCategories(), database),
+  );
   const reviews = lazy(() => new PostgresListingReviewRepository(database));
   const listingMediaRepository = lazy(() => new PostgresListingMediaRepository(database));
   const objectStorage = lazy(() =>
@@ -172,7 +178,14 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   );
   const authorization = lazy(() => new AuthorizationPolicy());
   const listingService = lazy(
-    () => new ListingService(listings(), authorization(), auditRecorder(), database),
+    () =>
+      new ListingService(
+        listings(),
+        authorization(),
+        auditRecorder(),
+        database,
+        listingCategoryService(),
+      ),
   );
   const operators = lazy(() => new PostgresOperatorAuthorizationService(database));
   const listingReviews = lazy(() => new ListingReviewService(reviews(), listings(), operators()));
@@ -674,6 +687,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get listingService() {
       return listingService();
+    },
+    get listingCategories() {
+      return listingCategoryService();
     },
     get listingTransfer() {
       return listingTransfer();

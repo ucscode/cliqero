@@ -88,6 +88,94 @@ suite("listing management and media", () => {
     expect((await app.listingService.restore(owner, archived.id)).state).toBe("draft");
   });
 
+  it("stores multiple canonical categories and applies principal-aware visibility to storefront reads", async () => {
+    const { owner } = await accounts("visibility");
+    const suffix = Date.now().toString();
+    const toolkit = await app.listingCategories.create(`Toolkit ${suffix}`, `toolkit-${suffix}`);
+    const api = await app.listingCategories.create(`API ${suffix}`, `api-${suffix}`);
+    const membersOnly = await app.listingService.create(owner, {
+      title: "Authenticated catalogue listing",
+      shortDescription: "Only visible to signed-in customers: visibilitytoken.",
+      longDescription: "This listing tests authenticated catalogue access.",
+      priceMinor: "0",
+      currency: "USD",
+      destination: "https://example.test/members-only",
+      visibility: "authenticated",
+      categoryIds: [api.id, toolkit.id],
+      compareAtPriceMinor: "1000",
+      featuredPosition: 1,
+    });
+    const publicListing = await app.listingService.create(owner, {
+      title: "Public catalogue listing",
+      shortDescription: "Visible to visitors: visibilitytoken.",
+      longDescription: "This listing remains public.",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/public",
+      featuredPosition: 2,
+    });
+    await app.listingService.publish(owner, membersOnly.id);
+    await app.listingService.publish(owner, publicListing.id);
+
+    const anonymous = await app.listingService.queryStorefront(
+      { kind: "anonymous" },
+      { limit: 20 },
+    );
+    const authenticated = await app.listingService.queryStorefront(
+      { kind: "authenticated" },
+      { limit: 20 },
+    );
+    expect(anonymous.items.map((item) => item.id)).toContain(publicListing.id);
+    expect(anonymous.items.map((item) => item.id)).not.toContain(membersOnly.id);
+    expect(
+      (
+        await app.listingService.queryStorefront(
+          { kind: "anonymous" },
+          { search: "visibilitytoken", limit: 20 },
+        )
+      ).items.map((item) => item.id),
+    ).toEqual([publicListing.id]);
+    expect(
+      (
+        await app.listingService.queryStorefront(
+          { kind: "anonymous" },
+          { featuredOnly: true, limit: 20 },
+        )
+      ).items.map((item) => item.id),
+    ).toEqual([publicListing.id]);
+    expect(
+      (
+        await app.listingService.queryStorefront(
+          { kind: "authenticated" },
+          { search: "visibilitytoken", limit: 20 },
+        )
+      ).items.map((item) => item.id),
+    ).toContain(membersOnly.id);
+    const included = authenticated.items.find((item) => item.id === membersOnly.id)!;
+    expect(included.visibility).toBe("authenticated");
+    expect(included.categories.map((category) => category.name)).toEqual(
+      [api.name, toolkit.name].sort((a, b) => a.localeCompare(b)),
+    );
+    expect(included.compareAtPrice?.minorAmount).toBe(1000n);
+    expect(
+      await app.listingService.getAvailableTo(membersOnly.id, { kind: "anonymous" }),
+    ).toBeNull();
+    expect(
+      await app.listingService.getAvailableTo(membersOnly.id, { kind: "authenticated" }),
+    ).not.toBeNull();
+
+    const checkout = await app.walletCheckout.initiate({
+      buyerId: owner.id,
+      listingId: membersOnly.id,
+      idempotencyKey: `members-only-${Date.now()}`,
+    });
+    expect(checkout.state).toBe("pending");
+    await expect(app.listingCategories.delete(api.id)).rejects.toThrow("assigned");
+    await app.listingService.update(owner, membersOnly.id, { categoryIds: [] });
+    expect((await app.listingService.getOwner(owner, membersOnly.id)).categories).toEqual([]);
+    await app.listingCategories.delete(api.id);
+  });
+
   it("converges every import lifecycle target and remains idempotent", async () => {
     const { owner } = await accounts();
     const transitions: ["draft" | "published" | "archived", "draft" | "published" | "archived"][] =

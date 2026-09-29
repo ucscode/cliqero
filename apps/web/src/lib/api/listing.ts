@@ -15,6 +15,9 @@ export type Listing = {
   long_description: string;
   test_only: "development" | "test" | null;
   price: { minor_amount: string; currency: string };
+  compare_at_price: { minor_amount: string; currency: string } | null;
+  visibility: "public" | "authenticated";
+  categories: { id: string; name: string; slug: string }[];
   metadata: Record<string, unknown>;
   state?: "draft" | "published" | "archived";
   featured_position?: number | null;

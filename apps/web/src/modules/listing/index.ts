@@ -3,6 +3,8 @@ import type { Id } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
 
 export type ListingState = "draft" | "published" | "archived";
+export type ListingVisibility = "public" | "authenticated";
+export type ListingCategorySummary = Readonly<{ id: Id; name: string; slug: string }>;
 export type ListingSort = "newest" | "oldest" | "price_asc" | "price_desc" | "title_asc";
 export type ListingMetadata = Readonly<Record<string, string | number | boolean | null>>;
 export const LISTING_SHORT_DESCRIPTION_MAX_LENGTH = 200;
@@ -15,6 +17,9 @@ export class Listing {
     private shortDescriptionValue: string,
     private longDescriptionValue: string,
     private priceValue: Money,
+    private compareAtPriceValue: Money | null,
+    private visibilityValue: ListingVisibility,
+    private categoriesValue: readonly ListingCategorySummary[],
     private destinationValue: URL,
     private metadataValue: ListingMetadata,
     private stateValue: ListingState,
@@ -33,6 +38,9 @@ export class Listing {
     metadata?: ListingMetadata;
     externalKey?: string | null;
     featuredPosition?: number | null;
+    compareAtPrice?: Money | null;
+    visibility?: ListingVisibility;
+    categories?: readonly ListingCategorySummary[];
   }): Listing {
     const title = input.title.trim();
     if (!title) throw new DomainInvariantError("Listing title is required");
@@ -46,8 +54,11 @@ export class Listing {
       normalizeShortDescription(input.shortDescription),
       input.longDescription.trim(),
       input.price,
+      validateCompareAtPrice(input.price, input.compareAtPrice ?? null),
+      validateVisibility(input.visibility ?? "public"),
+      normalizeCategories(input.categories ?? []),
       destination,
-      input.metadata ?? {},
+      normalizeMetadata(input.metadata ?? {}),
       "draft",
       validateExternalKey(input.externalKey ?? null),
       validateFeaturedPosition(input.featuredPosition ?? null),
@@ -66,6 +77,9 @@ export class Listing {
     state: ListingState;
     externalKey?: string | null;
     featuredPosition?: number | null;
+    compareAtPrice?: Money | null;
+    visibility?: ListingVisibility;
+    categories?: readonly ListingCategorySummary[];
   }): Listing {
     return new Listing(
       input.id,
@@ -74,8 +88,11 @@ export class Listing {
       normalizeShortDescription(input.shortDescription),
       input.longDescription,
       input.price,
+      validateCompareAtPrice(input.price, input.compareAtPrice ?? null),
+      validateVisibility(input.visibility ?? "public"),
+      normalizeCategories(input.categories ?? []),
       new URL(input.destination),
-      input.metadata,
+      normalizeMetadata(input.metadata),
       input.state,
       validateExternalKey(input.externalKey ?? null),
       validateFeaturedPosition(input.featuredPosition ?? null),
@@ -107,6 +124,9 @@ export class Listing {
     destination: string;
     metadata: ListingMetadata;
     featuredPosition?: number | null;
+    compareAtPrice?: Money | null;
+    visibility?: ListingVisibility;
+    categories?: readonly ListingCategorySummary[];
   }): void {
     const title = input.title.trim();
     if (!title) throw new DomainInvariantError("Listing title is required");
@@ -119,8 +139,11 @@ export class Listing {
     this.shortDescriptionValue = shortDescription;
     this.longDescriptionValue = input.longDescription.trim();
     this.priceValue = input.price;
+    this.compareAtPriceValue = validateCompareAtPrice(input.price, input.compareAtPrice ?? null);
+    this.visibilityValue = validateVisibility(input.visibility ?? this.visibilityValue);
+    this.categoriesValue = normalizeCategories(input.categories ?? this.categoriesValue);
     this.destinationValue = destination;
-    this.metadataValue = input.metadata;
+    this.metadataValue = normalizeMetadata(input.metadata);
     this.featuredPositionValue = validateFeaturedPosition(input.featuredPosition ?? null);
   }
 
@@ -141,6 +164,15 @@ export class Listing {
   }
   get price() {
     return this.priceValue;
+  }
+  get compareAtPrice() {
+    return this.compareAtPriceValue;
+  }
+  get visibility() {
+    return this.visibilityValue;
+  }
+  get categories() {
+    return this.categoriesValue;
   }
   get metadata() {
     return this.metadataValue;
@@ -187,9 +219,42 @@ export interface ListingRepository {
     cursor?: string;
     sort?: ListingSort;
     featuredOnly?: boolean;
+    visibility?: ListingVisibility | "all";
     limit: number;
   }): Promise<{ items: readonly Listing[]; nextCursor: string | null }>;
   save(listing: Listing): Promise<void>;
+}
+
+function validateCompareAtPrice(price: Money, compareAtPrice: Money | null) {
+  if (compareAtPrice && compareAtPrice.currency !== price.currency)
+    throw new DomainInvariantError("Compare-at price must use the listing currency");
+  if (compareAtPrice && compareAtPrice.minorAmount <= price.minorAmount)
+    throw new DomainInvariantError("Compare-at price must be greater than the listing price");
+  return compareAtPrice;
+}
+
+function validateVisibility(value: string): ListingVisibility {
+  if (value !== "public" && value !== "authenticated")
+    throw new DomainInvariantError("Listing visibility must be public or authenticated");
+  return value;
+}
+
+function normalizeCategories(categories: readonly ListingCategorySummary[]) {
+  const byId = new Map(categories.map((category) => [category.id, Object.freeze({ ...category })]));
+  return Object.freeze(
+    [...byId.values()].sort((a, b) => {
+      const left = a.name.toLowerCase();
+      const right = b.name.toLowerCase();
+      return (left < right ? -1 : left > right ? 1 : 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    }),
+  );
+}
+
+function normalizeMetadata(metadata: ListingMetadata): ListingMetadata {
+  if (!("category" in metadata)) return metadata;
+  const miscellaneous = { ...metadata };
+  delete miscellaneous.category;
+  return Object.freeze(miscellaneous);
 }
 
 function validateExternalKey(value: string | null) {

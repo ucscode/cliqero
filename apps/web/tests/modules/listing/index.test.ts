@@ -168,4 +168,83 @@ describe("Listing lifecycle", () => {
       longDescription: "Full details",
     });
   });
+
+  it("defaults visibility to public and validates optional compare-at prices", () => {
+    const publicListing = create();
+    expect(publicListing.visibility).toBe("public");
+    expect(publicListing.compareAtPrice).toBeNull();
+
+    const discounted = Listing.create({
+      id: "discounted",
+      sellerId: "seller",
+      title: "Discounted",
+      shortDescription: "Summary",
+      longDescription: "Details",
+      price: Money.of(2000n, "USD"),
+      compareAtPrice: Money.of(10000n, "USD"),
+      destination: "https://example.com",
+      visibility: "authenticated",
+    });
+    expect(discounted.visibility).toBe("authenticated");
+    expect(discounted.compareAtPrice?.minorAmount).toBe(10000n);
+
+    const freeWithReferencePrice = Listing.create({
+      id: "free-discounted",
+      sellerId: "seller",
+      title: "Free",
+      shortDescription: "Summary",
+      longDescription: "Details",
+      price: Money.of(0n, "USD"),
+      compareAtPrice: Money.of(1000n, "USD"),
+      destination: "https://example.com",
+    });
+    expect(freeWithReferencePrice.price.minorAmount).toBe(0n);
+    expect(freeWithReferencePrice.compareAtPrice?.minorAmount).toBe(1000n);
+
+    for (const amount of [2000n, 1500n])
+      expect(() =>
+        Listing.create({
+          id: `invalid-${amount}`,
+          sellerId: "seller",
+          title: "Invalid comparison",
+          shortDescription: "Summary",
+          longDescription: "Details",
+          price: Money.of(2000n, "USD"),
+          compareAtPrice: Money.of(amount, "USD"),
+          destination: "https://example.com",
+        }),
+      ).toThrow("Compare-at price must be greater than the listing price");
+
+    expect(() =>
+      Listing.create({
+        id: "invalid-visibility",
+        sellerId: "seller",
+        title: "Invalid visibility",
+        shortDescription: "Summary",
+        longDescription: "Details",
+        price: Money.of(100n, "USD"),
+        destination: "https://example.com",
+        visibility: "private" as never,
+      }),
+    ).toThrow("Listing visibility must be public or authenticated");
+  });
+
+  it("keeps category assignments normalized and removes legacy metadata category", () => {
+    const listing = Listing.create({
+      id: "categorized",
+      sellerId: "seller",
+      title: "Categorized",
+      shortDescription: "Summary",
+      longDescription: "Details",
+      price: Money.of(100n, "USD"),
+      destination: "https://example.com",
+      metadata: { category: "legacy", fixture: true },
+      categories: [
+        { id: "b", name: "Toolkit", slug: "toolkit" },
+        { id: "a", name: "API", slug: "api" },
+      ],
+    });
+    expect(listing.metadata).toEqual({ fixture: true });
+    expect(listing.categories.map((category) => category.name)).toEqual(["API", "Toolkit"]);
+  });
 });

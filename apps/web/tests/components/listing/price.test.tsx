@@ -12,4 +12,26 @@ describe("listing price presentation", () => {
       renderToStaticMarkup(createElement(ListingPrice, { minorAmount: "1250", currency: "USD" })),
     ).toContain("$12.50");
   });
+
+  it("renders the compare-at amount semantically while retaining a free price", () => {
+    const paid = renderToStaticMarkup(
+      createElement(ListingPrice, {
+        minorAmount: "2400",
+        compareAtMinorAmount: "4000",
+        currency: "USD",
+      }),
+    );
+    expect(paid).toContain("<del");
+    expect(paid).toContain("$40.00");
+    expect(paid).toContain("$24.00");
+    const free = renderToStaticMarkup(
+      createElement(ListingPrice, {
+        minorAmount: "0",
+        compareAtMinorAmount: "1000",
+        currency: "USD",
+      }),
+    );
+    expect(free).toContain("$10.00");
+    expect(free).toContain(">Free</span>");
+  });
 });

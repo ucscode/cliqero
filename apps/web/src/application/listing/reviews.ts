@@ -29,6 +29,21 @@ export class ListingReviewService {
     return this.reviews.findMine(listingId, account.id);
   }
   visible(input: { listingId: Id; accountId?: Id; cursor?: string; limit: number }) {
+    return this.visibleForListing(input);
+  }
+  private async visibleForListing(input: {
+    listingId: Id;
+    accountId?: Id;
+    cursor?: string;
+    limit: number;
+  }) {
+    const listing = await this.listings.findById(input.listingId);
+    if (
+      !listing ||
+      listing.state !== "published" ||
+      (listing.visibility === "authenticated" && !input.accountId)
+    )
+      return { items: [], nextCursor: null };
     return this.reviews.queryVisible(input);
   }
   async moderate(account: Account, reviewId: Id, status: "approved" | "rejected") {

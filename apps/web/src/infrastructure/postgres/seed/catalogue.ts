@@ -201,13 +201,46 @@ try {
     `insert into identity_capability.accounts(uuid,username) values($1,$2) on conflict (uuid) do nothing`,
     [ownerId, "fixture_catalogue"],
   );
+  const categoryIds = new Map<string, string>();
+  for (const name of [
+    "Toolkit",
+    "API",
+    "Product",
+    "Operations",
+    "Writing",
+    "Research",
+    "Templates",
+  ]) {
+    const slug = name.toLowerCase();
+    const category = (
+      await pool.query<{ id: string }>(
+        `insert into listing_capability.categories(name,slug) values($1,$2)
+       on conflict(slug) do update set name=excluded.name,updated_at=now() returning uuid as id`,
+        [name, slug],
+      )
+    ).rows[0]!;
+    categoryIds.set(slug, category.id);
+  }
+  const listingCategories: Record<string, string[]> = {
+    "toolkit-03": ["api", "toolkit"],
+    "toolkit-08": ["operations", "product"],
+    "toolkit-09": ["research", "product"],
+    "toolkit-10": ["product", "research", "toolkit"],
+    "toolkit-12": ["product", "templates"],
+    "toolkit-14": ["research", "writing"],
+    "toolkit-25": ["writing", "templates"],
+  };
   for (const [key, title, longDescription, price] of records) {
     const state = key === "toolkit-16" ? "archived" : key === "toolkit-15" ? "draft" : "published";
     const numericKey = Number(key.slice(-2));
     const featuredPosition = [1, 2, 3, 6, 11, 18].indexOf(numericKey) + 1 || null;
     const createdAt = new Date(Date.UTC(2025, 0, 1 + numericKey)).toISOString();
+    const visibility = ["toolkit-08", "toolkit-09"].includes(key) ? "authenticated" : "public";
+    const compareAtPrice = key === "toolkit-03" ? "4000" : key === "toolkit-08" ? "1500" : null;
     await pool.query(
-      `insert into listing_capability.listings(uuid,seller_id,title,short_description,long_description,price_minor,price_currency,destination_url,state,metadata,external_key,featured_position,created_at,updated_at) values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,'USD',$7,$8,$9::jsonb,$10,$11,$12,$12) on conflict (seller_id,external_key) do update set title=excluded.title,short_description=excluded.short_description,long_description=excluded.long_description,price_minor=excluded.price_minor,state=excluded.state,metadata=excluded.metadata,featured_position=excluded.featured_position,created_at=excluded.created_at,updated_at=excluded.updated_at`,
+      `insert into listing_capability.listings(uuid,seller_id,title,short_description,long_description,price_minor,price_currency,compare_at_price_minor,visibility,destination_url,state,metadata,external_key,featured_position,created_at,updated_at)
+       values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,'USD',$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$14)
+       on conflict (seller_id,external_key) do update set title=excluded.title,short_description=excluded.short_description,long_description=excluded.long_description,price_minor=excluded.price_minor,compare_at_price_minor=excluded.compare_at_price_minor,visibility=excluded.visibility,state=excluded.state,metadata=excluded.metadata,featured_position=excluded.featured_position,created_at=excluded.created_at,updated_at=excluded.updated_at`,
       [
         newId(),
         ownerId,
@@ -215,17 +248,29 @@ try {
         shortDescriptions[key],
         longDescription,
         price,
+        compareAtPrice,
+        visibility,
         `https://example.test/catalogue/${key}`,
         state,
-        JSON.stringify({
-          category: key.includes("toolkit") ? "Toolkit" : "Resources",
-          fixture: true,
-        }),
+        JSON.stringify({ fixture: true }),
         key,
         featuredPosition,
         createdAt,
       ],
     );
+    await pool.query(
+      `delete from listing_capability.listing_categories where listing_id=(select id from listing_capability.listings where seller_id=(select id from identity_capability.accounts where uuid=$1) and external_key=$2)`,
+      [ownerId, key],
+    );
+    const slugs = listingCategories[key] ?? [];
+    if (slugs.length)
+      await pool.query(
+        `insert into listing_capability.listing_categories(listing_id,category_id)
+         select l.id,c.id from listing_capability.listings l
+         join listing_capability.categories c on c.uuid=any($3::uuid[])
+         where l.seller_id=(select id from identity_capability.accounts where uuid=$1) and l.external_key=$2`,
+        [ownerId, key, slugs.map((slug) => categoryIds.get(slug))],
+      );
   }
   await pool.query("commit");
   const reviewers = [
@@ -267,6 +312,7 @@ try {
       "A concise reference for our API design review.",
       "approved",
     ],
+    ["toolkit-08", reviewers[1][0], 5, "The sessions are practical and welcoming.", "approved"],
     ["toolkit-06", reviewers[1][0], 5, "", "approved"],
     [
       "toolkit-11",
@@ -303,7 +349,10 @@ try {
   );
   const container = getContainer();
   const owner = new Account(ownerId, "fixture_catalogue");
-  await new CatalogueListingSeeder(container.listingService).seedFree(owner);
+  await new CatalogueListingSeeder(container.listingService).seedFree(
+    owner,
+    categoryIds.get("toolkit")!,
+  );
   for (const [key, filename, altText, color] of mediaFixtures) {
     const listing = (
       await pool.query<{ id: string }>(

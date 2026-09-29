@@ -12,7 +12,9 @@ export async function GET(request: Request) {
     return Response.json({ error: "Listing not found" }, { status: 404 });
   try {
     const container = getContainer();
-    const listing = await container.listingService.getPublic(listingId);
+    const listing = await container.listingService.getAvailableTo(listingId, {
+      kind: "authenticated",
+    });
     if (!listing) return Response.json({ error: "Listing not found" }, { status: 404 });
     const balance = await container.wallet.summary(account.id);
     const shortfall =

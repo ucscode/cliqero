@@ -15,7 +15,12 @@ const listing = {
 function configure() {
   const container = {
     principalResolver: { resolve: vi.fn(async () => ({ account, kind: "user_session" })) },
-    listingService: { getPublic: vi.fn(async () => listing) },
+    listingService: {
+      getAvailableTo: vi.fn(async (_id: string, viewer: { kind: string }) => {
+        expect(viewer.kind).toBe("authenticated");
+        return listing;
+      }),
+    },
     wallet: {
       summary: vi.fn(async () => ({
         available: { minorAmount: 999n },

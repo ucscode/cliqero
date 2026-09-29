@@ -16,6 +16,7 @@ function appWith(
   },
   hierarchySearch: (...args: any[]) => Promise<unknown[]> = async () => [],
   blogOverrides: Record<string, unknown> = {},
+  categoryOverrides: Record<string, unknown> = {},
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
   return createApiApp(
@@ -271,6 +272,22 @@ function appWith(
               : { id, success: false, error: `Invalid ${action} transition.` },
           ),
       },
+      listingCategories: {
+        list: async () => [],
+        get: async (id: string) => ({ id, name: "Toolkit", slug: "toolkit" }),
+        create: async (name: string, slug?: string) => ({
+          id: "00000000-0000-4000-8000-000000000009",
+          name,
+          slug: slug || "toolkit",
+        }),
+        update: async (id: string, input: Record<string, string>) => ({
+          id,
+          name: input.name ?? "Toolkit",
+          slug: input.slug ?? "toolkit",
+        }),
+        delete: async () => {},
+        ...categoryOverrides,
+      },
       blog: {
         list: () => ({ items: [], nextCursor: null, limit: 25 }),
         get: () => null,
@@ -299,6 +316,30 @@ function appWith(
   );
 }
 describe("Hono API foundation", () => {
+  it("protects catalogue category CRUD with catalogue capability and scope", async () => {
+    const path = "http://localhost/api/operator/catalogue/categories";
+    expect((await appWith().fetch(new Request(path))).status).toBe(401);
+    const ordinary = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session",
+      capabilities: [],
+      scopes: new Set<string>(),
+    };
+    expect((await appWith(ordinary).fetch(new Request(path))).status).toBe(403);
+    const manager = { ...ordinary, capabilities: ["catalogue.manage"] };
+    expect((await appWith(manager).fetch(new Request(path))).status).toBe(200);
+    const created = await appWith(manager).fetch(
+      new Request(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Toolkit", slug: "toolkit" }),
+      }),
+    );
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ name: "Toolkit", slug: "toolkit" });
+  });
+
   it("keeps public blog reads open and blog administration capability/scope constrained", async () => {
     const publicResponse = await appWith().fetch(new Request("http://localhost/api/blog/posts"));
     expect(publicResponse.status).toBe(200);
@@ -673,6 +714,21 @@ describe("Hono API foundation", () => {
     expect(paths["/api/operator/catalogue/bulk"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "catalogue:manage",
+    });
+    expect(paths["/api/operator/catalogue/categories"]).toMatchObject({
+      get: {
+        "x-authentication-mode": "account",
+        "x-required-api-scope": "catalogue:manage",
+      },
+      post: {
+        "x-authentication-mode": "account",
+        "x-required-api-scope": "catalogue:manage",
+      },
+    });
+    expect(paths["/api/operator/catalogue/categories/{id}"]).toMatchObject({
+      get: { "x-required-api-scope": "catalogue:manage" },
+      patch: { "x-required-api-scope": "catalogue:manage" },
+      delete: { "x-required-api-scope": "catalogue:manage" },
     });
     expect(paths["/api/operator/reviews/bulk"].post).toMatchObject({
       "x-authentication-mode": "account",

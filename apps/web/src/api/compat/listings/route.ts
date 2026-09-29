@@ -18,6 +18,13 @@ const listingSchema = z
       .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
       .optional(),
     external_key: z.string().max(128).optional(),
+    compare_at_price_minor: z.string().regex(/^\d+$/).nullable().optional(),
+    visibility: z.enum(["public", "authenticated"]).optional(),
+    category_ids: z
+      .array(z.uuid())
+      .max(30)
+      .refine((ids) => new Set(ids).size === ids.length, "Category IDs must be unique")
+      .optional(),
   })
   .strict();
 export async function POST(request: Request) {
@@ -35,6 +42,9 @@ export async function POST(request: Request) {
       destination: body.destination,
       metadata: body.metadata,
       externalKey: body.external_key,
+      compareAtPriceMinor: body.compare_at_price_minor,
+      visibility: body.visibility,
+      categoryIds: body.category_ids,
     });
     return Response.json(
       (await import("@/application/listing/service")).ownerListingView(listing),
@@ -47,12 +57,14 @@ export async function POST(request: Request) {
   }
 }
 export async function GET(request: Request) {
+  const c = getContainer();
   const url = new URL(request.url);
   const featuredOnly = url.searchParams.get("featured") === "true";
   const sort = sorts.includes(url.searchParams.get("sort") as (typeof sorts)[number])
     ? (url.searchParams.get("sort") as (typeof sorts)[number])
     : "newest";
   try {
+    const principal = await c.principalResolver.resolve(request);
     const storefrontConfig = loadStorefrontConfiguration();
     const configuredLimit = featuredOnly
       ? storefrontConfig.home.featured_limit
@@ -62,28 +74,33 @@ export async function GET(request: Request) {
       1,
       Math.min(Number.isFinite(requestedLimit) ? requestedLimit : configuredLimit, configuredLimit),
     );
-    const c = getContainer(),
-      page = await c.listingService.queryPublic({
+    const page = await c.listingService.queryStorefront(
+      principal ? { kind: "authenticated" } : { kind: "anonymous" },
+      {
         search: url.searchParams.get("search") ?? undefined,
         cursor: url.searchParams.get("cursor") ?? undefined,
         limit,
         sort,
         featuredOnly,
-      }),
-      media = await c.listingMediaRepository.listByListings(page.items.map((item) => item.id)),
-      ratings = await c.listingReviews.summariesForListings(page.items.map((item) => item.id));
-    return Response.json({
-      items: page.items.map((item) =>
-        listingWithMediaView(
-          item,
-          media.get(item.id) ?? [],
-          c.listingMedia,
-          false,
-          ratings.get(item.id) ?? null,
+      },
+    );
+    const media = await c.listingMediaRepository.listByListings(page.items.map((item) => item.id));
+    const ratings = await c.listingReviews.summariesForListings(page.items.map((item) => item.id));
+    return Response.json(
+      {
+        items: page.items.map((item) =>
+          listingWithMediaView(
+            item,
+            media.get(item.id) ?? [],
+            c.listingMedia,
+            false,
+            ratings.get(item.id) ?? null,
+          ),
         ),
-      ),
-      next_cursor: page.nextCursor,
-    });
+        next_cursor: page.nextCursor,
+      },
+      { headers: { "Cache-Control": "private, no-store, max-age=0" } },
+    );
   } catch (error) {
     return apiError(error);
   }

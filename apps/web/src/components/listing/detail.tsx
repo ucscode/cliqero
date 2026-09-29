@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, LockKeyhole } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch, type Listing, ApiClientError } from "@/lib/api-client";
 import { Badge } from "../ui/badge";
@@ -112,10 +112,6 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
   const currentListing = listing;
   const image =
     currentListing.media.find((media) => media.id === selectedMediaId) ?? currentListing.media[0];
-  const category =
-    typeof currentListing.metadata.category === "string" && currentListing.metadata.category.trim()
-      ? currentListing.metadata.category
-      : null;
   const hasApprovedReviews = (currentListing.rating?.count ?? 0) > 0;
   const approvedRating = hasApprovedReviews ? currentListing.rating! : null;
   function buy() {
@@ -187,10 +183,24 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
           )}
         </div>
         <aside className="h-fit py-2 lg:sticky lg:top-24">
-          {category && (
-            <Badge variant="secondary" className="mb-5 w-fit">
-              {category}
-            </Badge>
+          {(currentListing.categories.length > 0 ||
+            currentListing.visibility === "authenticated") && (
+            <div className="mb-5 flex flex-wrap gap-2">
+              {currentListing.categories.map((category) => (
+                <Badge variant="secondary" className="w-fit" key={category.id}>
+                  {category.name}
+                </Badge>
+              ))}
+              {currentListing.visibility === "authenticated" && (
+                <Badge
+                  variant="secondary"
+                  className="w-fit inline-flex items-center gap-1"
+                  aria-label="Members only"
+                >
+                  <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> Members only
+                </Badge>
+              )}
+            </div>
           )}
           <h1
             id="listing-title"
@@ -214,16 +224,24 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
             <ListingPrice
               minorAmount={currentListing.price.minor_amount}
               currency={currentListing.price.currency}
+              compareAtMinorAmount={currentListing.compare_at_price?.minor_amount}
             />
           </div>
           <div className="grid gap-3">
             <Button onClick={buy}>
               {isFreeListingPrice(currentListing.price.minor_amount) ? "Get free" : "Buy now"}
             </Button>
-            {canShowPromote(Boolean(session.data?.user)) && !referralUrl && (
-              <Button variant="secondary" onClick={promote} disabled={promoting}>
-                Promote
-              </Button>
+            {currentListing.visibility === "authenticated" ? (
+              <p className="text-sm text-slate-500">
+                Members-only listings can’t be promoted because they aren’t visible to new visitors.
+              </p>
+            ) : (
+              canShowPromote(Boolean(session.data?.user)) &&
+              !referralUrl && (
+                <Button variant="secondary" onClick={promote} disabled={promoting}>
+                  Promote
+                </Button>
+              )
             )}
             {promoteMessage && <Toast tone="success">{promoteMessage}</Toast>}
             {referralUrl && <ReferralShareActions url={referralUrl} />}

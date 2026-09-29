@@ -17,6 +17,7 @@ import {
   type OperatorListing,
   type OperatorListingPage,
 } from "@/lib/api-client";
+import type { ListingCategory } from "@/modules/listing/category/category";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
@@ -64,19 +65,21 @@ export function operatorListingDescriptionPayload(form: {
 export function OperatorCatalogueList() {
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
+  const [visibility, setVisibility] = useState("");
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const collection = useCrudCollection(
-    async (filters: { search: string; state: string }, cursor, pageSize) => {
+    async (filters: { search: string; state: string; visibility: string }, cursor, pageSize) => {
       const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       if (filters.state) params.set("state", filters.state);
+      if (filters.visibility) params.set("visibility", filters.visibility);
       if (cursor) params.set("cursor", cursor);
       const page = await apiFetch<OperatorListingPage>(`/api/operator/listings?${params}`);
       return { items: page.items, nextCursor: page.next_cursor };
     },
-    { search: "", state: "" },
+    { search: "", state: "", visibility: "" },
   );
 
   async function changeState(listing: OperatorListing, action: "publish" | "restore" | "archive") {
@@ -207,6 +210,24 @@ export function OperatorCatalogueList() {
       ),
     },
     {
+      key: "categories",
+      label: "Categories",
+      render: (listing) => (
+        <OperatorValueCell>
+          {listing.categories.map((category) => category.name).join(" · ") || "—"}
+        </OperatorValueCell>
+      ),
+    },
+    {
+      key: "visibility",
+      label: "Visibility",
+      render: (listing) => (
+        <OperatorValueCell>
+          {listing.visibility === "authenticated" ? "Members only" : "Public"}
+        </OperatorValueCell>
+      ),
+    },
+    {
       key: "state",
       label: "State",
       render: (listing) => <OperatorStatusCell status={listing.state ?? "draft"} />,
@@ -215,7 +236,12 @@ export function OperatorCatalogueList() {
       key: "price",
       label: "Price",
       render: (listing) => (
-        <OperatorValueCell>{formatMinorUsd(listing.price.minor_amount)}</OperatorValueCell>
+        <OperatorValueCell>
+          {listing.compare_at_price
+            ? `${formatMinorUsd(listing.compare_at_price.minor_amount)} → `
+            : ""}
+          {formatMinorUsd(listing.price.minor_amount)}
+        </OperatorValueCell>
       ),
     },
   ];
@@ -268,6 +294,17 @@ export function OperatorCatalogueList() {
               placeholder="Title or description"
             />
           </OperatorFilterField>
+          <OperatorFilterField label="Visibility" htmlFor="catalogue-visibility">
+            <Select
+              id="catalogue-visibility"
+              value={visibility}
+              onChange={(event) => setVisibility(event.target.value)}
+            >
+              <option value="">All visibility</option>
+              <option value="public">Public</option>
+              <option value="authenticated">Members only</option>
+            </Select>
+          </OperatorFilterField>
           <OperatorFilterField label="State" htmlFor="catalogue-state">
             <Select
               id="catalogue-state"
@@ -284,21 +321,27 @@ export function OperatorCatalogueList() {
       }
       onFiltersSubmit={(event) => {
         event.preventDefault();
-        void collection.apply({ search: search.trim(), state });
+        void collection.apply({ search: search.trim(), state, visibility });
       }}
       onFiltersReset={async () => {
-        const ok = await collection.apply({ search: "", state: "" });
+        const ok = await collection.apply({ search: "", state: "", visibility: "" });
         if (ok) {
           setSearch("");
           setState("");
+          setVisibility("");
         }
         return ok;
       }}
-      filtersDirty={Boolean(search.trim() || state)}
+      filtersDirty={Boolean(search.trim() || state || visibility)}
       toolbarActions={
-        <Button type="submit" variant="secondary" disabled={collection.loading}>
-          Apply filters
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="secondary">
+            <Link href="/operator/catalogue/categories">Manage categories</Link>
+          </Button>
+          <Button type="submit" variant="secondary" disabled={collection.loading}>
+            Apply filters
+          </Button>
+        </div>
       }
       beforeTable={
         <details className="rounded-xl border border-slate-200 bg-white p-4">
@@ -387,11 +430,25 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
     destination: "",
     externalKey: "",
     featuredPosition: "",
+    compareAtPrice: "",
+    visibility: "public" as "public" | "authenticated",
+    categoryIds: [] as string[],
   });
+  const [categories, setCategories] = useState<ListingCategory[]>([]);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    void apiFetch<{ items: ListingCategory[] }>("/api/operator/catalogue/categories")
+      .then((result) => {
+        setCategories(result.items);
+        setCategoriesLoaded(true);
+      })
+      .catch((cause) => setError(errorMessage(cause)));
+  }, []);
 
   useEffect(() => {
     if (!listingId) return;
@@ -405,6 +462,11 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           destination: value.destination,
           externalKey: value.external_key ?? "",
           featuredPosition: value.featured_position?.toString() ?? "",
+          compareAtPrice: value.compare_at_price
+            ? minorToUsdInput(value.compare_at_price.minor_amount)
+            : "",
+          visibility: value.visibility,
+          categoryIds: value.categories.map((category) => category.id),
         });
       })
       .catch((cause) => setError(errorMessage(cause)))
@@ -413,6 +475,10 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!categoriesLoaded) {
+      setError("Categories could not be loaded. Reload the page before saving.");
+      return;
+    }
     const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
     const honeypotHeaders: Record<string, string> = honeypot
       ? { [HONEYPOT_HEADER_NAME]: honeypot }
@@ -433,6 +499,11 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             currency: "USD",
             destination: form.destination.trim(),
             featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
+            compare_at_price_minor: form.compareAtPrice.trim()
+              ? parseUsdMinor(form.compareAtPrice)
+              : null,
+            visibility: form.visibility,
+            category_ids: form.categoryIds,
           }),
         });
         setListing(next);
@@ -449,6 +520,11 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             destination: form.destination.trim(),
             external_key: form.externalKey.trim() || undefined,
             featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
+            compare_at_price_minor: form.compareAtPrice.trim()
+              ? parseUsdMinor(form.compareAtPrice)
+              : null,
+            visibility: form.visibility,
+            category_ids: form.categoryIds,
           }),
         });
         router.replace(`/operator/catalogue/${next.id}`);
@@ -528,6 +604,18 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <span className="field-help">Exact USD minor units are sent to the API.</span>
         </label>
         <label>
+          Compare-at price (USD, optional)
+          <Input
+            inputMode="decimal"
+            placeholder="40.00"
+            value={form.compareAtPrice}
+            onChange={(event) => setForm({ ...form, compareAtPrice: event.target.value })}
+          />
+          <span className="field-help">
+            Previous/reference price shown crossed out; must exceed the listing price.
+          </span>
+        </label>
+        <label>
           Destination URL
           <Input
             required
@@ -537,6 +625,43 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           />
         </label>
       </div>
+      <label>
+        Visibility
+        <Select
+          value={form.visibility}
+          onChange={(event) =>
+            setForm({ ...form, visibility: event.target.value as "public" | "authenticated" })
+          }
+        >
+          <option value="public">Public</option>
+          <option value="authenticated">Members only</option>
+        </Select>
+      </label>
+      <fieldset className="grid gap-2">
+        <legend className="text-sm font-medium">Categories</legend>
+        {categories.map((category) => (
+          <label className="flex items-center gap-2 text-sm" key={category.id}>
+            <input
+              type="checkbox"
+              checked={form.categoryIds.includes(category.id)}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  categoryIds: event.target.checked
+                    ? [...form.categoryIds, category.id]
+                    : form.categoryIds.filter((id) => id !== category.id),
+                })
+              }
+            />
+            {category.name}
+          </label>
+        ))}
+        {categories.length === 0 && (
+          <span className="field-help">
+            No categories yet. Use Manage categories to create them.
+          </span>
+        )}
+      </fieldset>
       {!editing && (
         <label>
           External key (optional)
