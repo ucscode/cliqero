@@ -15,9 +15,15 @@ import { OperatorPrimaryCell } from "@/components/operator/ui/data-cells";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { OperatorErrorState } from "@/components/operator/ui/error-state";
+import {
+  OperatorBulkOutcome,
+  type OperatorBulkOutcomeData,
+} from "@/components/operator/ui/bulk-outcome";
 
 export function OperatorListingCategories() {
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(async () => {
     const result = await apiFetch<{ items: ListingCategory[] }>("/api/catalogue/categories");
     return { items: result.items, nextCursor: null };
@@ -28,17 +34,19 @@ export function OperatorListingCategories() {
       !window.confirm(`Delete category “${category.name}”? Assigned categories cannot be deleted.`)
     )
       return;
-    setError(null);
+    setActionError(null);
+    setBulkOutcome(null);
     try {
       await apiFetch(`/api/catalogue/categories/${category.id}`, { method: "DELETE" });
       await collection.retry();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete category.");
+      setActionError(cause instanceof Error ? cause.message : "Unable to delete category.");
     }
   }
   async function removeMany(categories: readonly ListingCategory[]) {
     if (!window.confirm(`Delete ${categories.length} selected catalogue categories?`)) return false;
-    setError(null);
+    setActionError(null);
+    setBulkOutcome(null);
     try {
       const results = await runOperatorBulkAction({
         resource: "catalogue-categories",
@@ -47,18 +55,21 @@ export function OperatorListingCategories() {
       });
       const failures = results.failed;
       if (failures.length)
-        setError(
-          `${failures.length} of ${categories.length} categories could not be deleted: ${failures
-            .map(
-              ({ id, message }) =>
-                `${categories.find((category) => category.id === id)?.name ?? id}: ${message}`,
-            )
-            .join("; ")}`,
-        );
+        setBulkOutcome({
+          resource: "catalogue categories",
+          selectedCount: categories.length,
+          failures: failures.map(({ id, message }) => ({
+            id,
+            label: categories.find((category) => category.id === id)?.name ?? id,
+            message,
+          })),
+        });
       await collection.retry();
       return failures.length === 0;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete selected categories.");
+      setActionError(
+        cause instanceof Error ? cause.message : "Unable to delete selected categories.",
+      );
       return false;
     }
   }
@@ -88,6 +99,12 @@ export function OperatorListingCategories() {
       getRowKey={(category) => category.id}
       selection={{ labelForItem: (category) => `catalogue category ${category.name}` }}
       bulkActions={bulkActions}
+      beforeTable={
+        <div className="grid gap-3">
+          {actionError && <OperatorErrorState message={actionError} />}
+          {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
+        </div>
+      }
       actions={(category) => [
         { type: "link", label: "Edit", href: `/operator/catalogue/categories/${category.id}` },
         {
@@ -100,15 +117,14 @@ export function OperatorListingCategories() {
       actionLabel={(category) => `Actions for category ${category.name}`}
       loading={collection.loading}
       initialized={collection.initialized}
-      error={error ?? collection.error}
+      error={collection.error}
       onRetry={() => {
-        setError(null);
         void collection.retry();
       }}
       emptyTitle="No catalogue categories yet"
       emptyDescription="Create a category to organize catalogue listings."
       emptyAction={
-        <Button asChild size="sm">
+        <Button asChild>
           <Link href="/operator/catalogue/categories/new">Create category</Link>
         </Button>
       }

@@ -15,26 +15,31 @@ import { OperatorPrimaryCell } from "../ui/data-cells";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { OperatorErrorState } from "../ui/error-state";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "../ui/bulk-outcome";
 
 export function OperatorBlogCategories() {
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(async () => {
     const result = await apiFetch<{ items: BlogCategory[] }>("/api/blog/categories");
     return { items: result.items, nextCursor: null };
   }, {});
   async function remove(category: BlogCategory) {
     if (!window.confirm(`Delete category “${category.name}”?`)) return;
-    setError(null);
+    setActionError(null);
+    setBulkOutcome(null);
     try {
       await apiFetch(`/api/blog/categories/${category.id}`, { method: "DELETE" });
       await collection.retry();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete category.");
+      setActionError(cause instanceof Error ? cause.message : "Unable to delete category.");
     }
   }
   async function removeMany(categories: readonly BlogCategory[]) {
     if (!window.confirm(`Delete ${categories.length} selected blog categories?`)) return false;
-    setError(null);
+    setActionError(null);
+    setBulkOutcome(null);
     try {
       const results = await runOperatorBulkAction({
         resource: "blog-categories",
@@ -43,18 +48,21 @@ export function OperatorBlogCategories() {
       });
       const failures = results.failed;
       if (failures.length)
-        setError(
-          `${failures.length} of ${categories.length} categories could not be deleted: ${failures
-            .map(
-              ({ id, message }) =>
-                `${categories.find((category) => category.id === id)?.name ?? id}: ${message}`,
-            )
-            .join("; ")}`,
-        );
+        setBulkOutcome({
+          resource: "blog categories",
+          selectedCount: categories.length,
+          failures: failures.map(({ id, message }) => ({
+            id,
+            label: categories.find((category) => category.id === id)?.name ?? id,
+            message,
+          })),
+        });
       await collection.retry();
       return failures.length === 0;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete selected categories.");
+      setActionError(
+        cause instanceof Error ? cause.message : "Unable to delete selected categories.",
+      );
       return false;
     }
   }
@@ -82,6 +90,12 @@ export function OperatorBlogCategories() {
       getRowKey={(category) => category.id}
       selection={{ labelForItem: (category) => `blog category ${category.name}` }}
       bulkActions={bulkActions}
+      beforeTable={
+        <div className="grid gap-3">
+          {actionError && <OperatorErrorState message={actionError} />}
+          {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
+        </div>
+      }
       actions={(category) => [
         { type: "link", label: "Edit", href: `/operator/blog/categories/${category.id}` },
         {
@@ -94,15 +108,14 @@ export function OperatorBlogCategories() {
       actionLabel={(category) => `Actions for category ${category.name}`}
       loading={collection.loading}
       initialized={collection.initialized}
-      error={error ?? collection.error}
+      error={collection.error}
       onRetry={() => {
-        setError(null);
         void collection.retry();
       }}
       emptyTitle="No categories yet"
       emptyDescription="Create a category to organize blog articles."
       emptyAction={
-        <Button asChild size="sm">
+        <Button asChild>
           <Link href="/operator/blog/categories/new">Create category</Link>
         </Button>
       }

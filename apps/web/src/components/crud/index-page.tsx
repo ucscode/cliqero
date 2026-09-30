@@ -114,7 +114,7 @@ export function CrudIndex<T>({
     <>
       {headerActions}
       {createAction && (
-        <Button asChild size="sm">
+        <Button asChild>
           <Link href={createAction.href}>{createAction.label}</Link>
         </Button>
       )}

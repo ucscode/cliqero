@@ -71,7 +71,7 @@ export function CrudBulkActions<T>({
       });
       if (!completed) return;
     } catch {
-      setError("Unable to apply this action. Try again.");
+      setError("Unable to apply this action.");
     } finally {
       busyRef.current = false;
       setBusy(false);

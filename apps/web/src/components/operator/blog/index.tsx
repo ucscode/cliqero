@@ -21,11 +21,14 @@ import type { CrudColumn } from "@/components/crud/table";
 import { CrudEdit } from "@/components/crud/edit";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { OperatorErrorState } from "../ui/error-state";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "../ui/bulk-outcome";
 
 export function OperatorBlogList() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(
     async (filters: { search: string; status: string }, cursor, pageSize) => {
       const params = new URLSearchParams({ limit: String(pageSize) });
@@ -42,6 +45,7 @@ export function OperatorBlogList() {
   async function remove(post: BlogPost) {
     if (!window.confirm(`Delete “${post.title}”?`)) return;
     setActionError(null);
+    setBulkOutcome(null);
     try {
       await apiFetch(`/api/blog/posts/${post.id}`, { method: "DELETE" });
       await collection.retry();
@@ -52,6 +56,7 @@ export function OperatorBlogList() {
   async function bulk(posts: readonly BlogPost[]) {
     if (!window.confirm(`Delete ${posts.length} selected articles?`)) return false;
     setActionError(null);
+    setBulkOutcome(null);
     try {
       const results = await runOperatorBulkAction({
         resource: "blog-posts",
@@ -60,14 +65,15 @@ export function OperatorBlogList() {
       });
       const failures = results.failed;
       if (failures.length)
-        setActionError(
-          failures
-            .map(
-              ({ id, message }) =>
-                `${posts.find((post) => post.id === id)?.title ?? id}: ${message}`,
-            )
-            .join(" "),
-        );
+        setBulkOutcome({
+          resource: "blog posts",
+          selectedCount: posts.length,
+          failures: failures.map(({ id, message }) => ({
+            id,
+            label: posts.find((post) => post.id === id)?.title ?? id,
+            message,
+          })),
+        });
       await collection.retry();
       return failures.length === 0;
     } catch (cause) {
@@ -141,6 +147,7 @@ export function OperatorBlogList() {
       onFiltersSubmit={async (event) => {
         event.preventDefault();
         setActionError(null);
+        setBulkOutcome(null);
         return collection.apply({ search: search.trim(), status });
       }}
       onFiltersReset={async () => {
@@ -168,7 +175,13 @@ export function OperatorBlogList() {
       ]}
       actionLabel={(post) => `Actions for article ${post.title}`}
       loading={collection.loading}
-      error={actionError ?? collection.error}
+      beforeTable={
+        <div className="grid gap-3">
+          {actionError && <OperatorErrorState message={actionError} />}
+          {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
+        </div>
+      }
+      error={collection.error}
       onRetry={() => {
         setActionError(null);
         void collection.retry();

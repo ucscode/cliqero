@@ -13,7 +13,7 @@ export function OperatorMetricCard({
   detail?: ReactNode;
 }) {
   return (
-    <Card className="min-w-0 border-slate-200 p-4 shadow-none">
+    <Card className="min-w-0 border-slate-200 p-5 shadow-none">
       {category && (
         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{category}</p>
       )}

@@ -11,7 +11,9 @@ export function Toast({
   return (
     <Alert
       className={
-        tone === "success" ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"
+        tone === "success"
+          ? "border-emerald-200 bg-emerald-50"
+          : "border-rose-200 bg-rose-50 text-rose-950"
       }
     >
       {children}

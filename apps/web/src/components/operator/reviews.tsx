@@ -12,6 +12,8 @@ import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { OperatorErrorState } from "./ui/error-state";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 
 type Review = ListingReview & { reviewer?: string; listing_title?: string };
 type ReviewPage = { items: Review[]; next_cursor: string | null };
@@ -29,6 +31,7 @@ export function OperatorReviews() {
   const [status, setStatus] = useState("pending");
   const [appliedStatus, setAppliedStatus] = useState("pending");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(async (appliedStatus: string, cursor, pageSize) => {
     const params = new URLSearchParams({ status: appliedStatus, limit: String(pageSize) });
     if (cursor) params.set("cursor", cursor);
@@ -39,6 +42,7 @@ export function OperatorReviews() {
   async function moderate(id: string, action: "approve" | "reject") {
     try {
       setActionError(null);
+      setBulkOutcome(null);
       await apiFetch(`/api/reviews/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -52,6 +56,7 @@ export function OperatorReviews() {
   async function moderateMany(reviews: readonly Review[], action: "approve" | "reject") {
     try {
       setActionError(null);
+      setBulkOutcome(null);
       const results = await runOperatorBulkAction({
         resource: "reviews",
         action: "moderate",
@@ -60,11 +65,15 @@ export function OperatorReviews() {
       });
       const failures = results.failed;
       if (failures.length)
-        setActionError(
-          `${failures.length} of ${reviews.length} reviews could not be moderated: ${failures
-            .map(({ id, message }) => `${id}: ${message}`)
-            .join("; ")}`,
-        );
+        setBulkOutcome({
+          resource: "reviews",
+          selectedCount: reviews.length,
+          failures: failures.map(({ id, message }) => ({
+            id,
+            label: reviews.find((review) => review.id === id)?.reviewer ?? id,
+            message,
+          })),
+        });
       await collection.retry();
       return failures.length === 0;
     } catch (cause) {
@@ -194,7 +203,13 @@ export function OperatorReviews() {
       }
       actionLabel={(review) => `Actions for review ${review.id}`}
       loading={collection.loading}
-      error={actionError ?? collection.error}
+      beforeTable={
+        <div className="grid gap-3">
+          {actionError && <OperatorErrorState message={actionError} />}
+          {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
+        </div>
+      }
+      error={collection.error}
       onRetry={() => void collection.retry()}
       emptyTitle="No reviews in this queue"
       emptyDescription="Reviews matching this status will appear here."

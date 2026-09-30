@@ -29,7 +29,13 @@ export function OperatorSection({
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {surface ? <Card className="overflow-hidden">{children}</Card> : children}
+      {surface ? (
+        <Card className="overflow-hidden">
+          <div className="p-4 sm:p-5">{children}</div>
+        </Card>
+      ) : (
+        children
+      )}
     </section>
   );
 }

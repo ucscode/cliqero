@@ -70,7 +70,7 @@ export function CrudEdit({
         actions={
           <>
             {headerActions}
-            <Button asChild type="button" variant="secondary" size="sm">
+            <Button asChild type="button" variant="secondary" size="xs">
               <Link href={backHref}>{backLabel ?? "Cancel"}</Link>
             </Button>
             <Button type="submit" form={formId} disabled={saving || loading}>
@@ -96,7 +96,7 @@ export function CrudEdit({
               description={sectionDescription}
               surface
             >
-              <div className="grid gap-4 p-4 sm:p-5">{children}</div>
+              <div className="grid gap-4">{children}</div>
             </OperatorSection>
           </form>
           {sidebar && <aside className="min-w-0">{sidebar}</aside>}

@@ -8,6 +8,8 @@ export {
 } from "./data-cells";
 export { OperatorEmptyState } from "./empty-state";
 export { OperatorErrorState } from "./error-state";
+export { OperatorBulkOutcome, groupBulkFailureReasons } from "./bulk-outcome";
+export type { OperatorBulkFailure, OperatorBulkOutcomeData } from "./bulk-outcome";
 export { OperatorLoadingState, type OperatorLoadingVariant } from "./loading-state";
 export { OperatorMetricCard } from "./metric-card";
 export { OperatorPage, OperatorPageHeader } from "./page";

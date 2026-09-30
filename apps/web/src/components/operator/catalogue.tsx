@@ -36,6 +36,7 @@ import type { OperatorAction } from "./ui/actions-menu";
 import { OperatorEmptyState } from "./ui/empty-state";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 
 function errorMessage(error: unknown) {
@@ -70,6 +71,7 @@ export function OperatorCatalogueList() {
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(
     async (filters: { search: string; state: string; visibility: string }, cursor, pageSize) => {
       const params = new URLSearchParams({ limit: String(pageSize) });
@@ -86,6 +88,7 @@ export function OperatorCatalogueList() {
   async function changeState(listing: OperatorListing, action: "publish" | "restore" | "archive") {
     if (action === "archive" && !window.confirm(`Archive “${listing.title}”?`)) return;
     setActionError(null);
+    setBulkOutcome(null);
     try {
       await apiFetch(`/api/listings/${listing.id}`, {
         method: "PATCH",
@@ -113,6 +116,7 @@ export function OperatorCatalogueList() {
     )
       return false;
     setActionError(null);
+    setBulkOutcome(null);
     try {
       const results = await runOperatorBulkAction({
         resource: "listings",
@@ -121,16 +125,16 @@ export function OperatorCatalogueList() {
         ids: listings.map((listing) => listing.id),
       });
       const failures = results.failed;
-      const pastTense = { publish: "published", archive: "archived", restore: "restored" }[action];
       if (failures.length)
-        setActionError(
-          `${failures.length} of ${listings.length} listings could not be ${pastTense}: ${failures
-            .map(
-              ({ id, message: error }) =>
-                `${listings.find((listing) => listing.id === id)?.title ?? id}: ${error}`,
-            )
-            .join("; ")}`,
-        );
+        setBulkOutcome({
+          resource: "listings",
+          selectedCount: listings.length,
+          failures: failures.map(({ id, message }) => ({
+            id,
+            label: listings.find((listing) => listing.id === id)?.title ?? id,
+            message,
+          })),
+        });
       await collection.retry();
       return failures.length === 0;
     } catch (cause) {
@@ -351,51 +355,57 @@ export function OperatorCatalogueList() {
         </div>
       }
       beforeTable={
-        <details className="rounded-xl border border-slate-200 bg-white p-4">
-          <summary className="cursor-pointer font-medium text-slate-800">Import and export</summary>
-          <div className="mt-4 grid gap-4">
-            <div className="flex flex-wrap gap-2">
-              {(["json", "csv", "yaml"] as const).map((format) => (
-                <a
-                  className="rounded-md px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50"
-                  href={`/api/listings/export?format=${format}`}
-                  key={format}
-                >
-                  Export {format.toUpperCase()}
-                </a>
-              ))}
+        <div className="grid gap-3">
+          {actionError && <OperatorErrorState message={actionError} />}
+          {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
+          <details className="rounded-xl border border-slate-200 bg-white p-4">
+            <summary className="cursor-pointer font-medium text-slate-800">
+              Import and export
+            </summary>
+            <div className="mt-4 grid gap-4">
+              <div className="flex flex-wrap gap-2">
+                {(["json", "csv", "yaml"] as const).map((format) => (
+                  <a
+                    className="rounded-md px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50"
+                    href={`/api/listings/export?format=${format}`}
+                    key={format}
+                  >
+                    Export {format.toUpperCase()}
+                  </a>
+                ))}
+              </div>
+              <form
+                className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                onSubmit={(event) => void importFile(event)}
+              >
+                <Input
+                  type="file"
+                  name="file"
+                  accept=".json,.csv,.yaml,.yml,text/csv,application/json"
+                  aria-label="Import file"
+                />
+                <Select name="format" defaultValue="json" aria-label="Import format">
+                  <option value="json">JSON</option>
+                  <option value="csv">CSV</option>
+                  <option value="yaml">YAML</option>
+                </Select>
+                <Select name="mode" defaultValue="create" aria-label="Import mode">
+                  <option value="create">Create only</option>
+                  <option value="upsert">Upsert by external key</option>
+                </Select>
+                <Button type="submit" variant="secondary" disabled={importing}>
+                  {importing ? "Importing…" : "Import"}
+                </Button>
+                <HoneypotField />
+              </form>
+              {importMessage && (
+                <Toast tone={importMessage.startsWith("Import complete") ? "success" : "error"}>
+                  {importMessage}
+                </Toast>
+              )}
             </div>
-            <form
-              className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-              onSubmit={(event) => void importFile(event)}
-            >
-              <Input
-                type="file"
-                name="file"
-                accept=".json,.csv,.yaml,.yml,text/csv,application/json"
-                aria-label="Import file"
-              />
-              <Select name="format" defaultValue="json" aria-label="Import format">
-                <option value="json">JSON</option>
-                <option value="csv">CSV</option>
-                <option value="yaml">YAML</option>
-              </Select>
-              <Select name="mode" defaultValue="create" aria-label="Import mode">
-                <option value="create">Create only</option>
-                <option value="upsert">Upsert by external key</option>
-              </Select>
-              <Button type="submit" variant="secondary" disabled={importing}>
-                {importing ? "Importing…" : "Import"}
-              </Button>
-              <HoneypotField />
-            </form>
-            {importMessage && (
-              <Toast tone={importMessage.startsWith("Import complete") ? "success" : "error"}>
-                {importMessage}
-              </Toast>
-            )}
-          </div>
-        </details>
+          </details>
+        </div>
       }
       items={collection.items}
       columns={columns}
@@ -405,7 +415,7 @@ export function OperatorCatalogueList() {
       actions={actions}
       actionLabel={(listing) => `Actions for ${listing.title}`}
       loading={collection.loading}
-      error={actionError ?? collection.error}
+      error={collection.error}
       onRetry={() => void collection.retry()}
       emptyTitle="No listings found"
       emptyDescription="Try another filter or create the first catalogue listing."

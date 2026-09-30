@@ -129,7 +129,7 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Search listings"
           />
-          <Button type="submit" variant="secondary">
+          <Button type="submit" variant="action">
             Search
           </Button>
           <HoneypotField />

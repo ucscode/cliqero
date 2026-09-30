@@ -24,13 +24,13 @@ export function OperatorPagination({
         <Button
           type="button"
           variant="secondary"
-          size="sm"
+          size="xs"
           disabled={!hasPrevious}
           onClick={onPrevious}
         >
           Previous
         </Button>
-        <Button type="button" variant="secondary" size="sm" disabled={!hasNext} onClick={onNext}>
+        <Button type="button" variant="secondary" size="xs" disabled={!hasNext} onClick={onNext}>
           Next
         </Button>
       </div>

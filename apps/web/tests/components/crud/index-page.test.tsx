@@ -116,6 +116,16 @@ describe("shared CRUD index", () => {
     expect(filtered).not.toContain(">Rows</label>");
   });
 
+  it("renders page-level creation actions with the confident default button size", () => {
+    const page = render({
+      createAction: { label: "New listing", href: "/operator/catalogue/new" },
+    });
+    const createButton = page.match(/<a[^>]*class="([^"]+)"[^>]*>New listing<\/a>/)?.[1] ?? "";
+
+    expect(createButton).toContain("px-5 py-2.5");
+    expect(createButton).not.toContain("text-xs");
+  });
+
   it("renders exactly all supplied items", () => {
     const page = render({
       items: [

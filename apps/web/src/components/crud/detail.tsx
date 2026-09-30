@@ -25,7 +25,7 @@ export function CrudDetail({
 }: {
   eyebrow?: string;
   title: string;
-  description?: string;
+  description?: ReactNode;
   headerActions?: ReactNode;
   summary?: ReactNode;
   fields?: readonly CrudField[];

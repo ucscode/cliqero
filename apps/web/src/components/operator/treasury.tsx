@@ -204,8 +204,11 @@ export function OperatorTreasuryPage() {
             description="Append-only accounting. Corrections are made with a separate opposite entry."
             surface
           >
-            <form className="operator-treasury-form" onSubmit={(event) => void createEntry(event)}>
-              <label>
+            <form
+              className="grid gap-5 sm:grid-cols-2"
+              onSubmit={(event) => void createEntry(event)}
+            >
+              <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
                 Direction
                 <Select
                   value={entryDirection}
@@ -215,7 +218,7 @@ export function OperatorTreasuryPage() {
                   <option value="debit">Debit</option>
                 </Select>
               </label>
-              <label>
+              <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
                 Amount (USD)
                 <Input
                   value={amount}
@@ -224,11 +227,14 @@ export function OperatorTreasuryPage() {
                   inputMode="decimal"
                   aria-describedby="treasury-amount-help"
                 />
-                <span id="treasury-amount-help" className="field-help">
+                <span
+                  id="treasury-amount-help"
+                  className="text-xs font-normal leading-5 text-slate-500"
+                >
                   Exact cents are recorded; enter dollars such as 10.00.
                 </span>
               </label>
-              <label>
+              <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
                 Title
                 <Input
                   value={title}
@@ -236,7 +242,7 @@ export function OperatorTreasuryPage() {
                   maxLength={200}
                 />
               </label>
-              <label>
+              <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
                 Note (optional)
                 <Input
                   value={note}
@@ -244,11 +250,17 @@ export function OperatorTreasuryPage() {
                   maxLength={1000}
                 />
               </label>
-              {formError && <Toast>{formError}</Toast>}
-              <Button type="submit" disabled={saving}>
-                {saving ? "Saving…" : "Add treasury entry"}
-              </Button>
-              <HoneypotField />
+              <div className="flex flex-wrap items-center gap-3 pt-1 sm:col-span-2">
+                {formError && (
+                  <div className="basis-full">
+                    <Toast>{formError}</Toast>
+                  </div>
+                )}
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Saving…" : "Add treasury entry"}
+                </Button>
+                <HoneypotField />
+              </div>
             </form>
           </OperatorSection>
         </>

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -47,6 +48,41 @@ describe("operator UI composition components", () => {
     expect(html).toContain("Users");
     expect(html).toContain("Search safe account projections");
     expect(html).toContain("Export</button>");
+  });
+
+  it("separates create, execute, destructive, secondary, and compact button treatments", () => {
+    const html = renderToStaticMarkup(
+      <>
+        <Button>Create</Button>
+        <Button variant="action">Apply</Button>
+        <Button variant="destructive">Delete</Button>
+        <Button variant="secondary">Cancel</Button>
+        <Button size="xs">Row utility</Button>
+        <Badge variant="destructive">Sensitive</Badge>
+      </>,
+    );
+
+    expect(html).toContain("bg-emerald-700");
+    expect(html).toContain("bg-violet-800");
+    expect(html).toContain("focus-visible:ring-violet-700");
+    expect(html).not.toContain("bg-blue-700");
+    expect(html).toContain("bg-rose-800");
+    expect(html).toContain("border-transparent bg-rose-800 text-white");
+    expect(html).toContain("border border-slate-200 bg-white");
+    expect(html).toContain("px-5 py-2.5");
+    expect(html).toContain("text-xs leading-4");
+  });
+
+  it("gives shared white Operator sections deliberate inner padding", () => {
+    const html = renderToStaticMarkup(
+      <OperatorSection title="Identity" surface>
+        <p>Account information</p>
+      </OperatorSection>,
+    );
+
+    expect(html).toContain("overflow-hidden");
+    expect(html).toContain("p-4 sm:p-5");
+    expect(html).toContain("Account information");
   });
 
   it("keeps toolbar controls in an accessible submitting form", () => {

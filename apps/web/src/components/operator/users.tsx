@@ -22,6 +22,7 @@ import {
 import { API_SCOPE_METADATA } from "@/modules/identity/api/scopes";
 import { OperatorPrimaryCell, OperatorSecondaryText, OperatorValueCell } from "./ui/data-cells";
 import { OperatorErrorState } from "./ui/error-state";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { OperatorLoadingState } from "./ui/loading-state";
 import { OperatorMetricCard } from "./ui/metric-card";
 import { OperatorSection } from "./ui/section";
@@ -106,6 +107,7 @@ export function OperatorUsersList({
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(
     deletedNotice ? "Account deleted. Historical platform records remain available." : null,
   );
@@ -135,6 +137,7 @@ export function OperatorUsersList({
       }}
       onRetry={() => void collection.retry()}
       actionError={actionError}
+      bulkOutcome={bulkOutcome}
       successNotice={successNotice}
       onDelete={async (account) => {
         if (
@@ -167,13 +170,18 @@ export function OperatorUsersList({
         await collection.refresh();
         if (results.failed.length) {
           const accountsById = new Map(accounts.map((account) => [account.id, account]));
-          setActionError(
-            results.failed
-              .map(({ id, message: error }) => `@${accountsById.get(id)?.username ?? id}: ${error}`)
-              .join(" "),
-          );
+          setBulkOutcome({
+            resource: "accounts",
+            selectedCount: accounts.length,
+            failures: results.failed.map(({ id, message: error }) => ({
+              id,
+              label: `@${accountsById.get(id)?.username ?? id}`,
+              message: error,
+            })),
+          });
           return false;
         }
+        setBulkOutcome(null);
         setActionError(null);
         setSuccessNotice(
           `${results.succeeded.length} account(s) deleted. Historical platform records remain.`,
@@ -209,6 +217,7 @@ export function OperatorUsersListView({
   onDelete,
   onBulkDelete,
   actionError,
+  bulkOutcome,
   successNotice,
   hasPrevious,
   onPrevious,
@@ -228,6 +237,7 @@ export function OperatorUsersListView({
   onDelete?: (account: OperatorAccountSummary) => void;
   onBulkDelete?: (accounts: readonly OperatorAccountSummary[]) => Promise<boolean>;
   actionError?: string | null;
+  bulkOutcome?: OperatorBulkOutcomeData | null;
   successNotice?: string | null;
   hasPrevious: boolean;
   onPrevious: () => void;
@@ -286,7 +296,7 @@ export function OperatorUsersListView({
       description="Search safe account projections and inspect referral context."
       headerActions={
         canManage ? (
-          <Button asChild size="sm">
+          <Button asChild>
             <Link href="/operator/users/new">Add user</Link>
           </Button>
         ) : undefined
@@ -333,6 +343,7 @@ export function OperatorUsersListView({
       beforeTable={
         <>
           {actionError && <OperatorErrorState message={actionError} />}
+          {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
           {successNotice && <Toast tone="success">{successNotice}</Toast>}
         </>
       }
@@ -606,7 +617,12 @@ export function OperatorUserDetail({
     <CrudDetail
       eyebrow="Account inspection"
       title={account.displayName || account.username}
-      description={`@${account.username} · ${account.email ?? "No authentication email"}`}
+      description={
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          <span className="font-semibold text-slate-800">@{account.username}</span>
+          <span className="break-all">{account.email ?? "No authentication email"}</span>
+        </div>
+      }
       fieldsTitle="Identity"
       headerActions={
         canManage && !account.deletedAt ? (
@@ -970,71 +986,89 @@ function CapabilityCard({
   const ordinary = CAPABILITIES.filter((capability) => capability !== "system.root");
 
   return (
-    <Card className="operator-capabilities-card col-span-full">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <Card className="col-span-full p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="eyebrow">Platform capabilities</p>
-          <p className="panel-note">
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+            Platform capabilities
+          </p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             These are direct assignments. Master operator authority is evaluated separately from the
             capabilities stored on the account.
           </p>
         </div>
         {rootAssigned && <Badge variant="destructive">system.root · master authority</Badge>}
       </div>
-      <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-        <strong>{CAPABILITY_METADATA["system.root"].label}</strong>
-        <p className="mt-1">{CAPABILITY_METADATA["system.root"].description}</p>
-        <p className="mt-1 font-medium">{rootAssigned ? "Directly assigned" : "Not assigned"}</p>
+      <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50/80 p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h4 className="font-semibold text-rose-950">
+              {CAPABILITY_METADATA["system.root"].label}
+            </h4>
+            <code className="mt-1 inline-block rounded bg-white/70 px-2 py-1 text-xs text-rose-900">
+              system.root
+            </code>
+          </div>
+          <Badge variant={rootAssigned ? "destructive" : "secondary"}>
+            {rootAssigned ? "Directly assigned" : "Not assigned"}
+          </Badge>
+        </div>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-rose-900">
+          {CAPABILITY_METADATA["system.root"].description}
+        </p>
         {manageable.has("system.root") && (
-          <Button
-            className="mt-3"
-            variant="destructive"
-            size="sm"
-            disabled={saving === "system.root"}
-            onClick={() => void onChange("system.root", rootAssigned ? "revoke" : "grant")}
-          >
-            {saving === "system.root"
-              ? "Saving…"
-              : rootAssigned
-                ? "Revoke master authority"
-                : "Grant master authority"}
-          </Button>
+          <div className="mt-4">
+            <Button
+              variant="destructive"
+              disabled={saving === "system.root"}
+              onClick={() => void onChange("system.root", rootAssigned ? "revoke" : "grant")}
+            >
+              {saving === "system.root"
+                ? "Saving…"
+                : rootAssigned
+                  ? "Revoke master authority"
+                  : "Grant master authority"}
+            </Button>
+          </div>
         )}
       </div>
-      <div className="mt-4 grid gap-3">
+      <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
         {ordinary.map((capability) => {
           const metadata = CAPABILITY_METADATA[capability];
           const grantedAt = assigned.get(capability);
           const canChange = manageable.has(capability);
           return (
-            <div key={capability} className="rounded-md border p-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <strong>{metadata.label}</strong>
-                  <p className="text-xs text-slate-500">{capability}</p>
-                  <p className="mt-1 text-sm text-slate-600">{metadata.description}</p>
-                  {grantedAt && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      Granted {new Date(grantedAt).toLocaleString()}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={grantedAt ? "default" : "secondary"}>
-                    {grantedAt ? "Assigned" : "Not assigned"}
-                  </Badge>
-                  {canChange && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={grantedAt ? "outline" : "secondary"}
-                      disabled={saving === capability}
-                      onClick={() => void onChange(capability, grantedAt ? "revoke" : "grant")}
-                    >
-                      {saving === capability ? "Saving…" : grantedAt ? "Revoke" : "Grant"}
-                    </Button>
-                  )}
-                </div>
+            <div
+              key={capability}
+              className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+            >
+              <div className="min-w-0">
+                <strong className="text-sm text-slate-900">{metadata.label}</strong>
+                <code className="mt-1 block w-fit max-w-full break-all rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                  {capability}
+                </code>
+                <p className="mt-2 text-sm leading-5 text-slate-600">{metadata.description}</p>
+                {grantedAt && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Granted {new Date(grantedAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                <Badge variant={grantedAt ? "default" : "secondary"}>
+                  {grantedAt ? "Assigned" : "Not assigned"}
+                </Badge>
+                {canChange && (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant={grantedAt ? "outline" : "secondary"}
+                    disabled={saving === capability}
+                    onClick={() => void onChange(capability, grantedAt ? "revoke" : "grant")}
+                  >
+                    {saving === capability ? "Saving…" : grantedAt ? "Revoke" : "Grant"}
+                  </Button>
+                )}
               </div>
             </div>
           );
@@ -1074,11 +1108,15 @@ function OperatorApiKeyCard({
   onDismissSecret: () => void;
 }) {
   return (
-    <Card className="operator-api-keys-card col-span-full">
+    <Card className="col-span-full p-5 sm:p-6">
       <div>
-        <p className="eyebrow">API access</p>
-        <h3>Credentials for this account</h3>
-        <p className="panel-note">
+        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+          API access
+        </p>
+        <h3 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">
+          Credentials for this account
+        </h3>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
           Keys restrict the account’s existing authority; they never grant capabilities. Secrets are
           shown only once.
         </p>
@@ -1156,7 +1194,7 @@ function OperatorApiKeyCard({
                   <Button
                     type="button"
                     variant="destructive"
-                    size="sm"
+                    size="xs"
                     disabled={saving}
                     onClick={() => void onRevoke(key)}
                   >
