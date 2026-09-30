@@ -20,8 +20,10 @@ import {
   OperatorBulkOutcome,
   type OperatorBulkOutcomeData,
 } from "@/components/operator/ui/bulk-outcome";
+import { useToast } from "@/components/toast/provider";
 
 export function OperatorListingCategories() {
+  const toast = useToast();
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(async () => {
@@ -39,6 +41,7 @@ export function OperatorListingCategories() {
     try {
       await apiFetch(`/api/catalogue/categories/${category.id}`, { method: "DELETE" });
       await collection.retry();
+      toast.success("Category deleted.");
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "Unable to delete category.");
     }
@@ -65,6 +68,7 @@ export function OperatorListingCategories() {
           })),
         });
       await collection.retry();
+      if (!failures.length) toast.success("Selected categories deleted.");
       return failures.length === 0;
     } catch (cause) {
       setActionError(
@@ -134,6 +138,7 @@ export function OperatorListingCategories() {
 
 export function OperatorListingCategoryEditor({ initial }: { initial?: ListingCategory }) {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName] = useState(initial?.name ?? "");
   const [slug, setSlug] = useState(initial?.slug ?? "");
   const [saving, setSaving] = useState(false);
@@ -159,6 +164,7 @@ export function OperatorListingCategoryEditor({ initial }: { initial?: ListingCa
           }),
         },
       );
+      toast.success(initial ? "Category updated." : "Category created.");
       router.push("/operator/catalogue/categories");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save category.");

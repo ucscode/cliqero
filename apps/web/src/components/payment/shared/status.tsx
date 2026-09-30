@@ -5,7 +5,7 @@ import { apiFetch, formatExchangeRate, type FundingStatus } from "@/lib/api-clie
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
-import { Toast } from "../../toast";
+import { Alert } from "../../ui/alert";
 import { Money } from "../../money";
 import { CopyValue } from "../../copy-value";
 import { PaymentInstructions } from "./instructions";
@@ -387,7 +387,7 @@ export function PaymentComponent({
           <a href="/dashboard?section=wallet">Wallet overview</a>
         </Button>
       </div>
-      {providerError && <Toast>{providerError}</Toast>}
+      {providerError && <Alert>{providerError}</Alert>}
     </Card>
   );
 }

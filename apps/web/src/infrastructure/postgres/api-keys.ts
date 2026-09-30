@@ -58,9 +58,17 @@ export class PostgresApiKeyRepository {
       [id],
     );
   }
-  async list(accountId?: string) {
+  async list(
+    accountId?: string,
+    order: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" } = {},
+  ) {
+    const sort = order.sort ?? "created";
+    const direction = order.direction ?? "desc";
+    const orderBy =
+      sort === "name" ? "lower(k.name)" : sort === "expires" ? "k.expires_at" : "k.created_at";
+    const nullOrder = sort === "expires" ? "(k.expires_at is null) asc," : "";
     const rows = await this.sql.query<ApiKeyRecord>(
-      `select k.uuid as id,(select uuid from identity_capability.accounts where id=k.account_id) as "accountId",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt" from identity_capability.api_keys k where ($1::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$1)) order by k.created_at desc,k.id desc`,
+      `select k.uuid as id,(select uuid from identity_capability.accounts where id=k.account_id) as "accountId",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt" from identity_capability.api_keys k where ($1::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$1)) order by ${nullOrder}${orderBy} ${direction} nulls last,k.id ${direction}`,
       [accountId ?? null],
     );
     return rows.rows;
@@ -131,8 +139,11 @@ export class ApiKeyService {
     await this.repository.touch(row.id);
     return { id: row.id, accountId: row.account_id, name: row.name, scopes: row.scopes };
   }
-  list(accountId?: string) {
-    return this.repository.list(accountId);
+  list(
+    accountId?: string,
+    order?: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" },
+  ) {
+    return this.repository.list(accountId, order);
   }
   revoke(id: string, accountId?: string) {
     return this.repository.revoke(id, accountId);

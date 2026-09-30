@@ -15,7 +15,7 @@ import {
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
-import { Toast } from "../../toast";
+import { Alert } from "../../ui/alert";
 import { CopyValue } from "../../copy-value";
 
 export function DirectTrc20Payment(props: PaymentProviderProps) {
@@ -145,7 +145,7 @@ export function DirectTrc20Payment(props: PaymentProviderProps) {
               placeholder="Paste the transaction hash"
               disabled={submitting}
             />
-            {error && <Toast>{error}</Toast>}
+            {error && <Alert>{error}</Alert>}
             <Button
               type="submit"
               variant="secondary"

@@ -12,6 +12,7 @@ export type OperatorPageAccess = {
 };
 
 export function capabilityForPath(pathname: string): Capability | null {
+  if (pathname.startsWith("/operator/api-keys")) return "api_keys.manage";
   if (pathname.startsWith("/operator/catalogue")) return "catalogue.manage";
   if (pathname.startsWith("/operator/blog")) return "content.manage";
   if (

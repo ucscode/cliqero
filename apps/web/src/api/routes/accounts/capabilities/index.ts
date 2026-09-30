@@ -11,6 +11,52 @@ export function registerAccountCapabilityRoutes(
 ) {
   const capabilityParams = z.object({ accountId: z.string().uuid() });
   const capabilityBody = z.object({ capability: z.string().min(1).max(64) }).strict();
+  const capabilitySetBody = z
+    .object({ capabilities: z.array(z.string().min(1).max(64)).max(64) })
+    .strict();
+  app.openapi(
+    createRoute({
+      method: "put",
+      path: "/api/accounts/{accountId}/capabilities",
+      request: {
+        params: capabilityParams,
+        body: { content: { "application/json": { schema: capabilitySetBody } } },
+      },
+      responses: {
+        200: { description: "Ordinary capability selection applied" },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Capability administration access required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Account not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireSessionCapability(c, p, "capabilities.manage");
+      if (denied) return denied;
+      try {
+        return c.json(
+          await container.capabilityAdministration.replaceOrdinary(
+            p.accountId,
+            c.req.valid("param").accountId,
+            c.req.valid("json").capabilities,
+          ),
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
   app.openapi(
     createRoute({
       method: "get",

@@ -31,7 +31,11 @@ export class OperatorApiKeyService {
     private readonly uow: UnitOfWork,
   ) {}
 
-  async list(actorId: string, targetId: string) {
+  async list(
+    actorId: string,
+    targetId: string,
+    order?: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" },
+  ) {
     const actorCapabilities = await this.operators.capabilities(actorId);
     if (!hasCapability(actorCapabilities, "api_keys.manage"))
       throw forbidden("You are not allowed to administer API keys.");
@@ -46,7 +50,7 @@ export class OperatorApiKeyService {
           (root || required.every((capability) => hasCapability(actorCapabilities, capability))))
       );
     });
-    return { items: await this.apiKeys.list(targetId), manageableScopes };
+    return { items: await this.apiKeys.list(targetId, order), manageableScopes };
   }
 
   async create(actorId: string, targetId: string, input: OperatorApiKeyInput) {

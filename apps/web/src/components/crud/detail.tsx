@@ -15,6 +15,7 @@ export function CrudDetail({
   summary,
   fields,
   fieldsTitle = "Details",
+  fieldsSurface = true,
   beforeDetails,
   afterDetails,
   sidebar,
@@ -30,6 +31,7 @@ export function CrudDetail({
   summary?: ReactNode;
   fields?: readonly CrudField[];
   fieldsTitle?: string;
+  fieldsSurface?: boolean;
   beforeDetails?: ReactNode;
   afterDetails?: ReactNode;
   sidebar?: ReactNode;
@@ -65,7 +67,7 @@ export function CrudDetail({
             <div className="min-w-0 space-y-6">
               {beforeDetails}
               {fields && (
-                <OperatorSection title={fieldsTitle} surface>
+                <OperatorSection title={fieldsTitle} surface={fieldsSurface}>
                   <CrudFieldList fields={fields} />
                 </OperatorSection>
               )}

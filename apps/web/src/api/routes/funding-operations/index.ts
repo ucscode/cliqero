@@ -22,6 +22,11 @@ export function registerFundingOperationsRoutes(
       .string()
       .regex(/^[a-z0-9_-]{1,50}$/)
       .optional(),
+    sort: z
+      .enum(["created", "amount"])
+      .default("created")
+      .describe("Sort by creation date or canonical funding amount."),
+    direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });

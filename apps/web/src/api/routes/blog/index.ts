@@ -46,6 +46,11 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
     status: z.enum(["draft", "published", "all"]).optional(),
     category: z.string().max(100).optional(),
     tag: z.string().max(100).optional(),
+    sort: z
+      .enum(["created", "title"])
+      .default("created")
+      .describe("Sort by creation date or title."),
+    direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(25),
   });

@@ -16,7 +16,7 @@ import {
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { Money } from "../money";
 import { ListingPrice, isFreeListingPrice } from "../listing/price";
 
@@ -460,7 +460,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
             </Button>
           </>
         )}
-        {error && <Toast>{error}</Toast>}
+        {error && <Alert>{error}</Alert>}
       </Card>
     </div>
   );

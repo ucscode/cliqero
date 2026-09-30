@@ -1,29 +1,5 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
-
-type Cursor = { createdAt: string; id: string };
-
-function encodeCursor(createdAt: string | Date, id: string) {
-  return Buffer.from(
-    JSON.stringify({ created_at: new Date(createdAt).toISOString(), id }),
-    "utf8",
-  ).toString("base64url");
-}
-
-function decodeCursor(value: string | undefined): Cursor | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
-      created_at?: unknown;
-      id?: unknown;
-    };
-    if (typeof parsed.created_at !== "string" || typeof parsed.id !== "string") throw new Error();
-    const date = new Date(parsed.created_at);
-    if (Number.isNaN(date.valueOf())) throw new Error();
-    return { createdAt: date.toISOString(), id: parsed.id };
-  } catch {
-    throw new Error("Invalid pagination cursor");
-  }
-}
+import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "./cursor";
 
 function cleanSearch(value?: string) {
   const trimmed = value?.trim() ?? "";
@@ -75,8 +51,14 @@ export class OperatorTreasuryService {
     source?: "automatic" | "manual";
     cursor?: string;
     limit: number;
+    sort?: "created" | "amount";
+    sort_direction?: "asc" | "desc";
   }) {
-    const cursor = decodeCursor(input.cursor);
+    const sort = input.sort ?? "created";
+    const direction = input.sort_direction ?? "desc";
+    const cursor = decodeOperatorSortCursor(input.cursor, sort, direction);
+    const orderBy = sort === "amount" ? "e.amount_minor" : "e.created_at";
+    const cursorType = sort === "amount" ? "bigint" : "timestamptz";
     const search = cleanSearch(input.search);
     const sourceKind =
       input.source === "automatic" ? "distribution" : input.source === "manual" ? null : undefined;
@@ -91,16 +73,20 @@ export class OperatorTreasuryService {
       `($3::text is null or ($3::text='distribution' and e.source_kind='distribution') or ($3::text is null and e.source_kind is null))`,
     ];
     if (input.source === "manual") conditions[2] = "e.source_kind is null";
-    values.push(cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1);
+    const cursorClause = cursor
+      ? `and (${orderBy},e.id) ${direction === "asc" ? ">" : "<"} ($4::${cursorType},$5::bigint)`
+      : "";
+    if (cursor) values.push(cursor.value, cursor.id);
+    values.push(input.limit + 1);
     const rows = (
       await this.sql.query<any>(
-        `select e.id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
+        `select e.uuid as id,e.id::text cursor_id,${orderBy}::text cursor_sort_value,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
                 a.uuid actor_id,a.username actor_username,a.email actor_email
            from treasury_capability.entries e
            left join identity_capability.account_profiles a on a.id=e.actor_id
           where ${conditions.join(" and ")}
-            and ($4::timestamptz is null or (e.created_at,e.id)<($4::timestamptz,(select id from treasury_capability.entries where uuid=$5)))
-          order by e.created_at desc,e.id desc limit $6`,
+            ${cursorClause}
+          order by ${orderBy} ${direction},e.id ${direction} limit $${values.length}`,
         values,
       )
     ).rows;
@@ -109,7 +95,12 @@ export class OperatorTreasuryService {
       items: visible.map(this.map),
       nextCursor:
         rows.length > input.limit
-          ? encodeCursor(visible.at(-1).created_at, visible.at(-1).id)
+          ? encodeOperatorSortCursor({
+              sort,
+              direction,
+              value: String(visible.at(-1).cursor_sort_value),
+              id: String(visible.at(-1).cursor_id),
+            })
           : null,
     };
   }

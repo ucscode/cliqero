@@ -98,6 +98,8 @@ export type OperatorFundingListInput = {
   provider?: string;
   cursor?: string;
   limit: number;
+  sort?: "created" | "amount";
+  direction?: "asc" | "desc";
 };
 
 export interface OperatorFundingReader {

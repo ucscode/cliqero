@@ -43,31 +43,60 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
     return c.json({ item: reviewJson(review, { reviewer: p.account.username, isMine: true }) });
   });
 
-  app.get("/api/reviews", async (c) => {
-    const p = requirePrincipal(c);
-    if (!(p instanceof Object) || !("accountId" in p)) return p;
-    const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
-    if (denied) return denied;
-    const maxRows = 100;
-    const query = z
-      .object({
-        status: z.enum(["pending", "approved", "rejected"]).optional(),
-        cursor: z.string().max(512).optional(),
-        limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
-      })
-      .parse({
-        status: c.req.query("status") || undefined,
-        cursor: c.req.query("cursor") || undefined,
-        limit: c.req.query("limit") || undefined,
-      });
-    const page = await container.listingReviews.operatorQueue(p.account, {
-      ...query,
-    });
-    return c.json({
-      items: page.items.map((review) => reviewJson(review)),
-      next_cursor: page.nextCursor,
-    });
+  const operatorReviewQuery = z.object({
+    status: z.enum(["pending", "approved", "rejected"]).optional(),
+    sort: z
+      .enum(["submitted", "rating"])
+      .default("submitted")
+      .describe("Sort by submission time or rating."),
+    direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(100),
   });
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/reviews",
+      tags: ["Reviews"],
+      summary: "List reviews for moderation",
+      request: { query: operatorReviewQuery },
+      responses: {
+        200: {
+          description: "Moderation queue",
+          content: {
+            "application/json": {
+              schema: z.object({ items: z.array(z.any()), next_cursor: z.string().nullable() }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Review moderation permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p as never;
+      const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
+      if (denied) return denied as never;
+      const query = c.req.valid("query");
+      const page = await container.listingReviews.operatorQueue(p.account, {
+        ...query,
+      });
+      return c.json(
+        {
+          items: page.items.map((review) => reviewJson(review)),
+          next_cursor: page.nextCursor,
+        },
+        200,
+      );
+    },
+  );
 
   app.openapi(
     createRoute({

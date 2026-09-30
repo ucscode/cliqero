@@ -30,6 +30,11 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
     search: z.string().max(100).optional(),
     state: operatorWithdrawalStateSchema.or(z.literal("all")).optional(),
     attention: operatorWithdrawalAttentionSchema.optional(),
+    sort: z
+      .enum(["created", "amount"])
+      .default("created")
+      .describe("Sort by created date or amount."),
+    direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });
@@ -64,7 +69,13 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const query = c.req.valid("query");
-      const requestsOperationalView = Boolean(query.state || query.search || query.attention);
+      const requestsOperationalView = Boolean(
+        query.state ||
+        query.search ||
+        query.attention ||
+        c.req.query("sort") ||
+        c.req.query("direction"),
+      );
       if (!requestsOperationalView) {
         const denied = requireScope(c, p, "withdrawals:read");
         if (denied) return denied;

@@ -83,6 +83,58 @@ export class CapabilityAdministrationService {
     return this.change(actorId, targetId, rawCapability, "revoke");
   }
 
+  /** Atomically applies an ordinary-capability selection while preserving root-only authority. */
+  async replaceOrdinary(actorId: string, targetId: string, rawCapabilities: readonly string[]) {
+    const requested = new Set(rawCapabilities.map(capabilityOrThrow));
+    if (requested.has("system.root"))
+      throw new PublicApplicationError(
+        "Master operator authority must be changed separately.",
+        "root_authorization_required",
+        403,
+      );
+
+    return this.uow.transaction(async () => {
+      const actorCapabilities = await this.operators.capabilities(actorId);
+      if (!canManageCapability(actorCapabilities, "capabilities.manage"))
+        throw forbidden("You are not allowed to manage capabilities.", "forbidden");
+      await this.ensureAccount(targetId);
+      const current = await this.assignmentsStore.assignments(targetId);
+      const currentSet = new Set(current.map((item) => item.capability));
+      const manageable = new Set(
+        CAPABILITIES.filter(
+          (capability) =>
+            capability !== "system.root" && canManageCapability(actorCapabilities, capability),
+        ),
+      );
+      for (const capability of requested) {
+        if (!manageable.has(capability))
+          throw forbidden(
+            "You can only assign capabilities that you are authorized to delegate.",
+            "capability_delegation_forbidden",
+          );
+      }
+
+      const toGrant = [...requested].filter(
+        (capability) => manageable.has(capability) && !currentSet.has(capability),
+      );
+      const toRevoke = [...currentSet].filter(
+        (capability) => manageable.has(capability) && !requested.has(capability),
+      );
+      for (const capability of toRevoke) {
+        if (await this.assignmentsStore.revoke(targetId, capability))
+          await this.recordAudit(actorId, targetId, capability, "revoked");
+      }
+      for (const capability of toGrant) {
+        const result = await this.assignmentsStore.grant(targetId, capability);
+        if (result.changed) await this.recordAudit(actorId, targetId, capability, "granted");
+      }
+      return {
+        accountId: targetId,
+        assignments: await this.assignmentsStore.assignments(targetId),
+      };
+    });
+  }
+
   private async change(
     actorId: string,
     targetId: string,

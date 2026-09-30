@@ -8,7 +8,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { Money } from "../money";
 
 export function purchaseStatusPresentation(state: Purchase["state"]) {
@@ -144,7 +144,7 @@ export function PurchasesPanel() {
 
   return (
     <section className="grid gap-4" aria-labelledby="purchases-heading">
-      {error && <Toast>{error}</Toast>}
+      {error && <Alert>{error}</Alert>}
       <div className="mb-1 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="eyebrow">Your collection</p>

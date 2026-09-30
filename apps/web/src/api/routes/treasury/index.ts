@@ -13,6 +13,11 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
     search: z.string().max(100).optional(),
     direction: z.enum(["credit", "debit"]).optional(),
     source: z.enum(["automatic", "manual"]).optional(),
+    sort: z
+      .enum(["created", "amount"])
+      .default("created")
+      .describe("Sort by creation date or entry amount."),
+    sort_direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });

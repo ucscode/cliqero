@@ -19,7 +19,7 @@ import {
 import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { PurchasesPanel } from "../purchase/panel";
 import { WalletPanel } from "../wallet/panel";
 import { FundingHistoryPanel } from "../funding/history";
@@ -323,7 +323,7 @@ export function DashboardShell({
             {!session.data.user.emailVerified && (
               <EmailVerificationNotice email={session.data.user.email} />
             )}
-            {error && <Toast>{error}</Toast>}
+            {error && <Alert>{error}</Alert>}
             {content}
           </main>
         </SidebarInset>

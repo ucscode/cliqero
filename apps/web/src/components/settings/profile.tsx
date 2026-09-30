@@ -9,7 +9,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { CountrySelect } from "../country-select";
 import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 
@@ -143,8 +143,8 @@ export function ProfileSettings() {
     );
   return (
     <Card className="grid gap-5 p-5">
-      {error && <Toast>{error}</Toast>}
-      {message && <Toast tone="success">{message}</Toast>}
+      {error && <Alert>{error}</Alert>}
+      {message && <Alert>{message}</Alert>}
       <form id="settings-profile-form" className="grid max-w-2xl gap-3" onSubmit={save}>
         <Label htmlFor="settings-username">Username</Label>
         <Input id="settings-username" value={profile.username} disabled />

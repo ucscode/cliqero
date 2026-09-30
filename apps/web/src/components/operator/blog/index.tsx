@@ -10,6 +10,7 @@ import { Input } from "../../ui/input";
 import { Select } from "../../ui/select";
 import { Label } from "../../ui/label";
 import { Textarea } from "../../ui/textarea";
+import { TagSelect } from "../../ui/tag-select";
 import type { BlogPost, BlogCategory } from "@/modules/blog/domain/blog";
 import { HoneypotField } from "../../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
@@ -23,24 +24,34 @@ import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorErrorState } from "../ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "../ui/bulk-outcome";
+import { useToast } from "@/components/toast/provider";
+import { CrudSortSelect } from "@/components/crud/sort-select";
 
 export function OperatorBlogList() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [sortChoice, setSortChoice] = useState("created:desc");
+  const [sort, direction] = sortChoice.split(":") as ["created" | "title", "asc" | "desc"];
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(
-    async (filters: { search: string; status: string }, cursor, pageSize) => {
+    async (
+      filters: { search: string; status: string; sort: string; direction: string },
+      cursor,
+      pageSize,
+    ) => {
       const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       params.set("status", filters.status || "all");
+      params.set("sort", filters.sort);
+      params.set("direction", filters.direction);
       if (cursor) params.set("cursor", cursor);
       const result = await apiFetch<{ items: BlogPost[]; nextCursor: string | null }>(
         `/api/blog/posts?${params}`,
       );
       return { items: result.items, nextCursor: result.nextCursor };
     },
-    { search: "", status: "" },
+    { search: "", status: "", sort: "created", direction: "desc" },
   );
   async function remove(post: BlogPost) {
     if (!window.confirm(`Delete “${post.title}”?`)) return;
@@ -145,21 +156,39 @@ export function OperatorBlogList() {
           </OperatorFilterField>
         </>
       }
+      sort={
+        <CrudSortSelect
+          value={sortChoice}
+          onChange={setSortChoice}
+          options={[
+            { value: "created:desc", label: "Newest", sort: "created", direction: "desc" },
+            { value: "created:asc", label: "Oldest", sort: "created", direction: "asc" },
+            { value: "title:asc", label: "Title A–Z", sort: "title", direction: "asc" },
+            { value: "title:desc", label: "Title Z–A", sort: "title", direction: "desc" },
+          ]}
+        />
+      }
       onFiltersSubmit={async (event) => {
         event.preventDefault();
         setActionError(null);
         setBulkOutcome(null);
-        return collection.apply({ search: search.trim(), status });
+        return collection.apply({ search: search.trim(), status, sort, direction });
       }}
       onFiltersReset={async () => {
-        const ok = await collection.apply({ search: "", status: "" });
+        const ok = await collection.apply({
+          search: "",
+          status: "",
+          sort: "created",
+          direction: "desc",
+        });
         if (ok) {
           setSearch("");
           setStatus("");
+          setSortChoice("created:desc");
         }
         return ok;
       }}
-      filtersDirty={Boolean(search.trim() || status)}
+      filtersDirty={Boolean(search.trim() || status || sortChoice !== "created:desc")}
       toolbarActions={
         <Button type="submit" variant="action" disabled={collection.loading}>
           Apply
@@ -202,6 +231,7 @@ export function OperatorBlogList() {
 
 export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   const router = useRouter();
+  const toast = useToast();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [slug, setSlug] = useState(initial?.slug ?? "");
   const [excerpt, setExcerpt] = useState(initial?.excerpt ?? "");
@@ -301,12 +331,14 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
-    await saveCurrent(honeypot);
+    const post = await saveCurrent(honeypot);
+    if (post) toast.success(initial ? "Post saved." : "Post created.");
   }
   async function remove() {
     if (!saved || !window.confirm("Delete this blog post?")) return;
     try {
       await apiFetch(`/api/blog/posts/${saved.id}`, { method: "DELETE" });
+      toast.success("Post deleted.");
       router.push("/operator/blog");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to delete post.");
@@ -408,26 +440,12 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="blog-categories">Categories</Label>
-            <Select
-              id="blog-categories"
-              multiple
+            <TagSelect
+              label="Categories"
+              options={categories.map((category) => ({ value: category.id, label: category.name }))}
               value={categoryIds}
-              className="h-36"
-              onChange={(event) =>
-                setCategoryIds(
-                  Array.from(event.currentTarget.selectedOptions, (option) => option.value),
-                )
-              }
-            >
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </Select>
-            <p className="mt-1 text-sm text-slate-600">
-              Select one or more existing categories. Use Ctrl/Cmd to change several.
-            </p>
+              onChange={setCategoryIds}
+            />
           </div>
           <div>
             <Label htmlFor="blog-tags">Tags (comma separated)</Label>

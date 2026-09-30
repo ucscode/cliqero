@@ -1,36 +1,18 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
-
-type Cursor = { createdAt: string; id: string };
-
-function encodeCursor(createdAt: string | Date, id: string) {
-  return Buffer.from(
-    JSON.stringify({ created_at: new Date(createdAt).toISOString(), id }),
-    "utf8",
-  ).toString("base64url");
-}
-
-function decodeCursor(value: string | undefined): Cursor | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
-      created_at?: unknown;
-      id?: unknown;
-    };
-    if (typeof parsed.created_at !== "string" || typeof parsed.id !== "string") throw new Error();
-    const date = new Date(parsed.created_at);
-    if (Number.isNaN(date.valueOf())) throw new Error();
-    return { createdAt: date.toISOString(), id: parsed.id };
-  } catch {
-    throw new Error("Invalid pagination cursor");
-  }
-}
+import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "./cursor";
 
 function cleanSearch(value?: string) {
   const trimmed = value?.trim() ?? "";
   return trimmed ? trimmed.replace(/[\\%_]/g, "\\$&") : null;
 }
 
-type DistributionInput = { search?: string; cursor?: string; limit: number };
+type DistributionInput = {
+  search?: string;
+  cursor?: string;
+  limit: number;
+  sort?: "created" | "amount";
+  direction?: "asc" | "desc";
+};
 
 export type OperatorDistributionSummary = {
   id: string;
@@ -82,14 +64,22 @@ export class OperatorDistributionService {
   constructor(private readonly sql: QueryExecutor) {}
 
   async list(input: DistributionInput) {
-    const cursor = decodeCursor(input.cursor);
+    const sort = input.sort ?? "created";
+    const direction = input.direction ?? "desc";
+    const cursor = decodeOperatorSortCursor(input.cursor, sort, direction);
+    const orderBy = sort === "amount" ? "d.gross_minor" : "d.completed_at";
+    const cursorType = sort === "amount" ? "bigint" : "timestamptz";
     const search = cleanSearch(input.search);
+    const cursorClause = cursor
+      ? `and (${orderBy},d.id) ${direction === "asc" ? ">" : "<"} ($2::${cursorType},$3::bigint)`
+      : "";
     const rows = (
       await this.sql.query<any>(
         `select d.uuid as id,p.uuid as purchase_id,d.gross_minor,d.currency,d.platform_amount_minor,d.completed_at,
               l.uuid as listing_id,p.listing_title_snapshot,b.uuid as buyer_id,b.username buyer_username,b.email buyer_email,
               coalesce(sum(case when e.recipient_role='referral' and e.direction='credit' and e.reversal_id is null then e.amount_minor else 0 end),0)::bigint referral_allocated_minor,
-              count(distinct case when e.recipient_role='referral' and e.direction='credit' and e.reversal_id is null then e.account_id end)::int beneficiary_count
+              count(distinct case when e.recipient_role='referral' and e.direction='credit' and e.reversal_id is null then e.account_id end)::int beneficiary_count,
+              d.id::text cursor_id,${orderBy}::text cursor_sort_value
          from ledger_capability.purchase_distributions d
          join purchase_capability.purchases p on p.id=d.purchase_id
          join identity_capability.account_profiles b on b.id=p.buyer_id
@@ -97,11 +87,11 @@ export class OperatorDistributionService {
          join listing_capability.listings l on l.id=p.listing_id
         where p.checkout_id is not null
           and ($1::text is null or d.uuid::text=$1 or p.uuid::text=$1 or p.listing_title_snapshot ilike '%'||$1||'%' escape '\\' or b.username ilike '%'||$1||'%' escape '\\' or b.email ilike '%'||$1||'%' escape '\\' or exists(select 1 from ledger_capability.entries se join identity_capability.account_profiles sa on sa.id=se.account_id where se.distribution_id=d.id and se.recipient_role='referral' and (sa.username ilike '%'||$1||'%' escape '\\' or sa.email ilike '%'||$1||'%' escape '\\')))
-          and ($2::timestamptz is null or (d.completed_at,d.id)<($2::timestamptz,(select id from ledger_capability.purchase_distributions where uuid=$3)))
+          ${cursorClause}
         group by d.id,p.id,b.id,b.uuid,b.username,b.email,l.id
-        order by d.completed_at desc,d.id desc
-        limit $4`,
-        [search, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
+        order by ${orderBy} ${direction},d.id ${direction}
+        limit $${cursor ? 4 : 2}`,
+        cursor ? [search, cursor.value, cursor.id, input.limit + 1] : [search, input.limit + 1],
       )
     ).rows;
     const visible = rows.slice(0, input.limit);
@@ -109,7 +99,12 @@ export class OperatorDistributionService {
       items: visible.map((row) => this.summary(row)),
       nextCursor:
         rows.length > input.limit
-          ? encodeCursor(visible.at(-1).completed_at, visible.at(-1).id)
+          ? encodeOperatorSortCursor({
+              sort,
+              direction,
+              value: String(visible.at(-1).cursor_sort_value),
+              id: String(visible.at(-1).cursor_id),
+            })
           : null,
     };
   }
@@ -243,13 +238,22 @@ export class OperatorEarningsService {
     state?: "pending" | "available" | "reversed";
     cursor?: string;
     limit: number;
+    sort?: "created" | "amount";
+    direction?: "asc" | "desc";
   }) {
-    const cursor = decodeCursor(input.cursor);
+    const sort = input.sort ?? "created";
+    const direction = input.direction ?? "desc";
+    const cursor = decodeOperatorSortCursor(input.cursor, sort, direction);
+    const orderBy = sort === "amount" ? "e.amount_minor" : "e.created_at";
+    const cursorType = sort === "amount" ? "bigint" : "timestamptz";
     const search = cleanSearch(input.search);
     const state = input.state ?? null;
+    const cursorClause = cursor
+      ? `and (${orderBy},e.id) ${direction === "asc" ? ">" : "<"} ($3::${cursorType},$4::bigint)`
+      : "";
     const rows = (
       await this.sql.query<any>(
-        `select e.uuid as id,a.uuid as account_id,a.username,a.email,p.uuid as purchase_id,d.uuid as distribution_id,e.entry_type,e.direction,e.amount_minor,e.currency,e.referral_level,e.balance_state,e.created_at,s.settled_at,
+        `select e.uuid as id,e.id::text cursor_id,${orderBy}::text cursor_sort_value,a.uuid as account_id,a.username,a.email,p.uuid as purchase_id,d.uuid as distribution_id,e.entry_type,e.direction,e.amount_minor,e.currency,e.referral_level,e.balance_state,e.created_at,s.settled_at,
               case when e.reversal_id is not null or exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then 'reversed' when s.id is not null then 'available' else e.balance_state end effective_state
          from ledger_capability.entries e
          join identity_capability.account_profiles a on a.id=e.account_id
@@ -259,9 +263,11 @@ export class OperatorEarningsService {
         where e.recipient_role='referral'
           and ($1::text is null or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1 or e.uuid::text=$1 or p.uuid::text=$1)
           and ($2::text is null or (case when e.reversal_id is not null or exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then 'reversed' when s.id is not null then 'available' else e.balance_state end)=$2)
-          and ($3::timestamptz is null or (e.created_at,e.id)<($3::timestamptz,(select id from ledger_capability.entries where uuid=$4)))
-        order by e.created_at desc,e.id desc limit $5`,
-        [search, state, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
+          ${cursorClause}
+        order by ${orderBy} ${direction},e.id ${direction} limit $${cursor ? 5 : 3}`,
+        cursor
+          ? [search, state, cursor.value, cursor.id, input.limit + 1]
+          : [search, state, input.limit + 1],
       )
     ).rows;
     const visible = rows.slice(0, input.limit);
@@ -277,7 +283,12 @@ export class OperatorEarningsService {
       items: visible.map((row) => this.entry(row)),
       nextCursor:
         rows.length > input.limit
-          ? encodeCursor(visible.at(-1).created_at, visible.at(-1).id)
+          ? encodeOperatorSortCursor({
+              sort,
+              direction,
+              value: String(visible.at(-1).cursor_sort_value),
+              id: String(visible.at(-1).cursor_id),
+            })
           : null,
       totals: {
         pendingMinor: String(totals.pending_minor ?? 0),

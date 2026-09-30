@@ -8,7 +8,7 @@ import { ReferralShareActions } from "./referral/share-actions";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
-import { Toast } from "./toast";
+import { Alert } from "./ui/alert";
 
 /** Promotion has no server-side link inventory: URLs are deterministic per listing/account. */
 export function PromotePanel() {
@@ -46,7 +46,7 @@ export function PromotePanel() {
           purchase may create referral earnings; a visit alone never guarantees a commission.
         </p>
       </div>
-      {error && <Toast>{error}</Toast>}
+      {error && <Alert>{error}</Alert>}
       <Card>
         <CardHeader>
           <CardTitle>Invite people to Cliqero</CardTitle>

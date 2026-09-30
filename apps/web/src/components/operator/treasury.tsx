@@ -13,7 +13,7 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { Money } from "../money";
 import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
@@ -25,6 +25,7 @@ import { CrudIndex } from "@/components/crud/index-page";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
 import type { OperatorAction } from "./ui/actions-menu";
+import { CrudSortSelect } from "@/components/crud/sort-select";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Treasury data is temporarily unavailable.";
@@ -35,6 +36,8 @@ export function OperatorTreasuryPage() {
   const [search, setSearch] = useState("");
   const [direction, setDirection] = useState<"" | "credit" | "debit">("");
   const [source, setSource] = useState<"" | "automatic" | "manual">("");
+  const [sortChoice, setSortChoice] = useState("created:desc");
+  const [sort, sort_direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [amount, setAmount] = useState("");
@@ -47,6 +50,8 @@ export function OperatorTreasuryPage() {
         search: string;
         direction: "" | "credit" | "debit";
         source: "" | "automatic" | "manual";
+        sort: string;
+        sort_direction: string;
       },
       cursor,
       pageSize,
@@ -55,6 +60,8 @@ export function OperatorTreasuryPage() {
       if (filters.search) params.set("search", filters.search);
       if (filters.direction) params.set("direction", filters.direction);
       if (filters.source) params.set("source", filters.source);
+      params.set("sort", filters.sort);
+      params.set("sort_direction", filters.sort_direction);
       if (cursor) params.set("cursor", cursor);
       const [nextSummary, nextPage] = await Promise.all([
         apiFetch<OperatorTreasurySummary>("/api/treasury"),
@@ -63,7 +70,7 @@ export function OperatorTreasuryPage() {
       setSummary(nextSummary);
       return { items: nextPage.items, nextCursor: nextPage.nextCursor };
     },
-    { search: "", direction: "", source: "" },
+    { search: "", direction: "", source: "", sort: "created", sort_direction: "desc" },
   );
 
   async function createEntry(event: FormEvent<HTMLFormElement>) {
@@ -253,7 +260,7 @@ export function OperatorTreasuryPage() {
               <div className="flex flex-wrap items-center gap-3 pt-1 sm:col-span-2">
                 {formError && (
                   <div className="basis-full">
-                    <Toast>{formError}</Toast>
+                    <Alert>{formError}</Alert>
                   </div>
                 )}
                 <Button type="submit" disabled={saving}>
@@ -306,19 +313,38 @@ export function OperatorTreasuryPage() {
           </div>
         </>
       }
+      sort={
+        <CrudSortSelect
+          value={sortChoice}
+          onChange={setSortChoice}
+          options={[
+            { value: "created:desc", label: "Newest", sort: "created", direction: "desc" },
+            { value: "created:asc", label: "Oldest", sort: "created", direction: "asc" },
+            { value: "amount:desc", label: "Highest amount", sort: "amount", direction: "desc" },
+            { value: "amount:asc", label: "Lowest amount", sort: "amount", direction: "asc" },
+          ]}
+        />
+      }
       onFiltersReset={async () => {
-        const ok = await collection.apply({ search: "", direction: "", source: "" });
+        const ok = await collection.apply({
+          search: "",
+          direction: "",
+          source: "",
+          sort: "created",
+          sort_direction: "desc",
+        });
         if (ok) {
           setSearch("");
           setDirection("");
           setSource("");
+          setSortChoice("created:desc");
         }
         return ok;
       }}
-      filtersDirty={Boolean(search.trim() || direction || source)}
+      filtersDirty={Boolean(search.trim() || direction || source || sortChoice !== "created:desc")}
       onFiltersSubmit={async (event) => {
         event.preventDefault();
-        return collection.apply({ search: search.trim(), direction, source });
+        return collection.apply({ search: search.trim(), direction, source, sort, sort_direction });
       }}
       items={collection.items}
       columns={columns}

@@ -23,11 +23,15 @@ import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { HoneypotField } from "../honeypot-field";
 import { Textarea } from "../ui/textarea";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { useToast } from "../toast/provider";
+import { TagSelect } from "../ui/tag-select";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { OperatorFilterField } from "./ui/toolbar";
 import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
 import { CrudIndex } from "@/components/crud/index-page";
+import { CrudSortSelect } from "@/components/crud/sort-select";
 import { CrudEdit } from "@/components/crud/edit";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
@@ -68,21 +72,38 @@ export function OperatorCatalogueList() {
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
   const [visibility, setVisibility] = useState("");
+  const [sort, setSort] = useState<"date" | "price" | "title" | "rating">("date");
+  const [direction, setDirection] = useState<"asc" | "desc">("desc");
+  const sortChoice = `${sort}:${direction}`;
+  const [transferOpen, setTransferOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const toast = useToast();
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(
-    async (filters: { search: string; state: string; visibility: string }, cursor, pageSize) => {
+    async (
+      filters: {
+        search: string;
+        state: string;
+        visibility: string;
+        sort: string;
+        direction: string;
+      },
+      cursor,
+      pageSize,
+    ) => {
       const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       params.set("state", filters.state || "all");
       if (filters.visibility) params.set("visibility", filters.visibility);
+      params.set("sort", filters.sort);
+      params.set("direction", filters.direction);
       if (cursor) params.set("cursor", cursor);
       const page = await apiFetch<OperatorListingPage>(`/api/listings?${params}`);
       return { items: page.items, nextCursor: page.next_cursor };
     },
-    { search: "", state: "", visibility: "" },
+    { search: "", state: "", visibility: "", sort: "date", direction: "desc" },
   );
 
   async function changeState(listing: OperatorListing, action: "publish" | "restore" | "archive") {
@@ -97,6 +118,9 @@ export function OperatorCatalogueList() {
           state: action === "publish" ? "published" : action === "archive" ? "archived" : "draft",
         }),
       });
+      toast.success(
+        `Listing ${action === "publish" ? "published" : action === "archive" ? "archived" : "restored"}.`,
+      );
       await collection.retry();
     } catch (cause) {
       // The list reader owns persistent query failures; mutations retain transient feedback here.
@@ -136,6 +160,8 @@ export function OperatorCatalogueList() {
           })),
         });
       await collection.retry();
+      if (!failures.length)
+        toast.success(`${listings.length} listing${listings.length === 1 ? "" : "s"} updated.`);
       return failures.length === 0;
     } catch (cause) {
       setActionError(errorMessage(cause));
@@ -186,13 +212,15 @@ export function OperatorCatalogueList() {
           body,
         },
       );
-      setImportMessage(
-        `Import complete: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.failed} failed.`,
+      toast.success(
+        `Import completed. ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.failed} failed.`,
       );
+      setTransferOpen(false);
+      setImportMessage(null);
       form.reset();
       await collection.retry();
     } catch (cause) {
-      setImportMessage(errorMessage(cause));
+      toast.error(errorMessage(cause));
     } finally {
       setImporting(false);
     }
@@ -257,7 +285,6 @@ export function OperatorCatalogueList() {
     },
   ];
   const actions = (listing: OperatorListing): readonly OperatorAction[] => [
-    { type: "link", label: "View", href: `/operator/catalogue/${listing.id}` },
     { type: "link", label: "Edit", href: `/operator/catalogue/${listing.id}` },
     ...(listing.state === "draft"
       ? [
@@ -290,155 +317,195 @@ export function OperatorCatalogueList() {
   ];
 
   return (
-    <CrudIndex
-      eyebrow="Platform catalogue"
-      title="Listings"
-      description="Create and curate the listings Cliqero makes available to customers."
-      createAction={{ label: "New listing", href: "/operator/catalogue/new" }}
-      filters={
-        <>
-          <OperatorFilterField label="Search" htmlFor="catalogue-search">
-            <Input
-              id="catalogue-search"
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Title or description"
-            />
-          </OperatorFilterField>
-          <OperatorFilterField label="Visibility" htmlFor="catalogue-visibility">
-            <Select
-              id="catalogue-visibility"
-              value={visibility}
-              onChange={(event) => setVisibility(event.target.value)}
-            >
-              <option value="">All visibility</option>
-              <option value="public">Public</option>
-              <option value="authenticated">Members only</option>
-            </Select>
-          </OperatorFilterField>
-          <OperatorFilterField label="State" htmlFor="catalogue-state">
-            <Select
-              id="catalogue-state"
-              value={state}
-              onChange={(event) => setState(event.target.value)}
-            >
-              <option value="">All states</option>
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-              <option value="archived">Archived</option>
-            </Select>
-          </OperatorFilterField>
-        </>
-      }
-      onFiltersSubmit={async (event) => {
-        event.preventDefault();
-        return collection.apply({ search: search.trim(), state, visibility });
-      }}
-      onFiltersReset={async () => {
-        const ok = await collection.apply({ search: "", state: "", visibility: "" });
-        if (ok) {
-          setSearch("");
-          setState("");
-          setVisibility("");
-        }
-        return ok;
-      }}
-      filtersDirty={Boolean(search.trim() || state || visibility)}
-      toolbarActions={
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="secondary">
-            <Link href="/operator/catalogue/categories">Manage categories</Link>
+    <>
+      <CrudIndex
+        eyebrow="Platform catalogue"
+        title="Listings"
+        description="Create and curate the listings Cliqero makes available to customers."
+        headerActions={
+          <Button type="button" variant="secondary" onClick={() => setTransferOpen(true)}>
+            Transfer
           </Button>
+        }
+        createAction={{ label: "New listing", href: "/operator/catalogue/new" }}
+        filters={
+          <>
+            <OperatorFilterField label="Search" htmlFor="catalogue-search">
+              <Input
+                id="catalogue-search"
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Title or description"
+              />
+            </OperatorFilterField>
+            <OperatorFilterField label="Visibility" htmlFor="catalogue-visibility">
+              <Select
+                id="catalogue-visibility"
+                value={visibility}
+                onChange={(event) => setVisibility(event.target.value)}
+              >
+                <option value="">All visibility</option>
+                <option value="public">Public</option>
+                <option value="authenticated">Members only</option>
+              </Select>
+            </OperatorFilterField>
+            <OperatorFilterField label="State" htmlFor="catalogue-state">
+              <Select
+                id="catalogue-state"
+                value={state}
+                onChange={(event) => setState(event.target.value)}
+              >
+                <option value="">All states</option>
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="archived">Archived</option>
+              </Select>
+            </OperatorFilterField>
+          </>
+        }
+        sort={
+          <CrudSortSelect
+            value={sortChoice}
+            onChange={(value) => {
+              const [nextSort, nextDirection] = value.split(":") as [typeof sort, typeof direction];
+              setSort(nextSort);
+              setDirection(nextDirection);
+            }}
+            options={[
+              { value: "date:desc", label: "Newest", sort: "date", direction: "desc" },
+              { value: "date:asc", label: "Oldest", sort: "date", direction: "asc" },
+              { value: "title:asc", label: "Title A–Z", sort: "title", direction: "asc" },
+              { value: "title:desc", label: "Title Z–A", sort: "title", direction: "desc" },
+              { value: "price:desc", label: "Highest price", sort: "price", direction: "desc" },
+              { value: "price:asc", label: "Lowest price", sort: "price", direction: "asc" },
+              { value: "rating:desc", label: "Highest rated", sort: "rating", direction: "desc" },
+              { value: "rating:asc", label: "Lowest rated", sort: "rating", direction: "asc" },
+            ]}
+          />
+        }
+        onFiltersSubmit={async (event) => {
+          event.preventDefault();
+          return collection.apply({ search: search.trim(), state, visibility, sort, direction });
+        }}
+        onFiltersReset={async () => {
+          const ok = await collection.apply({
+            search: "",
+            state: "",
+            visibility: "",
+            sort: "date",
+            direction: "desc",
+          });
+          if (ok) {
+            setSearch("");
+            setState("");
+            setVisibility("");
+            setSort("date");
+            setDirection("desc");
+          }
+          return ok;
+        }}
+        filtersDirty={Boolean(
+          search.trim() || state || visibility || sort !== "date" || direction !== "desc",
+        )}
+        toolbarActions={
           <Button type="submit" variant="action" disabled={collection.loading}>
             Apply filters
           </Button>
-        </div>
-      }
-      beforeTable={
-        <div className="grid gap-3">
-          {actionError && <OperatorErrorState message={actionError} />}
-          {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
-          <details className="rounded-xl border border-slate-200 bg-white p-4">
-            <summary className="cursor-pointer font-medium text-slate-800">
-              Import and export
-            </summary>
-            <div className="mt-4 grid gap-4">
-              <div className="flex flex-wrap gap-2">
-                {(["json", "csv", "yaml"] as const).map((format) => (
-                  <a
-                    className="rounded-md px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50"
-                    href={`/api/listings/export?format=${format}`}
-                    key={format}
-                  >
-                    Export {format.toUpperCase()}
-                  </a>
-                ))}
-              </div>
-              <form
-                className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-                onSubmit={(event) => void importFile(event)}
-              >
-                <Input
-                  type="file"
-                  name="file"
-                  accept=".json,.csv,.yaml,.yml,text/csv,application/json"
-                  aria-label="Import file"
-                />
-                <Select name="format" defaultValue="json" aria-label="Import format">
-                  <option value="json">JSON</option>
-                  <option value="csv">CSV</option>
-                  <option value="yaml">YAML</option>
-                </Select>
-                <Select name="mode" defaultValue="create" aria-label="Import mode">
-                  <option value="create">Create only</option>
-                  <option value="upsert">Upsert by external key</option>
-                </Select>
-                <Button type="submit" variant="secondary" disabled={importing}>
+        }
+        beforeTable={
+          <div className="grid gap-3">
+            {actionError && <OperatorErrorState message={actionError} />}
+            {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
+          </div>
+        }
+        items={collection.items}
+        columns={columns}
+        getRowKey={(listing) => listing.id}
+        selection={{ labelForItem: (listing) => `listing ${listing.title}` }}
+        bulkActions={bulkActions}
+        actions={actions}
+        actionLabel={(listing) => `Actions for ${listing.title}`}
+        loading={collection.loading}
+        error={collection.error}
+        onRetry={() => void collection.retry()}
+        emptyTitle="No listings found"
+        emptyDescription="Try another filter or create the first catalogue listing."
+        emptyAction={
+          <Button asChild>
+            <Link href="/operator/catalogue/new">New listing</Link>
+          </Button>
+        }
+        pagination={{
+          hasPrevious: collection.hasPrevious,
+          hasNext: collection.hasNext,
+          onPrevious: () => void collection.previous(),
+          onNext: () => void collection.next(),
+        }}
+        sectionTitle="Catalogue"
+        sectionDescription="Archive preserves the listing record; it does not hard-delete history."
+      />
+      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Catalogue transfer</DialogTitle>
+          </DialogHeader>
+          <section
+            className="grid gap-3 border-b border-slate-200 pb-5"
+            aria-labelledby="export-listings-heading"
+          >
+            <h3 id="export-listings-heading" className="font-semibold">
+              Export listings
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {(["json", "csv", "yaml"] as const).map((format) => (
+                <Button key={format} asChild variant="secondary" size="sm">
+                  <a href={`/api/listings/export?format=${format}`}>{format.toUpperCase()}</a>
+                </Button>
+              ))}
+            </div>
+          </section>
+          <section className="grid gap-3" aria-labelledby="import-listings-heading">
+            <h3 id="import-listings-heading" className="font-semibold">
+              Import listings
+            </h3>
+            <form
+              className="grid gap-3 sm:grid-cols-2"
+              onSubmit={(event) => void importFile(event)}
+            >
+              <Input
+                type="file"
+                name="file"
+                accept=".json,.csv,.yaml,.yml,text/csv,application/json"
+                aria-label="Import file"
+              />
+              <Select name="format" defaultValue="json" aria-label="Import format">
+                <option value="json">JSON</option>
+                <option value="csv">CSV</option>
+                <option value="yaml">YAML</option>
+              </Select>
+              <Select name="mode" defaultValue="create" aria-label="Import mode">
+                <option value="create">Create only</option>
+                <option value="upsert">Upsert by external key</option>
+              </Select>
+              <div className="flex items-center justify-end">
+                <Button type="submit" variant="action" disabled={importing}>
                   {importing ? "Importing…" : "Import"}
                 </Button>
-                <HoneypotField />
-              </form>
-              {importMessage && (
-                <Toast tone={importMessage.startsWith("Import complete") ? "success" : "error"}>
-                  {importMessage}
-                </Toast>
-              )}
-            </div>
-          </details>
-        </div>
-      }
-      items={collection.items}
-      columns={columns}
-      getRowKey={(listing) => listing.id}
-      selection={{ labelForItem: (listing) => `listing ${listing.title}` }}
-      bulkActions={bulkActions}
-      actions={actions}
-      actionLabel={(listing) => `Actions for ${listing.title}`}
-      loading={collection.loading}
-      error={collection.error}
-      onRetry={() => void collection.retry()}
-      emptyTitle="No listings found"
-      emptyDescription="Try another filter or create the first catalogue listing."
-      emptyAction={
-        <Button asChild>
-          <Link href="/operator/catalogue/new">New listing</Link>
-        </Button>
-      }
-      pagination={{
-        hasPrevious: collection.hasPrevious,
-        hasNext: collection.hasNext,
-        onPrevious: () => void collection.previous(),
-        onNext: () => void collection.next(),
-      }}
-      sectionTitle="Catalogue"
-      sectionDescription="Archive preserves the listing record; it does not hard-delete history."
-    />
+              </div>
+              <HoneypotField />
+            </form>
+            {importMessage && <Alert>{importMessage}</Alert>}
+          </section>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   const router = useRouter();
+  const toast = useToast();
   const editing = Boolean(listingId);
   const [listing, setListing] = useState<OperatorListing | null>(null);
   const [form, setForm] = useState({
@@ -458,7 +525,6 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     void apiFetch<{ items: ListingCategory[] }>("/api/catalogue/categories")
@@ -504,7 +570,6 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       : {};
     setSaving(true);
     setError(null);
-    setSaved(false);
     try {
       const priceMinor = parseUsdMinor(form.price);
       if (editing) {
@@ -526,7 +591,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           }),
         });
         setListing(next);
-        setSaved(true);
+        toast.success("Listing saved.");
       } else {
         const next = await apiFetch<OperatorListing>("/api/listings", {
           method: "POST",
@@ -546,6 +611,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             category_ids: form.categoryIds,
           }),
         });
+        toast.success("Listing created.");
         router.replace(`/operator/catalogue/${next.id}`);
       }
     } catch (cause) {
@@ -570,7 +636,6 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       loading={loading}
       loadingLabel="Loading listing"
       error={error}
-      success={saved ? "Listing saved." : null}
       sectionTitle={editing ? "Listing details" : "New listing details"}
       sectionDescription="Save catalogue fields through the existing listing workflow."
       onSubmit={save}
@@ -658,26 +723,15 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       </label>
       <fieldset className="grid gap-2">
         <legend className="text-sm font-medium">Categories</legend>
-        {categories.map((category) => (
-          <label className="flex items-center gap-2 text-sm" key={category.id}>
-            <input
-              type="checkbox"
-              checked={form.categoryIds.includes(category.id)}
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  categoryIds: event.target.checked
-                    ? [...form.categoryIds, category.id]
-                    : form.categoryIds.filter((id) => id !== category.id),
-                })
-              }
-            />
-            {category.name}
-          </label>
-        ))}
+        <TagSelect
+          label="Categories"
+          options={categories.map((category) => ({ value: category.id, label: category.name }))}
+          value={form.categoryIds}
+          onChange={(categoryIds) => setForm({ ...form, categoryIds })}
+        />
         {categories.length === 0 && (
           <span className="field-help">
-            No categories yet. Use Manage categories to create them.
+            No categories yet. Create them from Catalogue → Categories.
           </span>
         )}
       </fieldset>
@@ -791,7 +845,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
     >
       {error && <OperatorErrorState message={error} />}
       {secret && (
-        <Toast tone="success">
+        <Alert>
           <strong>Copy this credential now:</strong>
           <code className="catalogue-secret">{secret}</code>
           <Button variant="secondary" onClick={() => void navigator.clipboard?.writeText(secret)}>
@@ -800,7 +854,7 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
           <Button variant="ghost" onClick={() => setSecret(null)}>
             Dismiss
           </Button>
-        </Toast>
+        </Alert>
       )}
       <form className="media-upload-form" onSubmit={(event) => void create(event)}>
         <label className="sr-only" htmlFor={`integration-name-${listingId}`}>

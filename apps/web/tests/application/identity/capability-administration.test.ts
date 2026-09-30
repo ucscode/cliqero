@@ -120,4 +120,34 @@ describe("CapabilityAdministrationService", () => {
       status: 400,
     });
   });
+
+  it("replaces the manageable ordinary assignment set in one workflow and excludes root", async () => {
+    const { service, assignments, audits } = makeService();
+    assignments.values.set(
+      ids.actor,
+      new Map<Capability, string>([
+        ["capabilities.manage", new Date().toISOString()],
+        ["catalogue.manage", new Date().toISOString()],
+        ["reviews.moderate", new Date().toISOString()],
+      ]),
+    );
+    assignments.values.set(
+      ids.target,
+      new Map<Capability, string>([
+        ["catalogue.manage", new Date().toISOString()],
+        ["withdrawals.manage", new Date().toISOString()],
+      ]),
+    );
+    await service.replaceOrdinary(ids.actor, ids.target, ["reviews.moderate"]);
+    expect(
+      (await assignments.assignments(ids.target)).map((item) => item.capability).sort(),
+    ).toEqual(["reviews.moderate", "withdrawals.manage"]);
+    const auditCount = audits.length;
+    await expect(
+      service.replaceOrdinary(ids.actor, ids.target, ["system.root"]),
+    ).rejects.toMatchObject({
+      code: "root_authorization_required",
+    });
+    expect(audits).toHaveLength(auditCount);
+  });
 });

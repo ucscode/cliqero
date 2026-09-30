@@ -10,7 +10,7 @@ import {
   type HierarchyTree,
 } from "@/lib/api-client";
 import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Skeleton } from "../ui/skeleton";
@@ -254,12 +254,12 @@ export function HierarchyPanel() {
         </div>
       )}
       {error && (
-        <Toast>
+        <Alert>
           <span>{error}</span>
           <Button type="button" variant="outline" size="sm" onClick={retry}>
             Try again
           </Button>
-        </Toast>
+        </Alert>
       )}
       {loading ? (
         <div className="grid gap-4" aria-label="Loading network">

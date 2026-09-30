@@ -4,6 +4,7 @@ import "./styles.css";
 import { siteConfig } from "@/config/site";
 import { loadSiteConfiguration } from "@/config/site-loader";
 import { CrudConfigurationProvider } from "@/components/crud/configuration";
+import { ToastProvider } from "@/components/toast/provider";
 
 const crudMaxRows = loadSiteConfiguration().crud.table.max_rows;
 
@@ -23,7 +24,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={manrope.variable}>
       <body>
-        <CrudConfigurationProvider maxRows={crudMaxRows}>{children}</CrudConfigurationProvider>
+        <ToastProvider>
+          <CrudConfigurationProvider maxRows={crudMaxRows}>{children}</CrudConfigurationProvider>
+        </ToastProvider>
       </body>
     </html>
   );

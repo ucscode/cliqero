@@ -13,6 +13,7 @@ import { OperatorFilterField } from "./ui/toolbar";
 import { CrudIndex } from "@/components/crud/index-page";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
+import { CrudSortSelect } from "@/components/crud/sort-select";
 
 const formatDate = (value: string) => new Date(value).toLocaleString();
 const label = (value: string) =>
@@ -21,18 +22,26 @@ const label = (value: string) =>
 export function OperatorEarningsList() {
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
+  const [sortChoice, setSortChoice] = useState("created:desc");
+  const [sort, direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
   const [totals, setTotals] = useState<OperatorEarningsPage["totals"] | null>(null);
   const collection = useCrudCollection(
-    async (filters: { search: string; state: string }, cursor, pageSize) => {
+    async (
+      filters: { search: string; state: string; sort: string; direction: string },
+      cursor,
+      pageSize,
+    ) => {
       const params = new URLSearchParams({ limit: String(pageSize) });
       if (filters.search) params.set("search", filters.search);
       if (filters.state) params.set("state", filters.state);
+      params.set("sort", filters.sort);
+      params.set("direction", filters.direction);
       if (cursor) params.set("cursor", cursor);
       const next = await apiFetch<OperatorEarningsPage>(`/api/earnings/entries?${params}`);
       setTotals(next.totals);
       return { items: next.items, nextCursor: next.nextCursor };
     },
-    { search: "", state: "" },
+    { search: "", state: "", sort: "created", direction: "desc" },
   );
 
   type Entry = OperatorEarningsPage["items"][number];
@@ -136,18 +145,36 @@ export function OperatorEarningsList() {
           </OperatorFilterField>
         </>
       }
+      sort={
+        <CrudSortSelect
+          value={sortChoice}
+          onChange={setSortChoice}
+          options={[
+            { value: "created:desc", label: "Newest", sort: "created", direction: "desc" },
+            { value: "created:asc", label: "Oldest", sort: "created", direction: "asc" },
+            { value: "amount:desc", label: "Highest amount", sort: "amount", direction: "desc" },
+            { value: "amount:asc", label: "Lowest amount", sort: "amount", direction: "asc" },
+          ]}
+        />
+      }
       onFiltersReset={async () => {
-        const ok = await collection.apply({ search: "", state: "" });
+        const ok = await collection.apply({
+          search: "",
+          state: "",
+          sort: "created",
+          direction: "desc",
+        });
         if (ok) {
           setSearch("");
           setState("");
+          setSortChoice("created:desc");
         }
         return ok;
       }}
-      filtersDirty={Boolean(search.trim() || state)}
+      filtersDirty={Boolean(search.trim() || state || sortChoice !== "created:desc")}
       onFiltersSubmit={async (event) => {
         event.preventDefault();
-        return collection.apply({ search: search.trim(), state });
+        return collection.apply({ search: search.trim(), state, sort, direction });
       }}
       toolbarActions={
         <Button type="submit" variant="action" disabled={collection.loading}>

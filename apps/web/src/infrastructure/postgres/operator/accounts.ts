@@ -1,30 +1,8 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
+import { decodeOperatorSortCursor, encodeOperatorSortCursor, type SortDirection } from "./cursor";
 import { PublicApplicationError } from "@/kernel/errors";
 
-type Cursor = { createdAt: string; id: string };
-
-function encodeCursor(createdAt: string | Date, id: string) {
-  return Buffer.from(
-    JSON.stringify({ created_at: new Date(createdAt).toISOString(), id }),
-    "utf8",
-  ).toString("base64url");
-}
-
-function decodeCursor(value: string | undefined): Cursor | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
-      created_at?: unknown;
-      id?: unknown;
-    };
-    if (typeof parsed.created_at !== "string" || typeof parsed.id !== "string") throw new Error();
-    const date = new Date(parsed.created_at);
-    if (Number.isNaN(date.valueOf())) throw new Error();
-    return { createdAt: date.toISOString(), id: parsed.id };
-  } catch {
-    throw new PublicApplicationError("Invalid pagination cursor", "invalid_cursor", 400);
-  }
-}
+export type OperatorAccountSort = "created" | "username";
 
 export type OperatorAccountSummary = {
   id: string;
@@ -51,20 +29,39 @@ export type OperatorAccountDetail = OperatorAccountSummary & {
 export class OperatorAccountService {
   constructor(private readonly sql: QueryExecutor) {}
 
-  async list(input: { search?: string; cursor?: string; limit: number }) {
-    const cursor = decodeCursor(input.cursor);
+  async list(input: {
+    search?: string;
+    cursor?: string;
+    limit: number;
+    sort?: OperatorAccountSort;
+    direction?: SortDirection;
+  }) {
+    const sort = input.sort ?? "created";
+    const direction = input.direction ?? "desc";
+    const cursor = decodeOperatorSortCursor(input.cursor, sort, direction);
+    const orderBy = sort === "username" ? "lower(a.username)" : "a.created_at";
+    const cursorType = sort === "username" ? "text" : "timestamptz";
     const rawSearch = input.search?.trim() || "";
     const search = rawSearch ? rawSearch.replace(/[\\%_]/g, "\\$&") : null;
+    const values: unknown[] = [search];
+    const conditions = [
+      "($1::text is null or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1)",
+    ];
+    if (cursor) {
+      values.push(cursor.value, cursor.id);
+      conditions.push(
+        `(${orderBy},a.id) ${direction === "asc" ? ">" : "<"} ($2::${cursorType},$3::bigint)`,
+      );
+    }
+    values.push(input.limit + 1);
     const rows = (
       await this.sql.query<any>(
-        `select a.uuid id,a.email,a.username,a.display_name,a.metadata->>'country' country,a.created_at,
+        `select a.uuid id,a.id::text cursor_id,${orderBy}::text cursor_sort_value,a.email,a.username,a.display_name,a.metadata->>'country' country,a.created_at,
           (select count(*)::int from referral_capability.account_referrals r where r.parent_account_id=a.id) direct_referral_count
          from identity_capability.account_profiles a
-         where a.deleted_at is null
-           and ($1::text is null or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1)
-           and ($2::timestamptz is null or (a.created_at,a.id)<($2::timestamptz,(select id from identity_capability.accounts where uuid=$3)))
-         order by a.created_at desc,a.id desc limit $4`,
-        [search, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
+         where a.deleted_at is null and ${conditions.join(" and ")}
+         order by ${orderBy} ${direction},a.id ${direction} limit $${values.length}`,
+        values,
       )
     ).rows;
     const visible = rows.slice(0, input.limit);
@@ -72,7 +69,12 @@ export class OperatorAccountService {
       items: visible.map((row) => this.summary(row)),
       nextCursor:
         rows.length > input.limit
-          ? encodeCursor(visible.at(-1).created_at, visible.at(-1).id)
+          ? encodeOperatorSortCursor({
+              sort,
+              direction,
+              value: String(visible.at(-1).cursor_sort_value),
+              id: String(visible.at(-1).cursor_id),
+            })
           : null,
     };
   }

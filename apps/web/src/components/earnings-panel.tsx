@@ -14,7 +14,7 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { EmptyState } from "./empty-state";
-import { Toast } from "./toast";
+import { Alert } from "./ui/alert";
 import { Money } from "./money";
 import { findWithdrawableBalance } from "./earnings/withdrawable";
 
@@ -125,12 +125,12 @@ export function EarningsPanel() {
         </Button>
       </div>
       {error && (
-        <Toast>
+        <Alert>
           <span>{error}</span>
           <Button type="button" variant="outline" size="sm" onClick={refresh}>
             Try again
           </Button>
-        </Toast>
+        </Alert>
       )}
       {loading ? (
         <div className="grid gap-4 md:grid-cols-3" aria-label="Loading earnings">

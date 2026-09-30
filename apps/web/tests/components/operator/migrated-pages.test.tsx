@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { OperatorBlogEditor, OperatorBlogList } from "@/components/operator/blog";
 import { OperatorCatalogueEditor, OperatorCatalogueList } from "@/components/operator/catalogue";
@@ -16,6 +17,11 @@ import {
   OperatorWithdrawalDetail,
   OperatorWithdrawalList,
 } from "@/components/operator/withdrawals";
+import { ToastProvider } from "@/components/toast/provider";
+
+function renderPage(element: ReactNode) {
+  return renderToStaticMarkup(<ToastProvider>{element}</ToastProvider>);
+}
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
@@ -36,7 +42,7 @@ const migratedPages = [
 
 describe("operator console shared page migration", () => {
   it.each(migratedPages)("%s renders within the shared page composition", (title, Page) => {
-    const html = renderToStaticMarkup(<Page />);
+    const html = renderPage(<Page />);
     expect(html).toContain("max-w-[1400px]");
     expect(html).toContain(title);
     expect(html).toContain('role="status"');
@@ -52,13 +58,13 @@ describe("operator console shared page migration", () => {
     ["new blog article", <OperatorBlogEditor key="blog-create" />, "New article", "max-w-5xl"],
     ["user create", <OperatorUserForm key="user-create" />, "Create user", "max-w-4xl"],
   ])("%s uses the shared form-page composition", (_name, Page, title, composition) => {
-    const html = renderToStaticMarkup(Page);
+    const html = renderPage(Page);
     expect(html).toContain(title);
     expect(html).toContain(composition);
   });
 
   it("uses the shared loading state while an existing catalogue listing is fetched", () => {
-    const html = renderToStaticMarkup(<OperatorCatalogueEditor listingId="listing-1" />);
+    const html = renderPage(<OperatorCatalogueEditor listingId="listing-1" />);
     expect(html).toContain("max-w-4xl");
     expect(html).toContain('role="status"');
     expect(html).toContain("Loading listing");
@@ -76,14 +82,16 @@ describe("operator console shared page migration", () => {
       <OperatorWithdrawalDetail key="withdrawal-detail" withdrawalId="withdrawal-1" />,
     ],
   ])("%s starts with shared loading state", (_name, Page) => {
-    const html = renderToStaticMarkup(Page);
+    const html = renderPage(Page);
     expect(html).toContain("max-w-[1400px]");
     expect(html).toContain('role="status"');
   });
 
   it("keeps catalogue transfer tools secondary to the browse surface", () => {
-    const html = renderToStaticMarkup(<OperatorCatalogueList />);
-    expect(html).toContain("Import and export");
+    const html = renderPage(<OperatorCatalogueList />);
+    expect(html).toContain(">Transfer</button>");
     expect(html).toContain("New listing");
+    expect(html).not.toContain("Manage categories");
+    expect(html).not.toContain("Import listings");
   });
 });

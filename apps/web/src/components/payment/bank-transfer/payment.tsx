@@ -15,7 +15,7 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { Textarea } from "../../ui/textarea";
-import { Toast } from "../../toast";
+import { Alert } from "../../ui/alert";
 import { Money } from "../../money";
 import { CopyValue } from "../../copy-value";
 
@@ -244,7 +244,7 @@ export function BankTransferPayment(props: PaymentProviderProps) {
           <Button type="submit" variant="secondary" disabled={submitting}>
             {submitting ? "Submitting…" : "Submit transfer evidence"}
           </Button>
-          {error && <Toast>{error}</Toast>}
+          {error && <Alert>{error}</Alert>}
         </form>
       )}
       {message && (

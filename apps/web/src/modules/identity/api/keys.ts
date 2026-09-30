@@ -26,7 +26,10 @@ export interface ApiKeyManagementService {
     createdAt: Date;
     expiresAt: Date | null;
   }>;
-  list(accountId?: string): Promise<readonly ApiKeyRecord[]>;
+  list(
+    accountId?: string,
+    order?: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" },
+  ): Promise<readonly ApiKeyRecord[]>;
   find(id: string, accountId?: string): Promise<ApiKeyRecord | null>;
   revoke(id: string, accountId?: string): Promise<boolean>;
 }

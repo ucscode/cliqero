@@ -15,6 +15,11 @@ export function registerAccountManagementRoutes(
   const maxRows = crudMaxRows();
   const accountListQuery = z.object({
     search: z.string().max(100).optional(),
+    sort: z
+      .enum(["created", "username"])
+      .default("created")
+      .describe("Sort by created date or username."),
+    direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });

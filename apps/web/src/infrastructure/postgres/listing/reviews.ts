@@ -6,6 +6,7 @@ import type {
 } from "@/modules/listing/reviews/review";
 import type { QueryExecutor } from "../shared/database";
 import { approvedReviewSummaryCte } from "./approved-review-summary";
+import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "../operator/cursor";
 
 type ReviewRow = {
   id: string;
@@ -20,6 +21,8 @@ type ReviewRow = {
   moderated_by: string | null;
   reviewer?: string;
   listing_title?: string;
+  cursor_id?: string;
+  cursor_sort_value?: string;
 };
 
 export class PostgresListingReviewRepository implements ListingReviewRepository {
@@ -97,27 +100,38 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
       nextCursor: rows.length > input.limit ? visible.at(-1)!.id : null,
     };
   }
-  async queryOperator(input: { status?: ReviewStatus; cursor?: string; limit: number }) {
+  async queryOperator(input: {
+    status?: ReviewStatus;
+    cursor?: string;
+    limit: number;
+    sort?: "submitted" | "rating";
+    direction?: "asc" | "desc";
+  }) {
+    const sort = input.sort ?? "submitted";
+    const direction = input.direction ?? "desc";
+    const cursor = decodeOperatorSortCursor(input.cursor, sort, direction);
+    const orderBy = sort === "rating" ? "r.rating" : "r.created_at";
+    const cursorType = sort === "rating" ? "integer" : "timestamptz";
     const values: unknown[] = [];
     const where: string[] = [];
     if (input.status) {
       values.push(input.status);
       where.push(`r.status=$${values.length}`);
     }
-    if (input.cursor) {
-      values.push(input.cursor);
+    if (cursor) {
+      values.push(cursor.value, cursor.id);
       where.push(
-        `(r.created_at,r.id)>(select created_at,id from listing_capability.reviews where uuid=$${values.length})`,
+        `(${orderBy},r.id) ${direction === "asc" ? ">" : "<"} ($${values.length - 1}::${cursorType},$${values.length}::bigint)`,
       );
     }
     values.push(input.limit + 1);
     const rows = (
       await this.sql.query<ReviewRow>(
-        `select r.uuid as id,l.uuid as listing_id,a.uuid as account_id,r.rating,r.body,r.status,r.created_at,r.updated_at,r.moderated_at,moderator.uuid as moderated_by,
+        `select r.uuid as id,r.id::text cursor_id,${orderBy}::text cursor_sort_value,l.uuid as listing_id,a.uuid as account_id,r.rating,r.body,r.status,r.created_at,r.updated_at,r.moderated_at,moderator.uuid as moderated_by,
                 a.username as reviewer,l.title as listing_title
          from listing_capability.reviews r join identity_capability.accounts a on a.id=r.account_id
          join listing_capability.listings l on l.id=r.listing_id left join identity_capability.accounts moderator on moderator.id=r.moderated_by ${where.length ? `where ${where.join(" and ")}` : ""}
-         order by r.created_at asc,r.id asc limit $${values.length}`,
+         order by ${orderBy} ${direction},r.id ${direction} limit $${values.length}`,
         values,
       )
     ).rows;
@@ -128,7 +142,15 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
         reviewer: row.reviewer!,
         listingTitle: row.listing_title!,
       })),
-      nextCursor: rows.length > input.limit ? visible.at(-1)!.id : null,
+      nextCursor:
+        rows.length > input.limit
+          ? encodeOperatorSortCursor({
+              sort,
+              direction,
+              value: String(visible.at(-1)!.cursor_sort_value),
+              id: String(visible.at(-1)!.cursor_id),
+            })
+          : null,
     };
   }
   async summariesForListings(listingIds: readonly string[]) {

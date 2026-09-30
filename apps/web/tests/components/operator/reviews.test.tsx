@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { CrudIndex } from "@/components/crud/index-page";
-import { reviewQueueBulkActions } from "@/components/operator/reviews";
+import { reviewQueueBulkActions, reviewQueueQuery } from "@/components/operator/reviews";
 
 const review = {
   id: "review-1",
@@ -33,49 +33,53 @@ function renderQueue(appliedStatus: string) {
       emptyTitle="No reviews"
       emptyDescription="No reviews in this queue."
       selection={selection}
-      bulkActions={reviewQueueBulkActions(appliedStatus, actions)}
+      bulkActions={reviewQueueBulkActions([{ ...review, status: appliedStatus }], actions)}
     />,
   );
 }
 
 describe("operator review queue bulk selection", () => {
-  it("shows checkboxes and approve/reject dropdown actions for the pending queue", () => {
-    const html = renderQueue("pending");
+  it("shows selection controls and leaves bulk actions unavailable before selection", () => {
+    const html = renderQueue("all");
     expect(html).toContain('aria-label="Select all visible records"');
     expect(html).toContain('aria-label="Select review by A customer"');
-    expect(html).toContain(">Approve</option>");
-    expect(html).toContain(">Reject</option>");
-    expect(html).not.toContain(">Approve</button>");
-    expect(html).not.toContain(">Reject</button>");
+    expect(html).not.toContain('aria-label="Bulk actions"');
+    expect(reviewQueueBulkActions([review], actions)).toBe(actions);
   });
 
-  it.each(["approved", "rejected"])(
-    "keeps selection but hides invalid moderation actions for %s queue",
-    (status) => {
-      const html = renderQueue(status);
-      expect(html).toContain("Select all visible records");
-      expect(html).toContain("0 items selected");
-      expect(html).not.toContain('aria-label="Bulk actions"');
-      expect(html).not.toContain(">Approve</option>");
-      expect(html).not.toContain(">Reject</option>");
-    },
-  );
-
-  it("keeps pending bulk actions until a different filter is successfully applied", () => {
-    expect(reviewQueueBulkActions("pending", actions)).toBe(actions);
-    expect(reviewQueueBulkActions("approved", actions)).toEqual([]);
-    expect(reviewQueueBulkActions("pending", actions)).toBe(actions);
+  it.each(["approved", "rejected"])("hides invalid actions for selected %s reviews", (status) => {
+    expect(reviewQueueBulkActions([{ ...review, status }], actions)).toEqual([]);
   });
 
-  it("wires moderation actions to the applied queue state", () => {
+  it("derives bulk moderation availability from selected row states", () => {
+    expect(reviewQueueBulkActions([review], actions)).toBe(actions);
+    expect(
+      reviewQueueBulkActions(
+        [
+          { ...review, status: "pending" },
+          { ...review, status: "approved" },
+        ],
+        actions,
+      ),
+    ).toEqual([]);
+    expect(reviewQueueBulkActions([], actions)).toEqual([]);
+  });
+
+  it("starts with All, omits the default status filter, and reset returns to All", () => {
+    expect(reviewQueueQuery("all", null, 100).toString()).toBe(
+      "limit=100&sort=submitted&direction=desc",
+    );
+    expect(reviewQueueQuery("all", null, 100).get("status")).toBeNull();
+    expect(reviewQueueQuery("pending", null, 100).get("status")).toBe("pending");
     const source = readFileSync(
       resolve(process.cwd(), "src/components/operator/reviews.tsx"),
       "utf8",
     );
-    expect(source).toContain("bulkActions={reviewQueueBulkActions(appliedStatus, bulkActions)}");
-    expect(source).toContain("selection={{ labelForItem:");
-    expect(source).toContain("if (applied) setAppliedStatus(requestedStatus)");
-    expect(source).toContain('setAppliedStatus("pending")');
-    expect(source).not.toContain("reviewQueueBulkActions(status,");
+    expect(source).toContain('useState("all")');
+    expect(source).toContain(
+      "bulkActions={(selected) => reviewQueueBulkActions(selected, bulkActions)}",
+    );
+    expect(source).toContain('sort: "submitted", direction: "desc"');
+    expect(source).toContain('status: "all"');
   });
 });

@@ -17,7 +17,7 @@ import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { Select } from "../../ui/select";
 import { Textarea } from "../../ui/textarea";
-import { Toast } from "../../toast";
+import { Alert } from "../../ui/alert";
 
 const reactAttrNames: Record<string, string> = {
   autocomplete: "autoComplete",
@@ -78,7 +78,7 @@ export function PayoutMethodForm({
 
   return (
     <form className="grid gap-4" aria-label="Payout method details" onSubmit={submit}>
-      {error && <Toast>{error}</Toast>}
+      {error && <Alert>{error}</Alert>}
       <div className="grid gap-2">
         <Label htmlFor="payout-method-type">Type</Label>
         {destination ? (

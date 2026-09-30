@@ -94,6 +94,73 @@ suite("listing review visibility", () => {
     expect(summary.get(listing.id)).toEqual({ average: 4, count: 1 });
   });
 
+  it("orders the moderation queue by submitted time or rating with cursor-safe ties", async () => {
+    const owner = await app.authentication.register({
+      email: "review-sort-owner@example.test",
+      username: "review_sort_owner",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'reviews.moderate')`,
+      [owner.id],
+    );
+    const listing = await app.listingService.createPublished(owner, {
+      title: "Review sorting listing",
+      shortDescription: "Sorting",
+      longDescription: "Sorting reviews",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/sort",
+    });
+    const ratings = [5, 3, 5, 1];
+    const submitted = [];
+    for (let index = 0; index < ratings.length; index++) {
+      const author = await app.authentication.register({
+        email: `review-sort-${index}@example.test`,
+        username: `review_sort_${index}`,
+        password: "correct-horse-battery",
+        country: "NG",
+      });
+      submitted.push(
+        await app.listingReviews.submit(author, listing.id, { rating: ratings[index]! }),
+      );
+    }
+    await app.database.query(
+      `update listing_capability.reviews set created_at='2026-01-01T00:00:00Z'::timestamptz where listing_id=(select id from listing_capability.listings where uuid=$1)`,
+      [listing.id],
+    );
+    const descending = await app.listingReviews.operatorQueue(owner, {
+      sort: "rating",
+      direction: "desc",
+      limit: 2,
+    });
+    expect(descending.items.map((review) => review.rating)).toEqual([5, 5]);
+    expect(descending.nextCursor).toBeTruthy();
+    const continued = await app.listingReviews.operatorQueue(owner, {
+      sort: "rating",
+      direction: "desc",
+      cursor: descending.nextCursor!,
+      limit: 10,
+    });
+    expect([...descending.items, ...continued.items].map((review) => review.rating)).toEqual([
+      5, 5, 3, 1,
+    ]);
+    expect(new Set([...descending.items, ...continued.items].map((review) => review.id)).size).toBe(
+      4,
+    );
+    await expect(
+      app.listingReviews.operatorQueue(owner, {
+        sort: "submitted",
+        direction: "desc",
+        cursor: descending.nextCursor!,
+        limit: 2,
+      }),
+    ).rejects.toThrow("Invalid or stale pagination cursor");
+    expect(submitted).toHaveLength(4);
+  });
+
   it("keeps approved aggregate data separate from the author's pending replacement", async () => {
     const owner = await app.authentication.register({
       email: "aggregate-owner@example.com",

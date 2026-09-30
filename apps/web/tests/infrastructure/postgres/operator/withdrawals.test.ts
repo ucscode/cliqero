@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OperatorWithdrawalService } from "@/infrastructure/postgres/operator/withdrawals";
+import { encodeOperatorSortCursor } from "@/infrastructure/postgres/operator/cursor";
 
 describe("operator withdrawal projection", () => {
   it("keeps list identity concise and exposes complete destination snapshots in detail", async () => {
@@ -118,5 +119,27 @@ describe("operator withdrawal projection", () => {
       name: "Primary",
     });
     expect(JSON.stringify(page)).not.toContain("0123456789");
+  });
+
+  it("applies amount sorting with a deterministic tie-breaker and matching cursor", async () => {
+    let query: { sql: string; values?: unknown[] } | undefined;
+    const service = new OperatorWithdrawalService({
+      query: async (sql: string, values?: unknown[]) => {
+        query = { sql, values };
+        return { rows: [] };
+      },
+    } as any);
+    const cursor = encodeOperatorSortCursor({
+      sort: "amount",
+      direction: "desc",
+      value: "4000",
+      id: "10",
+    });
+
+    await service.list({ limit: 5, sort: "amount", direction: "desc", cursor });
+
+    expect(query?.sql).toContain("(q.amount_minor,q.cursor_id) < ($4::bigint,$5::bigint)");
+    expect(query?.sql).toContain("order by q.amount_minor desc,q.cursor_id desc");
+    expect(query?.values).toEqual([null, null, null, "4000", "10", 6]);
   });
 });

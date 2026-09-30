@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OperatorTreasuryService } from "@/infrastructure/postgres/operator/treasury";
+import { encodeOperatorSortCursor } from "@/infrastructure/postgres/operator/cursor";
 
 describe("operator treasury read model", () => {
   it("projects exact summary and safe source/actor metadata", async () => {
@@ -48,7 +49,29 @@ describe("operator treasury read model", () => {
   it("rejects malformed opaque cursors", async () => {
     const service = new OperatorTreasuryService({ query: async () => ({ rows: [] }) } as any);
     await expect(service.list({ limit: 10, cursor: "not-a-cursor" })).rejects.toThrow(
-      "Invalid pagination cursor",
+      "Invalid or stale pagination cursor",
     );
+  });
+
+  it("uses deterministic amount ordering and keeps cursors bound to that ordering", async () => {
+    let query: { sql: string; values?: unknown[] } | undefined;
+    const service = new OperatorTreasuryService({
+      query: async (sql: string, values?: unknown[]) => {
+        query = { sql, values };
+        return { rows: [] };
+      },
+    } as any);
+    const cursor = encodeOperatorSortCursor({
+      sort: "amount",
+      direction: "asc",
+      value: "1000",
+      id: "10",
+    });
+
+    await service.list({ limit: 5, sort: "amount", sort_direction: "asc", cursor });
+
+    expect(query?.sql).toContain("and (e.amount_minor,e.id) > ($4::bigint,$5::bigint)");
+    expect(query?.sql).toContain("order by e.amount_minor asc,e.id asc");
+    expect(query?.values).toEqual([null, null, null, "1000", "10", 6]);
   });
 });

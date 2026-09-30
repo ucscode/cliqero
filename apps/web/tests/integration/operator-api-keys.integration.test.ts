@@ -44,6 +44,41 @@ suite("operator API-key administration", () => {
     } as any);
   }
 
+  it("sorts target keys by normalized name and expiry with no-expiry keys last", async () => {
+    const actor = await account("keysortoperator");
+    const target = await account("keysorttarget");
+    await grant(actor.id, "api_keys.manage");
+    await app.database.query(
+      `insert into identity_capability.api_keys(name,key_prefix,secret_hash,scopes,expires_at,account_id)
+       select seed.name,seed.prefix,decode(repeat('00',31)||seed.hash_suffix,'hex'),'[]'::jsonb,seed.expiry,(select id from identity_capability.accounts where uuid=$1)
+       from (values ('Zulu','key_sort_zulu','01',now()+interval '2 days'),('Alpha','key_sort_alpha','02',now()+interval '1 day'),('Never expires','key_sort_never','03',null::timestamptz)) as seed(name,prefix,hash_suffix,expiry)`,
+      [target.id],
+    );
+    const api = sessionApi(actor.id, ["api_keys.manage"]);
+    const byName = await api.fetch(
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys?sort=name&direction=asc`),
+    );
+    expect(byName.status).toBe(200);
+    const nameItems = (await byName.json()).items;
+    expect(nameItems.map((item: { name: string }) => item.name)).toEqual([
+      "Alpha",
+      "Never expires",
+      "Zulu",
+    ]);
+    const byExpiry = await api.fetch(
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys?sort=expires&direction=asc`),
+    );
+    expect((await byExpiry.json()).items.map((item: { name: string }) => item.name)).toEqual([
+      "Alpha",
+      "Zulu",
+      "Never expires",
+    ]);
+    const invalid = await api.fetch(
+      new Request(`http://localhost/api/accounts/${target.id}/api-keys?sort=unknown`),
+    );
+    expect(invalid.status).toBe(400);
+  });
+
   it("creates safe target-scoped credentials, audits changes, and revokes idempotently", async () => {
     const actor = await account("keyoperator");
     const target = await account("keytarget");

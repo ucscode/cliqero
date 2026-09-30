@@ -8,6 +8,8 @@ export interface BlogListOptions {
   cursor?: string;
   limit?: number;
   publishedOnly?: boolean;
+  sort?: "created" | "title";
+  direction?: "asc" | "desc";
 }
 
 export interface BlogSaveInput {

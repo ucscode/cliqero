@@ -79,6 +79,39 @@ suite("operator account index PostgreSQL projection", () => {
     expect(all.map((account) => account.id)).toEqual([...ids].reverse());
     expect(new Set(all.map((account) => account.id)).size).toBe(ids.length);
 
+    const usernameFirst = await app.operatorAccounts.list({
+      sort: "username",
+      direction: "asc",
+      limit: 2,
+    });
+    expect(usernameFirst.items.map((account) => account.username)).toEqual(
+      [...usernameFirst.items.map((account) => account.username)].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    );
+    expect(usernameFirst.nextCursor).toBeTruthy();
+    await expect(
+      app.operatorAccounts.list({
+        sort: "created",
+        direction: "desc",
+        cursor: usernameFirst.nextCursor!,
+        limit: 2,
+      }),
+    ).rejects.toThrow("Invalid or stale pagination cursor");
+    const usernameRemaining = await app.operatorAccounts.list({
+      sort: "username",
+      direction: "asc",
+      cursor: usernameFirst.nextCursor!,
+      limit: 10,
+    });
+    expect(
+      [...usernameFirst.items, ...usernameRemaining.items].map((item) => item.username),
+    ).toEqual(
+      [...ids.map((id) => all.find((item) => item.id === id)!.username)].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    );
+
     const withoutAuth = all.find((account) => account.id === noAuthMetadata);
     expect(withoutAuth).toMatchObject({
       username: "ops_account_noauth",

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch, ApiClientError, type ListingPage } from "@/lib/api-client";
 import { Button } from "../ui/button";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { LoadingGrid, ListingGrid } from "./grid";
 import {
   listingPageRequestFailed,
@@ -58,7 +58,7 @@ export function FeaturedStorefront({ reviewsVisible }: { reviewsVisible: boolean
         <LoadingGrid />
       ) : request.status === "error" ? (
         <div className="grid justify-items-start gap-3">
-          <Toast>{request.error}</Toast>
+          <Alert>{request.error}</Alert>
           <Button variant="secondary" onClick={() => setRequestVersion((version) => version + 1)}>
             Try again
           </Button>

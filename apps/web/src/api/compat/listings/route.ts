@@ -92,20 +92,14 @@ export async function GET(
       );
   }
   const featuredOnly = url.searchParams.get("featured") === "true";
-  const sort = sorts.includes(url.searchParams.get("sort") as (typeof sorts)[number])
-    ? (url.searchParams.get("sort") as (typeof sorts)[number])
-    : "date";
-  const direction = directions.includes(
-    url.searchParams.get("direction") as (typeof directions)[number],
-  )
-    ? (url.searchParams.get("direction") as (typeof directions)[number])
-    : "desc";
   try {
     const listingQuery = z.object({
       state: z.enum(["draft", "published", "archived", "all"]).optional(),
       visibility: z.enum(["public", "authenticated"]).optional(),
       search: z.string().max(200).optional(),
       cursor: z.string().optional(),
+      sort: z.enum(sorts).default("date"),
+      direction: z.enum(directions).default("desc"),
       limit: z.coerce
         .number()
         .int()
@@ -118,6 +112,8 @@ export async function GET(
       visibility: url.searchParams.get("visibility") ?? undefined,
       search: url.searchParams.get("search") ?? undefined,
       cursor: url.searchParams.get("cursor") ?? undefined,
+      sort: url.searchParams.get("sort") ?? undefined,
+      direction: url.searchParams.get("direction") ?? undefined,
       limit: url.searchParams.get("limit") ?? undefined,
     });
     if (stateFilter) {
@@ -125,6 +121,8 @@ export async function GET(
         state: query.state === "all" ? undefined : query.state,
         visibility: query.visibility,
         search: query.search,
+        sort: query.sort,
+        direction: query.direction,
         cursor: query.cursor,
         limit: query.limit,
       });
@@ -149,8 +147,8 @@ export async function GET(
         search: query.search,
         cursor: query.cursor,
         limit: Math.min(query.limit, limit),
-        sort,
-        direction,
+        sort: query.sort,
+        direction: query.direction,
         featuredOnly,
       },
     );

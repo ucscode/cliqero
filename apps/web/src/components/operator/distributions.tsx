@@ -20,6 +20,7 @@ import type { OperatorAction } from "./ui/actions-menu";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
 import { OperatorEmptyState } from "./ui/empty-state";
+import { CrudSortSelect } from "@/components/crud/sort-select";
 
 function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
@@ -33,13 +34,20 @@ function stateLabel(value: string) {
 
 export function OperatorDistributionList() {
   const [search, setSearch] = useState("");
-  const collection = useCrudCollection(async (appliedSearch: string, cursor, pageSize) => {
-    const params = new URLSearchParams({ limit: String(pageSize) });
-    if (appliedSearch) params.set("search", appliedSearch);
-    if (cursor) params.set("cursor", cursor);
-    const result = await apiFetch<OperatorDistributionPage>(`/api/distributions?${params}`);
-    return { items: result.items, nextCursor: result.nextCursor };
-  }, "");
+  const [sortChoice, setSortChoice] = useState("created:desc");
+  const [sort, direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
+  const collection = useCrudCollection(
+    async (filters: { search: string; sort: string; direction: string }, cursor, pageSize) => {
+      const params = new URLSearchParams({ limit: String(pageSize) });
+      if (filters.search) params.set("search", filters.search);
+      params.set("sort", filters.sort);
+      params.set("direction", filters.direction);
+      if (cursor) params.set("cursor", cursor);
+      const result = await apiFetch<OperatorDistributionPage>(`/api/distributions?${params}`);
+      return { items: result.items, nextCursor: result.nextCursor };
+    },
+    { search: "", sort: "created", direction: "desc" },
+  );
   const columns: readonly CrudColumn<OperatorDistributionPage["items"][number]>[] = [
     {
       key: "listing",
@@ -88,16 +96,31 @@ export function OperatorDistributionList() {
           />
         </OperatorFilterField>
       }
+      sort={
+        <CrudSortSelect
+          value={sortChoice}
+          onChange={setSortChoice}
+          options={[
+            { value: "created:desc", label: "Newest", sort: "created", direction: "desc" },
+            { value: "created:asc", label: "Oldest", sort: "created", direction: "asc" },
+            { value: "amount:desc", label: "Highest amount", sort: "amount", direction: "desc" },
+            { value: "amount:asc", label: "Lowest amount", sort: "amount", direction: "asc" },
+          ]}
+        />
+      }
       onFiltersSubmit={async (event) => {
         event.preventDefault();
-        return collection.apply(search.trim());
+        return collection.apply({ search: search.trim(), sort, direction });
       }}
       onFiltersReset={async () => {
-        const ok = await collection.apply("");
-        if (ok) setSearch("");
+        const ok = await collection.apply({ search: "", sort: "created", direction: "desc" });
+        if (ok) {
+          setSearch("");
+          setSortChoice("created:desc");
+        }
         return ok;
       }}
-      filtersDirty={Boolean(search.trim())}
+      filtersDirty={Boolean(search.trim() || sortChoice !== "created:desc")}
       toolbarActions={
         <Button type="submit" variant="action" disabled={collection.loading}>
           Apply

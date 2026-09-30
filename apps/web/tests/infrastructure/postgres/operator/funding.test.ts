@@ -52,6 +52,27 @@ describe("PostgresOperatorFundingReader", () => {
     });
   });
 
+  it("uses an amount/id keyset and rejects cursor reuse under a different sort", async () => {
+    const statements: string[] = [];
+    const reader = new PostgresOperatorFundingReader({
+      query: async <T extends object>(sql: string) => {
+        statements.push(sql);
+        return result<T>([
+          { ...baseRow, id: "funding-one", cursor_id: "11", cursor_sort_value: "1000" },
+          { ...baseRow, id: "funding-two", cursor_id: "12", cursor_sort_value: "2000" },
+        ] as T[]);
+      },
+    });
+    const first = await reader.list({ limit: 1, sort: "amount", direction: "asc" });
+    expect(statements[0]).toContain("order by f.canonical_amount_minor asc,f.id asc");
+    expect(first.nextCursor).toBeTruthy();
+    await expect(
+      reader.list({ limit: 1, sort: "created", direction: "desc", cursor: first.nextCursor! }),
+    ).rejects.toThrow("Invalid or stale pagination cursor");
+    await reader.list({ limit: 1, sort: "amount", direction: "asc", cursor: first.nextCursor! });
+    expect(statements[1]).toContain("(f.canonical_amount_minor,f.id) > ($4::bigint,$5::bigint)");
+  });
+
   it("does not expose access codes or provider payloads in detail", async () => {
     const reader = new PostgresOperatorFundingReader({
       query: async <T extends object>(sql: string) => {
@@ -141,7 +162,7 @@ describe("PostgresOperatorFundingReader", () => {
   it("rejects malformed opaque cursors", async () => {
     const reader = new PostgresOperatorFundingReader({ query: async () => result([]) });
     await expect(reader.list({ limit: 25, cursor: "not-a-cursor" })).rejects.toThrow(
-      "Invalid pagination cursor",
+      "Invalid or stale pagination cursor",
     );
   });
 });

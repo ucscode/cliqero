@@ -16,17 +16,27 @@ import type {
   BlogRepository,
   BlogSaveInput,
 } from "@/application/blog/contracts";
+import { PublicApplicationError } from "@/kernel/errors";
 
 type Row = Record<string, any>;
-function decodeCursor(value: string | undefined): [number, string] | null {
-  if (!value) return null;
+function decodeSortCursor(token: string | undefined, sort: string, direction: string) {
+  if (!token) return null;
   try {
-    const decoded = Buffer.from(value, "base64url").toString("utf8").split("|");
-    if (decoded.length !== 2 || !/^\d+$/.test(decoded[0]) || !decoded[1]) return null;
-    const timestamp = Number(decoded[0]);
-    return Number.isSafeInteger(timestamp) ? [timestamp, decoded[1]] : null;
+    const decoded = JSON.parse(Buffer.from(token, "base64url").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+    if (
+      decoded.sort !== sort ||
+      decoded.direction !== direction ||
+      typeof decoded.value !== "string" ||
+      typeof decoded.id !== "string" ||
+      !decoded.id
+    )
+      throw new Error();
+    return { value: decoded.value, id: decoded.id };
   } catch {
-    return null;
+    throw new PublicApplicationError("Invalid or stale pagination cursor", "invalid_cursor", 400);
   }
 }
 const date = (value: number | null | undefined) => (value == null ? null : new Date(Number(value)));
@@ -151,15 +161,19 @@ export class SqliteBlogRepository implements BlogRepository {
       );
       values.push(options.tag);
     }
-    const cursor = decodeCursor(options.cursor);
+    const sort = options.sort ?? "created";
+    const direction = options.direction ?? "desc";
+    const orderBy = sort === "title" ? "lower(p.title)" : "p.created_at";
+    const cursor = decodeSortCursor(options.cursor, sort, direction);
     if (cursor) {
-      where.push("(p.created_at < ? or (p.created_at = ? and p.id < ?))");
-      values.push(cursor[0], cursor[0], cursor[1]);
+      const comparison = direction === "asc" ? ">" : "<";
+      where.push(`(${orderBy} ${comparison} ? or (${orderBy} = ? and p.id ${comparison} ?))`);
+      values.push(cursor.value, cursor.value, cursor.id);
     }
     const rows = this.db
       .prepare(
-        `select p.* from blog_posts p ${where.length ? `where ${where.join(" and ")}` : ""}
-      order by p.created_at desc,p.id desc limit ?`,
+        `select p.*,${orderBy} as cursor_sort_value from blog_posts p ${where.length ? `where ${where.join(" and ")}` : ""}
+      order by ${orderBy} ${direction},p.id ${direction} limit ?`,
       )
       .all(...values, limit + 1) as Row[];
     const selected = rows.slice(0, limit);
@@ -168,7 +182,14 @@ export class SqliteBlogRepository implements BlogRepository {
       items: selected.map((row) => this.mapPost(row)),
       nextCursor:
         rows.length > limit && last
-          ? Buffer.from(`${last.created_at}|${last.id}`).toString("base64url")
+          ? Buffer.from(
+              JSON.stringify({
+                sort,
+                direction,
+                value: String(last.cursor_sort_value),
+                id: String(last.id),
+              }),
+            ).toString("base64url")
           : null,
       limit,
     };

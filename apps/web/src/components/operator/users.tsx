@@ -2,14 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   apiFetch,
   ApiClientError,
   type CapabilityAdministrationView,
-  type OperatorApiKeyCreated,
-  type OperatorApiKeyPage,
-  type ApiKeyMetadata,
   type OperatorAccountDetail,
   type OperatorAccountPage,
   type OperatorAccountSummary,
@@ -19,7 +16,6 @@ import {
   CAPABILITY_METADATA,
   type Capability,
 } from "@/modules/identity/capabilities";
-import { API_SCOPE_METADATA } from "@/modules/identity/api/scopes";
 import { OperatorPrimaryCell, OperatorSecondaryText, OperatorValueCell } from "./ui/data-cells";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
@@ -32,16 +28,18 @@ import { CrudDetail } from "@/components/crud/detail";
 import { CrudFieldList } from "@/components/crud/field-list";
 import { CrudEdit } from "@/components/crud/edit";
 import { useCrudCollection } from "@/components/crud/use-collection";
+import { CrudSortSelect } from "@/components/crud/sort-select";
 import type { CrudColumn } from "@/components/crud/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { HoneypotField } from "../honeypot-field";
 import { Input } from "../ui/input";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { CountrySelect } from "../country-select";
 import { Label } from "../ui/label";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { useToast } from "../toast/provider";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The account service is temporarily unavailable.";
@@ -104,19 +102,27 @@ export function OperatorUsersList({
   canManage?: boolean;
   deletedNotice?: boolean;
 }) {
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [sortChoice, setSortChoice] = useState("created:desc");
+  const [sort, direction] = sortChoice.split(":") as ["created" | "username", "asc" | "desc"];
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
-  const [successNotice, setSuccessNotice] = useState<string | null>(
-    deletedNotice ? "Account deleted. Historical platform records remain available." : null,
+  useEffect(() => {
+    if (deletedNotice) toast.info("Account deleted. Historical platform records remain available.");
+  }, [deletedNotice, toast]);
+  const collection = useCrudCollection(
+    async (filters: { search: string; sort: string; direction: string }, cursor, pageSize) => {
+      const params = new URLSearchParams({ limit: String(pageSize) });
+      if (filters.search) params.set("search", filters.search);
+      params.set("sort", filters.sort);
+      params.set("direction", filters.direction);
+      if (cursor) params.set("cursor", cursor);
+      return apiFetch<OperatorAccountPage>(`/api/accounts?${params}`);
+    },
+    { search: "", sort: "created", direction: "desc" },
   );
-  const collection = useCrudCollection(async (appliedSearch: string, cursor, pageSize) => {
-    const params = new URLSearchParams({ limit: String(pageSize) });
-    if (appliedSearch) params.set("search", appliedSearch);
-    if (cursor) params.set("cursor", cursor);
-    return apiFetch<OperatorAccountPage>(`/api/accounts?${params}`);
-  }, "");
 
   return (
     <OperatorUsersListView
@@ -127,18 +133,33 @@ export function OperatorUsersList({
       }
       search={search}
       appliedSearch={appliedSearch}
+      sort={
+        <CrudSortSelect
+          value={sortChoice}
+          onChange={setSortChoice}
+          options={[
+            { value: "created:desc", label: "Newest", sort: "created", direction: "desc" },
+            { value: "created:asc", label: "Oldest", sort: "created", direction: "asc" },
+            { value: "username:asc", label: "Username A–Z", sort: "username", direction: "asc" },
+            { value: "username:desc", label: "Username Z–A", sort: "username", direction: "desc" },
+          ]}
+        />
+      }
       loading={collection.loading}
       error={collection.error}
       canManage={canManage}
       onSearchChange={setSearch}
       onSearch={async (event) => {
         event.preventDefault();
-        return applyOperatorUserSearch(collection.apply, search, setAppliedSearch);
+        return applyOperatorUserSearch(
+          (value) => collection.apply({ search: value, sort, direction }),
+          search,
+          setAppliedSearch,
+        );
       }}
       onRetry={() => void collection.retry()}
       actionError={actionError}
       bulkOutcome={bulkOutcome}
-      successNotice={successNotice}
       onDelete={async (account) => {
         if (
           !window.confirm(
@@ -149,8 +170,8 @@ export function OperatorUsersList({
         try {
           await apiFetch(`/api/accounts/${account.id}`, { method: "DELETE" });
           setActionError(null);
-          setSuccessNotice(`@${account.username} was deleted. Historical platform records remain.`);
           await collection.refresh();
+          toast.success(`@${account.username} was deleted. Historical platform records remain.`);
         } catch (cause) {
           setActionError(message(cause));
         }
@@ -183,7 +204,7 @@ export function OperatorUsersList({
         }
         setBulkOutcome(null);
         setActionError(null);
-        setSuccessNotice(
+        toast.success(
           `${results.succeeded.length} account(s) deleted. Historical platform records remain.`,
         );
         return true;
@@ -191,12 +212,13 @@ export function OperatorUsersList({
       hasPrevious={collection.hasPrevious}
       onPrevious={() => void collection.previous()}
       onNext={() => void collection.next()}
-      filtersDirty={Boolean(search.trim() || appliedSearch)}
+      filtersDirty={Boolean(search.trim() || appliedSearch || sortChoice !== "created:desc")}
       onFiltersReset={async () => {
-        const ok = await collection.apply("");
+        const ok = await collection.apply({ search: "", sort: "created", direction: "desc" });
         if (ok) {
           setSearch("");
           setAppliedSearch("");
+          setSortChoice("created:desc");
         }
         return ok;
       }}
@@ -208,6 +230,7 @@ export function OperatorUsersListView({
   page,
   search,
   appliedSearch,
+  sort,
   loading,
   error,
   canManage,
@@ -218,7 +241,6 @@ export function OperatorUsersListView({
   onBulkDelete,
   actionError,
   bulkOutcome,
-  successNotice,
   hasPrevious,
   onPrevious,
   onNext,
@@ -228,6 +250,7 @@ export function OperatorUsersListView({
   page: OperatorAccountPage | null;
   search: string;
   appliedSearch: string;
+  sort?: ReactNode;
   loading: boolean;
   error: string | null;
   canManage?: boolean;
@@ -238,7 +261,6 @@ export function OperatorUsersListView({
   onBulkDelete?: (accounts: readonly OperatorAccountSummary[]) => Promise<boolean>;
   actionError?: string | null;
   bulkOutcome?: OperatorBulkOutcomeData | null;
-  successNotice?: string | null;
   hasPrevious: boolean;
   onPrevious: () => void;
   onNext: () => void;
@@ -314,6 +336,7 @@ export function OperatorUsersListView({
         </OperatorFilterField>
       }
       onFiltersSubmit={onSearch}
+      sort={sort}
       onFiltersReset={onFiltersReset}
       filtersDirty={filtersDirty}
       toolbarActions={
@@ -345,7 +368,6 @@ export function OperatorUsersListView({
         <>
           {actionError && <OperatorErrorState message={actionError} />}
           {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
-          {successNotice && <Toast tone="success">{successNotice}</Toast>}
         </>
       }
       actions={(account) => operatorUserRowActions(account, Boolean(canManage), onDelete)}
@@ -385,21 +407,18 @@ export function OperatorUserDetail({
   const [loading, setLoading] = useState(true);
   const [parentSearch, setParentSearch] = useState("");
   const [parentResults, setParentResults] = useState<OperatorAccountSummary[]>([]);
+  const [parentSearchState, setParentSearchState] = useState<
+    "idle" | "searching" | "empty" | "results" | "error"
+  >("idle");
   const [selectedParent, setSelectedParent] = useState<OperatorAccountSummary | null>(null);
   const [saving, setSaving] = useState(false);
   const [capabilityView, setCapabilityView] = useState<CapabilityAdministrationView | null>(null);
   const [capabilityLoading, setCapabilityLoading] = useState(true);
   const [capabilityError, setCapabilityError] = useState<string | null>(null);
-  const [capabilitySaving, setCapabilitySaving] = useState<Capability | null>(null);
-  const [apiKeyPage, setApiKeyPage] = useState<OperatorApiKeyPage | null>(null);
-  const [apiKeyLoading, setApiKeyLoading] = useState(true);
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [apiKeySaving, setApiKeySaving] = useState(false);
-  const [apiKeyName, setApiKeyName] = useState("");
-  const [apiKeyExpiry, setApiKeyExpiry] = useState("");
-  const [apiKeyScopes, setApiKeyScopes] = useState<string[]>([]);
-  const [apiKeySecret, setApiKeySecret] = useState<OperatorApiKeyCreated | null>(null);
+  const [capabilitySaving, setCapabilitySaving] = useState<Capability | "set" | null>(null);
+  const [capabilityDraft, setCapabilityDraft] = useState<Capability[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
 
   async function load(): Promise<OperatorAccountDetail | null> {
     setLoading(true);
@@ -420,8 +439,14 @@ export function OperatorUserDetail({
     setCapabilityLoading(true);
     setCapabilityError(null);
     try {
-      setCapabilityView(
-        await apiFetch<CapabilityAdministrationView>(`/api/accounts/${accountId}/capabilities`),
+      const view = await apiFetch<CapabilityAdministrationView>(
+        `/api/accounts/${accountId}/capabilities`,
+      );
+      setCapabilityView(view);
+      setCapabilityDraft(
+        view.assignments
+          .map((item) => item.capability as Capability)
+          .filter((capability) => capability !== "system.root"),
       );
     } catch (cause) {
       // Account readers are intentionally not given assignment data. Keep the
@@ -435,84 +460,38 @@ export function OperatorUserDetail({
       setCapabilityLoading(false);
     }
   }
-  async function loadApiKeys() {
-    setApiKeyLoading(true);
-    setApiKeyError(null);
-    try {
-      const result = await apiFetch<OperatorApiKeyPage>(`/api/accounts/${accountId}/api-keys`);
-      setApiKeyPage(result);
-      setApiKeyScopes((current) =>
-        current.filter((scope) => result.manageable_scopes.includes(scope)),
-      );
-    } catch (cause) {
-      if (cause instanceof ApiClientError && cause.status === 403) {
-        setApiKeyPage(null);
-      } else {
-        setApiKeyError(message(cause));
-      }
-    } finally {
-      setApiKeyLoading(false);
-    }
-  }
   useEffect(() => {
     void (async () => {
       const loaded = await load();
       if (!loaded || loaded.deletedAt) {
         setCapabilityLoading(false);
-        setApiKeyLoading(false);
         return;
       }
-      await Promise.all([loadCapabilities(), loadApiKeys()]);
+      await loadCapabilities();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
-  function toggleApiKeyScope(scope: string) {
-    setApiKeyScopes((current) =>
-      current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope],
-    );
-  }
-
-  async function createApiKey(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!apiKeyPage || apiKeySaving) return;
-    setApiKeySaving(true);
-    setApiKeyError(null);
+  async function saveCapabilities() {
+    if (!capabilityView || capabilitySaving) return;
+    setCapabilitySaving("set");
+    setCapabilityError(null);
     try {
-      const created = await apiFetch<OperatorApiKeyCreated>(`/api/accounts/${accountId}/api-keys`, {
-        method: "POST",
+      await apiFetch(`/api/accounts/${accountId}/capabilities`, {
+        method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          name: apiKeyName,
-          scopes: apiKeyScopes,
-          expires_at: apiKeyExpiry ? new Date(`${apiKeyExpiry}T23:59:59.000Z`).toISOString() : null,
+          capabilities: capabilityDraft.filter((capability) =>
+            capabilityView.manageableCapabilities.includes(capability),
+          ),
         }),
       });
-      setApiKeySecret(created);
-      setApiKeyName("");
-      setApiKeyExpiry("");
-      setApiKeyScopes([]);
-      await loadApiKeys();
+      await loadCapabilities();
+      toast.success("Capabilities saved.");
     } catch (cause) {
-      setApiKeyError(message(cause));
+      setCapabilityError(message(cause));
     } finally {
-      setApiKeySaving(false);
-    }
-  }
-
-  async function revokeApiKey(key: ApiKeyMetadata) {
-    if (apiKeySaving || !window.confirm(`Revoke ${key.name}? This cannot be undone.`)) return;
-    setApiKeySaving(true);
-    setApiKeyError(null);
-    try {
-      await apiFetch(`/api/accounts/${accountId}/api-keys/${key.id}/revoke`, {
-        method: "POST",
-      });
-      await loadApiKeys();
-    } catch (cause) {
-      setApiKeyError(message(cause));
-    } finally {
-      setApiKeySaving(false);
+      setCapabilitySaving(null);
     }
   }
 
@@ -542,6 +521,7 @@ export function OperatorUserDetail({
         },
       );
       await loadCapabilities();
+      toast.success("Master authority updated.");
     } catch (cause) {
       setCapabilityError(message(cause));
     } finally {
@@ -551,13 +531,17 @@ export function OperatorUserDetail({
 
   async function searchParent() {
     if (!parentSearch.trim()) return;
+    setParentSearchState("searching");
+    setParentResults([]);
     try {
       const result = await apiFetch<OperatorAccountPage>(
         `/api/accounts?search=${encodeURIComponent(parentSearch.trim())}&limit=10`,
       );
-      setParentResults(result.items.filter((item) => item.id !== accountId));
-    } catch (cause) {
-      setError(message(cause));
+      const matches = result.items.filter((item) => item.id !== accountId);
+      setParentResults(matches);
+      setParentSearchState(matches.length ? "results" : "empty");
+    } catch {
+      setParentSearchState("error");
     }
   }
 
@@ -575,6 +559,7 @@ export function OperatorUserDetail({
       setSelectedParent(null);
       setParentResults([]);
       await load();
+      toast.success("Parent reassigned successfully.");
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -625,6 +610,7 @@ export function OperatorUserDetail({
         </div>
       }
       fieldsTitle="Identity"
+      fieldsSurface={false}
       headerActions={
         canManage && !account.deletedAt ? (
           <Button
@@ -657,6 +643,15 @@ export function OperatorUserDetail({
                 view={capabilityView}
                 saving={capabilitySaving}
                 onChange={changeCapability}
+                draft={capabilityDraft}
+                onToggle={(capability, checked) =>
+                  setCapabilityDraft((current) =>
+                    checked
+                      ? [...new Set([...current, capability])]
+                      : current.filter((item) => item !== capability),
+                  )
+                }
+                onSave={() => void saveCapabilities()}
               />
             )}
             {!account.deletedAt && capabilityLoading && (
@@ -664,29 +659,6 @@ export function OperatorUserDetail({
             )}
             {!account.deletedAt && capabilityError && (
               <OperatorErrorState message={capabilityError} />
-            )}
-            {!account.deletedAt && !apiKeyLoading && apiKeyPage && (
-              <OperatorApiKeyCard
-                page={apiKeyPage}
-                name={apiKeyName}
-                expiry={apiKeyExpiry}
-                selectedScopes={apiKeyScopes}
-                saving={apiKeySaving}
-                secret={apiKeySecret}
-                error={apiKeyError}
-                onNameChange={setApiKeyName}
-                onExpiryChange={setApiKeyExpiry}
-                onToggleScope={toggleApiKeyScope}
-                onCreate={createApiKey}
-                onRevoke={revokeApiKey}
-                onDismissSecret={() => setApiKeySecret(null)}
-              />
-            )}
-            {!account.deletedAt && apiKeyLoading && (
-              <OperatorLoadingState variant="section" label="Loading API access" />
-            )}
-            {!account.deletedAt && apiKeyError && !apiKeyPage && (
-              <OperatorErrorState message={apiKeyError} />
             )}
             <OperatorSection title="Referral context" surface>
               <CrudFieldList
@@ -744,6 +716,9 @@ export function OperatorUserDetail({
                   Search
                 </Button>
               </form>
+              {parentSearchState === "searching" && <p role="status">Searching…</p>}
+              {parentSearchState === "empty" && <p role="status">No matching account found.</p>}
+              {parentSearchState === "error" && <Alert>Unable to search accounts.</Alert>}
               {parentResults.length > 0 && (
                 <ul className="operator-search-results">
                   {parentResults.map((result) => (
@@ -938,7 +913,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
       error={error}
       success={
         success ? (
-          <Toast tone="success">
+          <Alert>
             <p>{success}</p>
             {createdAccountId && (
               <Link
@@ -948,7 +923,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
                 View account
               </Link>
             )}
-          </Toast>
+          </Alert>
         ) : undefined
       }
       submitLabel={create ? "Create user" : "Save changes"}
@@ -977,10 +952,16 @@ function CapabilityCard({
   view,
   saving,
   onChange,
+  draft,
+  onToggle,
+  onSave,
 }: {
   view: CapabilityAdministrationView;
-  saving: Capability | null;
+  saving: Capability | "set" | null;
   onChange: (capability: Capability, action: "grant" | "revoke") => Promise<void>;
+  draft: readonly Capability[];
+  onToggle: (capability: Capability, checked: boolean) => void;
+  onSave: () => void;
 }) {
   const assigned = new Map(view.assignments.map((item) => [item.capability, item.grantedAt]));
   const manageable = new Set(view.manageableCapabilities);
@@ -1056,180 +1037,25 @@ function CapabilityCard({
                   </p>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                <Badge variant={grantedAt ? "default" : "secondary"}>
-                  {grantedAt ? "Assigned" : "Not assigned"}
-                </Badge>
-                {canChange && (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant={grantedAt ? "outline" : "secondary"}
-                    disabled={saving === capability}
-                    onClick={() => void onChange(capability, grantedAt ? "revoke" : "grant")}
-                  >
-                    {saving === capability ? "Saving…" : grantedAt ? "Revoke" : "Grant"}
-                  </Button>
-                )}
-              </div>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 sm:justify-end">
+                <input
+                  type="checkbox"
+                  checked={draft.includes(capability)}
+                  disabled={!canChange || saving !== null}
+                  onChange={(event) => onToggle(capability, event.target.checked)}
+                  aria-label={metadata.label}
+                />
+                {grantedAt ? "Assigned" : "Not assigned"}
+              </label>
             </div>
           );
         })}
       </div>
-    </Card>
-  );
-}
-
-function OperatorApiKeyCard({
-  page,
-  name,
-  expiry,
-  selectedScopes,
-  saving,
-  secret,
-  error,
-  onNameChange,
-  onExpiryChange,
-  onToggleScope,
-  onCreate,
-  onRevoke,
-  onDismissSecret,
-}: {
-  page: OperatorApiKeyPage;
-  name: string;
-  expiry: string;
-  selectedScopes: string[];
-  saving: boolean;
-  secret: OperatorApiKeyCreated | null;
-  error: string | null;
-  onNameChange: (value: string) => void;
-  onExpiryChange: (value: string) => void;
-  onToggleScope: (scope: string) => void;
-  onCreate: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  onRevoke: (key: ApiKeyMetadata) => Promise<void>;
-  onDismissSecret: () => void;
-}) {
-  return (
-    <Card className="col-span-full p-5 sm:p-6">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-          API access
-        </p>
-        <h3 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">
-          Credentials for this account
-        </h3>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          Keys restrict the account’s existing authority; they never grant capabilities. Secrets are
-          shown only once.
-        </p>
-      </div>
-      {error && <Toast>{error}</Toast>}
-      <form className="mt-4 grid max-w-2xl gap-3" onSubmit={onCreate}>
-        <label>
-          Key name
-          <Input
-            value={name}
-            onChange={(event) => onNameChange(event.target.value)}
-            required
-            maxLength={100}
-          />
-        </label>
-        <label>
-          Expiry <span>(optional)</span>
-          <Input
-            type="date"
-            value={expiry}
-            onChange={(event) => onExpiryChange(event.target.value)}
-          />
-        </label>
-        <fieldset className="grid gap-2 rounded-lg border border-slate-200 p-4">
-          <legend>Scopes that restrict this credential</legend>
-          {page.manageable_scopes.map((scope) => {
-            const metadata = API_SCOPE_METADATA[scope as keyof typeof API_SCOPE_METADATA];
-            return (
-              <label className="flex items-start gap-2 text-sm text-slate-600" key={scope}>
-                <input
-                  type="checkbox"
-                  checked={selectedScopes.includes(scope)}
-                  onChange={() => onToggleScope(scope)}
-                />
-                <span>
-                  <strong className="text-slate-800">{metadata?.label ?? scope}</strong>
-                  <span className="block text-xs text-slate-500">{scope}</span>
-                  {metadata && <span className="block text-xs">{metadata.description}</span>}
-                </span>
-              </label>
-            );
-          })}
-        </fieldset>
-        <Button type="submit" disabled={saving || !name.trim()}>
-          {saving ? "Creating…" : "Create API key"}
+      <div className="mt-4 flex justify-end">
+        <Button type="button" disabled={saving !== null} onClick={onSave}>
+          {saving === "set" ? "Saving…" : "Save capabilities"}
         </Button>
-      </form>
-      <div className="mt-6 grid gap-2">
-        <h4>Existing credentials</h4>
-        {page.items.length === 0 ? (
-          <p className="panel-note">No API keys have been created for this account.</p>
-        ) : (
-          page.items.map((key) => (
-            <div
-              className="flex flex-wrap items-start justify-between gap-3 border-b py-3 last:border-0"
-              key={key.id}
-            >
-              <div className="grid gap-1 text-sm">
-                <strong>{key.name}</strong>
-                <span>
-                  {key.key_prefix} · Created {new Date(key.created_at).toLocaleString()}
-                </span>
-                <span className="text-xs text-slate-500">
-                  {key.scopes.join(", ") || "No scopes"}
-                  {key.expires_at
-                    ? ` · Expires ${new Date(key.expires_at).toLocaleDateString()}`
-                    : ""}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant={key.revoked_at ? "secondary" : "default"}>
-                  {key.revoked_at ? "revoked" : "active"}
-                </Badge>
-                {!key.revoked_at && (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="xs"
-                    disabled={saving}
-                    onClick={() => void onRevoke(key)}
-                  >
-                    {saving ? "Saving…" : "Revoke"}
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))
-        )}
       </div>
-      {secret && (
-        <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <strong>Copy this key now</strong>
-              <p className="mt-1">It will not be shown again after you dismiss this message.</p>
-            </div>
-            <Button type="button" variant="secondary" onClick={onDismissSecret}>
-              Done
-            </Button>
-          </div>
-          <code className="mt-3 block break-all rounded bg-white p-3">{secret.secret}</code>
-          <Button
-            type="button"
-            className="mt-3"
-            variant="secondary"
-            onClick={() => void navigator.clipboard?.writeText(secret.secret)}
-          >
-            Copy key
-          </Button>
-        </div>
-      )}
     </Card>
   );
 }

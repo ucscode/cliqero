@@ -54,7 +54,13 @@ export class ListingReviewService {
   }
   async operatorQueue(
     account: Account,
-    input: { status?: ReviewStatus; cursor?: string; limit: number },
+    input: {
+      status?: ReviewStatus;
+      cursor?: string;
+      limit: number;
+      sort?: "submitted" | "rating";
+      direction?: "asc" | "desc";
+    },
   ) {
     await this.operators.requireCapability(account.id, "reviews.moderate");
     return this.reviews.queryOperator(input);

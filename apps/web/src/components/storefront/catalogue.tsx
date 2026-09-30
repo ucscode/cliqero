@@ -9,7 +9,7 @@ import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { HoneypotField } from "../honeypot-field";
 import { LoadingGrid, ListingGrid } from "./grid";
 import {
@@ -173,7 +173,7 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
         <LoadingGrid />
       ) : currentRequest.status === "error" ? (
         <div className="grid justify-items-start gap-3">
-          <Toast>{currentRequest.error}</Toast>
+          <Alert>{currentRequest.error}</Alert>
           <Button
             variant="secondary"
             onClick={() => {

@@ -11,7 +11,7 @@ import {
 import { Share2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { createCopyFeedbackReset } from "./copy-feedback";
 
@@ -167,11 +167,9 @@ export function ReferralShareActions({
         </Dialog>
       </div>
       {state === "fallback" && (
-        <Toast tone="success">
-          Copying is unavailable. Select the link above to copy it manually.
-        </Toast>
+        <Alert>Copying is unavailable. Select the link above to copy it manually.</Alert>
       )}
-      {state === "shared" && <Toast tone="success">Referral link shared.</Toast>}
+      {state === "shared" && <Alert>Referral link shared.</Alert>}
     </div>
   );
 }

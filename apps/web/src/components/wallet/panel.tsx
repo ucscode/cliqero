@@ -26,7 +26,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { Money } from "../money";
 import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
@@ -419,7 +419,7 @@ export function WalletPanel({
 
   return (
     <div className="grid gap-4">
-      {summaryError && <Toast>{summaryError}</Toast>}
+      {summaryError && <Alert>{summaryError}</Alert>}
       {composition.showCompactBalance && (
         <Card className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4">
           <div>
@@ -555,7 +555,7 @@ export function WalletPanel({
             activityLoading ? (
               <Skeleton className="h-24 w-full" />
             ) : activityError ? (
-              <Toast>{activityError}</Toast>
+              <Alert>{activityError}</Alert>
             ) : (
               <EmptyState
                 title="No wallet activity yet"
@@ -740,7 +740,7 @@ export function WalletPanel({
                   Getting payment details…
                 </p>
               )}
-              {providerPreparation && preparationError && <Toast>{preparationError}</Toast>}
+              {providerPreparation && preparationError && <Alert>{preparationError}</Alert>}
               {providerPreparation &&
                 preparation &&
                 providerPreparationReady(selectedMethod!, fundingOptionId) && (
@@ -766,7 +766,7 @@ export function WalletPanel({
                     )}
                   </div>
                 )}
-              {providerError && <Toast>{providerError}</Toast>}
+              {providerError && <Alert>{providerError}</Alert>}
               <Button
                 type="submit"
                 disabled={

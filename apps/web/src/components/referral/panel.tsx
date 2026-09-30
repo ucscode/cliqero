@@ -9,7 +9,7 @@ import {
   type HierarchyLevels,
 } from "@/lib/api-client";
 import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
@@ -141,12 +141,12 @@ export function ReferralsPanel() {
         )}
       </div>
       {error && (
-        <Toast>
+        <Alert>
           <span>{error}</span>
           <Button type="button" variant="outline" size="sm" onClick={retry}>
             Try again
           </Button>
-        </Toast>
+        </Alert>
       )}
       {levelsLoading || (level !== null && loading) ? (
         <Card className="p-5" aria-label="Loading referrals">

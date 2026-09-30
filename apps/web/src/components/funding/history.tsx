@@ -7,7 +7,7 @@ import { apiFetch, formatMinorCurrency } from "@/lib/api-client";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { presentFundingState, fundingToneClass } from "@/modules/funding/presentation";
 
 type FundingHistoryItem = {
@@ -93,7 +93,7 @@ export function FundingHistoryPanel() {
           </select>
         </label>
       </div>
-      {error && <Toast>{error}</Toast>}
+      {error && <Alert>{error}</Alert>}
       {loading && items.length === 0 ? (
         <Skeleton className="h-48 w-full" />
       ) : items.length === 0 ? (

@@ -4,6 +4,7 @@ import {
   OperatorDistributionService,
   OperatorEarningsService,
 } from "@/infrastructure/postgres/operator/distributions";
+import { encodeOperatorSortCursor } from "@/infrastructure/postgres/operator/cursor";
 
 function result<T extends object>(rows: T[]): QueryResult<T> {
   return { command: "SELECT", rowCount: rows.length, oid: 0, fields: [], rows };
@@ -162,7 +163,55 @@ describe("operator distribution and earnings read models", () => {
   it("rejects malformed cursors", async () => {
     const service = new OperatorDistributionService({ query: async () => result([]) });
     await expect(service.list({ limit: 25, cursor: "invalid" })).rejects.toThrow(
-      "Invalid pagination cursor",
+      "Invalid or stale pagination cursor",
     );
+  });
+
+  it("uses deterministic distribution amount ordering and a matching keyset cursor", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const service = new OperatorDistributionService({
+      query: async <T extends object>(sql: string, values?: unknown[]) => {
+        queries.push({ sql, values });
+        return result<T>([]);
+      },
+    });
+    const cursor = encodeOperatorSortCursor({
+      sort: "amount",
+      direction: "asc",
+      value: "1000",
+      id: "10",
+    });
+
+    await service.list({ limit: 5, sort: "amount", direction: "asc", cursor });
+
+    expect(queries[0]?.sql).toContain("and (d.gross_minor,d.id) > ($2::bigint,$3::bigint)");
+    expect(queries[0]?.sql).toContain("order by d.gross_minor asc,d.id asc");
+    expect(queries[0]?.values).toEqual([null, "1000", "10", 6]);
+  });
+
+  it("uses deterministic earnings date ordering and a matching keyset cursor", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const service = new OperatorEarningsService({
+      query: async <T extends object>(sql: string, values?: unknown[]) => {
+        queries.push({ sql, values });
+        if (sql.includes("pending_minor"))
+          return result<T>([
+            { pending_minor: "0", available_minor: "0", reserved_minor: "0" } as T,
+          ]);
+        return result<T>([]);
+      },
+    });
+    const cursor = encodeOperatorSortCursor({
+      sort: "created",
+      direction: "desc",
+      value: "2026-01-01T00:00:00.000Z",
+      id: "10",
+    });
+
+    await service.list({ limit: 5, sort: "created", direction: "desc", cursor });
+
+    expect(queries[0]?.sql).toContain("and (e.created_at,e.id) < ($3::timestamptz,$4::bigint)");
+    expect(queries[0]?.sql).toContain("order by e.created_at desc,e.id desc");
+    expect(queries[0]?.values).toEqual([null, null, "2026-01-01T00:00:00.000Z", "10", 6]);
   });
 });

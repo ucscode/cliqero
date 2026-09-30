@@ -13,7 +13,7 @@ import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
@@ -165,8 +165,8 @@ export function IntegrationSettings() {
           These credentials are for supported listing access integrations. Secrets are never shown
           again after this panel.
         </p>
-        {error && <Toast>{error}</Toast>}
-        {message && <Toast tone="success">{message}</Toast>}
+        {error && <Alert>{error}</Alert>}
+        {message && <Alert>{message}</Alert>}
         {items.length === 0 ? (
           <EmptyState
             title="No integrations connected"

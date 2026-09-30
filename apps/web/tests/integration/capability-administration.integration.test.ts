@@ -64,6 +64,26 @@ suite("capability administration persistence", () => {
     ).toBe(false);
   });
 
+  it("applies an ordinary capability selection atomically and preserves system.root separation", async () => {
+    const actor = await account("cap-set-admin");
+    const target = await account("cap-set-target");
+    await grantDirect(actor.id, "capabilities.manage");
+    await grantDirect(actor.id, "catalogue.manage");
+    await grantDirect(actor.id, "reviews.moderate");
+    await grantDirect(target.id, "catalogue.manage");
+    await grantDirect(target.id, "system.root");
+
+    await app.capabilityAdministration.replaceOrdinary(actor.id, target.id, ["reviews.moderate"]);
+    const assigned = await app.capabilityAdministration.inspect(actor.id, target.id);
+    expect(assigned.assignments.map((item) => item.capability).sort()).toEqual([
+      "reviews.moderate",
+      "system.root",
+    ]);
+    await expect(
+      app.capabilityAdministration.replaceOrdinary(actor.id, target.id, ["system.root"]),
+    ).rejects.toMatchObject({ code: "root_authorization_required" });
+  });
+
   it("serializes concurrent root self-revocation and leaves one root", async () => {
     const first = await account("root-first");
     const second = await account("root-second");

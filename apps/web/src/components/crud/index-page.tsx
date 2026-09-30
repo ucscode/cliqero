@@ -93,7 +93,8 @@ export function CrudIndex<T>({
   empty?: ReactNode;
   pagination?: CrudPagination;
   selection?: { labelForItem: (item: T) => string };
-  bulkActions?: readonly CrudBulkAction<T>[];
+  bulkActions?:
+    readonly CrudBulkAction<T>[] | ((selectedItems: readonly T[]) => readonly CrudBulkAction<T>[]);
   sectionTitle?: string;
   sectionDescription?: string;
 }) {
@@ -215,7 +216,9 @@ export function CrudIndex<T>({
         <CrudBulkActions
           items={selectedItems}
           selectedCount={selectedItems.length}
-          actions={bulkActions ?? []}
+          actions={
+            typeof bulkActions === "function" ? bulkActions(selectedItems) : (bulkActions ?? [])
+          }
           onComplete={clearSelection}
         />
       ) : null}

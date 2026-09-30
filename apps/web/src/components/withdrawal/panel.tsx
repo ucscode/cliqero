@@ -20,7 +20,7 @@ import { Select } from "../ui/select";
 import { Label } from "../ui/label";
 import { Skeleton } from "../ui/skeleton";
 import { HoneypotField } from "../honeypot-field";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { Money } from "../money";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { parseWithdrawalAmount, withdrawalRequestErrorField } from "./model";
@@ -204,8 +204,8 @@ export function WithdrawalsPanel() {
           {refreshing ? "Refreshing…" : "Refresh"}
         </Button>
       </div>
-      {error && <Toast>{error}</Toast>}
-      {success && <Toast tone="success">{success}</Toast>}
+      {error && <Alert>{error}</Alert>}
+      {success && <Alert>{success}</Alert>}
       {loading ? (
         <div className="grid gap-4 md:grid-cols-3" aria-label="Loading withdrawals">
           <Skeleton className="h-32 w-full" />
@@ -323,7 +323,7 @@ export function WithdrawalsPanel() {
               >
                 {submitting ? "Submitting…" : "Request withdrawal"}
               </Button>
-              {requestError && <Toast>{requestError}</Toast>}
+              {requestError && <Alert>{requestError}</Alert>}
               {!destinations.length && (
                 <Button asChild variant="secondary">
                   <Link href="/dashboard/payout-methods/new">Add payout method</Link>
@@ -366,7 +366,7 @@ export function WithdrawalsPanel() {
               </p>
             )}
           </DialogHeader>
-          {error && <Toast>{error}</Toast>}
+          {error && <Alert>{error}</Alert>}
           <div className="flex justify-end gap-2">
             <Button
               type="button"

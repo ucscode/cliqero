@@ -82,6 +82,33 @@ describe("BlogService SQLite workflow", () => {
     ).toBe(false);
     expect([...first.items, ...second.items].every((p) => p.status === "published")).toBe(true);
   });
+  it("sorts titles on the server-side repository and scopes cursors to the selected order", () => {
+    for (const title of ["Zebra", "Alpha", "Delta", "Bravo", "Echo"])
+      service.create(input({ title, status: "published" }), null);
+    const first = service.list({ publishedOnly: true, sort: "title", direction: "asc", limit: 2 });
+    expect(first.items.map((post) => post.title)).toEqual(["Alpha", "Bravo"]);
+    expect(first.nextCursor).toBeTruthy();
+    expect(() =>
+      service.list({
+        publishedOnly: true,
+        sort: "created",
+        direction: "desc",
+        cursor: first.nextCursor ?? undefined,
+        limit: 2,
+      }),
+    ).toThrow("Invalid or stale pagination cursor");
+    const second = service.list({
+      publishedOnly: true,
+      sort: "title",
+      direction: "asc",
+      cursor: first.nextCursor ?? undefined,
+      limit: 2,
+    });
+    expect(second.items.map((post) => post.title)).toEqual(["Delta", "Echo"]);
+    expect(second.items.some((post) => first.items.some((item) => item.id === post.id))).toBe(
+      false,
+    );
+  });
   it("creates and refreshes a private preview without mutating canonical posts", () => {
     const category = service.createCategory("Guides");
     const categoryTwo = service.createCategory("AI");

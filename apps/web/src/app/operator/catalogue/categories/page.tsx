@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function OperatorListingCategoriesPage() {
   const access = await requireOperatorPage("/operator/catalogue/categories");
   return (
-    <OperatorShell {...access} activeSection="catalogue">
+    <OperatorShell {...access} activeSection="catalogueCategories">
       <OperatorListingCategories />
     </OperatorShell>
   );

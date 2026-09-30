@@ -2144,6 +2144,21 @@ describe("Hono API foundation", () => {
       ).status,
     ).toBe(403);
   });
+  it("validates treasury-entry sorting parameters", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { username: "system.root", email: "operator@example.com" },
+      kind: "user_session" as const,
+      capabilities: ["system.root"],
+      scopes: new Set<string>(),
+    };
+    const request = (query: string) =>
+      appWith(principal).fetch(new Request(`http://localhost/api/treasury/entries${query}`));
+
+    expect((await request("?sort=drop_table")).status).toBe(400);
+    expect((await request("?sort_direction=sideways")).status).toBe(400);
+    expect((await request("?sort=amount&sort_direction=asc")).status).toBe(200);
+  });
   it("requires review moderation capability and scope for API-key principals", async () => {
     const base = {
       accountId: "00000000-0000-4000-8000-000000000001",

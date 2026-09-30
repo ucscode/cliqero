@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function NewOperatorListingCategoryPage() {
   const access = await requireOperatorPage("/operator/catalogue/categories/new");
   return (
-    <OperatorShell {...access} activeSection="catalogue">
+    <OperatorShell {...access} activeSection="catalogueCategories">
       <OperatorListingCategoryEditor />
     </OperatorShell>
   );

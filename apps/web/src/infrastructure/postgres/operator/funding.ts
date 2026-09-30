@@ -5,31 +5,7 @@ import type {
   OperatorFundingReader,
   OperatorFundingSummary,
 } from "@/application/operator/funding";
-
-type Cursor = { createdAt: string; id: string };
-
-function encodeCursor(createdAt: string | Date, id: string) {
-  return Buffer.from(
-    JSON.stringify({ created_at: new Date(createdAt).toISOString(), id }),
-    "utf8",
-  ).toString("base64url");
-}
-
-function decodeCursor(value: string | undefined): Cursor | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
-      created_at?: unknown;
-      id?: unknown;
-    };
-    if (typeof parsed.created_at !== "string" || typeof parsed.id !== "string") throw new Error();
-    const date = new Date(parsed.created_at);
-    if (Number.isNaN(date.valueOf())) throw new Error();
-    return { createdAt: date.toISOString(), id: parsed.id };
-  } catch {
-    throw new Error("Invalid pagination cursor");
-  }
-}
+import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "./cursor";
 
 function summary(row: any): OperatorFundingSummary {
   return {
@@ -63,7 +39,11 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
   constructor(private readonly sql: QueryExecutor) {}
 
   async list(input: OperatorFundingListInput) {
-    const cursor = decodeCursor(input.cursor);
+    const sort = input.sort ?? "created";
+    const direction = input.direction ?? "desc";
+    const cursor = decodeOperatorSortCursor(input.cursor, sort, direction);
+    const orderBy = sort === "amount" ? "f.canonical_amount_minor" : "f.created_at";
+    const cursorType = sort === "amount" ? "bigint" : "timestamptz";
     const rawSearch = input.search?.trim() || "";
     const search = rawSearch ? rawSearch.replace(/[\\%_]/g, "\\$&") : null;
     const values: unknown[] = [search, input.state ?? null, input.provider ?? null];
@@ -72,13 +52,16 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
       "($2::text is null or f.state=$2)",
       "($3::text is null or f.provider_name=$3)",
     ];
-    values.push(cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1);
-    conditions.push(
-      "($4::timestamptz is null or (f.created_at,f.id)<($4::timestamptz,(select id from funding_capability.funding_transactions where uuid=$5)))",
-    );
+    if (cursor) {
+      values.push(cursor.value, cursor.id);
+      conditions.push(
+        `(${orderBy},f.id) ${direction === "asc" ? ">" : "<"} ($4::${cursorType},$5::bigint)`,
+      );
+    }
+    values.push(input.limit + 1);
     const rows = (
       await this.sql.query<any>(
-        `select f.uuid as id,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,f.provider_transaction_id,
+        `select f.uuid as id,f.id::text cursor_id,${orderBy}::text cursor_sort_value,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,f.provider_transaction_id,
                 f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
                 f.state,f.created_at,f.updated_at,f.confirmed_at,
                 c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
@@ -87,7 +70,7 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
            join identity_capability.account_profiles a on a.id=f.account_id
            left join wallet_capability.credits c on c.funding_id=f.id
           where ${conditions.join(" and ")}
-          order by f.created_at desc,f.id desc limit $6`,
+          order by ${orderBy} ${direction},f.id ${direction} limit $${values.length}`,
         values,
       )
     ).rows;
@@ -96,7 +79,12 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
       items: visible.map(summary),
       nextCursor:
         rows.length > input.limit
-          ? encodeCursor(visible.at(-1).created_at, visible.at(-1).id)
+          ? encodeOperatorSortCursor({
+              sort,
+              direction,
+              value: String(visible.at(-1).cursor_sort_value),
+              id: String(visible.at(-1).cursor_id),
+            })
           : null,
     };
   }

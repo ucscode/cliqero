@@ -14,30 +14,59 @@ import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
+import { useToast } from "../toast/provider";
+import { CrudSortSelect } from "@/components/crud/sort-select";
 
 type Review = ListingReview & { reviewer?: string; listing_title?: string };
 type ReviewPage = { items: Review[]; next_cursor: string | null };
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Review queue is temporarily unavailable.";
 
-export function reviewQueueBulkActions<T>(
-  appliedStatus: string,
+export function reviewQueueBulkActions<T extends { status: string }>(
+  selectedItems: readonly T[],
   bulkActions: readonly CrudBulkAction<T>[],
 ) {
-  return appliedStatus === "pending" ? bulkActions : [];
+  return selectedItems.length > 0 && selectedItems.every((item) => item.status === "pending")
+    ? bulkActions
+    : [];
+}
+
+export function reviewQueueQuery(
+  status: string,
+  cursor: string | null,
+  pageSize: number,
+  sort = "submitted",
+  direction = "desc",
+) {
+  const params = new URLSearchParams({ limit: String(pageSize) });
+  params.set("sort", sort);
+  params.set("direction", direction);
+  if (status !== "all") params.set("status", status);
+  if (cursor) params.set("cursor", cursor);
+  return params;
 }
 
 export function OperatorReviews() {
-  const [status, setStatus] = useState("pending");
-  const [appliedStatus, setAppliedStatus] = useState("pending");
+  const toast = useToast();
+  const [status, setStatus] = useState("all");
+  const [sortChoice, setSortChoice] = useState("submitted:desc");
+  const [sort, direction] = sortChoice.split(":") as ["submitted" | "rating", "asc" | "desc"];
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
-  const collection = useCrudCollection(async (appliedStatus: string, cursor, pageSize) => {
-    const params = new URLSearchParams({ status: appliedStatus, limit: String(pageSize) });
-    if (cursor) params.set("cursor", cursor);
-    const result = await apiFetch<ReviewPage>(`/api/reviews?${params}`);
-    return { items: result.items, nextCursor: result.next_cursor };
-  }, "pending");
+  const collection = useCrudCollection(
+    async (filters: { status: string; sort: string; direction: string }, cursor, pageSize) => {
+      const params = reviewQueueQuery(
+        filters.status,
+        cursor,
+        pageSize,
+        filters.sort,
+        filters.direction,
+      );
+      const result = await apiFetch<ReviewPage>(`/api/reviews?${params}`);
+      return { items: result.items, nextCursor: result.next_cursor };
+    },
+    { status: "all", sort: "submitted", direction: "desc" },
+  );
 
   async function moderate(id: string, action: "approve" | "reject") {
     try {
@@ -48,6 +77,7 @@ export function OperatorReviews() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status: action === "approve" ? "approved" : "rejected" }),
       });
+      toast.success(`Review ${action === "approve" ? "approved" : "rejected"}.`);
       await collection.retry();
     } catch (cause) {
       setActionError(errorMessage(cause));
@@ -75,6 +105,8 @@ export function OperatorReviews() {
           })),
         });
       await collection.retry();
+      if (!failures.length)
+        toast.success(`${reviews.length} review${reviews.length === 1 ? "" : "s"} moderated.`);
       return failures.length === 0;
     } catch (cause) {
       setActionError(errorMessage(cause));
@@ -141,26 +173,38 @@ export function OperatorReviews() {
             value={status}
             onChange={(event) => setStatus(event.target.value)}
           >
+            <option value="all">All</option>
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </Select>
         </OperatorFilterField>
       }
+      sort={
+        <CrudSortSelect
+          value={sortChoice}
+          onChange={setSortChoice}
+          options={[
+            { value: "submitted:desc", label: "Newest", sort: "submitted", direction: "desc" },
+            { value: "submitted:asc", label: "Oldest", sort: "submitted", direction: "asc" },
+            { value: "rating:desc", label: "Highest rating", sort: "rating", direction: "desc" },
+            { value: "rating:asc", label: "Lowest rating", sort: "rating", direction: "asc" },
+          ]}
+        />
+      }
       onFiltersReset={async () => {
-        const ok = await collection.apply("pending");
+        const ok = await collection.apply({ status: "all", sort: "submitted", direction: "desc" });
         if (ok) {
-          setStatus("pending");
-          setAppliedStatus("pending");
+          setStatus("all");
+          setSortChoice("submitted:desc");
         }
         return ok;
       }}
-      filtersDirty={status !== "pending"}
+      filtersDirty={status !== "all" || sortChoice !== "submitted:desc"}
       onFiltersSubmit={async (event) => {
         event.preventDefault();
         const requestedStatus = status;
-        const applied = await collection.apply(requestedStatus);
-        if (applied) setAppliedStatus(requestedStatus);
+        const applied = await collection.apply({ status: requestedStatus, sort, direction });
         return applied;
       }}
       toolbarActions={
@@ -172,7 +216,7 @@ export function OperatorReviews() {
       columns={columns}
       getRowKey={(review) => review.id}
       selection={{ labelForItem: (review) => `review by ${review.reviewer ?? "customer"}` }}
-      bulkActions={reviewQueueBulkActions(appliedStatus, bulkActions)}
+      bulkActions={(selected) => reviewQueueBulkActions(selected, bulkActions)}
       actions={(review) =>
         review.status === "pending"
           ? [

@@ -65,8 +65,18 @@ describe("catalogue listing route sorting contract", () => {
 
     expect(response.status).toBe(200);
     expect(queryCatalogue).toHaveBeenCalledWith(
-      expect.objectContaining({ state: undefined, limit: 50 }),
+      expect.objectContaining({ state: undefined, limit: 50, sort: "date", direction: "desc" }),
     );
+  });
+
+  it("rejects unsupported sort fields and directions", async () => {
+    configure();
+    const sortResponse = await GET(new Request("http://localhost/api/listings?sort=owner"));
+    const directionResponse = await GET(
+      new Request("http://localhost/api/listings?direction=sideways"),
+    );
+    expect(sortResponse.status).toBe(400);
+    expect(directionResponse.status).toBe(400);
   });
 
   it.each([

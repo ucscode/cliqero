@@ -28,11 +28,18 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
     });
   const operatorKeyParams = z.object({ accountId: z.string().uuid() });
   const operatorKeyIdParams = operatorKeyParams.extend({ apiKeyId: z.string().uuid() });
+  const operatorKeyListQuery = z.object({
+    sort: z
+      .enum(["created", "name", "expires"])
+      .default("created")
+      .describe("Sort by creation date, name, or expiry."),
+    direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
+  });
   app.openapi(
     createRoute({
       method: "get",
       path: "/api/accounts/{accountId}/api-keys",
-      request: { params: operatorKeyParams },
+      request: { params: operatorKeyParams, query: operatorKeyListQuery },
       responses: {
         200: {
           description: "Safe API-key metadata for the selected account",
@@ -63,6 +70,7 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
         const result = await container.operatorApiKeys.list(
           p.accountId,
           c.req.valid("param").accountId,
+          c.req.valid("query"),
         );
         return c.json(
           {

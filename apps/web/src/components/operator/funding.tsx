@@ -17,6 +17,7 @@ import { OperatorFilterField } from "./ui/toolbar";
 import { CrudIndex } from "@/components/crud/index-page";
 import { CrudDetail } from "@/components/crud/detail";
 import { useCrudCollection } from "@/components/crud/use-collection";
+import { CrudSortSelect } from "@/components/crud/sort-select";
 import type { CrudColumn } from "@/components/crud/table";
 import type { OperatorAction } from "./ui/actions-menu";
 import { OperatorErrorState } from "./ui/error-state";
@@ -72,9 +73,17 @@ export function OperatorFundingList() {
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorFundingState | "">("");
   const [provider, setProvider] = useState("");
+  const [sortChoice, setSortChoice] = useState("created:desc");
+  const [sort, direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
   const collection = useCrudCollection(
     async (
-      filters: { search: string; state: OperatorFundingState | ""; provider: string },
+      filters: {
+        search: string;
+        state: OperatorFundingState | "";
+        provider: string;
+        sort: string;
+        direction: string;
+      },
       cursor,
       pageSize,
     ) => {
@@ -82,11 +91,13 @@ export function OperatorFundingList() {
       if (filters.search) params.set("search", filters.search);
       if (filters.state) params.set("state", filters.state);
       if (filters.provider) params.set("provider", filters.provider);
+      params.set("sort", filters.sort);
+      params.set("direction", filters.direction);
       if (cursor) params.set("cursor", cursor);
       const result = await apiFetch<OperatorFundingPage>(`/api/funding?${params}`);
       return { items: result.items, nextCursor: result.nextCursor };
     },
-    { search: "", state: "", provider: "" },
+    { search: "", state: "", provider: "", sort: "created", direction: "desc" },
   );
 
   const columns: readonly CrudColumn<OperatorFundingPage["items"][number]>[] = [
@@ -182,20 +193,47 @@ export function OperatorFundingList() {
           </OperatorFilterField>
         </>
       }
+      sort={
+        <CrudSortSelect
+          value={sortChoice}
+          onChange={setSortChoice}
+          options={[
+            { value: "created:desc", label: "Newest", sort: "created", direction: "desc" },
+            { value: "created:asc", label: "Oldest", sort: "created", direction: "asc" },
+            { value: "amount:desc", label: "Highest amount", sort: "amount", direction: "desc" },
+            { value: "amount:asc", label: "Lowest amount", sort: "amount", direction: "asc" },
+          ]}
+        />
+      }
       onFiltersSubmit={async (event) => {
         event.preventDefault();
-        return collection.apply({ search: search.trim(), state, provider: provider.trim() });
+        return collection.apply({
+          search: search.trim(),
+          state,
+          provider: provider.trim(),
+          sort,
+          direction,
+        });
       }}
       onFiltersReset={async () => {
-        const ok = await collection.apply({ search: "", state: "", provider: "" });
+        const ok = await collection.apply({
+          search: "",
+          state: "",
+          provider: "",
+          sort: "created",
+          direction: "desc",
+        });
         if (ok) {
           setSearch("");
           setState("");
           setProvider("");
+          setSortChoice("created:desc");
         }
         return ok;
       }}
-      filtersDirty={Boolean(search.trim() || state || provider.trim())}
+      filtersDirty={Boolean(
+        search.trim() || state || provider.trim() || sortChoice !== "created:desc",
+      )}
       toolbarActions={
         <Button type="submit" variant="action" disabled={collection.loading}>
           Apply filters

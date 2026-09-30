@@ -12,7 +12,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../empty-state";
-import { Toast } from "../toast";
+import { Alert } from "../ui/alert";
 import { canShowPromote, postAuthBuyPath } from "../interaction-model";
 import { ReferralShareActions } from "../referral/share-actions";
 import { ListingMarkdown } from "./markdown";
@@ -243,7 +243,7 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
                 </Button>
               )
             )}
-            {promoteMessage && <Toast tone="success">{promoteMessage}</Toast>}
+            {promoteMessage && <Alert>{promoteMessage}</Alert>}
             {referralUrl && <ReferralShareActions url={referralUrl} />}
           </div>
         </aside>

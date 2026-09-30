@@ -22,6 +22,7 @@ import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
+import { CrudSortSelect } from "@/components/crud/sort-select";
 
 const states: Array<[OperatorWithdrawalState, string]> = [
   ["requested", "Requested"],
@@ -37,9 +38,17 @@ export function OperatorWithdrawalList() {
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorWithdrawalState | "">("");
   const [attention, setAttention] = useState("");
+  const [sortChoice, setSortChoice] = useState("created:desc");
+  const [sort, direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
   const collection = useCrudCollection(
     async (
-      filters: { search: string; state: OperatorWithdrawalState | ""; attention: string },
+      filters: {
+        search: string;
+        state: OperatorWithdrawalState | "";
+        attention: string;
+        sort: string;
+        direction: string;
+      },
       cursor,
       pageSize,
     ) => {
@@ -47,11 +56,13 @@ export function OperatorWithdrawalList() {
       if (filters.search) params.set("search", filters.search);
       params.set("state", filters.state || "all");
       if (filters.attention) params.set("attention", filters.attention);
+      params.set("sort", filters.sort);
+      params.set("direction", filters.direction);
       if (cursor) params.set("cursor", cursor);
       const result = await apiFetch<OperatorWithdrawalPage>(`/api/withdrawals?${params}`);
       return { items: result.items, nextCursor: result.nextCursor };
     },
-    { search: "", state: "", attention: "" },
+    { search: "", state: "", attention: "", sort: "created", direction: "desc" },
   );
   type Withdrawal = OperatorWithdrawalPage["items"][number];
   const columns: readonly CrudColumn<Withdrawal>[] = [
@@ -144,19 +155,38 @@ export function OperatorWithdrawalList() {
           </OperatorFilterField>
         </>
       }
+      sort={
+        <CrudSortSelect
+          value={sortChoice}
+          onChange={setSortChoice}
+          options={[
+            { value: "created:desc", label: "Newest", sort: "created", direction: "desc" },
+            { value: "created:asc", label: "Oldest", sort: "created", direction: "asc" },
+            { value: "amount:desc", label: "Highest amount", sort: "amount", direction: "desc" },
+            { value: "amount:asc", label: "Lowest amount", sort: "amount", direction: "asc" },
+          ]}
+        />
+      }
       onFiltersReset={async () => {
-        const ok = await collection.apply({ search: "", state: "", attention: "" });
+        const ok = await collection.apply({
+          search: "",
+          state: "",
+          attention: "",
+          sort: "created",
+          direction: "desc",
+        });
         if (ok) {
           setSearch("");
           setState("");
           setAttention("");
+          setSortChoice("created:desc");
         }
         return ok;
       }}
-      filtersDirty={Boolean(search.trim() || state || attention)}
+      filtersDirty={Boolean(search.trim() || state || attention || sortChoice !== "created:desc")}
       onFiltersSubmit={async (event) => {
         event.preventDefault();
-        return collection.apply({ search: search.trim(), state, attention });
+        return collection.apply({ search: search.trim(), state, attention, sort, direction });
       }}
       toolbarActions={
         <Button type="submit" variant="action" disabled={collection.loading}>

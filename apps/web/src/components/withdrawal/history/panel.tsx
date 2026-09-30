@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Toast } from "@/components/toast";
+import { Alert } from "@/components/ui/alert";
 import { WithdrawalHistoryList } from "./list";
 import { ActionLock } from "../action-lock";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/dialog";
@@ -103,7 +103,7 @@ export function WithdrawalHistoryPanel() {
           Back to Withdrawals
         </Link>
       </div>
-      {error && <Toast>{error}</Toast>}
+      {error && <Alert>{error}</Alert>}
       <Card className="min-w-0 p-5">
         {loading && !page ? (
           <Skeleton className="h-64 w-full" aria-label="Loading withdrawal history" />
@@ -147,7 +147,7 @@ export function WithdrawalHistoryPanel() {
               </p>
             )}
           </DialogHeader>
-          {error && <Toast>{error}</Toast>}
+          {error && <Alert>{error}</Alert>}
           <div className="flex justify-end gap-2">
             <Button
               type="button"

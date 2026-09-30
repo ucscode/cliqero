@@ -49,7 +49,9 @@ export function OperatorShell({
   activeSection?:
     | "overview"
     | "catalogue"
+    | "catalogueCategories"
     | "users"
+    | "apiKeys"
     | "network"
     | "funding"
     | "distributions"
@@ -100,6 +102,15 @@ export function OperatorShell({
         ...(hasCapability(capabilities, "catalogue.manage")
           ? [{ key: "catalogue", href: "/operator/catalogue", label: "Listings" }]
           : []),
+        ...(hasCapability(capabilities, "catalogue.manage")
+          ? [
+              {
+                key: "catalogueCategories",
+                href: "/operator/catalogue/categories",
+                label: "Categories",
+              },
+            ]
+          : []),
         ...(hasCapability(capabilities, "reviews.moderate")
           ? [{ key: "reviews", href: "/operator/reviews", label: "Reviews" }]
           : []),
@@ -111,6 +122,9 @@ export function OperatorShell({
         ...(hasCapability(capabilities, "accounts.read") ||
         hasCapability(capabilities, "accounts.manage")
           ? [{ key: "users", href: "/operator/users", label: "Accounts" }]
+          : []),
+        ...(hasCapability(capabilities, "api_keys.manage")
+          ? [{ key: "apiKeys", href: "/operator/api-keys", label: "API Keys" }]
           : []),
         ...(hasCapability(capabilities, "hierarchy.manage")
           ? [{ key: "network", href: "/operator/network", label: "Network" }]

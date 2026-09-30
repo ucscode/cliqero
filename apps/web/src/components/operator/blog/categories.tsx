@@ -17,8 +17,10 @@ import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorErrorState } from "../ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "../ui/bulk-outcome";
+import { useToast } from "@/components/toast/provider";
 
 export function OperatorBlogCategories() {
+  const toast = useToast();
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(async () => {
@@ -32,6 +34,7 @@ export function OperatorBlogCategories() {
     try {
       await apiFetch(`/api/blog/categories/${category.id}`, { method: "DELETE" });
       await collection.retry();
+      toast.success("Category deleted.");
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "Unable to delete category.");
     }
@@ -58,6 +61,7 @@ export function OperatorBlogCategories() {
           })),
         });
       await collection.retry();
+      if (!failures.length) toast.success("Selected categories deleted.");
       return failures.length === 0;
     } catch (cause) {
       setActionError(
@@ -125,6 +129,7 @@ export function OperatorBlogCategories() {
 
 export function OperatorBlogCategoryEditor({ initial }: { initial?: BlogCategory }) {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName] = useState(initial?.name ?? "");
   const [slug, setSlug] = useState(initial?.slug ?? "");
   const [saving, setSaving] = useState(false);
@@ -145,6 +150,7 @@ export function OperatorBlogCategoryEditor({ initial }: { initial?: BlogCategory
           }),
         },
       );
+      toast.success(initial ? "Category updated." : "Category created.");
       router.push("/operator/blog/categories");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save category.");

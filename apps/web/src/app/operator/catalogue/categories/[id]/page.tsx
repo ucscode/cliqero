@@ -22,7 +22,7 @@ export default async function OperatorListingCategoryPage({
     notFound();
   }
   return (
-    <OperatorShell {...access} activeSection="catalogue">
+    <OperatorShell {...access} activeSection="catalogueCategories">
       <OperatorListingCategoryEditor initial={category} />
     </OperatorShell>
   );

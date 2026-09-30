@@ -10,7 +10,7 @@ import { Card } from "../../ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/dialog";
 import { EmptyState } from "../../empty-state";
 import { Skeleton } from "../../ui/skeleton";
-import { Toast } from "../../toast";
+import { Alert } from "../../ui/alert";
 
 export function PayoutMethodsPanel() {
   const [methods, setMethods] = useState<WithdrawalMethod[]>([]);
@@ -79,7 +79,7 @@ export function PayoutMethodsPanel() {
           </Button>
         )}
       </div>
-      {error && <Toast>{error}</Toast>}
+      {error && <Alert>{error}</Alert>}
       {loading ? (
         <Card>
           <Skeleton className="h-40 w-full" />
@@ -180,7 +180,7 @@ export function PayoutMethodsPanel() {
               </p>
             )}
           </DialogHeader>
-          {error && <Toast>{error}</Toast>}
+          {error && <Alert>{error}</Alert>}
           <div className="flex justify-end gap-2">
             <Button
               type="button"

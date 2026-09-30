@@ -14,6 +14,11 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
   const maxRows = crudMaxRows();
   const operatorDistributionQuery = z.object({
     search: z.string().max(100).optional(),
+    sort: z
+      .enum(["created", "amount"])
+      .default("created")
+      .describe("Sort by completion date or gross amount."),
+    direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });
@@ -98,6 +103,11 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
   const operatorEarningsQuery = z.object({
     search: z.string().max(100).optional(),
     state: z.enum(["pending", "available", "reversed"]).optional(),
+    sort: z
+      .enum(["created", "amount"])
+      .default("created")
+      .describe("Sort by entry date or amount."),
+    direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });
