@@ -1,7 +1,12 @@
 import { getContainer, type ApplicationContainer } from "@/infrastructure/container";
 import type { ApiKeyRecord } from "@/modules/identity/api/keys";
 import { apiError } from "@/api/http";
-import { apiKeyCreateSchema, apiKeyListQuerySchema, apiKeyUpdateSchema } from "./contracts";
+import {
+  apiKeyBulkDeleteSchema,
+  apiKeyCreateSchema,
+  apiKeyListQuerySchema,
+  apiKeyUpdateSchema,
+} from "./contracts";
 
 type ApiKeyManagementContainer = Pick<
   ApplicationContainer,
@@ -119,9 +124,13 @@ export class InternalApiKeyManagementRoutes {
         sort: query.sort,
         direction: query.direction,
       });
+      const offset = Number(query.cursor ?? 0);
+      const items = result.items.slice(offset, offset + query.limit);
+      const nextOffset = offset + items.length;
       return response({
-        items: result.items.map(metadata),
+        items: items.map(metadata),
         manageable_scopes: result.manageableScopes,
+        next_cursor: nextOffset < result.items.length ? String(nextOffset) : null,
       });
     } catch (error) {
       return apiError(error, request);
@@ -218,6 +227,24 @@ export class InternalApiKeyManagementRoutes {
       return apiError(error, request);
     }
   }
+
+  async bulkDelete(request: Request): Promise<Response> {
+    const principal = await this.session(request, true);
+    if (principal instanceof Response) return principal;
+    if (!this.rateLimiter.allow(principal.accountId)) return rateLimited();
+    try {
+      const parsed = await parseJson(request);
+      if (parsed.error) return parsed.error;
+      const body = apiKeyBulkDeleteSchema.parse(parsed.value);
+      const outcome = await this.container.operatorApiKeys.bulkDeleteForOperator(
+        principal.accountId,
+        body.ids,
+      );
+      return response(outcome);
+    } catch (error) {
+      return apiError(error, request);
+    }
+  }
 }
 
 export function internalApiKeyCollection(request: Request) {
@@ -230,4 +257,8 @@ export function internalApiKeyCreate(request: Request) {
 
 export function internalApiKeyItem(request: Request, keyId: string) {
   return new InternalApiKeyManagementRoutes(getContainer()).item(request, keyId);
+}
+
+export function internalApiKeyBulkDelete(request: Request) {
+  return new InternalApiKeyManagementRoutes(getContainer()).bulkDelete(request);
 }

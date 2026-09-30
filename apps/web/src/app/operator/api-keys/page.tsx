@@ -1,4 +1,4 @@
-import { OperatorApiKeys } from "@/components/operator/api-keys";
+import { OperatorApiKeys } from "@/components/operator/api-keys/collection";
 import { OperatorShell } from "@/components/operator/shell";
 import { requireOperatorPage } from "../operator-access";
 

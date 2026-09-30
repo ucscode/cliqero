@@ -49,6 +49,7 @@ export function OperatorActionsMenu({
   actions: readonly OperatorAction[];
   label?: string;
 }) {
+  if (actions.length === 0) return null;
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>

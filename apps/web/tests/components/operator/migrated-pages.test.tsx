@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { OperatorBlogEditor, OperatorBlogList } from "@/components/operator/blog";
 import { OperatorCatalogueEditor, OperatorCatalogueList } from "@/components/operator/catalogue";
-import { OperatorApiKeys } from "@/components/operator/api-keys";
+import { OperatorApiKeys } from "@/components/operator/api-keys/collection";
 import {
   OperatorDistributionDetail,
   OperatorDistributionList,

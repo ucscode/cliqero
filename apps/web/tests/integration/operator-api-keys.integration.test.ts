@@ -61,6 +61,8 @@ suite("operator API-key administration", () => {
           if (request.method === "GET") return routes.collection(request);
           if (request.method === "POST") return routes.create(request);
         }
+        if (url.pathname === "/internal/api-keys/actions/delete" && request.method === "POST")
+          return routes.bulkDelete(request);
         const match = /^\/internal\/api-keys\/([^/]+)$/.exec(url.pathname);
         if (match) return routes.item(request, decodeURIComponent(match[1]));
         return Promise.resolve(Response.json({ error: "Not found" }, { status: 404 }));
@@ -298,6 +300,99 @@ suite("operator API-key administration", () => {
     expect((await deletedMetadata.json()).items.map((item: { id: string }) => item.id)).toContain(
       created.id,
     );
+  });
+
+  it("bulk-deletes server-side with independent per-key authorization and partial outcomes", async () => {
+    const actor = await account("bulkkeyoperator");
+    const allowedTarget = await account("bulkkeytarget");
+    const restrictedTarget = await account("bulkkeyrestricted");
+    await grant(actor.id, "api_keys.manage");
+    await grant(restrictedTarget.id, "catalogue.manage");
+
+    const allowed = await app.apiKeys.create({
+      accountId: allowedTarget.id,
+      name: "bulk allowed",
+      scopes: [],
+      createdBy: actor.id,
+    });
+    const restricted = await app.apiKeys.create({
+      accountId: restrictedTarget.id,
+      name: "bulk restricted scope",
+      scopes: ["catalogue:manage"],
+      createdBy: actor.id,
+    });
+    const previouslyDeleted = await app.apiKeys.create({
+      accountId: allowedTarget.id,
+      name: "already deleted",
+      scopes: [],
+      createdBy: actor.id,
+    });
+    await app.apiKeys.revoke(previouslyDeleted.id, allowedTarget.id);
+
+    const api = sessionApi(actor.id, ["api_keys.manage"]);
+    const response = await api.fetch(
+      new Request("http://localhost/internal/api-keys/actions/delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [allowed.id, restricted.id, previouslyDeleted.id] }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      succeeded: [allowed.id],
+      failed: [
+        {
+          id: restricted.id,
+          message: expect.stringContaining("cannot assign the catalogue:manage scope"),
+        },
+        { id: previouslyDeleted.id, message: "API key is already deleted." },
+      ],
+    });
+    expect(await app.apiKeys.authenticate(allowed.secret)).toBeNull();
+    expect(await app.apiKeys.authenticate(restricted.secret)).not.toBeNull();
+    expect(await app.apiKeys.authenticate(previouslyDeleted.secret)).toBeNull();
+  });
+
+  it("paginates the collection deterministically within the applied filters", async () => {
+    const actor = await account("pagekeyoperator");
+    const target = await account("pagekeytarget");
+    await grant(actor.id, "api_keys.manage");
+    const ids = [];
+    for (const name of ["Page Alpha", "Page Beta", "Page Gamma"]) {
+      ids.push(
+        (
+          await app.apiKeys.create({
+            accountId: target.id,
+            name,
+            scopes: [],
+            createdBy: actor.id,
+          })
+        ).id,
+      );
+    }
+    const api = sessionApi(actor.id, ["api_keys.manage"]);
+    const pageOne = await api.fetch(
+      new Request(
+        `http://localhost/internal/api-keys?account_id=${target.id}&search=Page&sort=name&direction=asc&limit=1`,
+      ),
+    );
+    const first = await pageOne.json();
+    const pageTwo = await api.fetch(
+      new Request(
+        `http://localhost/internal/api-keys?account_id=${target.id}&search=Page&sort=name&direction=asc&limit=1&cursor=${first.next_cursor}`,
+      ),
+    );
+    const second = await pageTwo.json();
+    const pageThree = await api.fetch(
+      new Request(
+        `http://localhost/internal/api-keys?account_id=${target.id}&search=Page&sort=name&direction=asc&limit=1&cursor=${second.next_cursor}`,
+      ),
+    );
+    const third = await pageThree.json();
+    const pagedIds = [first.items[0].id, second.items[0].id, third.items[0].id];
+    expect(new Set(pagedIds).size).toBe(3);
+    expect(pagedIds).toEqual(ids);
+    expect(third.next_cursor).toBeNull();
   });
 
   it("contains operator scopes to both actor and target account authority", async () => {

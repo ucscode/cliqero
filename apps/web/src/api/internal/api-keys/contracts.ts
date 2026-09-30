@@ -2,8 +2,9 @@ import { z } from "zod";
 import { apiScopeSchema } from "@/modules/identity/api/scopes";
 
 /**
- * Internal Operator UI contract for GET/POST /internal/api-keys and
- * GET/PATCH/DELETE /internal/api-keys/{apiKeyId}. Authentication and
+ * Internal Operator UI contract for GET/POST /internal/api-keys,
+ * GET/PATCH/DELETE /internal/api-keys/{apiKeyId}, and POST
+ * /internal/api-keys/actions/delete. Authentication and
  * authorization are session-only; account ownership is derived/enforced by
  * the application service. These schemas are deliberately not OpenAPI routes.
  */
@@ -13,6 +14,8 @@ export const apiKeyListQuerySchema = z.object({
   state: z.enum(["all", "active", "expired", "deleted"]).default("all"),
   sort: z.enum(["created", "name", "expires"]).default("created"),
   direction: z.enum(["asc", "desc"]).default("desc"),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  cursor: z.string().max(12).regex(/^\d+$/).optional(),
 });
 
 export const apiKeyCreateSchema = z
@@ -33,3 +36,5 @@ export const apiKeyUpdateSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0);
+
+export const apiKeyBulkDeleteSchema = z.object({ ids: z.array(z.uuid()).min(1).max(100) }).strict();

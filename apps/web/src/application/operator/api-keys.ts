@@ -310,6 +310,8 @@ export class OperatorApiKeyService {
       const key = await this.apiKeys.find(keyId, targetId);
       if (!key) throw new PublicApplicationError("API key not found.", "not_found", 404);
       if (key.revokedAt) return { changed: false, key };
+      const targetCapabilities = await this.operators.capabilities(targetId);
+      this.authorizeScopes(actorCapabilities, targetCapabilities, this.validateScopes(key.scopes));
       const changed = await this.apiKeys.revoke(keyId, targetId);
       if (changed) {
         const state = {
@@ -329,6 +331,36 @@ export class OperatorApiKeyService {
       }
       return { changed, key };
     });
+  }
+
+  /** Revoke selected keys server-side, rechecking operator authority per key. */
+  async bulkDeleteForOperator(actorId: string, keyIds: readonly string[]) {
+    const actorCapabilities = await this.operators.capabilities(actorId);
+    if (!hasCapability(actorCapabilities, "api_keys.manage"))
+      throw forbidden("You are not allowed to administer API keys.");
+
+    const outcome: { succeeded: string[]; failed: Array<{ id: string; message: string }> } = {
+      succeeded: [],
+      failed: [],
+    };
+    for (const keyId of new Set(keyIds)) {
+      try {
+        const key = await this.apiKeys.find(keyId);
+        if (!key) throw new PublicApplicationError("API key not found.", "not_found", 404);
+        if (key.revokedAt)
+          throw new PublicApplicationError("API key is already deleted.", "not_found", 404);
+        const result = await this.revoke(actorId, key.accountId, key.id);
+        if (!result.changed)
+          throw new PublicApplicationError("API key is already deleted.", "not_found", 404);
+        outcome.succeeded.push(keyId);
+      } catch (error) {
+        outcome.failed.push({
+          id: keyId,
+          message: error instanceof Error ? error.message : "Unable to delete this API key.",
+        });
+      }
+    }
+    return outcome;
   }
 
   private async revokeForAccount(

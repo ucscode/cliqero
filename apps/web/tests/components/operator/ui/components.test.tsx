@@ -219,6 +219,12 @@ describe("operator UI composition components", () => {
     expect(html).toContain('aria-expanded="false"');
   });
 
+  it("does not render an empty row-action trigger", () => {
+    const html = renderToStaticMarkup(<OperatorActionsMenu actions={[]} label="Empty actions" />);
+    expect(html).toBe("");
+    expect(html).not.toContain("Empty actions");
+  });
+
   it("renders link and callback actions with destructive and disabled semantics", () => {
     const action = vi.fn();
     const link = operatorActionMenuItem({

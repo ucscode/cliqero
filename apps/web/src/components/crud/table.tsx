@@ -23,6 +23,7 @@ export type CrudSelection<T> = {
   selectedKeys: ReadonlySet<string>;
   onChange: (selectedKeys: Set<string>) => void;
   labelForItem: (item: T) => string;
+  canSelectItem?: (item: T) => boolean;
 };
 
 export function visibleSelection<T>(
@@ -30,9 +31,11 @@ export function visibleSelection<T>(
   getRowKey: (item: T) => string,
   selectedKeys: ReadonlySet<string>,
   checked: boolean,
+  canSelectItem: (item: T) => boolean = () => true,
 ) {
   const keys = new Set(selectedKeys);
   for (const item of items) {
+    if (!canSelectItem(item)) continue;
     const key = getRowKey(item);
     if (checked) keys.add(key);
     else keys.delete(key);
@@ -53,6 +56,7 @@ export type CrudTableRowProps<T> = {
   desktopColumns: readonly CrudColumn<T>[];
   actions?: (item: T) => readonly OperatorAction[];
   actionLabel?: (item: T) => string;
+  selectionEnabled: boolean;
   selectionLabel: string | null;
   selected: boolean;
   onToggle: (item: T, checked: boolean) => void;
@@ -67,6 +71,7 @@ export function crudTableRowPropsEqual<T>(
     previous.desktopColumns === next.desktopColumns &&
     previous.actions === next.actions &&
     previous.actionLabel === next.actionLabel &&
+    previous.selectionEnabled === next.selectionEnabled &&
     previous.selectionLabel === next.selectionLabel &&
     previous.selected === next.selected &&
     previous.onToggle === next.onToggle
@@ -78,21 +83,25 @@ function CrudTableRow<T>({
   desktopColumns,
   actions,
   actionLabel,
+  selectionEnabled,
   selectionLabel,
   selected,
   onToggle,
 }: CrudTableRowProps<T>) {
+  const rowActions = actions?.(item) ?? [];
   return (
     <TableRow className="odd:bg-white even:bg-slate-50/70 hover:bg-slate-50">
-      {selectionLabel !== null && (
+      {selectionEnabled && (
         <TableCell className="w-12 px-4 py-3">
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={(event) => onToggle(item, event.target.checked)}
-            aria-label={`Select ${selectionLabel}`}
-            className="size-4 accent-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
-          />
+          {selectionLabel !== null && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(event) => onToggle(item, event.target.checked)}
+              aria-label={`Select ${selectionLabel}`}
+              className="size-4 accent-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+            />
+          )}
         </TableCell>
       )}
       {desktopColumns.map((column) => (
@@ -108,11 +117,11 @@ function CrudTableRow<T>({
           {column.render(item)}
         </TableCell>
       ))}
-      {actions && (
+      {rowActions.length > 0 && (
         <TableCell className="px-4 py-3">
           <OperatorActionCell>
             <OperatorActionsMenu
-              actions={actions(item)}
+              actions={rowActions}
               label={actionLabel?.(item) ?? "Row actions"}
             />
           </OperatorActionCell>
@@ -137,6 +146,7 @@ export function crudMobileCardPropsEqual<T>(
     previous.mobileColumns === next.mobileColumns &&
     previous.actions === next.actions &&
     previous.actionLabel === next.actionLabel &&
+    previous.selectionEnabled === next.selectionEnabled &&
     previous.selectionLabel === next.selectionLabel &&
     previous.selected === next.selected &&
     previous.onToggle === next.onToggle
@@ -148,13 +158,15 @@ function CrudMobileCard<T>({
   mobileColumns,
   actions,
   actionLabel,
+  selectionEnabled,
   selectionLabel,
   selected,
   onToggle,
 }: CrudMobileCardProps<T>) {
+  const rowActions = actions?.(item) ?? [];
   return (
     <article className="min-w-0 rounded-md border border-slate-200 bg-white px-4 py-4">
-      {selectionLabel !== null && (
+      {selectionEnabled && selectionLabel !== null && (
         <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
           <input
             type="checkbox"
@@ -184,13 +196,10 @@ function CrudMobileCard<T>({
           </div>
         ))}
       </dl>
-      {actions && (
+      {rowActions.length > 0 && (
         <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
           <span className="text-xs font-medium text-slate-500">Actions</span>
-          <OperatorActionsMenu
-            actions={actions(item)}
-            label={actionLabel?.(item) ?? "Row actions"}
-          />
+          <OperatorActionsMenu actions={rowActions} label={actionLabel?.(item) ?? "Row actions"} />
         </div>
       )}
     </article>
@@ -234,10 +243,12 @@ export function CrudTable<T>({
         .sort((left, right) => Number(Boolean(right.primary)) - Number(Boolean(left.primary))),
     [columns],
   );
+  const canSelectItem = selection?.canSelectItem ?? (() => true);
+  const selectableItems = selection ? items.filter(canSelectItem) : [];
   const visibleSelectedItems =
-    selectedItems ?? items.filter((item) => selection?.selectedKeys.has(getRowKey(item)));
+    selectedItems ?? selectableItems.filter((item) => selection?.selectedKeys.has(getRowKey(item)));
   const { allSelected: allVisibleSelected, indeterminate: someVisibleSelected } =
-    visibleSelectionState(items.length, visibleSelectedItems.length);
+    visibleSelectionState(selectableItems.length, visibleSelectedItems.length);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const selectionRef = useRef(selection);
   useEffect(() => {
@@ -251,6 +262,7 @@ export function CrudTable<T>({
     (item: T, checked: boolean) => {
       const currentSelection = selectionRef.current;
       if (!currentSelection) return;
+      if (currentSelection.canSelectItem && !currentSelection.canSelectItem(item)) return;
       const key = getRowKey(item);
       const keys = new Set(currentSelection.selectedKeys);
       if (checked) keys.add(key);
@@ -262,7 +274,9 @@ export function CrudTable<T>({
 
   function toggleVisible(checked: boolean) {
     if (!selection) return;
-    selection.onChange(visibleSelection(items, getRowKey, selection.selectedKeys, checked));
+    selection.onChange(
+      visibleSelection(items, getRowKey, selection.selectedKeys, checked, selection.canSelectItem),
+    );
   }
 
   return (
@@ -311,7 +325,10 @@ export function CrudTable<T>({
                   desktopColumns={desktopColumns}
                   actions={actions}
                   actionLabel={actionLabel}
-                  selectionLabel={selection?.labelForItem(item) ?? null}
+                  selectionEnabled={Boolean(selection)}
+                  selectionLabel={
+                    selection && canSelectItem(item) ? selection.labelForItem(item) : null
+                  }
                   selected={selection?.selectedKeys.has(getRowKey(item)) ?? false}
                   onToggle={toggleRow}
                 />
@@ -329,7 +346,8 @@ export function CrudTable<T>({
             mobileColumns={mobileColumns}
             actions={actions}
             actionLabel={actionLabel}
-            selectionLabel={selection?.labelForItem(item) ?? null}
+            selectionEnabled={Boolean(selection)}
+            selectionLabel={selection && canSelectItem(item) ? selection.labelForItem(item) : null}
             selected={selection?.selectedKeys.has(getRowKey(item)) ?? false}
             onToggle={toggleRow}
           />

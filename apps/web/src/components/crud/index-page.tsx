@@ -92,7 +92,10 @@ export function CrudIndex<T>({
   emptyAction?: ReactNode;
   empty?: ReactNode;
   pagination?: CrudPagination;
-  selection?: { labelForItem: (item: T) => string };
+  selection?: {
+    labelForItem: (item: T) => string;
+    canSelectItem?: (item: T) => boolean;
+  };
   bulkActions?:
     readonly CrudBulkAction<T>[] | ((selectedItems: readonly T[]) => readonly CrudBulkAction<T>[]);
   sectionTitle?: string;
@@ -101,7 +104,9 @@ export function CrudIndex<T>({
   const collectionInitialized = initialized ?? !loading;
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const clearSelection = () => setSelectedKeys(new Set());
-  const selectedItems = items.filter((item) => selectedKeys.has(getRowKey(item)));
+  const selectedItems = items.filter(
+    (item) => (selection?.canSelectItem?.(item) ?? true) && selectedKeys.has(getRowKey(item)),
+  );
   async function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
     const completed = await onFiltersSubmit?.(event);
     if (crudFilterAppliedSuccessfully(completed)) clearSelection();
@@ -140,7 +145,12 @@ export function CrudIndex<T>({
         selectedItems={selectedItems}
         selection={
           selection
-            ? { selectedKeys, onChange: setSelectedKeys, labelForItem: selection.labelForItem }
+            ? {
+                selectedKeys,
+                onChange: setSelectedKeys,
+                labelForItem: selection.labelForItem,
+                canSelectItem: selection.canSelectItem,
+              }
             : undefined
         }
         footer={

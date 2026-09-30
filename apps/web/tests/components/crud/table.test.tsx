@@ -91,6 +91,39 @@ describe("shared CRUD table", () => {
     expect(visibleSelection(visible, (row) => row.id, selectAll, false).size).toBe(0);
   });
 
+  it("omits ineligible rows from row selection, select-visible, and row-action controls", () => {
+    const items = [
+      { id: "active", name: "Active key", state: "active" },
+      { id: "deleted", name: "Deleted key", state: "deleted" },
+    ];
+    const selectable = (item: (typeof items)[number]) => item.state !== "deleted";
+    const selected = visibleSelection(items, (item) => item.id, new Set(), true, selectable);
+    expect(selected).toEqual(new Set(["active"]));
+
+    const html = renderToStaticMarkup(
+      <CrudTable
+        items={items}
+        columns={[{ key: "name", label: "Name", render: (item) => item.name }]}
+        getRowKey={(item) => item.id}
+        selection={{
+          selectedKeys: selected,
+          onChange: () => {},
+          labelForItem: (item) => item.name,
+          canSelectItem: selectable,
+        }}
+        actions={(item) =>
+          selectable(item) ? [{ type: "link", label: "Edit", href: "/edit" }] : []
+        }
+      />,
+    );
+    expect(html).toContain('aria-label="Select Active key"');
+    expect(html).not.toContain('aria-label="Select Deleted key"');
+    expect(html).toMatch(/<td class="[^\"]*w-12 px-4 py-3"><\/td><td[^>]*>Deleted key<\/td>/);
+    expect(html).toContain('aria-label="Row actions"');
+    expect(html.match(/aria-label="Row actions"/g)).toHaveLength(2);
+    expect(html).not.toContain('aria-label="Actions for deleted"');
+  });
+
   it("keeps select-all unchecked, indeterminate, or checked from the visible selection count", () => {
     expect(visibleSelectionState(3, 0)).toEqual({ allSelected: false, indeterminate: false });
     expect(visibleSelectionState(3, 1)).toEqual({ allSelected: false, indeterminate: true });
@@ -109,6 +142,7 @@ describe("shared CRUD table", () => {
       item,
       desktopColumns: columns,
       getRowKey,
+      selectionEnabled: true,
       selectionLabel: "Ada",
       selected: false,
       onToggle,

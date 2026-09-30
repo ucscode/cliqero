@@ -31,6 +31,7 @@ function routes(principal: any = sessionPrincipal) {
     getForSession: vi.fn(),
     updateForSession: vi.fn(),
     revokeForSession: vi.fn(),
+    bulkDeleteForOperator: vi.fn(async () => ({ succeeded: [], failed: [] })),
   };
   return {
     handler: new InternalApiKeyManagementRoutes(
@@ -150,6 +151,45 @@ describe("internal API-key management boundary", () => {
     expect(limiter.allow("account-b")).toBe(true);
     now += 1_000;
     expect(limiter.allow("account-a")).toBe(true);
+  });
+
+  it("accepts one same-origin bulk-delete request and delegates IDs once to the service", async () => {
+    const boundary = routes();
+    boundary.operatorApiKeys.bulkDeleteForOperator.mockResolvedValue({
+      succeeded: ["key-1"],
+      failed: [{ id: "key-2", message: "API key not found." }],
+    });
+    const response = await boundary.handler.bulkDelete(
+      request("/internal/api-keys/actions/delete", {
+        method: "POST",
+        headers: { origin: "https://cliqero.test", "content-type": "application/json" },
+        body: JSON.stringify({ ids: ["00000000-0000-4000-8000-000000000001"] }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      succeeded: ["key-1"],
+      failed: [{ id: "key-2", message: "API key not found." }],
+    });
+    expect(boundary.operatorApiKeys.bulkDeleteForOperator).toHaveBeenCalledOnce();
+    expect(boundary.operatorApiKeys.bulkDeleteForOperator).toHaveBeenCalledWith(
+      sessionPrincipal.accountId,
+      ["00000000-0000-4000-8000-000000000001"],
+    );
+  });
+
+  it("rejects cross-origin bulk delete before resolving the session", async () => {
+    const boundary = routes();
+    const response = await boundary.handler.bulkDelete(
+      request("/internal/api-keys/actions/delete", {
+        method: "POST",
+        headers: { origin: "https://attacker.test", "content-type": "application/json" },
+        body: JSON.stringify({ ids: ["00000000-0000-4000-8000-000000000001"] }),
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(boundary.resolve).not.toHaveBeenCalled();
+    expect(boundary.operatorApiKeys.bulkDeleteForOperator).not.toHaveBeenCalled();
   });
 
   it("keeps API-key administration out of the external API scope registry", () => {
