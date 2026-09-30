@@ -54,6 +54,9 @@ describe("storefront listing-page request state", () => {
 
   it("lets only the latest catalogue request update state and preserves cursor URL state", () => {
     expect(catalogueSource).toContain('<Button type="submit" variant="action">');
+    expect(catalogueSource).toContain('id="catalogue-search"');
+    expect(catalogueSource).toContain('type="search"');
+    expect(catalogueSource).toContain("onChange={(event) => setDraft(event.target.value)}");
     expect(catalogueSource).toContain("let active = true");
     expect(catalogueSource).toContain("if (active) setRequest(listingPageRequestSucceeded");
     expect(catalogueSource).toContain("if (active)");

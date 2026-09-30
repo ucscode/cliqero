@@ -111,6 +111,7 @@ export function OperatorWithdrawalList() {
           >
             <Input
               id="withdrawal-search"
+              type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="ID, username, email, reference"

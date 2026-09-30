@@ -151,6 +151,7 @@ export function OperatorFundingList() {
           <OperatorFilterField label="Funding, reference, or account" htmlFor="funding-search">
             <Input
               id="funding-search"
+              type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Funding ID, reference, username, email"
@@ -173,6 +174,7 @@ export function OperatorFundingList() {
           <OperatorFilterField label="Provider" htmlFor="funding-provider">
             <Input
               id="funding-provider"
+              type="search"
               value={provider}
               onChange={(event) => setProvider(event.target.value)}
               placeholder="Provider name"

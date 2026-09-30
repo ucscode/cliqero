@@ -81,6 +81,7 @@ export function OperatorDistributionList() {
         <OperatorFilterField label="Search distributions" htmlFor="distribution-search">
           <Input
             id="distribution-search"
+            type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Distribution, purchase, buyer, or listing"

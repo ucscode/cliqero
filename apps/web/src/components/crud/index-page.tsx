@@ -136,6 +136,7 @@ export function CrudIndex<T>({
         getRowKey={getRowKey}
         actions={actions}
         actionLabel={actionLabel}
+        selectedItems={selectedItems}
         selection={
           selection
             ? { selectedKeys, onChange: setSelectedKeys, labelForItem: selection.labelForItem }

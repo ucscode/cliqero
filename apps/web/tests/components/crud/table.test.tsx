@@ -1,6 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CrudTable, type CrudColumn, visibleSelection } from "@/components/crud/table";
+import {
+  crudTableRowPropsEqual,
+  CrudTable,
+  type CrudColumn,
+  visibleSelection,
+  visibleSelectionState,
+} from "@/components/crud/table";
 
 describe("shared CRUD table", () => {
   it("renders desktop semantic columns and mobile record fields from the same definitions", () => {
@@ -83,6 +89,34 @@ describe("shared CRUD table", () => {
     expect(selectAll.size).toBe(37);
     expect([...selectAll]).toEqual(visible.map((row) => row.id));
     expect(visibleSelection(visible, (row) => row.id, selectAll, false).size).toBe(0);
+  });
+
+  it("keeps select-all unchecked, indeterminate, or checked from the visible selection count", () => {
+    expect(visibleSelectionState(3, 0)).toEqual({ allSelected: false, indeterminate: false });
+    expect(visibleSelectionState(3, 1)).toEqual({ allSelected: false, indeterminate: true });
+    expect(visibleSelectionState(3, 3)).toEqual({ allSelected: true, indeterminate: false });
+    expect(visibleSelectionState(0, 0)).toEqual({ allSelected: false, indeterminate: false });
+  });
+
+  it("memoizes unaffected rows while rerendering the row whose selection changed", () => {
+    const item = { id: "r-1", name: "Ada" };
+    const columns: readonly CrudColumn<typeof item>[] = [
+      { key: "name", label: "Name", render: (record) => record.name },
+    ];
+    const getRowKey = (record: typeof item) => record.id;
+    const onToggle = () => {};
+    const base = {
+      item,
+      desktopColumns: columns,
+      getRowKey,
+      selectionLabel: "Ada",
+      selected: false,
+      onToggle,
+    };
+
+    expect(crudTableRowPropsEqual(base, { ...base })).toBe(true);
+    expect(crudTableRowPropsEqual(base, { ...base, selected: true })).toBe(false);
+    expect(crudTableRowPropsEqual(base, { ...base, item: { id: "r-1", name: "Ada" } })).toBe(false);
   });
 
   it("does not render selection controls when the resource has no bulk actions", () => {

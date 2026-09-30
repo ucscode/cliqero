@@ -300,6 +300,7 @@ export function OperatorCatalogueList() {
           <OperatorFilterField label="Search" htmlFor="catalogue-search">
             <Input
               id="catalogue-search"
+              type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Title or description"

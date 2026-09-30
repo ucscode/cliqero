@@ -116,6 +116,7 @@ export function OperatorEarningsList() {
           <OperatorFilterField label="Search account or entry" htmlFor="earnings-search">
             <Input
               id="earnings-search"
+              type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Username, email, purchase, entry"

@@ -79,6 +79,7 @@ describe("operator users list", () => {
     expect(html).toContain('<form aria-label="Operator filters"');
     expect(html).toContain('for="operator-user-search"');
     expect(html).toContain('id="operator-user-search"');
+    expect(html).toContain('type="search"');
     expect(html).toContain('placeholder="Username, email, or account ID"');
     expect(html).toContain(">Search</button>");
   });
@@ -124,6 +125,18 @@ describe("operator users list", () => {
     expect(laterPage).toContain(">Previous</button>");
     expect(laterPage).toMatch(/<button[^>]*disabled=""[^>]*>Next<\/button>/);
     expect(laterPage).not.toMatch(/<button[^>]*disabled=""[^>]*>Previous<\/button>/);
+  });
+
+  it("keeps one-page pagination visible with both directions disabled", () => {
+    const html = renderUsers({
+      page: { items: page.items, nextCursor: null },
+      hasPrevious: false,
+    });
+
+    expect(html).toContain('aria-label="Operator result pages"');
+    expect(html).toContain("Showing 2 users");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Previous<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Next<\/button>/);
   });
 
   it("keeps email editable only for creation and excludes credentials and immutable fields", () => {

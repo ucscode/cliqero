@@ -130,6 +130,7 @@ export function OperatorBlogList() {
           <OperatorFilterField label="Search" htmlFor="blog-search">
             <Input
               id="blog-search"
+              type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Title, excerpt, or slug"

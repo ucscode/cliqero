@@ -145,6 +145,7 @@ export function OperatorNetwork() {
         <OperatorFilterField label="Find an account" htmlFor="operator-network-search">
           <Input
             id="operator-network-search"
+            type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Username, email, or account ID"

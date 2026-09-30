@@ -63,14 +63,22 @@ describe("operator UI composition components", () => {
     );
 
     expect(html).toContain("bg-emerald-700");
-    expect(html).toContain("bg-violet-800");
-    expect(html).toContain("focus-visible:ring-violet-700");
+    expect(html).toContain("bg-sky-700");
+    expect(html).toContain("hover:bg-sky-800");
+    expect(html).toContain("focus-visible:ring-sky-600");
     expect(html).not.toContain("bg-blue-700");
+    expect(html).not.toContain("bg-violet-800");
     expect(html).toContain("bg-rose-800");
     expect(html).toContain("border-transparent bg-rose-800 text-white");
     expect(html).toContain("border border-slate-200 bg-white");
     expect(html).toContain("px-5 py-2.5");
     expect(html).toContain("text-xs leading-4");
+    expect(html).toContain("focus-visible:ring-offset-2");
+    expect(html).toContain("focus-visible:ring-emerald-600");
+    expect(html).toContain("focus-visible:ring-slate-500");
+    expect(html).not.toMatch(
+      /focus-visible:ring-2[^\"]*focus-visible:ring-emerald-600[^\"]*focus-visible:ring-sky-600/,
+    );
   });
 
   it("gives shared white Operator sections deliberate inner padding", () => {

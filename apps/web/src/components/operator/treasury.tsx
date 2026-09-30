@@ -270,6 +270,7 @@ export function OperatorTreasuryPage() {
           <OperatorFilterField label="Search" htmlFor="treasury-search">
             <Input
               id="treasury-search"
+              type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Title, note, source ID"

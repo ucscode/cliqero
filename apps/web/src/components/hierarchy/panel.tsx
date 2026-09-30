@@ -221,7 +221,7 @@ export function HierarchyPanel() {
         <div className="flex items-start gap-2">
           <Input
             id="hierarchy-search"
-            type="text"
+            type="search"
             maxLength={100}
             required
             aria-busy={searchLoading}

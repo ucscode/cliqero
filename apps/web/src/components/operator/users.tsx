@@ -306,6 +306,7 @@ export function OperatorUsersListView({
           <Input
             id="operator-user-search"
             name="search"
+            type="search"
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Username, email, or account ID"
@@ -357,7 +358,7 @@ export function OperatorUsersListView({
       emptyTitle="No users found"
       emptyDescription={operatorUsersEmptyDescription(appliedSearch)}
       pagination={
-        page && (page.nextCursor || hasPrevious)
+        page
           ? {
               hasPrevious,
               hasNext: Boolean(page.nextCursor),
@@ -734,6 +735,7 @@ export function OperatorUserDetail({
                   Find new parent
                   <Input
                     value={parentSearch}
+                    type="search"
                     onChange={(event) => setParentSearch(event.target.value)}
                     placeholder="Username, email, or account ID"
                   />

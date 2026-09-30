@@ -125,6 +125,7 @@ export function Storefront({ reviewsVisible }: { reviewsVisible: boolean }) {
           </label>
           <Input
             id="catalogue-search"
+            type="search"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Search listings"
