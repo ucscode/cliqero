@@ -133,3 +133,31 @@ export async function PATCH(
     return apiError(error);
   }
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ listingId: string }> },
+) {
+  const principal = await authenticatedPrincipal(request);
+  const denied = apiAuthorizer.authorize(
+    principal,
+    { mode: "account", capability: "catalogue.manage", scope: "catalogue:manage" },
+    request.headers.has("authorization"),
+  );
+  if (denied)
+    return Response.json(
+      { error: denied === "unauthorized" ? "Unauthorized" : "Forbidden" },
+      { status: denied === "unauthorized" ? 401 : 403 },
+    );
+  const account = await authenticatedAccount(request);
+  if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const listingId = (await params).listingId;
+  if (!z.uuid().safeParse(listingId).success)
+    return Response.json({ error: "Listing not found" }, { status: 404 });
+  try {
+    await getContainer().listingService.deleteCatalogue(account, listingId);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    return apiError(error, request);
+  }
+}

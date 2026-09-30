@@ -28,6 +28,7 @@ interface ListingRow {
   state: ListingState;
   external_key: string | null;
   featured_position: number | null;
+  deleted_at?: Date | null;
   categories: ListingCategorySummary[] | string;
   rating_average?: string | null;
   rating_count?: string;
@@ -41,14 +42,17 @@ export class PostgresListingRepository implements ListingRepository {
   ) {}
   async findById(id: string): Promise<Listing | null> {
     const row = (
-      await this.sql.query<ListingRow>(`${this.selectListings()} where l.uuid = $1`, [id])
+      await this.sql.query<ListingRow>(
+        `${this.selectListings()} where l.uuid = $1 and l.deleted_at is null`,
+        [id],
+      )
     ).rows[0];
     return row ? this.restore(row) : null;
   }
   async findByExternalKey(sellerId: string, key: string) {
     const row = (
       await this.sql.query<ListingRow>(
-        `${this.selectListings()} where l.seller_id=(select id from identity_capability.accounts where uuid=$1) and l.external_key=$2`,
+        `${this.selectListings()} where l.deleted_at is null and l.seller_id=(select id from identity_capability.accounts where uuid=$1) and l.external_key=$2`,
         [sellerId, key],
       )
     ).rows[0];
@@ -67,7 +71,7 @@ export class PostgresListingRepository implements ListingRepository {
     limit: number;
   }) {
     const values: unknown[] = [];
-    const where: string[] = [];
+    const where: string[] = ["l.deleted_at is null"];
     const add = (value: unknown) => {
       values.push(value);
       return `$${values.length}`;
@@ -196,6 +200,14 @@ export class PostgresListingRepository implements ListingRepository {
     if (this.uow) await this.uow.transaction(persist);
     else await persist();
   }
+  async delete(id: string): Promise<boolean> {
+    const result = await this.sql.query(
+      `update listing_capability.listings set deleted_at=now(),updated_at=now()
+       where uuid=$1 and deleted_at is null`,
+      [id],
+    );
+    return (result.rowCount ?? 0) === 1;
+  }
   private restore(row: ListingRow) {
     return Listing.restore({
       id: row.id,
@@ -221,7 +233,7 @@ export class PostgresListingRepository implements ListingRepository {
   private selectListings(includeRating = false) {
     return `select l.uuid as id,seller.uuid as seller_id,l.seller_id as seller_pk,l.title,lower(l.title) as lower_title,l.created_at,l.price_minor,l.featured_position,l.short_description,l.long_description,
       l.price_currency,l.compare_at_price_minor,l.visibility,l.destination_url,l.metadata,l.state,
-      l.external_key,coalesce(category_data.categories,'[]'::json) as categories
+      l.external_key,l.deleted_at,coalesce(category_data.categories,'[]'::json) as categories
       ${includeRating ? ",review_summary.average_rating as rating_average,coalesce(review_summary.approved_count,0) as rating_count,(review_summary.listing_id is not null) as has_rating" : ""}
       from listing_capability.listings l
       join identity_capability.accounts seller on seller.id=l.seller_id

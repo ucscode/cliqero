@@ -10,7 +10,7 @@ import { Input } from "../../ui/input";
 import { Select } from "../../ui/select";
 import { Label } from "../../ui/label";
 import { Textarea } from "../../ui/textarea";
-import { TagSelect } from "../../ui/tag-select";
+import { MultiSelect } from "../../ui/multi-select";
 import type { BlogPost, BlogCategory } from "@/modules/blog/domain/blog";
 import { HoneypotField } from "../../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
@@ -440,8 +440,9 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="blog-categories">Categories</Label>
-            <TagSelect
+            <MultiSelect
               label="Categories"
+              inputId="blog-categories"
               options={categories.map((category) => ({ value: category.id, label: category.name }))}
               value={categoryIds}
               onChange={setCategoryIds}

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { apiFetch, type ListingReview } from "@/lib/api-client";
 import { Select } from "../ui/select";
+import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
 import { OperatorFilterField } from "./ui/toolbar";
@@ -16,8 +18,12 @@ import { OperatorErrorState } from "./ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { useToast } from "../toast/provider";
 import { CrudSortSelect } from "@/components/crud/sort-select";
+import { CrudEdit } from "@/components/crud/edit";
+import { Label } from "../ui/label";
+import { Textarea } from "../ui/textarea";
 
 type Review = ListingReview & { reviewer?: string; listing_title?: string };
+type OperatorReviewDetail = Review & { moderated_by?: string | null };
 type ReviewPage = { items: Review[]; next_cursor: string | null };
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Review queue is temporarily unavailable.";
@@ -31,41 +37,199 @@ export function reviewQueueBulkActions<T extends { status: string }>(
     : [];
 }
 
+export function OperatorReviewEditor({ reviewId }: { reviewId: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [review, setReview] = useState<OperatorReviewDetail | null>(null);
+  const [rating, setRating] = useState("5");
+  const [body, setBody] = useState("");
+  const [status, setStatus] = useState<Review["status"]>("pending");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void apiFetch<{ item: OperatorReviewDetail }>(`/api/reviews/${reviewId}`)
+      .then(({ item }) => {
+        setReview(item);
+        setRating(String(item.rating));
+        setBody(item.body);
+        setStatus(item.status);
+      })
+      .catch((cause) => setError(errorMessage(cause)))
+      .finally(() => setLoading(false));
+  }, [reviewId]);
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await apiFetch<{ item: OperatorReviewDetail }>(`/api/reviews/${reviewId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rating: Number(rating), body, status }),
+      });
+      setReview(result.item);
+      toast.success("Review saved.");
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    if (
+      !window.confirm(
+        "Delete this review? It will be removed from customer reviews and rating totals.",
+      )
+    )
+      return;
+    setSaving(true);
+    try {
+      await apiFetch(`/api/reviews/${reviewId}`, { method: "DELETE" });
+      toast.success("Review deleted.");
+      router.push("/operator/reviews");
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <CrudEdit
+      mode="edit"
+      eyebrow="Customer feedback"
+      title="Edit review"
+      description="Review the listing and reviewer context, then update only the rating, content, or moderation status."
+      backHref="/operator/reviews"
+      backLabel="Back to reviews"
+      saving={saving}
+      loading={loading}
+      error={error}
+      onSubmit={save}
+      formId="operator-review-form"
+      submitLabel="Save changes"
+      savingLabel="Saving…"
+      sectionTitle="Review details"
+      sectionDescription="Submitted content and moderation history remain attached to the original reviewer and listing."
+      footer={
+        review ? (
+          <div className="text-xs leading-5 text-slate-500">
+            Updated {new Date(review.updated_at).toLocaleString()}
+            {review.moderated_at
+              ? ` · Moderated ${new Date(review.moderated_at).toLocaleString()}`
+              : ""}
+          </div>
+        ) : null
+      }
+      headerActions={
+        <Button type="button" variant="destructive" onClick={() => void remove()} disabled={saving}>
+          Delete review
+        </Button>
+      }
+    >
+      {review && (
+        <div className="grid gap-2 rounded-md bg-slate-50 p-4 text-sm">
+          <p>
+            <strong>Listing:</strong> {review.listing_title}{" "}
+            <span className="text-slate-500">({review.listing_id})</span>
+          </p>
+          <p>
+            <strong>Reviewer:</strong> {review.reviewer ?? "Customer"}
+          </p>
+          <p>
+            <strong>Submitted:</strong> {new Date(review.created_at).toLocaleString()}
+          </p>
+        </div>
+      )}
+      <div className="grid gap-2">
+        <Label htmlFor="review-rating">Rating</Label>
+        <Select
+          id="review-rating"
+          value={rating}
+          onChange={(event) => setRating(event.target.value)}
+        >
+          {[1, 2, 3, 4, 5].map((value) => (
+            <option key={value} value={value}>
+              {value} / 5
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="review-body">Review body</Label>
+        <Textarea
+          id="review-body"
+          rows={12}
+          maxLength={2000}
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+        />
+        <p className="text-xs leading-5 text-slate-500">Up to 2,000 characters.</p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="review-status">Status</Label>
+        <Select
+          id="review-status"
+          value={status}
+          onChange={(event) => setStatus(event.target.value as Review["status"])}
+        >
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </Select>
+      </div>
+    </CrudEdit>
+  );
+}
+
 export function reviewQueueQuery(
   status: string,
   cursor: string | null,
   pageSize: number,
   sort = "submitted",
   direction = "desc",
+  listingId = "",
 ) {
   const params = new URLSearchParams({ limit: String(pageSize) });
   params.set("sort", sort);
   params.set("direction", direction);
   if (status !== "all") params.set("status", status);
+  if (listingId.trim()) params.set("listing_id", listingId.trim());
   if (cursor) params.set("cursor", cursor);
   return params;
 }
 
-export function OperatorReviews() {
+export function OperatorReviews({ initialListingId = "" }: { initialListingId?: string }) {
   const toast = useToast();
   const [status, setStatus] = useState("all");
+  const [listingId, setListingId] = useState(initialListingId);
+  const [appliedListingId, setAppliedListingId] = useState(initialListingId);
   const [sortChoice, setSortChoice] = useState("submitted:desc");
   const [sort, direction] = sortChoice.split(":") as ["submitted" | "rating", "asc" | "desc"];
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(
-    async (filters: { status: string; sort: string; direction: string }, cursor, pageSize) => {
+    async (
+      filters: { status: string; sort: string; direction: string; listingId: string },
+      cursor,
+      pageSize,
+    ) => {
       const params = reviewQueueQuery(
         filters.status,
         cursor,
         pageSize,
         filters.sort,
         filters.direction,
+        filters.listingId,
       );
       const result = await apiFetch<ReviewPage>(`/api/reviews?${params}`);
       return { items: result.items, nextCursor: result.next_cursor };
     },
-    { status: "all", sort: "submitted", direction: "desc" },
+    { status: "all", sort: "submitted", direction: "desc", listingId: initialListingId },
   );
 
   async function moderate(id: string, action: "approve" | "reject") {
@@ -147,7 +311,11 @@ export function OperatorReviews() {
     {
       key: "review",
       label: "Review",
-      render: (review) => <span className="whitespace-pre-wrap">{review.body || "—"}</span>,
+      render: (review) => (
+        <div className="line-clamp-3 max-w-[20rem] break-words whitespace-pre-wrap">
+          {review.body || "—"}
+        </div>
+      ),
     },
     {
       key: "status",
@@ -167,18 +335,29 @@ export function OperatorReviews() {
       title="Reviews"
       description="Moderate submitted listing reviews. Decisions remain protected by the review moderation capability."
       filters={
-        <OperatorFilterField label="Status" htmlFor="review-status">
-          <Select
-            id="review-status"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-          >
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </Select>
-        </OperatorFilterField>
+        <>
+          <OperatorFilterField label="Status" htmlFor="review-status">
+            <Select
+              id="review-status"
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </Select>
+          </OperatorFilterField>
+          <OperatorFilterField label="Listing ID" htmlFor="review-listing-id">
+            <Input
+              id="review-listing-id"
+              type="search"
+              value={listingId}
+              onChange={(event) => setListingId(event.target.value)}
+              placeholder="Filter by listing ID"
+            />
+          </OperatorFilterField>
+        </>
       }
       sort={
         <CrudSortSelect
@@ -193,18 +372,33 @@ export function OperatorReviews() {
         />
       }
       onFiltersReset={async () => {
-        const ok = await collection.apply({ status: "all", sort: "submitted", direction: "desc" });
+        const ok = await collection.apply({
+          status: "all",
+          sort: "submitted",
+          direction: "desc",
+          listingId: "",
+        });
         if (ok) {
           setStatus("all");
+          setListingId("");
+          setAppliedListingId("");
           setSortChoice("submitted:desc");
         }
         return ok;
       }}
-      filtersDirty={status !== "all" || sortChoice !== "submitted:desc"}
+      filtersDirty={
+        status !== "all" || listingId !== appliedListingId || sortChoice !== "submitted:desc"
+      }
       onFiltersSubmit={async (event) => {
         event.preventDefault();
         const requestedStatus = status;
-        const applied = await collection.apply({ status: requestedStatus, sort, direction });
+        const applied = await collection.apply({
+          status: requestedStatus,
+          sort,
+          direction,
+          listingId,
+        });
+        if (applied) setAppliedListingId(listingId.trim());
         return applied;
       }}
       toolbarActions={
@@ -217,34 +411,24 @@ export function OperatorReviews() {
       getRowKey={(review) => review.id}
       selection={{ labelForItem: (review) => `review by ${review.reviewer ?? "customer"}` }}
       bulkActions={(selected) => reviewQueueBulkActions(selected, bulkActions)}
-      actions={(review) =>
-        review.status === "pending"
+      actions={(review) => [
+        { type: "link" as const, label: "Edit review", href: `/operator/reviews/${review.id}` },
+        ...(review.status === "pending"
           ? [
               {
-                type: "link",
-                label: "View listing",
-                href: `/operator/catalogue/${review.listing_id}`,
-              },
-              {
-                type: "action",
+                type: "action" as const,
                 label: "Approve",
                 onSelect: () => void moderate(review.id, "approve"),
               },
               {
-                type: "action",
+                type: "action" as const,
                 label: "Reject",
                 destructive: true,
                 onSelect: () => void moderate(review.id, "reject"),
               },
             ]
-          : [
-              {
-                type: "link",
-                label: "View listing",
-                href: `/operator/catalogue/${review.listing_id}`,
-              },
-            ]
-      }
+          : []),
+      ]}
       actionLabel={(review) => `Actions for review ${review.id}`}
       loading={collection.loading}
       beforeTable={

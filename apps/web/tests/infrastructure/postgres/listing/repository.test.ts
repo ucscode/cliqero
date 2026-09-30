@@ -44,7 +44,7 @@ describe("PostgresListingRepository descriptions", () => {
     await repository.findByExternalKey("seller-uuid", "shared-key");
 
     expect(query?.sql).toContain(
-      "where l.seller_id=(select id from identity_capability.accounts where uuid=$1) and l.external_key=$2",
+      "where l.deleted_at is null and l.seller_id=(select id from identity_capability.accounts where uuid=$1) and l.external_key=$2",
     );
     expect(query?.values).toEqual(["seller-uuid", "shared-key"]);
     expect(repository).not.toHaveProperty("findAnyByExternalKey");

@@ -6,6 +6,7 @@ import type { Checkout, CheckoutRepository } from "@/modules/checkout/checkout";
 import { Purchase, type PurchaseRepository } from "@/modules/purchase/purchase";
 import type { PurchaseAttributionResolver } from "@/modules/referral/attribution";
 import type { WalletRepository, WalletSummary } from "@/modules/wallet/wallet";
+import type { EventOutbox } from "@/kernel/events";
 
 export class WalletCheckoutService {
   constructor(
@@ -80,6 +81,7 @@ export class WalletCheckoutPaymentService {
     private wallet: WalletRepository,
     private purchases: PurchaseRepository,
     private uow: UnitOfWork,
+    private outbox: EventOutbox,
   ) {}
 
   async pay(input: { buyerId: string; checkoutId: string }): Promise<WalletCheckoutPaymentResult> {
@@ -96,7 +98,22 @@ export class WalletCheckoutPaymentService {
           checkout.state = "paid";
           checkout.paidAt = new Date();
           await this.checkouts.save(checkout);
-          await this.markPurchasePaid(checkout.purchaseId);
+          const purchase = await this.purchases.findById(checkout.purchaseId, { forUpdate: true });
+          if (!purchase) throw new Error("Purchase not found");
+          purchase.markPaid();
+          purchase.complete();
+          await this.purchases.save(purchase);
+          const occurredAt = new Date();
+          await this.outbox.append([
+            {
+              id: newId(),
+              name: "purchase.completed",
+              aggregateId: purchase.id,
+              occurredAt,
+              correlationId: purchase.id,
+              payload: { free: true },
+            },
+          ]);
         }
         return {
           checkout,

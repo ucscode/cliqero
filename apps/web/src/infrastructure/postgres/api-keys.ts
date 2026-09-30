@@ -61,22 +61,31 @@ export class PostgresApiKeyRepository {
   async list(
     accountId?: string,
     order: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" } = {},
+    filters: { search?: string; state?: "active" | "expired" | "deleted" | "all" } = {},
   ) {
     const sort = order.sort ?? "created";
     const direction = order.direction ?? "desc";
     const orderBy =
       sort === "name" ? "lower(k.name)" : sort === "expires" ? "k.expires_at" : "k.created_at";
     const nullOrder = sort === "expires" ? "(k.expires_at is null) asc," : "";
+    const state = filters.state;
+    const search = filters.search?.trim();
     const rows = await this.sql.query<ApiKeyRecord>(
-      `select k.uuid as id,(select uuid from identity_capability.accounts where id=k.account_id) as "accountId",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt" from identity_capability.api_keys k where ($1::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$1)) order by ${nullOrder}${orderBy} ${direction} nulls last,k.id ${direction}`,
-      [accountId ?? null],
+      `select k.uuid as id,a.uuid as "accountId",a.username as "accountUsername",p.email as "accountEmail",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt"
+       from identity_capability.api_keys k join identity_capability.accounts a on a.id=k.account_id
+       left join identity_capability.account_profiles p on p.id=a.id
+       where ($1::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$1))
+         and ($2::text is null or (k.uuid::text||' '||k.name||' '||a.username||' '||coalesce(p.email,'')) ilike '%'||$2||'%')
+         and ($3::text is null or $3='all' or ($3='deleted' and k.revoked_at is not null) or ($3='expired' and k.revoked_at is null and k.expires_at<=now()) or ($3='active' and k.revoked_at is null and (k.expires_at is null or k.expires_at>now())))
+       order by ${nullOrder}${orderBy} ${direction} nulls last,k.id ${direction}`,
+      [accountId ?? null, search || null, state ?? null],
     );
     return rows.rows;
   }
   async findById(id: string, accountId?: string) {
     const result = await this.sql.query<ApiKeyRecord>(
-      `select k.uuid as id,(select uuid from identity_capability.accounts where id=k.account_id) as "accountId",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt"
-       from identity_capability.api_keys k
+      `select k.uuid as id,a.uuid as "accountId",a.username as "accountUsername",p.email as "accountEmail",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt"
+       from identity_capability.api_keys k join identity_capability.accounts a on a.id=k.account_id left join identity_capability.account_profiles p on p.id=a.id
        where k.uuid=$1 and ($2::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$2))`,
       [id, accountId ?? null],
     );
@@ -88,6 +97,14 @@ export class PostgresApiKeyRepository {
       [id, accountId ?? null],
     );
     return (result.rowCount ?? 0) > 0;
+  }
+  async update(id: string, input: { name: string; scopes: string[]; expiresAt: Date | null }) {
+    const result = await this.sql.query(
+      `update identity_capability.api_keys set name=$2,scopes=$3::jsonb,expires_at=$4
+       where uuid=$1 and revoked_at is null`,
+      [id, input.name, JSON.stringify(input.scopes), input.expiresAt],
+    );
+    return (result.rowCount ?? 0) === 1;
   }
 }
 export class ApiKeyService {
@@ -142,14 +159,18 @@ export class ApiKeyService {
   list(
     accountId?: string,
     order?: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" },
+    filters?: { search?: string; state?: "active" | "expired" | "deleted" | "all" },
   ) {
-    return this.repository.list(accountId, order);
+    return this.repository.list(accountId, order, filters);
   }
   revoke(id: string, accountId?: string) {
     return this.repository.revoke(id, accountId);
   }
   find(id: string, accountId?: string) {
     return this.repository.findById(id, accountId);
+  }
+  update(id: string, input: { name: string; scopes: string[]; expiresAt: Date | null }) {
+    return this.repository.update(id, input);
   }
 }
 function hash(secret: string) {

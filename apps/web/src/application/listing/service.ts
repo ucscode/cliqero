@@ -10,6 +10,7 @@ import type { ListingMediaService } from "@/application/listing/media";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { RatingSummary } from "@/modules/listing/reviews/review";
 import type { AuditRecorder } from "@/application/shared/audit";
+import { PublicApplicationError } from "@/kernel/errors";
 
 export class ListingService {
   constructor(
@@ -18,6 +19,7 @@ export class ListingService {
     private readonly auditRecorder?: AuditRecorder,
     private readonly uow?: UnitOfWork,
     private readonly categoryService?: ListingCategoryService,
+    private readonly integrationRevoker?: { revokeAllForListing(listingId: Id): Promise<void> },
   ) {}
   async create(
     seller: Account,
@@ -247,6 +249,28 @@ export class ListingService {
         state: listing.state,
       });
       return listing;
+    });
+  }
+  async deleteCatalogue(actor: Account, id: Id) {
+    return this.catalogueMutation(async () => {
+      const listing = await this.listings.findById(id);
+      if (!listing) throw new PublicApplicationError("Listing not found.", "not_found", 404);
+      const deleted = await this.listings.delete(id);
+      if (!deleted) throw new PublicApplicationError("Listing not found.", "not_found", 404);
+      await this.integrationRevoker?.revokeAllForListing(id);
+      await this.audit(
+        actor.id,
+        "listing.deleted",
+        id,
+        {
+          state: listing.state,
+          title: listing.title,
+          price_minor: listing.price.minorAmount.toString(),
+          currency: listing.price.currency,
+        },
+        { deleted: true },
+      );
+      return { id };
     });
   }
   async setCatalogueState(actor: Account, id: Id, state: "draft" | "published" | "archived") {

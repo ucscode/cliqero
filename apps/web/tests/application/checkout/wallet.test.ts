@@ -58,11 +58,13 @@ describe("WalletCheckoutPaymentService", () => {
       findDebitByCheckout: vi.fn(async () => null),
       createDebit: vi.fn(async () => undefined),
     } as unknown as WalletRepository;
+    const append = vi.fn(async () => undefined);
     const service = new WalletCheckoutPaymentService(
       checkoutRepository,
       walletRepository,
       purchaseRepository,
       { transaction: async (work) => work() } as UnitOfWork,
+      { append },
     );
 
     await expect(service.pay({ buyerId: newId(), checkoutId })).rejects.toThrow(
@@ -74,7 +76,7 @@ describe("WalletCheckoutPaymentService", () => {
       checkout: { state: "paid", amount: Money.of(0n, "USD") },
       shortfall: Money.of(0n, "USD"),
     });
-    expect(purchase.state).toBe("paid");
+    expect(purchase.state).toBe("completed");
     expect(walletRepository.lockAccount).not.toHaveBeenCalled();
     expect(walletRepository.createDebit).not.toHaveBeenCalled();
 
@@ -82,6 +84,8 @@ describe("WalletCheckoutPaymentService", () => {
     expect(checkoutRepository.save).toHaveBeenCalledOnce();
     expect(purchaseRepository.save).toHaveBeenCalledOnce();
     expect(walletRepository.createDebit).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledOnce();
+    expect(append).toHaveBeenCalledWith([expect.objectContaining({ name: "purchase.completed" })]);
   });
 
   it("does not pay a pending checkout when funding becomes available, then debits once on Pay now", async () => {
@@ -156,6 +160,7 @@ describe("WalletCheckoutPaymentService", () => {
       walletRepository,
       purchaseRepository,
       { transaction: async (work) => work() } as UnitOfWork,
+      { append: vi.fn(async () => undefined) },
     );
 
     const insufficient = await service.pay({ buyerId, checkoutId });

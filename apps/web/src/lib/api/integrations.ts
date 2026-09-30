@@ -11,8 +11,11 @@ export type IntegrationCredential = { id: string; credential: string };
 export type ApiKeyMetadata = {
   id: string;
   name: string;
-  key_prefix: string;
   scopes: string[];
+  account_id: string;
+  account_username: string;
+  account_email: string | null;
+  state: "active" | "expired" | "deleted";
   created_at: string;
   last_used_at: string | null;
   expires_at: string | null;
@@ -29,7 +32,10 @@ export type ApiKeyCreated = {
 };
 
 export type OperatorApiKeyCreated = ApiKeyCreated & {
-  key_prefix: string;
+  account_id: string;
+  account_username: string;
+  account_email: string | null;
+  state: "active" | "expired" | "deleted";
   created_at: string;
   expires_at: string | null;
 };

@@ -225,6 +225,7 @@ export interface ListingRepository {
     limit: number;
   }): Promise<{ items: readonly Listing[]; nextCursor: string | null }>;
   save(listing: Listing): Promise<void>;
+  delete(id: Id): Promise<boolean>;
 }
 
 function validateCompareAtPrice(price: Money, compareAtPrice: Money | null) {

@@ -1,6 +1,8 @@
 export interface ApiKeyRecord {
   id: string;
   accountId: string;
+  accountUsername?: string;
+  accountEmail?: string | null;
   name: string;
   keyPrefix: string;
   scopes: string[];
@@ -29,7 +31,12 @@ export interface ApiKeyManagementService {
   list(
     accountId?: string,
     order?: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" },
+    filters?: { search?: string; state?: "active" | "expired" | "deleted" | "all" },
   ): Promise<readonly ApiKeyRecord[]>;
   find(id: string, accountId?: string): Promise<ApiKeyRecord | null>;
   revoke(id: string, accountId?: string): Promise<boolean>;
+  update(
+    id: string,
+    input: { name: string; scopes: string[]; expiresAt: Date | null },
+  ): Promise<boolean>;
 }

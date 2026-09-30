@@ -1081,6 +1081,7 @@ CREATE TABLE listing_capability.listings (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     external_key text,
     featured_position integer,
+    deleted_at timestamp with time zone,
     id bigint NOT NULL,
     seller_id bigint NOT NULL,
     CONSTRAINT listings_currency_format CHECK ((price_currency ~ '^[A-Z]{3}$'::text)),

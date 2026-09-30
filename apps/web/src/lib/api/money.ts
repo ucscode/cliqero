@@ -43,13 +43,14 @@ export function formatExchangeRate(rate: string, currency: string): string {
   return `${normalized} ${whole.toLocaleString("en-US")}.${cents.toString().padStart(2, "0")}`;
 }
 
-export function parseUsdMinor(value: string): string {
+export function parseUsdMinor(value: string, options: { allowZero?: boolean } = {}): string {
   const normalized = value.trim().replace(/^\$/, "");
   if (!/^\d+(?:\.\d{0,2})?$/.test(normalized))
     throw new Error("Enter a USD amount with no more than two decimal places.");
   const [dollars, cents = ""] = normalized.split(".");
   const minor = BigInt(dollars) * 100n + BigInt(cents.padEnd(2, "0") || "0");
-  if (minor <= 0n) throw new Error("Enter an amount greater than zero.");
+  if (minor < 0n || (!options.allowZero && minor === 0n))
+    throw new Error("Enter an amount greater than zero.");
   return minor.toString();
 }
 

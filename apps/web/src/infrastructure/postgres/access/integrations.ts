@@ -178,6 +178,31 @@ export class PostgresIntegrationService {
       return this.listForListing(listingId);
     });
   }
+  async revokeAllForListing(listingId: Id) {
+    await this.sql.query(
+      `with affected as (
+         select il.integration_id
+           from access_capability.integration_listings il
+           join listing_capability.listings l on l.id=il.listing_id
+          where l.uuid=$1
+       ), removed as (
+         delete from access_capability.integration_listings il
+          using affected
+          where il.integration_id=affected.integration_id
+            and il.listing_id=(select id from listing_capability.listings where uuid=$1)
+          returning il.integration_id
+       )
+       update access_capability.integrations i set state='revoked',updated_at=now()
+        where i.state='active'
+          and i.id in (select integration_id from removed)
+          and not exists (
+            select 1 from access_capability.integration_listings remaining
+            where remaining.integration_id=i.id
+              and remaining.listing_id<>(select id from listing_capability.listings where uuid=$1)
+          )`,
+      [listingId],
+    );
+  }
   async rotate(ownerId: Id, id: Id) {
     const secret = randomBytes(32).toString("base64url"),
       salt = randomBytes(16);

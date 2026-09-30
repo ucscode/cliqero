@@ -31,7 +31,7 @@ export function OperatorSection({
       </div>
       {surface ? (
         <Card className="overflow-hidden">
-          <div className="p-4 sm:p-5">{children}</div>
+          <div className="p-6">{children}</div>
         </Card>
       ) : (
         children

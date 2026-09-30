@@ -89,14 +89,14 @@ export function CrudEdit({
         <div
           className={sidebar ? "grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]" : "min-w-0"}
         >
-          <form id={formId} onSubmit={onSubmit} className="grid min-w-0 gap-4">
+          <form id={formId} onSubmit={onSubmit} className="grid min-w-0 gap-6">
             {beforeFields}
             <OperatorSection
               title={sectionTitle ?? (mode === "create" ? "New record" : "Record details")}
               description={sectionDescription}
               surface
             >
-              <div className="grid gap-4">{children}</div>
+              <div className="grid gap-5">{children}</div>
             </OperatorSection>
           </form>
           {sidebar && <aside className="min-w-0">{sidebar}</aside>}

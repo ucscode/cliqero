@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { OperatorBlogEditor, OperatorBlogList } from "@/components/operator/blog";
 import { OperatorCatalogueEditor, OperatorCatalogueList } from "@/components/operator/catalogue";
+import { OperatorApiKeys } from "@/components/operator/api-keys";
 import {
   OperatorDistributionDetail,
   OperatorDistributionList,
@@ -30,6 +31,7 @@ vi.mock("next/navigation", () => ({
 
 const migratedPages = [
   ["Catalogue", OperatorCatalogueList],
+  ["API keys", OperatorApiKeys],
   ["Blog", OperatorBlogList],
   ["Distributions", OperatorDistributionList],
   ["User earnings", OperatorEarningsList],
@@ -68,6 +70,26 @@ describe("operator console shared page migration", () => {
     expect(html).toContain("max-w-4xl");
     expect(html).toContain('role="status"');
     expect(html).toContain("Loading listing");
+  });
+
+  it("renders listing fields with distinct labels, helper hierarchy, Markdown, zero price, and access URL semantics", () => {
+    const html = renderPage(<OperatorCatalogueEditor />);
+    expect(html).toContain('for="listing-short-description"');
+    expect(html).toContain("Plain-text customer summary, up to 200 characters.");
+    expect(html).toContain("Detailed listing content saved as Markdown.");
+    expect(html).toContain("Set 0.00 for a free listing.");
+    expect(html).toContain('for="listing-access-url"');
+    expect(html).toContain("not the public listing page");
+    expect(html).not.toContain("Destination URL");
+    expect(html).toContain("react-select");
+  });
+
+  it("opens the API-key CRUD collection with search and a create action", () => {
+    const html = renderPage(<OperatorApiKeys />);
+    expect(html).toContain("API keys");
+    expect(html).toContain("New API key");
+    expect(html).toContain('type="search"');
+    expect(html).toContain("API key collection");
   });
 
   it.each([

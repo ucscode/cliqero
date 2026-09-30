@@ -358,4 +358,110 @@ suite("listing review visibility", () => {
       "Forbidden",
     );
   });
+
+  it("supports authorized review inspection, long-content edits, listing filters, and audited deletion", async () => {
+    const owner = await app.authentication.register({
+      email: "review-crud-owner@example.test",
+      username: "review_crud_owner",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const author = await app.authentication.register({
+      email: "review-crud-author@example.test",
+      username: "review_crud_author",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const unrelatedOwner = await app.authentication.register({
+      email: "review-crud-unrelated@example.test",
+      username: "review_crud_unrelated",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const listing = await app.listingService.createPublished(owner, {
+      title: "Review CRUD listing",
+      shortDescription: "Review CRUD summary",
+      longDescription: "A listing used to test operator review CRUD.",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/review-crud",
+    });
+    const unrelatedListing = await app.listingService.createPublished(unrelatedOwner, {
+      title: "Unrelated review listing",
+      shortDescription: "Another review summary",
+      longDescription: "A separate listing.",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/review-unrelated",
+    });
+    const edited = await app.listingReviews.submit(author, listing.id, {
+      rating: 3,
+      body: "Initial content",
+    });
+    const retained = await app.listingReviews.submit(author, unrelatedListing.id, {
+      rating: 5,
+      body: "Unrelated content",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'reviews.moderate'),
+             ((select id from identity_capability.accounts where uuid=$2),'reviews.moderate')`,
+      [owner.id, unrelatedOwner.id],
+    );
+    await app.listingReviews.moderate(owner, edited.id, "approved");
+    await app.listingReviews.moderate(unrelatedOwner, retained.id, "approved");
+
+    const initialDetail = await app.listingReviews.getOperator(owner, edited.id);
+    expect(initialDetail).toMatchObject({
+      reviewer: "review_crud_author",
+      listingTitle: "Review CRUD listing",
+    });
+    await expect(app.listingReviews.update(author, edited.id, { rating: 1 })).rejects.toThrow(
+      "Forbidden",
+    );
+    const longBody = "A detailed operator-edited review. ".repeat(40);
+    const updated = await app.listingReviews.update(owner, edited.id, {
+      rating: 4,
+      body: longBody,
+      status: "pending",
+    });
+    expect(updated).toMatchObject({ rating: 4, body: longBody.trim(), status: "pending" });
+    const byListing = await app.listingReviews.operatorQueue(owner, {
+      listingId: listing.id,
+      limit: 10,
+    });
+    expect(byListing.items.map((item) => item.id)).toEqual([edited.id]);
+    expect((await app.listingReviews.summariesForListings([listing.id])).get(listing.id)).toBe(
+      undefined,
+    );
+
+    await app.listingReviews.update(owner, edited.id, { status: "approved" });
+    expect((await app.listingReviews.summariesForListings([listing.id])).get(listing.id)).toEqual({
+      average: 4,
+      count: 1,
+    });
+    await app.listingReviews.delete(owner, edited.id);
+    await expect(app.listingReviews.getOperator(owner, edited.id)).rejects.toMatchObject({
+      status: 404,
+      code: "not_found",
+    });
+    expect((await app.listingReviews.summariesForListings([listing.id])).has(listing.id)).toBe(
+      false,
+    );
+    expect(
+      (await app.listingReviews.summariesForListings([unrelatedListing.id])).get(
+        unrelatedListing.id,
+      ),
+    ).toEqual({ average: 5, count: 1 });
+    const audit = await app.database.query<{ action: string }>(
+      `select action from kernel.audit_records where subject_type='review' and subject_id=$1 order by id`,
+      [edited.id],
+    );
+    expect(audit.rows.map(({ action }) => action)).toEqual([
+      "review.moderated",
+      "review.updated",
+      "review.updated",
+      "review.deleted",
+    ]);
+  });
 });

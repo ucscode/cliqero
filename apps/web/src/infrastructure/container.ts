@@ -186,10 +186,13 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         auditRecorder(),
         database,
         listingCategoryService(),
+        integrations(),
       ),
   );
   const operators = lazy(() => new PostgresOperatorAuthorizationService(database));
-  const listingReviews = lazy(() => new ListingReviewService(reviews(), listings(), operators()));
+  const listingReviews = lazy(
+    () => new ListingReviewService(reviews(), listings(), operators(), auditRecorder(), database),
+  );
   const listingTransfer = lazy(
     () => new ListingTransferService(listingService(), listingMedia(), listingMediaRepository()),
   );
@@ -544,6 +547,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         walletRepository(),
         purchases(),
         database,
+        outbox(),
       ),
   );
   const referralGraphService = lazy(

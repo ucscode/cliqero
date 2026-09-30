@@ -89,7 +89,7 @@ describe("operator UI composition components", () => {
     );
 
     expect(html).toContain("overflow-hidden");
-    expect(html).toContain("p-4 sm:p-5");
+    expect(html).toContain("p-6");
     expect(html).toContain("Account information");
   });
 

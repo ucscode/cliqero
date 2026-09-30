@@ -71,6 +71,9 @@ describe("operator review queue bulk selection", () => {
     );
     expect(reviewQueueQuery("all", null, 100).get("status")).toBeNull();
     expect(reviewQueueQuery("pending", null, 100).get("status")).toBe("pending");
+    expect(
+      reviewQueueQuery("all", null, 100, "submitted", "desc", "listing-1").get("listing_id"),
+    ).toBe("listing-1");
     const source = readFileSync(
       resolve(process.cwd(), "src/components/operator/reviews.tsx"),
       "utf8",
@@ -81,5 +84,7 @@ describe("operator review queue bulk selection", () => {
     );
     expect(source).toContain('sort: "submitted", direction: "desc"');
     expect(source).toContain('status: "all"');
+    expect(source).toContain('label: "Edit review"');
+    expect(source).toContain("line-clamp-3 max-w-[20rem] break-words whitespace-pre-wrap");
   });
 });

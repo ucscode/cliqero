@@ -75,6 +75,7 @@ describe("frontend API presentation helpers", () => {
     expect(parseUsdMinor("0.01")).toBe("1");
     expect(parseUsdMinor("$20.5")).toBe("2050");
     expect(() => parseUsdMinor("0")).toThrow();
+    expect(parseUsdMinor("0.00", { allowZero: true })).toBe("0");
     expect(() => parseUsdMinor("-1")).toThrow();
     expect(() => parseUsdMinor("1.001")).toThrow();
     expect(() => parseUsdMinor("one dollar")).toThrow();

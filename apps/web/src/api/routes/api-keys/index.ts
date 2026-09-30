@@ -4,47 +4,75 @@ import { apiScopeSchema } from "@/modules/identity/api/scopes";
 import { requireCapabilityScope, requirePrincipal, type Env } from "../../shared/context";
 import { domainError } from "../../shared/error";
 import { errorSchema } from "../../shared/schemas";
-import { operatorApiKeyListSchema } from "./contracts";
+
+const querySchema = z.object({
+  search: z.string().max(200).optional(),
+  account_id: z.uuid().optional(),
+  state: z.enum(["all", "active", "expired", "deleted"]).default("all"),
+  sort: z.enum(["created", "name", "expires"]).default("created"),
+  direction: z.enum(["asc", "desc"]).default("desc"),
+});
+const createSchema = z
+  .object({
+    account_id: z.uuid(),
+    name: z.string().min(1).max(100),
+    scopes: z.array(apiScopeSchema).max(20).default([]),
+    expires_at: z.string().datetime().nullable().optional(),
+  })
+  .strict();
+const patchSchema = z
+  .object({
+    account_id: z.uuid().optional(),
+    name: z.string().min(1).max(100).optional(),
+    scopes: z.array(apiScopeSchema).max(20).optional(),
+    expires_at: z.string().datetime().nullable().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0);
+
+function metadata(key: {
+  id: string;
+  name: string;
+  accountId: string;
+  accountUsername?: string;
+  accountEmail?: string | null;
+  scopes: string[];
+  createdAt: Date;
+  lastUsedAt: Date | null;
+  expiresAt: Date | null;
+  revokedAt: Date | null;
+}) {
+  const expired = Boolean(key.expiresAt && key.expiresAt <= new Date());
+  return {
+    id: key.id,
+    name: key.name,
+    account_id: key.accountId,
+    account_username: key.accountUsername ?? "",
+    account_email: key.accountEmail ?? null,
+    scopes: key.scopes,
+    state: key.revokedAt ? "deleted" : expired ? "expired" : "active",
+    created_at: key.createdAt.toISOString(),
+    last_used_at: key.lastUsedAt?.toISOString() ?? null,
+    expires_at: key.expiresAt?.toISOString() ?? null,
+    revoked_at: key.revokedAt?.toISOString() ?? null,
+  };
+}
 
 export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
-  const operatorKeyBody = z
-    .object({
-      name: z.string().min(1).max(100),
-      scopes: z.array(apiScopeSchema).max(20).default([]),
-      expires_at: z.string().datetime().nullable().optional(),
-    })
-    .strict();
-  const operatorKeyResult = z
-    .object({
-      id: z.string().uuid(),
-      secret: z.string(),
-      name: z.string(),
-      scopes: z.array(z.string()),
-    })
-    .extend({
-      key_prefix: z.string(),
-      created_at: z.string(),
-      expires_at: z.string().nullable(),
-    });
-  const operatorKeyParams = z.object({ accountId: z.string().uuid() });
-  const operatorKeyIdParams = operatorKeyParams.extend({ apiKeyId: z.string().uuid() });
-  const operatorKeyListQuery = z.object({
-    sort: z
-      .enum(["created", "name", "expires"])
-      .default("created")
-      .describe("Sort by creation date, name, or expiry."),
-    direction: z.enum(["asc", "desc"]).default("desc").describe("Sort direction."),
-  });
   app.openapi(
     createRoute({
       method: "get",
-      path: "/api/accounts/{accountId}/api-keys",
-      request: { params: operatorKeyParams, query: operatorKeyListQuery },
+      path: "/api/api-keys",
+      tags: ["API keys"],
+      summary: "List API keys the operator can manage",
+      request: { query: querySchema },
       responses: {
         200: {
-          description: "Safe API-key metadata for the selected account",
+          description: "Safe API-key metadata",
           content: {
-            "application/json": { schema: operatorApiKeyListSchema },
+            "application/json": {
+              schema: z.object({ items: z.array(z.any()), manageable_scopes: z.array(z.string()) }),
+            },
           },
         },
         401: {
@@ -55,37 +83,24 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
           description: "API-key administration required",
           content: { "application/json": { schema: errorSchema } },
         },
-        404: {
-          description: "Account not found",
-          content: { "application/json": { schema: errorSchema } },
-        },
       },
     }),
     async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "api_keys.manage", "api_keys:manage");
-      if (denied) return denied;
+      const principal = requirePrincipal(c);
+      if (!(principal instanceof Object) || !("accountId" in principal)) return principal as never;
+      const denied = requireCapabilityScope(c, principal, "api_keys.manage", "api_keys:manage");
+      if (denied) return denied as never;
       try {
-        const result = await container.operatorApiKeys.list(
-          p.accountId,
-          c.req.valid("param").accountId,
-          c.req.valid("query"),
-        );
+        const query = c.req.valid("query");
+        const result = await container.operatorApiKeys.listAll(principal.accountId, {
+          search: query.search,
+          accountId: query.account_id,
+          state: query.state,
+          sort: query.sort,
+          direction: query.direction,
+        });
         return c.json(
-          {
-            manageable_scopes: result.manageableScopes,
-            items: result.items.map((item) => ({
-              id: item.id,
-              name: item.name,
-              key_prefix: item.keyPrefix,
-              scopes: item.scopes,
-              created_at: item.createdAt.toISOString(),
-              last_used_at: item.lastUsedAt?.toISOString() ?? null,
-              expires_at: item.expiresAt?.toISOString() ?? null,
-              revoked_at: item.revokedAt?.toISOString() ?? null,
-            })),
-          },
+          { items: result.items.map(metadata), manageable_scopes: result.manageableScopes },
           200,
         );
       } catch (error) {
@@ -93,105 +108,91 @@ export function registerApiKeyRoutes(app: OpenAPIHono<Env>, container: Applicati
       }
     },
   );
-  app.openapi(
-    createRoute({
-      method: "post",
-      path: "/api/accounts/{accountId}/api-keys",
-      request: {
-        params: operatorKeyParams,
-        body: { content: { "application/json": { schema: operatorKeyBody } } },
-      },
-      responses: {
-        201: {
-          description: "New operator-managed key; the secret is shown once",
-          content: { "application/json": { schema: operatorKeyResult } },
+
+  app.post("/api/api-keys", async (c) => {
+    const principal = requirePrincipal(c);
+    if (!(principal instanceof Object) || !("accountId" in principal)) return principal;
+    const denied = requireCapabilityScope(c, principal, "api_keys.manage", "api_keys:manage");
+    if (denied) return denied;
+    try {
+      const body = createSchema.parse(await c.req.json());
+      const created = await container.operatorApiKeys.create(principal.accountId, body.account_id, {
+        name: body.name,
+        scopes: body.scopes,
+        expiresAt: body.expires_at ? new Date(body.expires_at) : null,
+      });
+      return c.json(
+        {
+          ...metadata({
+            ...created,
+            accountId: body.account_id,
+            accountUsername: "",
+            accountEmail: null,
+            lastUsedAt: null,
+            revokedAt: null,
+          }),
+          secret: created.secret,
         },
-        401: {
-          description: "Authentication required",
-          content: { "application/json": { schema: errorSchema } },
+        201,
+      );
+    } catch (error) {
+      return domainError(c, error);
+    }
+  });
+
+  app.get("/api/api-keys/:apiKeyId", async (c) => {
+    const principal = requirePrincipal(c);
+    if (!(principal instanceof Object) || !("accountId" in principal)) return principal;
+    const denied = requireCapabilityScope(c, principal, "api_keys.manage", "api_keys:manage");
+    if (denied) return denied;
+    try {
+      const key = await container.operatorApiKeys.get(principal.accountId, c.req.param("apiKeyId"));
+      return c.json({ item: metadata(key) });
+    } catch (error) {
+      return domainError(c, error);
+    }
+  });
+
+  app.patch("/api/api-keys/:apiKeyId", async (c) => {
+    const principal = requirePrincipal(c);
+    if (!(principal instanceof Object) || !("accountId" in principal)) return principal;
+    const denied = requireCapabilityScope(c, principal, "api_keys.manage", "api_keys:manage");
+    if (denied) return denied;
+    try {
+      const body = patchSchema.parse(await c.req.json());
+      if (body.account_id)
+        return c.json({ error: "An API key's owning account cannot be changed." }, 400);
+      const key = await container.operatorApiKeys.update(
+        principal.accountId,
+        c.req.param("apiKeyId"),
+        {
+          name: body.name,
+          scopes: body.scopes,
+          expiresAt:
+            body.expires_at === undefined
+              ? undefined
+              : body.expires_at === null
+                ? null
+                : new Date(body.expires_at),
         },
-        403: {
-          description: "API-key administration required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        404: {
-          description: "Account not found",
-          content: { "application/json": { schema: errorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "api_keys.manage", "api_keys:manage");
-      if (denied) return denied;
-      const body = c.req.valid("json");
-      try {
-        const created = await container.operatorApiKeys.create(
-          p.accountId,
-          c.req.valid("param").accountId,
-          {
-            name: body.name,
-            scopes: body.scopes,
-            expiresAt: body.expires_at ? new Date(body.expires_at) : null,
-          },
-        );
-        return c.json(
-          {
-            id: created.id,
-            secret: created.secret,
-            name: created.name,
-            scopes: created.scopes,
-            key_prefix: created.keyPrefix,
-            created_at: created.createdAt.toISOString(),
-            expires_at: created.expiresAt?.toISOString() ?? null,
-          },
-          201,
-        );
-      } catch (error) {
-        return domainError(c, error);
-      }
-    },
-  );
-  app.openapi(
-    createRoute({
-      method: "post",
-      path: "/api/accounts/{accountId}/api-keys/{apiKeyId}/revoke",
-      request: { params: operatorKeyIdParams },
-      responses: {
-        200: {
-          description: "API key revocation result",
-          content: { "application/json": { schema: z.object({ changed: z.boolean() }) } },
-        },
-        401: {
-          description: "Authentication required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        403: {
-          description: "API-key administration required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        404: {
-          description: "Account or key not found",
-          content: { "application/json": { schema: errorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "api_keys.manage", "api_keys:manage");
-      if (denied) return denied;
-      try {
-        const result = await container.operatorApiKeys.revoke(
-          p.accountId,
-          c.req.valid("param").accountId,
-          c.req.valid("param").apiKeyId,
-        );
-        return c.json({ changed: result.changed }, 200);
-      } catch (error) {
-        return domainError(c, error);
-      }
-    },
-  );
+      );
+      return c.json({ item: key ? metadata(key) : null });
+    } catch (error) {
+      return domainError(c, error);
+    }
+  });
+
+  app.delete("/api/api-keys/:apiKeyId", async (c) => {
+    const principal = requirePrincipal(c);
+    if (!(principal instanceof Object) || !("accountId" in principal)) return principal;
+    const denied = requireCapabilityScope(c, principal, "api_keys.manage", "api_keys:manage");
+    if (denied) return denied;
+    try {
+      const key = await container.operatorApiKeys.get(principal.accountId, c.req.param("apiKeyId"));
+      await container.operatorApiKeys.revoke(principal.accountId, key.accountId, key.id);
+      return c.body(null, 204);
+    } catch (error) {
+      return domainError(c, error);
+    }
+  });
 }

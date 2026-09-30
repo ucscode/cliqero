@@ -215,7 +215,7 @@ suite("wallet-first durable commerce", () => {
     });
     expect(acquired.checkout.state).toBe("paid");
     expect(acquired.shortfall.minorAmount).toBe(0n);
-    expect((await app.purchases.findById(checkout.purchaseId))?.state).toBe("paid");
+    expect((await app.purchases.findById(checkout.purchaseId))?.state).toBe("completed");
     expect((await app.wallet.summary(buyer.id)).available.minorAmount).toBe(0n);
 
     const dispatcher = new CommercialWorkflowDispatcher(app, { error: () => {} });

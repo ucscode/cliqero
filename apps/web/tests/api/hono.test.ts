@@ -58,6 +58,8 @@ function appWith(
       apiKeys: { create: async () => ({}), list: async () => [], revoke: async () => {} },
       operatorApiKeys: {
         list: async () => ({ items: [], manageableScopes: [] }),
+        listAll: async () => ({ items: [], manageableScopes: [] }),
+        get: async () => ({ id: ordinaryId }),
         create: async () => ({
           id: "00000000-0000-4000-8000-000000000005",
           secret: "cliq_live_test",
@@ -67,6 +69,7 @@ function appWith(
           createdAt: new Date(),
           expiresAt: null,
         }),
+        update: async () => ({ id: ordinaryId }),
         revoke: async () => ({ changed: true, key: null }),
       },
       operatorOverview: {
@@ -615,9 +618,9 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const reviewId = "00000000-0000-4000-8000-000000000012";
-    const moderate = vi.fn(async (_account: unknown, id: string, status: string) => ({
+    const update = vi.fn(async (_account: unknown, id: string, input: { status: string }) => ({
       id,
-      status,
+      status: input.status,
       body: "Review",
       rating: 5,
       createdAt: new Date(),
@@ -631,7 +634,7 @@ describe("Hono API foundation", () => {
       undefined,
       undefined,
       undefined,
-      { moderate },
+      { update },
     ).fetch(
       new Request(`http://localhost/api/reviews/${reviewId}`, {
         method: "PATCH",
@@ -640,7 +643,7 @@ describe("Hono API foundation", () => {
       }),
     );
     expect(response.status).toBe(200);
-    expect(moderate).toHaveBeenCalledWith(root.account, reviewId, "approved");
+    expect(update).toHaveBeenCalledWith(root.account, reviewId, { status: "approved" });
     const actionRoute = await appWith(root).fetch(
       new Request(`http://localhost/api/reviews/${reviewId}/approve`, { method: "POST" }),
     );
@@ -822,11 +825,10 @@ describe("Hono API foundation", () => {
       "Authentication:",
     );
     expect(paths["/api/treasury/entries"]).toBeDefined();
-    expect(paths["/api/api-keys"]).toBeUndefined();
-    expect(paths["/api/accounts/{accountId}/api-keys"]).toBeDefined();
-    expect(paths["/api/accounts/{accountId}/api-keys/{apiKeyId}/revoke"]).toBeDefined();
-    expect(paths["/api/api-keys"]).toBeUndefined();
-    expect(paths["/api/api-keys/{id}/revoke"]).toBeUndefined();
+    expect(paths["/api/api-keys"]?.get).toBeDefined();
+    expect(paths["/api/accounts/{accountId}/api-keys"]).toBeUndefined();
+    expect(paths["/api/accounts/{accountId}/api-keys/{apiKeyId}/revoke"]).toBeUndefined();
+    expect(paths["/api/api-keys/{apiKeyId}/revoke"]).toBeUndefined();
     expect(paths["/api/me/access"]).toBeDefined();
     expect(paths["/api/me/session"]).toBeDefined();
     expect(paths["/api/overview"]).toBeDefined();
@@ -1135,7 +1137,7 @@ describe("Hono API foundation", () => {
           }),
         )
       ).status,
-    ).toBe(404);
+    ).toBe(401);
   });
   it("fails closed for missing non-development schema configuration", async () => {
     expect(
@@ -1607,15 +1609,19 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const response = await appWith(principal).fetch(
-      new Request("http://localhost/api/accounts/00000000-0000-4000-8000-000000000001/api-keys", {
+      new Request("http://localhost/api/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "x", scopes: ["hierachy:read"] }),
+        body: JSON.stringify({
+          account_id: "00000000-0000-4000-8000-000000000001",
+          name: "x",
+          scopes: ["hierachy:read"],
+        }),
       }),
     );
     expect(response.status).toBe(400);
   });
-  it("does not register ordinary customer API-key routes", async () => {
+  it("registers canonical API-key CRUD routes but denies customers without operator authority", async () => {
     const principal = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: {},
@@ -1626,12 +1632,14 @@ describe("Hono API foundation", () => {
     for (const [path, method] of [
       ["/api/api-keys", "GET"],
       ["/api/api-keys", "POST"],
-      ["/api/api-keys/00000000-0000-4000-8000-000000000001/revoke", "POST"],
+      ["/api/api-keys/00000000-0000-4000-8000-000000000001", "GET"],
+      ["/api/api-keys/00000000-0000-4000-8000-000000000001", "PATCH"],
+      ["/api/api-keys/00000000-0000-4000-8000-000000000001", "DELETE"],
     ] as const) {
       const response = await appWith(principal).fetch(
         new Request(`http://localhost${path}`, { method }),
       );
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(403);
     }
   });
   it("enforces capability and API-key scope intersection for compatibility routes", async () => {

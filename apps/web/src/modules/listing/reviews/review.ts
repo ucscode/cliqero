@@ -17,6 +17,7 @@ export type ListingReview = Readonly<{
 }>;
 
 export interface ListingReviewRepository {
+  findById(id: Id): Promise<OperatorListingReview | null>;
   findMine(listingId: Id, accountId: Id): Promise<ListingReview | null>;
   savePending(input: {
     id: Id;
@@ -26,6 +27,11 @@ export interface ListingReviewRepository {
     body: string;
   }): Promise<ListingReview>;
   moderate(id: Id, status: "approved" | "rejected", moderatorId: Id): Promise<ListingReview | null>;
+  update(
+    id: Id,
+    input: { rating: number; body: string; status: ReviewStatus; moderatorId: Id },
+  ): Promise<OperatorListingReview | null>;
+  delete(id: Id): Promise<boolean>;
   queryVisible(input: {
     listingId: Id;
     accountId?: Id;
@@ -34,6 +40,7 @@ export interface ListingReviewRepository {
   }): Promise<{ items: readonly PublicListingReview[]; nextCursor: string | null }>;
   queryOperator(input: {
     status?: ReviewStatus;
+    listingId?: Id;
     cursor?: string;
     limit: number;
   }): Promise<{ items: readonly OperatorListingReview[]; nextCursor: string | null }>;

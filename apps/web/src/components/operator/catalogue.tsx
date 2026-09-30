@@ -23,10 +23,12 @@ import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { HoneypotField } from "../honeypot-field";
 import { Textarea } from "../ui/textarea";
+import { Label } from "../ui/label";
 import { Alert } from "../ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { useToast } from "../toast/provider";
-import { TagSelect } from "../ui/tag-select";
+import { MultiSelect } from "../ui/multi-select";
+import { MarkdownEditor } from "../ui/markdown-editor";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { OperatorFilterField } from "./ui/toolbar";
 import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
@@ -124,6 +126,22 @@ export function OperatorCatalogueList() {
       await collection.retry();
     } catch (cause) {
       // The list reader owns persistent query failures; mutations retain transient feedback here.
+      setActionError(errorMessage(cause));
+    }
+  }
+
+  async function deleteListing(listing: OperatorListing) {
+    if (
+      !window.confirm(
+        `Delete “${listing.title}”? This removes the listing from catalogue management and customer discovery. Historical purchases and accounting records will be retained.`,
+      )
+    )
+      return;
+    try {
+      await apiFetch(`/api/listings/${listing.id}`, { method: "DELETE" });
+      toast.success("Listing deleted.");
+      await collection.retry();
+    } catch (cause) {
       setActionError(errorMessage(cause));
     }
   }
@@ -285,7 +303,11 @@ export function OperatorCatalogueList() {
     },
   ];
   const actions = (listing: OperatorListing): readonly OperatorAction[] => [
-    { type: "link", label: "Edit", href: `/operator/catalogue/${listing.id}` },
+    { type: "link", label: "Edit listing", href: `/operator/catalogue/${listing.id}` },
+    { type: "link", label: "View reviews", href: `/operator/reviews?listing=${listing.id}` },
+    ...(listing.state === "published"
+      ? [{ type: "link" as const, label: "Open listing", href: `/listings/${listing.id}` }]
+      : []),
     ...(listing.state === "draft"
       ? [
           {
@@ -314,6 +336,12 @@ export function OperatorCatalogueList() {
           },
         ]
       : []),
+    {
+      type: "action",
+      label: "Delete listing",
+      destructive: true,
+      onSelect: () => void deleteListing(listing),
+    },
   ];
 
   return (
@@ -571,7 +599,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
     setSaving(true);
     setError(null);
     try {
-      const priceMinor = parseUsdMinor(form.price);
+      const priceMinor = parseUsdMinor(form.price, { allowZero: true });
       if (editing) {
         const next = await apiFetch<OperatorListing>(`/api/listings/${listingId}`, {
           method: "PATCH",
@@ -638,6 +666,19 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       error={error}
       sectionTitle={editing ? "Listing details" : "New listing details"}
       sectionDescription="Save catalogue fields through the existing listing workflow."
+      headerActions={
+        listing?.state === "published" ? (
+          <Button asChild type="button" variant="secondary" size="xs">
+            <Link href={`/listings/${listing.id}`} target="_blank" rel="noreferrer">
+              Open listing
+            </Link>
+          </Button>
+        ) : (
+          <Button type="button" variant="secondary" size="xs" disabled>
+            Open listing
+          </Button>
+        )
+      }
       onSubmit={save}
       afterFields={
         editing && listing ? (
@@ -648,70 +689,85 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         ) : null
       }
     >
-      <label>
-        Title
+      <div className="grid gap-2">
+        <Label htmlFor="listing-title">Title</Label>
         <Input
+          id="listing-title"
           required
           value={form.title}
           onChange={(event) => setForm({ ...form, title: event.target.value })}
         />
-      </label>
-      <label>
-        Short description
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="listing-short-description">Short description</Label>
         <Textarea
+          id="listing-short-description"
           rows={3}
           maxLength={200}
           value={form.shortDescription}
           onChange={(event) => setForm({ ...form, shortDescription: event.target.value })}
         />
-        <span className="field-help">Plain-text customer summary, up to 200 characters.</span>
-      </label>
-      <label>
-        Long description
-        <Textarea
-          rows={8}
-          value={form.longDescription}
-          onChange={(event) => setForm({ ...form, longDescription: event.target.value })}
+        <p className="text-xs leading-5 text-slate-500">
+          Plain-text customer summary, up to 200 characters.
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="listing-long-description">Long description</Label>
+        <MarkdownEditor
+          markdown={form.longDescription}
+          onChange={(longDescription) => setForm({ ...form, longDescription })}
         />
-        <span className="field-help">Detailed listing content; Markdown is supported.</span>
-      </label>
-      <div className="catalogue-form-grid">
-        <label>
-          Price (USD)
+        <p className="text-xs leading-5 text-slate-500">
+          Detailed listing content saved as Markdown.
+        </p>
+      </div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid content-start gap-2">
+          <Label htmlFor="listing-price">Price (USD)</Label>
           <Input
+            id="listing-price"
             required
             inputMode="decimal"
             placeholder="10.00"
             value={form.price}
             onChange={(event) => setForm({ ...form, price: event.target.value })}
           />
-          <span className="field-help">Exact USD minor units are sent to the API.</span>
-        </label>
-        <label>
-          Compare-at price (USD, optional)
+          <p className="text-xs leading-5 text-slate-500">
+            Set 0.00 for a free listing. Amounts are stored in exact USD minor units.
+          </p>
+        </div>
+        <div className="grid content-start gap-2">
+          <Label htmlFor="listing-compare-price">Compare-at price (USD, optional)</Label>
           <Input
+            id="listing-compare-price"
             inputMode="decimal"
             placeholder="40.00"
             value={form.compareAtPrice}
             onChange={(event) => setForm({ ...form, compareAtPrice: event.target.value })}
           />
-          <span className="field-help">
+          <p className="text-xs leading-5 text-slate-500">
             Previous/reference price shown crossed out; must exceed the listing price.
-          </span>
-        </label>
-        <label>
-          Destination URL
+          </p>
+        </div>
+        <div className="grid content-start gap-2">
+          <Label htmlFor="listing-access-url">Access URL</Label>
           <Input
+            id="listing-access-url"
             required
             type="url"
             value={form.destination}
             onChange={(event) => setForm({ ...form, destination: event.target.value })}
           />
-        </label>
+          <p className="text-xs leading-5 text-slate-500">
+            Customer delivery/access destination provided after purchase; not the public listing
+            page.
+          </p>
+        </div>
       </div>
-      <label>
-        Visibility
+      <div className="grid gap-2">
+        <Label htmlFor="listing-visibility">Visibility</Label>
         <Select
+          id="listing-visibility"
           value={form.visibility}
           onChange={(event) =>
             setForm({ ...form, visibility: event.target.value as "public" | "authenticated" })
@@ -720,43 +776,48 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <option value="public">Public</option>
           <option value="authenticated">Members only</option>
         </Select>
-      </label>
+      </div>
       <fieldset className="grid gap-2">
-        <legend className="text-sm font-medium">Categories</legend>
-        <TagSelect
+        <legend className="text-sm font-semibold text-slate-800">Categories</legend>
+        <MultiSelect
           label="Categories"
+          inputId="listing-categories"
           options={categories.map((category) => ({ value: category.id, label: category.name }))}
           value={form.categoryIds}
           onChange={(categoryIds) => setForm({ ...form, categoryIds })}
         />
         {categories.length === 0 && (
-          <span className="field-help">
+          <p className="text-xs leading-5 text-slate-500">
             No categories yet. Create them from Catalogue → Categories.
-          </span>
+          </p>
         )}
       </fieldset>
       {!editing && (
-        <label>
-          External key (optional)
+        <div className="grid gap-2">
+          <Label htmlFor="listing-external-key">External key (optional)</Label>
           <Input
+            id="listing-external-key"
             value={form.externalKey}
             onChange={(event) => setForm({ ...form, externalKey: event.target.value })}
           />
-          <span className="field-help">Useful for deterministic imports and reconciliation.</span>
-        </label>
+          <p className="text-xs leading-5 text-slate-500">
+            Useful for deterministic imports and reconciliation.
+          </p>
+        </div>
       )}
-      <label>
-        Featured home position (optional)
+      <div className="grid gap-2">
+        <Label htmlFor="listing-featured-position">Featured home position (optional)</Label>
         <Input
+          id="listing-featured-position"
           type="number"
           min="1"
           value={form.featuredPosition}
           onChange={(event) => setForm({ ...form, featuredPosition: event.target.value })}
         />
-        <span className="field-help">
+        <p className="text-xs leading-5 text-slate-500">
           Published listings with a position appear on Home in ascending order.
-        </span>
-      </label>
+        </p>
+      </div>
       <HoneypotField />
     </CrudEdit>
   );

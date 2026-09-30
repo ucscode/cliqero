@@ -89,6 +89,103 @@ suite("listing management and media", () => {
     expect((await app.listingService.restore(owner, archived.id)).state).toBe("draft");
   });
 
+  it("allows a free listing to be edited and published with a compare-at price", async () => {
+    const { owner } = await accounts("free");
+    const listing = await app.listingService.create(owner, {
+      title: "Free resource",
+      shortDescription: "A zero-price listing",
+      longDescription: "Free access.",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/free-resource",
+    });
+    await app.listingService.update(owner, listing.id, {
+      priceMinor: "0",
+      compareAtPriceMinor: "4000",
+    });
+    await app.listingService.publish(owner, listing.id);
+
+    const persisted = await app.listingService.getPublic(listing.id);
+    expect(persisted?.price.minorAmount).toBe(0n);
+    expect(persisted?.compareAtPrice?.minorAmount).toBe(4000n);
+    expect(
+      (await app.listingService.queryPublic({ search: "Free resource", limit: 10 })).items,
+    ).toHaveLength(1);
+  });
+
+  it("deletes managed listings with history by tombstoning, preserving snapshots, and revoking integrations", async () => {
+    const { owner, other: buyer } = await accounts("delete");
+    const listing = await app.listingService.createPublished(owner, {
+      title: "Historical listing",
+      shortDescription: "Retained in purchase history",
+      longDescription: "Snapshot-safe historical details.",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/historical-listing",
+    });
+    const otherListing = await app.listingService.createPublished(owner, {
+      title: "Other retained listing",
+      shortDescription: "Another access scope",
+      longDescription: "This listing remains active.",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/other-retained-listing",
+    });
+    const sharedIntegration = await app.integrations.create(owner.id, "Shared access", listing.id);
+    await app.database.query(
+      `insert into access_capability.integration_listings(integration_id,listing_id)
+       select i.id,l.id from access_capability.integrations i
+       cross join listing_capability.listings l where i.uuid=$1 and l.uuid=$2`,
+      [sharedIntegration.id, otherListing.id],
+    );
+    const dedicatedIntegration = await app.integrations.create(
+      owner.id,
+      "Historical access",
+      listing.id,
+    );
+    expect(await app.integrations.authenticate(dedicatedIntegration.credential)).not.toBeNull();
+    const checkout = await app.walletCheckout.initiate({
+      buyerId: buyer.id,
+      listingId: listing.id,
+      idempotencyKey: "historical-listing-checkout",
+    });
+    const historicalPurchase = await app.purchases.findById(checkout.purchaseId);
+    expect(historicalPurchase?.terms.title).toBe("Historical listing");
+
+    await app.listingService.deleteCatalogue(owner, listing.id);
+
+    expect(await app.listingService.getPublic(listing.id)).toBeNull();
+    expect(
+      (await app.listingService.queryPublic({ limit: 50 })).items.map(({ id }) => id),
+    ).not.toContain(listing.id);
+    await expect(app.listingService.getCatalogue(listing.id)).rejects.toThrow("Listing not found");
+    await expect(
+      app.walletCheckout.initiate({
+        buyerId: buyer.id,
+        listingId: listing.id,
+        idempotencyKey: "new-after-delete",
+      }),
+    ).rejects.toThrow("Listing not found");
+    expect((await app.purchases.findById(checkout.purchaseId))?.terms).toMatchObject({
+      title: "Historical listing",
+      shortDescription: "Retained in purchase history",
+    });
+    expect(await app.integrations.authenticate(dedicatedIntegration.credential)).toBeNull();
+    const sharedPrincipal = await app.integrations.authenticate(sharedIntegration.credential);
+    expect(sharedPrincipal?.canVerifyListing(listing.id)).toBe(false);
+    expect(sharedPrincipal?.canVerifyListing(otherListing.id)).toBe(true);
+    const deleted = await app.database.query<{ deleted_at: Date | null }>(
+      `select deleted_at from listing_capability.listings where uuid=$1`,
+      [listing.id],
+    );
+    expect(deleted.rows[0].deleted_at).toBeTruthy();
+    const audit = await app.database.query<{ action: string; subject_id: string }>(
+      `select action,subject_id from kernel.audit_records where action='listing.deleted' and subject_id=$1`,
+      [listing.id],
+    );
+    expect(audit.rows).toHaveLength(1);
+  });
+
   it("stores multiple canonical categories and applies principal-aware visibility to storefront reads", async () => {
     const { owner } = await accounts("visibility");
     const suffix = Date.now().toString();

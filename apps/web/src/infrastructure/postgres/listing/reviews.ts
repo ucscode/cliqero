@@ -27,6 +27,20 @@ type ReviewRow = {
 
 export class PostgresListingReviewRepository implements ListingReviewRepository {
   constructor(private readonly sql: QueryExecutor) {}
+  async findById(id: string) {
+    const row = (
+      await this.sql.query<ReviewRow>(
+        `select r.uuid as id,l.uuid as listing_id,a.uuid as account_id,r.rating,r.body,r.status,r.created_at,r.updated_at,r.moderated_at,moderator.uuid as moderated_by,a.username as reviewer,l.title as listing_title
+         from listing_capability.reviews r join listing_capability.listings l on l.id=r.listing_id
+         join identity_capability.accounts a on a.id=r.account_id left join identity_capability.accounts moderator on moderator.id=r.moderated_by
+         where r.uuid=$1`,
+        [id],
+      )
+    ).rows[0];
+    return row
+      ? { ...this.review(row), reviewer: row.reviewer!, listingTitle: row.listing_title! }
+      : null;
+  }
   async findMine(listingId: string, accountId: string) {
     const row = (
       await this.sql.query<ReviewRow>(
@@ -70,6 +84,34 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
     ).rows[0];
     return row ? this.review(row) : null;
   }
+  async update(
+    id: string,
+    input: { rating: number; body: string; status: ReviewStatus; moderatorId: string },
+  ) {
+    const row = (
+      await this.sql.query<ReviewRow>(
+        `with updated as (
+          update listing_capability.reviews set rating=$2,body=$3,status=$4,
+            moderated_at=case when status is distinct from $4 then now() else moderated_at end,
+            moderated_by=case when status is distinct from $4 then (select id from identity_capability.accounts where uuid=$5) else moderated_by end,
+            updated_at=now()
+          where uuid=$1 returning *
+        )
+        select u.uuid as id,l.uuid as listing_id,a.uuid as account_id,u.rating,u.body,u.status,u.created_at,u.updated_at,u.moderated_at,moderator.uuid as moderated_by,a.username as reviewer,l.title as listing_title
+        from updated u join listing_capability.listings l on l.id=u.listing_id join identity_capability.accounts a on a.id=u.account_id left join identity_capability.accounts moderator on moderator.id=u.moderated_by`,
+        [id, input.rating, input.body, input.status, input.moderatorId],
+      )
+    ).rows[0];
+    return row
+      ? { ...this.review(row), reviewer: row.reviewer!, listingTitle: row.listing_title! }
+      : null;
+  }
+  async delete(id: string) {
+    const result = await this.sql.query(`delete from listing_capability.reviews where uuid=$1`, [
+      id,
+    ]);
+    return (result.rowCount ?? 0) === 1;
+  }
   async queryVisible(input: {
     listingId: string;
     accountId?: string;
@@ -102,6 +144,7 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
   }
   async queryOperator(input: {
     status?: ReviewStatus;
+    listingId?: string;
     cursor?: string;
     limit: number;
     sort?: "submitted" | "rating";
@@ -117,6 +160,12 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
     if (input.status) {
       values.push(input.status);
       where.push(`r.status=$${values.length}`);
+    }
+    if (input.listingId) {
+      values.push(input.listingId);
+      where.push(
+        `r.listing_id=(select id from listing_capability.listings where uuid=$${values.length})`,
+      );
     }
     if (cursor) {
       values.push(cursor.value, cursor.id);

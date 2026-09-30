@@ -13,8 +13,8 @@ import {
 import type { ApiKeyManagementService } from "@/modules/identity/api/keys";
 
 export type OperatorApiKeyInput = {
-  name: string;
-  scopes: string[];
+  name?: string;
+  scopes?: string[];
   expiresAt?: Date | null;
 };
 
@@ -53,7 +53,99 @@ export class OperatorApiKeyService {
     return { items: await this.apiKeys.list(targetId, order), manageableScopes };
   }
 
-  async create(actorId: string, targetId: string, input: OperatorApiKeyInput) {
+  async listAll(
+    actorId: string,
+    input: {
+      accountId?: string;
+      search?: string;
+      state?: "active" | "expired" | "deleted" | "all";
+      sort?: "created" | "name" | "expires";
+      direction?: "asc" | "desc";
+    } = {},
+  ) {
+    const actorCapabilities = await this.requireManager(actorId);
+    const all = await this.apiKeys.list(input.accountId, input, input);
+    const items = [];
+    for (const key of all) {
+      const targetCapabilities = await this.operators.capabilities(key.accountId);
+      try {
+        this.authorizeScopes(
+          actorCapabilities,
+          targetCapabilities,
+          this.validateScopes(key.scopes),
+        );
+        items.push(key);
+      } catch {
+        // Keys carrying scopes the actor cannot administer are outside this collection.
+      }
+    }
+    const target = input.accountId ? await this.scopesForTarget(actorId, input.accountId) : [];
+    return { items, manageableScopes: target };
+  }
+
+  async get(actorId: string, keyId: string) {
+    const actorCapabilities = await this.requireManager(actorId);
+    const key = await this.apiKeys.find(keyId);
+    if (!key) throw new PublicApplicationError("API key not found.", "not_found", 404);
+    const targetCapabilities = await this.operators.capabilities(key.accountId);
+    this.authorizeScopes(actorCapabilities, targetCapabilities, this.validateScopes(key.scopes));
+    return key;
+  }
+
+  async update(actorId: string, keyId: string, input: OperatorApiKeyInput) {
+    return this.uow.transaction(async () => {
+      const key = await this.get(actorId, keyId);
+      if (key.revokedAt) throw new PublicApplicationError("API key is deleted.", "not_found", 404);
+      const actorCapabilities = await this.operators.capabilities(actorId);
+      const targetCapabilities = await this.operators.capabilities(key.accountId);
+      const scopes =
+        input.scopes === undefined
+          ? this.validateScopes(key.scopes)
+          : this.validateScopes(input.scopes);
+      this.authorizeScopes(actorCapabilities, targetCapabilities, scopes);
+      const name = input.name === undefined ? key.name : input.name.trim();
+      if (!name)
+        throw new PublicApplicationError("API-key name is required.", "invalid_request", 400);
+      const expiresAt = input.expiresAt === undefined ? key.expiresAt : input.expiresAt;
+      if (expiresAt && expiresAt <= new Date())
+        throw new PublicApplicationError("Expiry must be in the future.", "invalid_request", 400);
+      if (!(await this.apiKeys.update(keyId, { name, scopes, expiresAt })))
+        throw new PublicApplicationError("API key not found.", "not_found", 404);
+      const updated = await this.apiKeys.find(keyId);
+      await this.audit.record({
+        actorId,
+        action: "api_key.updated",
+        subjectType: "api_key",
+        subjectId: keyId,
+        previousState: {
+          name: key.name,
+          scopes: key.scopes,
+          expiresAt: key.expiresAt?.toISOString() ?? null,
+        },
+        newState: { name, scopes, expiresAt: expiresAt?.toISOString() ?? null },
+      });
+      return updated!;
+    });
+  }
+
+  private async scopesForTarget(actorId: string, targetId: string) {
+    const result = await this.list(actorId, targetId);
+    return result.manageableScopes;
+  }
+
+  private async requireManager(actorId: string) {
+    const capabilities = await this.operators.capabilities(actorId);
+    if (!hasCapability(capabilities, "api_keys.manage"))
+      throw forbidden("You are not allowed to administer API keys.");
+    return capabilities;
+  }
+
+  async create(
+    actorId: string,
+    targetId: string,
+    input: Required<Pick<OperatorApiKeyInput, "name" | "scopes">> &
+      Pick<OperatorApiKeyInput, "expiresAt">,
+  ) {
     return this.uow.transaction(async () => {
       const actorCapabilities = await this.operators.capabilities(actorId);
       if (!hasCapability(actorCapabilities, "api_keys.manage"))

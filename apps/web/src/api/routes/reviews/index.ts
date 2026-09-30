@@ -45,6 +45,7 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
 
   const operatorReviewQuery = z.object({
     status: z.enum(["pending", "approved", "rejected"]).optional(),
+    listing_id: z.uuid().optional(),
     sort: z
       .enum(["submitted", "rating"])
       .default("submitted")
@@ -87,6 +88,7 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
       const query = c.req.valid("query");
       const page = await container.listingReviews.operatorQueue(p.account, {
         ...query,
+        listingId: query.listing_id,
       });
       return c.json(
         {
@@ -97,6 +99,22 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
       );
     },
   );
+
+  app.get("/api/reviews/:reviewId", async (c) => {
+    const p = requirePrincipal(c);
+    if (!(p instanceof Object) || !("accountId" in p)) return p;
+    const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
+    if (denied) return denied;
+    try {
+      return c.json({
+        item: reviewJson(
+          await container.listingReviews.getOperator(p.account, c.req.param("reviewId")),
+        ),
+      });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Review not found" }, 404);
+    }
+  });
 
   app.openapi(
     createRoute({
@@ -111,7 +129,14 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
         body: {
           content: {
             "application/json": {
-              schema: z.object({ status: z.enum(["approved", "rejected"]) }).strict(),
+              schema: z
+                .object({
+                  rating: z.number().int().min(1).max(5).optional(),
+                  body: z.string().max(2000).optional(),
+                  status: z.enum(["pending", "approved", "rejected"]).optional(),
+                })
+                .strict()
+                .refine((value) => Object.keys(value).length > 0),
             },
           },
         },
@@ -148,13 +173,25 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
       if (denied) return denied;
-      const { status } = c.req.valid("json");
-      const review = await container.listingReviews.moderate(
+      const review = await container.listingReviews.update(
         p.account,
         c.req.valid("param").reviewId,
-        status,
+        c.req.valid("json"),
       );
       return c.json({ item: reviewJson(review) }, 200);
     },
   );
+
+  app.delete("/api/reviews/:reviewId", async (c) => {
+    const p = requirePrincipal(c);
+    if (!(p instanceof Object) || !("accountId" in p)) return p;
+    const denied = requireCapabilityScope(c, p, "reviews.moderate", "reviews:moderate");
+    if (denied) return denied;
+    try {
+      await container.listingReviews.delete(p.account, c.req.param("reviewId"));
+      return c.body(null, 204);
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Review not found" }, 404);
+    }
+  });
 }
