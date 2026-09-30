@@ -6,13 +6,14 @@ const actor = new Account("00000000-0000-4000-8000-000000000001", "operator");
 
 describe("OperatorBulkWorkflow", () => {
   it("authorizes before work and reports partial per-record outcomes", async () => {
-    const moderate = vi.fn(async (_account: Account, id: string) => {
+    const update = vi.fn(async (_account: Account, id: string) => {
       if (id.endsWith("2")) throw new Error("Review is no longer available.");
     });
+    const moderate = vi.fn();
     const requireCapability = vi.fn(async () => undefined);
     const workflow = new OperatorBulkWorkflow({
       operators: { requireCapability },
-      listingReviews: { moderate },
+      listingReviews: { moderate, update },
     } as never);
 
     await expect(
@@ -27,7 +28,9 @@ describe("OperatorBulkWorkflow", () => {
       failed: [{ id: "review-2", message: "Review is no longer available." }],
     });
     expect(requireCapability).toHaveBeenCalledWith(actor.id, "reviews.moderate");
-    expect(moderate).toHaveBeenCalledTimes(2);
+    expect(moderate).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenCalledWith(actor, "review-1", { status: "approved" });
   });
 
   it("does not execute any records when capability authorization fails", async () => {

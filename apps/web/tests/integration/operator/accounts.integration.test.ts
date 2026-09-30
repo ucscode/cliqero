@@ -19,6 +19,66 @@ suite("operator account index PostgreSQL projection", () => {
     await app.authentication.betterAuth.close();
   });
 
+  it("creates email-setup identities without credentials and authenticates manual-password accounts", async () => {
+    const actor = await app.authentication.register({
+      email: "operator.credential.actor@example.test",
+      username: "operator_credential_actor",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const emailMode = await app.authentication.registerForOperatorWithoutPassword(
+      {
+        email: "operator.email.mode@example.test",
+        username: "operator_email_mode",
+        country: "GH",
+      },
+      actor.id,
+    );
+    const emailIdentity = (
+      await app.database.query<{ authUserId: string; credentialCount: string }>(
+        `select link.auth_user_id as "authUserId",
+                count(auth_account.id)::text as "credentialCount"
+           from identity_capability.auth_account_links link
+           left join better_auth.account auth_account
+             on auth_account."userId"=link.auth_user_id
+            and auth_account."providerId"='credential'
+            and auth_account.password is not null
+          where link.account_id=(select id from identity_capability.accounts where uuid=$1)
+          group by link.auth_user_id`,
+        [emailMode.id],
+      )
+    ).rows[0];
+    expect(emailIdentity.credentialCount).toBe("0");
+    await expect(
+      app.authentication.login("operator.email.mode@example.test", "NoCredential!2026"),
+    ).rejects.toThrow();
+    expect(await app.authentication.accountForAuthUser(emailIdentity.authUserId)).toMatchObject({
+      id: emailMode.id,
+    });
+
+    const manualPassword = "OperatorChosen!2026";
+    const manual = await app.authentication.registerForOperator(
+      {
+        email: "operator.manual.mode@example.test",
+        username: "operator_manual_mode",
+        password: manualPassword,
+      },
+      actor.id,
+    );
+    await expect(
+      app.authentication.login("operator.manual.mode@example.test", manualPassword),
+    ).resolves.toMatchObject({
+      account: { id: manual.id },
+      token: expect.any(String),
+    });
+    const audit = await app.database.query<{ new_state: Record<string, unknown> }>(
+      `select new_state from kernel.audit_records
+        where action='operator.account_created' and subject_id=$1`,
+      [manual.id],
+    );
+    expect(JSON.stringify(audit.rows[0]?.new_state)).not.toContain(manualPassword);
+  });
+
   it("lists canonical accounts, searches profile fields, and paginates without skips or repeats", async () => {
     const first = await app.authentication.register({
       email: "ops.account.first@example.test",

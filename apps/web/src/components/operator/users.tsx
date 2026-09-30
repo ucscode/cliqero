@@ -428,6 +428,7 @@ export function OperatorUserDetail({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [parentError, setParentError] = useState<string | null>(null);
+  const [selectedParent, setSelectedParent] = useState<ParentOption | null>(null);
   const [capabilityView, setCapabilityView] = useState<CapabilityAdministrationView | null>(null);
   const [capabilityLoading, setCapabilityLoading] = useState(true);
   const [capabilityError, setCapabilityError] = useState<string | null>(null);
@@ -558,6 +559,7 @@ export function OperatorUserDetail({
       const updated = await load();
       if (!updated)
         throw new Error("Parent was reassigned, but referral context could not refresh.");
+      setSelectedParent(null);
       toast.success("Parent reassigned successfully.");
     } catch (cause) {
       setParentError(message(cause));
@@ -673,9 +675,10 @@ export function OperatorUserDetail({
               <OperatorSection title="Referral context" surface>
                 <div className="grid content-start gap-5">
                   <CrudFieldList
+                    layout="stacked"
                     fields={[
                       {
-                        label: "Immediate parent",
+                        label: "Parent",
                         value: account.parent ? (
                           <Link href={`/operator/users/${account.parent.id}`}>
                             @{account.parent.username}
@@ -694,6 +697,7 @@ export function OperatorUserDetail({
               </OperatorSection>
               <OperatorSection title="Commerce" surface>
                 <CrudFieldList
+                  layout="stacked"
                   fields={[
                     { label: "Purchases", value: account.purchaseCount.toLocaleString("en-US") },
                   ]}
@@ -702,7 +706,7 @@ export function OperatorUserDetail({
             </div>
             {!account.deletedAt && (
               <OperatorSection
-                title="Reassign immediate parent"
+                title="Reassign parent"
                 description="Descendants stay attached. The server prevents cycles and records the change."
                 surface
                 className="lg:col-start-2"
@@ -723,11 +727,14 @@ export function OperatorUserDetail({
                       cacheOptions
                       defaultOptions={false}
                       loadOptions={loadParentOptions}
-                      value={null}
+                      value={selectedParent}
                       isDisabled={saving}
                       isClearable
                       isLoading={saving}
-                      onChange={(option) => void reassign(option?.account ?? null)}
+                      onChange={(option) => {
+                        setSelectedParent(option);
+                        setParentError(null);
+                      }}
                       placeholder="Search username, email or account ID"
                       noOptionsMessage={({ inputValue }) =>
                         inputValue.trim() ? "No eligible account found." : "Start typing to search."
@@ -735,6 +742,18 @@ export function OperatorUserDetail({
                       styles={parentSelectStyles}
                       menuPortalTarget={typeof document === "undefined" ? undefined : document.body}
                     />
+                    <Button
+                      type="button"
+                      disabled={
+                        saving ||
+                        !selectedParent ||
+                        selectedParent.account.id === account.id ||
+                        selectedParent.account.id === account.parent?.id
+                      }
+                      onClick={() => void reassign(selectedParent?.account ?? null)}
+                    >
+                      {saving ? "Assigning…" : "Assign parent"}
+                    </Button>
                     {saving && (
                       <p role="status" className="text-sm text-slate-600">
                         Reassigning parent…
@@ -830,8 +849,10 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
   const [loading, setLoading] = useState(!create);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
+  const [credentialMode, setCredentialMode] = useState<"email" | "password">("email");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const toast = useToast();
 
   useEffect(() => {
     if (!accountId) return;
@@ -858,11 +879,15 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
     event.preventDefault();
     setSaving(true);
     setError(null);
-    setSuccess(null);
     try {
       if (create) {
+        if (credentialMode === "password" && password !== confirmPassword) {
+          setError("Passwords do not match.");
+          return;
+        }
         const result = await apiFetch<{
           account: OperatorAccountDetail;
+          credentialSetupMode: "email" | "password";
           passwordSetupEmailRequested: boolean;
         }>("/api/accounts", {
           method: "POST",
@@ -871,14 +896,21 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
             email: email.trim(),
             username: username.trim(),
             ...(country ? { country } : {}),
+            credential_setup:
+              credentialMode === "email"
+                ? { mode: "email" }
+                : { mode: "password", password, confirm_password: confirmPassword },
           }),
         });
-        setCreatedAccountId(result.account.id);
-        setSuccess(
-          result.passwordSetupEmailRequested
-            ? "Account created. A password setup link was requested for the account email."
-            : "Account created. Password setup email could not be requested; the account holder can use Forgot password.",
-        );
+        const confirmation =
+          result.credentialSetupMode === "password"
+            ? "Account created with the password supplied by the operator."
+            : result.passwordSetupEmailRequested
+              ? "Account created. A password setup link was requested."
+              : "Account created. Password setup email could not be requested; the account holder can use Forgot password.";
+        toast.success(confirmation);
+        router.push(`/operator/users/${result.account.id}`);
+        router.refresh();
       } else {
         const account = await apiFetch<OperatorAccountDetail>(`/api/accounts/${accountId}`, {
           method: "PATCH",
@@ -910,21 +942,6 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
       loading={loading}
       onSubmit={(event) => void submit(event)}
       error={error}
-      success={
-        success ? (
-          <Alert>
-            <p>{success}</p>
-            {createdAccountId && (
-              <Link
-                className="mt-2 inline-block font-medium underline"
-                href={`/operator/users/${createdAccountId}`}
-              >
-                View account
-              </Link>
-            )}
-          </Alert>
-        ) : undefined
-      }
       submitLabel={create ? "Create user" : "Save changes"}
       savingLabel={create ? "Creating…" : "Saving…"}
       sectionTitle={create ? "Account details" : "Editable profile fields"}
@@ -938,9 +955,60 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
         onEmailChange={setEmail}
         onCountryChange={setCountry}
       />
+      {create && (
+        <fieldset className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:p-5">
+          <legend className="px-1 text-sm font-semibold text-slate-900">Credential setup</legend>
+          <label className="flex items-start gap-3 text-sm text-slate-800">
+            <input
+              type="radio"
+              name="credential-setup-mode"
+              value="email"
+              checked={credentialMode === "email"}
+              onChange={() => setCredentialMode("email")}
+            />
+            <span>Send account setup email</span>
+          </label>
+          <label className="flex items-start gap-3 text-sm text-slate-800">
+            <input
+              type="radio"
+              name="credential-setup-mode"
+              value="password"
+              checked={credentialMode === "password"}
+              onChange={() => setCredentialMode("password")}
+            />
+            <span>Set password manually</span>
+          </label>
+          {credentialMode === "password" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="operator-account-password">Password</Label>
+                <Input
+                  id="operator-account-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="operator-account-confirm-password">Confirm password</Label>
+                <Input
+                  id="operator-account-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  required
+                />
+              </div>
+            </div>
+          )}
+        </fieldset>
+      )}
       <p className="text-sm text-slate-600">
         {create
-          ? "The account holder sets their password using an email link. Parent assignment remains a separate hierarchy operation."
+          ? "Choose how the account holder receives their initial password. Parent assignment remains a separate hierarchy operation."
           : "Email changes require the account holder’s Better Auth verification flow. Parent assignment remains a separate hierarchy operation."}
       </p>
     </CrudEdit>
@@ -990,7 +1058,7 @@ export function CapabilityCard({
               system.root
             </code>
           </div>
-          {rootAssigned && <Badge variant="secondary">Enabled</Badge>}
+          {rootAssigned && <Badge variant="default">Enabled</Badge>}
         </div>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
           {CAPABILITY_METADATA["system.root"].description}
@@ -1012,12 +1080,12 @@ export function CapabilityCard({
         )}
       </div>
       {view.rootAuthority && (
-        <p className="mt-4 rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
+        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
           Root authority already includes every ordinary platform permission. Existing direct
           assignments are preserved and cannot be edited while this authority is enabled.
-        </p>
+        </div>
       )}
-      <div className="mt-4 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
+      <div className="mt-6 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
         {ordinary.map((capability) => {
           const metadata = CAPABILITY_METADATA[capability];
           const grantedAt = assigned.get(capability);

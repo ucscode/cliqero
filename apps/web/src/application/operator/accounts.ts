@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import type { AuthenticationService } from "@/application/identity/authentication";
 import type { ProfileService } from "@/application/account/profile";
 import type { AuditRecorder } from "@/application/shared/audit";
@@ -66,32 +65,40 @@ export class OperatorAccountManagementService {
 
   async create(
     actorId: string,
-    input: { email: string; username: string; country?: string | null },
+    input: {
+      email: string;
+      username: string;
+      country?: string | null;
+      credentialSetup: { mode: "email" } | { mode: "password"; password: string };
+    },
   ) {
-    // The generated credential is never returned or persisted in plaintext.
-    // The recipient chooses their own password through Better Auth's reset flow.
-    const account = await this.authentication.registerForOperator(
-      {
-        ...input,
-        password: randomBytes(32).toString("base64url"),
-      },
-      actorId,
-    );
+    const { credentialSetup, ...identity } = input;
+    const account =
+      credentialSetup.mode === "password"
+        ? await this.authentication.registerForOperator(
+            { ...identity, password: credentialSetup.password },
+            actorId,
+          )
+        : await this.authentication.registerForOperatorWithoutPassword(identity, actorId);
 
-    let passwordSetupEmailRequested = true;
-    try {
-      await this.authentication.requestPasswordSetup(
-        input.email,
-        `${siteConfig.url}/reset-password`,
-      );
-    } catch {
-      // Account creation is complete and audited. The recipient can still use
-      // the public password-reset request if delivery is temporarily unavailable.
-      passwordSetupEmailRequested = false;
+    let passwordSetupEmailRequested = false;
+    if (credentialSetup.mode === "email") {
+      passwordSetupEmailRequested = true;
+      try {
+        await this.authentication.requestPasswordSetup(
+          input.email,
+          `${siteConfig.url}/reset-password`,
+        );
+      } catch {
+        // Account creation is complete and audited. The recipient can still use
+        // the public password-reset request if delivery is temporarily unavailable.
+        passwordSetupEmailRequested = false;
+      }
     }
 
     return {
       account: await this.accounts.get(account.id),
+      credentialSetupMode: credentialSetup.mode,
       passwordSetupEmailRequested,
     };
   }

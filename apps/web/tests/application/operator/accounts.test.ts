@@ -8,16 +8,15 @@ const target = new Account("00000000-0000-4000-8000-000000000002", "new_user", "
 
 function fixture(options: { failReset?: boolean; deletionContext?: Record<string, unknown> } = {}) {
   const audits: AuditRecordInput[] = [];
-  const register = vi.fn(async (input: { email: string; username: string; password: string }) => {
-    expect(input.password.length).toBeGreaterThanOrEqual(32);
-    return target;
-  });
+  const register = vi.fn(async () => target);
+  const registerWithoutPassword = vi.fn(async () => target);
   const requestPasswordSetup = vi.fn(async () => {
     if (options.failReset) throw new Error("email unavailable");
   });
   const updateProfile = vi.fn(async () => undefined);
   const authentication = {
     registerForOperator: register,
+    registerForOperatorWithoutPassword: registerWithoutPassword,
     requestPasswordSetup,
     removeAccountIdentity: vi.fn(async () => undefined),
   };
@@ -75,6 +74,7 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     service,
     audits,
     register,
+    registerWithoutPassword,
     requestPasswordSetup,
     updateProfile,
     deletion,
@@ -84,34 +84,67 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
 
 describe("OperatorAccountManagementService", () => {
   it("creates through the trusted identity service and never returns a bootstrap password", async () => {
-    const { service, register, requestPasswordSetup } = fixture();
+    const { service, register, registerWithoutPassword, requestPasswordSetup } = fixture();
     const created = await service.create(actorId, {
       email: "new@example.test",
       username: "new_user",
       country: "NG",
+      credentialSetup: { mode: "email" },
     });
 
-    expect(register).toHaveBeenCalledWith(
+    expect(registerWithoutPassword).toHaveBeenCalledWith(
       expect.objectContaining({ email: "new@example.test", username: "new_user", country: "NG" }),
       actorId,
     );
+    expect(register).not.toHaveBeenCalled();
     expect(requestPasswordSetup).toHaveBeenCalledWith(
       "new@example.test",
       expect.stringMatching(/\/reset-password$/),
     );
     expect(created).toMatchObject({
       account: { id: target.id },
+      credentialSetupMode: "email",
       passwordSetupEmailRequested: true,
     });
-    expect(JSON.stringify(created)).not.toContain("generated-random-bootstrap-credential");
+    expect(created).not.toHaveProperty("password");
   });
 
   it("preserves successful account creation and reports reset-email delivery failure", async () => {
     const { service, audits } = fixture({ failReset: true });
     await expect(
-      service.create(actorId, { email: "new@example.test", username: "new_user" }),
-    ).resolves.toMatchObject({ account: { id: target.id }, passwordSetupEmailRequested: false });
+      service.create(actorId, {
+        email: "new@example.test",
+        username: "new_user",
+        credentialSetup: { mode: "email" },
+      }),
+    ).resolves.toMatchObject({
+      account: { id: target.id },
+      credentialSetupMode: "email",
+      passwordSetupEmailRequested: false,
+    });
     expect(audits).toHaveLength(0);
+  });
+
+  it("creates a manual-password account without requesting email or returning the password", async () => {
+    const { service, register, registerWithoutPassword, requestPasswordSetup } = fixture();
+    const suppliedPassword = "OperatorChosenPassword!";
+    const result = await service.create(actorId, {
+      email: "new@example.test",
+      username: "new_user",
+      credentialSetup: { mode: "password", password: suppliedPassword },
+    });
+
+    expect(register).toHaveBeenCalledWith(
+      { email: "new@example.test", username: "new_user", password: suppliedPassword },
+      actorId,
+    );
+    expect(registerWithoutPassword).not.toHaveBeenCalled();
+    expect(requestPasswordSetup).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      credentialSetupMode: "password",
+      passwordSetupEmailRequested: false,
+    });
+    expect(JSON.stringify(result)).not.toContain(suppliedPassword);
   });
 
   it("updates only supported profile fields and records before/after audit state", async () => {

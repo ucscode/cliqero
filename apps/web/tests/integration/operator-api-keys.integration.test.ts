@@ -112,6 +112,46 @@ suite("operator API-key administration", () => {
     expect(invalid.status).toBe(400);
   });
 
+  it("lets a system-root session load target scopes and create a permitted key while bearer keys stay excluded", async () => {
+    const root = await account("rootkeycontext");
+    const target = await account("centralkeytarget");
+    await grant(root.id, "system.root");
+    await grant(target.id, "catalogue.manage");
+
+    const rootSession = sessionApi(root.id, ["system.root"]);
+    const context = await rootSession.fetch(
+      new Request(`http://localhost/internal/api-keys?account_id=${target.id}`),
+    );
+    expect(context.status).toBe(200);
+    const permissions = await context.json();
+    expect(permissions.manageable_scopes).toContain("catalogue:manage");
+
+    const created = await rootSession.fetch(
+      new Request("http://localhost/internal/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          account_id: target.id,
+          name: "central catalogue access",
+          scopes: ["catalogue:manage"],
+        }),
+      }),
+    );
+    expect(created.status).toBe(201);
+    const key = await created.json();
+    expect(key.secret).toMatch(/^cliq_live_/);
+    const authenticatedKey = await app.apiKeys.authenticate(key.secret);
+    expect(authenticatedKey).not.toBeNull();
+    expect(authenticatedKey?.accountId).toBe(target.id);
+
+    const bearer = await internalApi(app as any).fetch(
+      new Request("http://localhost/internal/api-keys", {
+        headers: { authorization: `Bearer ${key.secret}` },
+      }),
+    );
+    expect(bearer.status).toBe(401);
+  });
+
   it("creates safe target-scoped credentials, audits changes, and revokes without deleting", async () => {
     const actor = await account("keyoperator");
     const target = await account("keytarget");

@@ -155,6 +155,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
     const created = await app.operatorAccountManagement.create(actor.id, {
       email: "operator-created@example.test",
       username: "operatorcreated",
+      credentialSetup: { mode: "email" },
     });
     expect(created).toMatchObject({
       account: {
@@ -213,12 +214,14 @@ suite("Better Auth and Cliqero identity boundary", () => {
       app.operatorAccountManagement.create(actor.id, {
         email: "duplicate-username@example.test",
         username: "operatorupdated",
+        credentialSetup: { mode: "email" },
       }),
     ).rejects.toMatchObject({ code: "username_taken", status: 409 });
     await expect(
       app.operatorAccountManagement.create(actor.id, {
         email: "operator-created@example.test",
         username: "unique-new-name",
+        credentialSetup: { mode: "email" },
       }),
     ).rejects.toMatchObject({ code: "registration_failed" });
     const createdIdentityCount = await app.database.query<{ count: number }>(

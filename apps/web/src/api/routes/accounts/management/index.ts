@@ -4,6 +4,7 @@ import { requireCapabilityScope, requirePrincipal, type Env } from "../../../sha
 import { domainError } from "../../../shared/error";
 import { errorSchema } from "../../../shared/schemas";
 import { usernameSchema } from "@/modules/identity/username";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 import { operatorAccountDetailSchema, operatorAccountSummarySchema } from "./contracts";
 import { crudMaxRows } from "@/config/crud";
 import { registerAccount } from "@/api/compat/accounts/route";
@@ -23,6 +24,20 @@ export function registerAccountManagementRoutes(
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(maxRows).default(maxRows),
   });
+  const credentialSetupSchema = z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("email") }).strict(),
+    z
+      .object({
+        mode: z.literal("password"),
+        password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
+        confirm_password: z.string().min(1).max(PASSWORD_MAX_LENGTH),
+      })
+      .strict()
+      .refine((value) => value.password === value.confirm_password, {
+        path: ["confirm_password"],
+        message: "Passwords do not match.",
+      }),
+  ]);
   const accountCreateBody = z
     .object({
       email: z.email().trim().max(254),
@@ -33,6 +48,7 @@ export function registerAccountManagementRoutes(
         .regex(/^[A-Za-z]{2}$/)
         .transform((value) => value.toUpperCase())
         .optional(),
+      credential_setup: credentialSetupSchema.default({ mode: "email" }),
     })
     .strict();
   const publicRegistrationBody = z
@@ -83,6 +99,7 @@ export function registerAccountManagementRoutes(
               schema: z.union([
                 z.object({
                   account: operatorAccountDetailSchema,
+                  credentialSetupMode: z.enum(["email", "password"]),
                   passwordSetupEmailRequested: z.boolean(),
                 }),
                 publicRegistrationResponse,
@@ -123,8 +140,12 @@ export function registerAccountManagementRoutes(
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
-        if (!("password" in body)) {
-          const created = await container.operatorAccountManagement.create(p.accountId, body);
+        if ("credential_setup" in body) {
+          const { credential_setup, ...identity } = body;
+          const created = await container.operatorAccountManagement.create(p.accountId, {
+            ...identity,
+            credentialSetup: credential_setup,
+          });
           return c.json(created, 201);
         }
         return c.json({ error: "Forbidden", code: "forbidden" }, 403);

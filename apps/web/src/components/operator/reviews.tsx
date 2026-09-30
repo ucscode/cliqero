@@ -125,7 +125,7 @@ export function OperatorReviewEditor({ reviewId }: { reviewId: string }) {
       }
       headerActions={
         <Button type="button" variant="destructive" onClick={() => void remove()} disabled={saving}>
-          Delete review
+          Delete
         </Button>
       }
     >
@@ -268,7 +268,7 @@ export function OperatorReviews({ initialListingId = "" }: { initialListingId?: 
         });
       await collection.retry();
       if (!failures.length)
-        toast.success(`${reviews.length} review${reviews.length === 1 ? "" : "s"} moderated.`);
+        toast.success(`${reviews.length} review${reviews.length === 1 ? "" : "s"} updated.`);
       return failures.length === 0;
     } catch (cause) {
       setActionError(errorMessage(cause));
@@ -307,18 +307,18 @@ export function OperatorReviews({ initialListingId = "" }: { initialListingId?: 
   const bulkActions: readonly CrudBulkAction<Review>[] = [
     {
       value: "approve",
-      label: "Approve selected",
+      label: "Approve",
       onSelect: (items) => moderateMany(items, "approve"),
     },
     {
       value: "reject",
-      label: "Reject selected",
+      label: "Reject",
       destructive: true,
       onSelect: (items) => moderateMany(items, "reject"),
     },
     {
       value: "delete",
-      label: "Delete selected",
+      label: "Delete",
       destructive: true,
       onSelect: deleteMany,
     },
@@ -449,10 +449,10 @@ export function OperatorReviews({ initialListingId = "" }: { initialListingId?: 
       selection={{ labelForItem: (review) => `review by ${review.reviewer ?? "customer"}` }}
       bulkActions={(selected) => reviewQueueBulkActions(selected, bulkActions)}
       actions={(review) => [
-        { type: "link" as const, label: "Edit review", href: `/operator/reviews/${review.id}` },
+        { type: "link" as const, label: "Edit", href: `/operator/reviews/${review.id}` },
         {
           type: "action" as const,
-          label: "Delete review",
+          label: "Delete",
           destructive: true,
           onSelect: () => {
             if (!window.confirm("Permanently delete this review?")) return;

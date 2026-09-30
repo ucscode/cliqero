@@ -2,9 +2,15 @@ import type { ReactNode } from "react";
 
 export type CrudField = { label: ReactNode; value: ReactNode; className?: string };
 
-export function CrudFieldList({ fields }: { fields: readonly CrudField[] }) {
+export function CrudFieldList({
+  fields,
+  layout = "grid",
+}: {
+  fields: readonly CrudField[];
+  layout?: "grid" | "stacked";
+}) {
   return (
-    <dl className="grid min-w-0 gap-x-6 gap-y-4 sm:grid-cols-2">
+    <dl className={`grid min-w-0 gap-x-6 gap-y-4 ${layout === "grid" ? "sm:grid-cols-2" : ""}`}>
       {fields.map((field, index) => (
         <div
           key={`${index}`}

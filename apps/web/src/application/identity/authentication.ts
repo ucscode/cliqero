@@ -6,7 +6,7 @@ import {
   type IdentityPersistence,
   type AuthIdentityResolution,
 } from "@/modules/identity/persistence";
-import { assertPasswordMinimum } from "@/modules/identity/password-policy";
+import { assertPasswordLength } from "@/modules/identity/password-policy";
 import { normalizeUsername } from "@/modules/identity/username";
 import type { AuthenticationGateway } from "./contracts";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
@@ -62,6 +62,14 @@ export class AuthenticationService {
     return this.createAccount(input, false, actorId);
   }
 
+  /** Creates an operator-provisioned Better Auth identity with no credential. */
+  async registerForOperatorWithoutPassword(
+    input: { email: string; username: string; country?: string | null },
+    actorId: string,
+  ): Promise<Account> {
+    return this.createAccount(input, false, actorId);
+  }
+
   async requestPasswordSetup(email: string, redirectTo: string): Promise<void> {
     await this.gateway.requestPasswordReset({ email: email.trim().toLowerCase(), redirectTo });
   }
@@ -70,14 +78,14 @@ export class AuthenticationService {
     input: {
       email: string;
       username: string;
-      password: string;
+      password?: string;
       country?: string | null;
       accountReferralSource?: string;
     },
     countryRequired: boolean,
     operatorActorId?: string,
   ): Promise<Account> {
-    assertPasswordMinimum(input.password);
+    if (input.password !== undefined) assertPasswordLength(input.password);
     const email = input.email.trim().toLowerCase();
     const username = normalizeUsername(input.username);
     const country = countryRequired
@@ -91,7 +99,9 @@ export class AuthenticationService {
     await this.identity.removeUnlinkedAuthUser(email);
     let result: { user: { id: string }; token?: string | null };
     try {
-      result = await this.gateway.signUpEmail({ email, password: input.password });
+      result = input.password
+        ? await this.gateway.signUpEmail({ email, password: input.password })
+        : { user: await this.gateway.createUserWithoutPassword({ email }) };
     } catch {
       throw new PublicApplicationError(
         "We couldn’t create an account with those details.",
@@ -220,7 +230,7 @@ export class AuthenticationService {
       );
     let createdCredentialId: string | null = null;
     if (!hasPassword && input.password) {
-      assertPasswordMinimum(input.password);
+      assertPasswordLength(input.password);
       if (!headers)
         throw new Error("An authenticated request is required to create a local password");
       createdCredentialId = await this.gateway.setPassword(authUserId, input.password, headers);

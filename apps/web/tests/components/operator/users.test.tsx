@@ -262,9 +262,11 @@ describe("operator capability administration", () => {
     expect(html).toContain("Root authority already includes every ordinary platform permission.");
     expect(html).toContain("Existing direct assignments are preserved");
     expect(html).toContain("opacity-60");
-    expect(html).toContain("mt-4 rounded-lg border border-slate-200");
-    expect(html).toContain("mt-4 divide-y divide-slate-200");
-    expect(html).toContain('bg-slate-100 text-slate-800">Enabled</div>');
+    expect(html).toContain(
+      '<div class="mt-6 rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">Root authority already includes every ordinary platform permission.',
+    );
+    expect(html).toContain("mt-6 divide-y divide-slate-200");
+    expect(html).toContain('bg-emerald-700 text-white">Enabled</div>');
     expect([...html.matchAll(/bg-rose-800/g)]).toHaveLength(1);
     expect(html).not.toContain("Save capabilities");
     expect(html).not.toContain("Assigned</");
@@ -297,20 +299,39 @@ describe("operator capability administration", () => {
     expect(html.indexOf('type="checkbox"')).toBeLessThan(html.indexOf("Catalogue management"));
   });
 
-  it("uses an async parent selector and assigns immediately on selection", () => {
+  it("keeps parent selection as a draft until the explicit Assign parent action", () => {
     const source = readFileSync(
       resolve(process.cwd(), "src/components/operator/users.tsx"),
       "utf8",
     );
     expect(source).toContain('import AsyncSelect from "react-select/async"');
     expect(source).toContain("loadOptions={loadParentOptions}");
-    expect(source).toContain("onChange={(option) => void reassign(option?.account ?? null)}");
+    expect(source).toContain("setSelectedParent(option)");
+    expect(source).not.toContain("onChange={(option) => void reassign");
+    expect(source).toContain("onClick={() => void reassign(selectedParent?.account ?? null)}");
     expect(source).toContain("Current parent");
+    expect(source).toContain('title="Reassign parent"');
+    expect(source).toContain('label: "Parent"');
     expect(source).toContain('toast.success("Parent reassigned successfully.")');
     expect(source).toContain("setParentError(message(cause))");
     expect(source).toContain("candidate.id !== currentAccountId");
+    expect(source).toContain("Assigning…");
+    expect(source).toContain("Assign parent");
     expect(source).not.toContain("Assign parent</button>");
-    expect(source).not.toContain("Search</Button>");
-    expect(source).not.toContain("Selected parent:");
+    expect(source).not.toContain("Immediate parent");
+  });
+
+  it("offers explicit email or manual-password setup only during account creation", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/operator/users.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("Send account setup email");
+    expect(source).toContain("Set password manually");
+    expect(source).toContain('type="radio"');
+    expect(source).toContain('type="password"');
+    expect(source).toContain("confirm_password: confirmPassword");
+    expect(source).toContain("router.push(`/operator/users/${result.account.id}`)");
+    expect(source).toContain("credential_setup:");
   });
 });

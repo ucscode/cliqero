@@ -13,6 +13,11 @@ export interface OperatorBulkWorkflowDependencies {
   };
   listingReviews: {
     moderate(actor: Account, reviewId: string, status: "approved" | "rejected"): Promise<unknown>;
+    update(
+      actor: Account,
+      reviewId: string,
+      input: { status: "approved" | "rejected" },
+    ): Promise<unknown>;
     delete(actor: Account, reviewId: string): Promise<unknown>;
   };
   blog: {
@@ -80,7 +85,7 @@ export class OperatorBulkWorkflow {
             if (command.action === "delete") {
               await this.container.listingReviews.delete(actor, id);
             } else {
-              await this.container.listingReviews.moderate(actor, id, command.status);
+              await this.container.listingReviews.update(actor, id, { status: command.status });
             }
             break;
           case "blog-posts":

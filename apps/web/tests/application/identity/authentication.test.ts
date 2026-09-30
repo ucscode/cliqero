@@ -38,6 +38,7 @@ function dependencies(
   };
   const gateway: AuthenticationGateway = {
     signUpEmail: async () => ({ user: { id: "auth-user" }, token: "session-token" }),
+    createUserWithoutPassword: async () => ({ id: "auth-user" }),
     signInEmail: async () => ({ user: { id: "auth-user" }, token: "session-token" }),
     requestPasswordReset: async () => undefined,
     getSession: async () => options.session ?? null,
@@ -87,6 +88,21 @@ describe("AuthenticationService application contracts", () => {
       email: "new@example.test",
       redirectTo: "https://example.test/reset-password",
     });
+  });
+
+  it("creates a Better Auth identity without a credential for operator email setup", async () => {
+    const { accounts, service, gateway } = dependencies();
+    const createWithoutPassword = vi.spyOn(gateway, "createUserWithoutPassword");
+    const signUp = vi.spyOn(gateway, "signUpEmail");
+    const account = await service.registerForOperatorWithoutPassword(
+      { email: " New@Example.Test ", username: "new_user" },
+      "actor-id",
+    );
+
+    expect(createWithoutPassword).toHaveBeenCalledWith({ email: "new@example.test" });
+    expect(signUp).not.toHaveBeenCalled();
+    expect(account.country).toBeNull();
+    expect(accounts).toHaveLength(1);
   });
 
   it("records operator account creation inside the trusted identity transaction", async () => {

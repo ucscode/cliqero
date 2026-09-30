@@ -466,7 +466,7 @@ suite("listing review visibility", () => {
     ]);
   });
 
-  it("bulk-moderates mixed statuses and permanently deletes selected reviews with partial outcomes", async () => {
+  it("bulk-sets approved or rejected status across mixed states and deletes with partial outcomes", async () => {
     const operator = await app.authentication.register({
       email: "review_bulk_operator@example.test",
       username: "review_bulk_operator",
@@ -510,13 +510,27 @@ suite("listing review visibility", () => {
         resource: "reviews",
         action: "moderate",
         status: "approved",
-        ids: [reviews[0]!.id, reviews[2]!.id],
+        ids: reviews.map(({ id }) => id),
       }),
-    ).resolves.toEqual({ succeeded: [reviews[0]!.id, reviews[2]!.id], failed: [] });
+    ).resolves.toEqual({ succeeded: reviews.map(({ id }) => id), failed: [] });
     expect((await app.listingReviews.summariesForListings([listing.id])).get(listing.id)).toEqual({
       average: 4,
-      count: 2,
+      count: 3,
     });
+
+    await app.listingReviews.update(operator, reviews[0]!.id, { status: "rejected" });
+    await app.listingReviews.update(operator, reviews[2]!.id, { status: "pending" });
+    await expect(
+      workflow.execute(operator, {
+        resource: "reviews",
+        action: "moderate",
+        status: "rejected",
+        ids: reviews.map(({ id }) => id),
+      }),
+    ).resolves.toEqual({ succeeded: reviews.map(({ id }) => id), failed: [] });
+    expect(
+      (await app.listingReviews.operatorQueue(operator, { status: "rejected", limit: 10 })).items,
+    ).toHaveLength(3);
 
     const missingId = newId();
     await expect(

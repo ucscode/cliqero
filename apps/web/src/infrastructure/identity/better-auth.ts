@@ -8,7 +8,7 @@ import { sendAuthEmail, type AuthEmail, type AuthenticationEmailPurpose } from "
 import { siteConfig } from "@/config/site";
 import { getOptionalSocialProviders } from "@/config/auth";
 import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
-import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 
 const developmentSecret = "cliqero-development-better-auth-secret-change-me-32";
 
@@ -102,6 +102,7 @@ export class BetterAuthBoundary implements AuthenticationGateway {
         enabled: true,
         autoSignIn: false,
         minPasswordLength: PASSWORD_MIN_LENGTH,
+        maxPasswordLength: PASSWORD_MAX_LENGTH,
         requireEmailVerification: false,
         sendResetPassword: (message: AuthEmail) => deliverAuthenticationEmail("reset", message),
       },
@@ -147,6 +148,18 @@ export class BetterAuthBoundary implements AuthenticationGateway {
       body: { name: "", email: input.email, password: input.password },
     });
     return { user: { id: result.user.id }, token: result.token };
+  }
+
+  async createUserWithoutPassword(input: { email: string }): Promise<{ id: string }> {
+    // Better Auth's admin create-user endpoint uses this same internal adapter
+    // operation when no password is supplied. Keep it server-side: adding the
+    // Admin plugin would expose an unrelated public administration surface.
+    const context = await this.auth.$context;
+    const user = await context.internalAdapter.createUser(
+      { name: "", email: input.email.trim().toLowerCase(), emailVerified: false },
+      { method: "admin" },
+    );
+    return { id: user.id };
   }
 
   async signInEmail(input: { email: string; password: string }): Promise<AuthSession> {

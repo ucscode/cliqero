@@ -17,9 +17,9 @@ const review = {
 };
 const selection = { labelForItem: (item: typeof review) => `review by ${item.reviewer}` };
 const actions = [
-  { value: "approve", label: "Approve selected", onSelect: vi.fn() },
-  { value: "reject", label: "Reject selected", onSelect: vi.fn() },
-  { value: "delete", label: "Delete selected", onSelect: vi.fn() },
+  { value: "approve", label: "Approve", onSelect: vi.fn() },
+  { value: "reject", label: "Reject", onSelect: vi.fn() },
+  { value: "delete", label: "Delete", onSelect: vi.fn() },
 ];
 
 function renderQueue(appliedStatus: string) {
@@ -45,9 +45,9 @@ describe("operator review queue bulk selection", () => {
     expect(html).toContain('aria-label="Select all visible records"');
     expect(html).toContain('aria-label="Select review by A customer"');
     expect(html).toContain('aria-label="Bulk actions"');
-    expect(html).toContain(">Approve selected</option>");
-    expect(html).toContain(">Reject selected</option>");
-    expect(html).toContain(">Delete selected</option>");
+    expect(html).toContain(">Approve</option>");
+    expect(html).toContain(">Reject</option>");
+    expect(html).toContain(">Delete</option>");
     expect(html).toContain('type="button" disabled=""');
     expect(reviewQueueBulkActions([review], actions)).toBe(actions);
   });
@@ -64,11 +64,7 @@ describe("operator review queue bulk selection", () => {
         actions,
       ),
     ).toEqual(actions);
-    expect(actions.map(({ label }) => label)).toEqual([
-      "Approve selected",
-      "Reject selected",
-      "Delete selected",
-    ]);
+    expect(actions.map(({ label }) => label)).toEqual(["Approve", "Reject", "Delete"]);
     expect(reviewQueueBulkActions([], actions)).toEqual([]);
   });
 
@@ -91,10 +87,14 @@ describe("operator review queue bulk selection", () => {
     );
     expect(source).toContain('sort: "submitted", direction: "desc"');
     expect(source).toContain('status: "all"');
-    expect(source).toContain('label: "Edit review"');
+    expect(source).not.toContain('label: "Edit review"');
     expect(source).toContain("line-clamp-3 max-w-[20rem] break-words whitespace-pre-wrap");
     expect(source).toContain('resource: "reviews",\n        action: "delete"');
-    expect(source).toContain("Delete review");
+    expect(source).toContain('label: "Delete"');
+    expect(source).toContain('label: "Edit"');
+    expect(source).not.toContain("Approve selected");
+    expect(source).not.toContain("Reject selected");
+    expect(source).not.toContain("Delete selected");
     expect(source).toContain("reviewQueueBulkActions(selected, bulkActions)");
   });
 });

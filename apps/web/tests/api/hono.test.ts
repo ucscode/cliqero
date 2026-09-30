@@ -116,6 +116,7 @@ function appWith(
             purchaseCount: 0,
             latestParentReassignment: null,
           },
+          credentialSetupMode: input.credentialSetup?.mode ?? "email",
           passwordSetupEmailRequested: true,
         }),
         update: async (_actorId: string, accountId: string, input: any) => ({
@@ -298,6 +299,7 @@ function appWith(
         summariesForListings: async () => new Map(),
         operatorQueue: async () => ({ items: [], nextCursor: null }),
         moderate: async () => ({}),
+        update: async () => ({}),
         ...reviewOverrides,
       },
       listingService: {
@@ -1897,7 +1899,11 @@ describe("Hono API foundation", () => {
           body: JSON.stringify(body),
         }),
       );
-    const body = { email: "new@example.test", username: "new_user" };
+    const body = {
+      email: "new@example.test",
+      username: "new_user",
+      credential_setup: { mode: "email" },
+    };
 
     expect((await create(null, body)).status).toBe(401);
     expect((await create({ ...base, capabilities: ["accounts.read"] }, body)).status).toBe(403);
@@ -1910,6 +1916,49 @@ describe("Hono API foundation", () => {
       ).status,
     ).toBe(400);
     expect((await create({ ...base, capabilities: ["accounts.manage"] }, body)).status).toBe(201);
+    const manualPassword = "ManualPassword!2026";
+    const manualResponse = await create(
+      { ...base, capabilities: ["accounts.manage"] },
+      {
+        email: "manual@example.test",
+        username: "manual_user",
+        credential_setup: {
+          mode: "password",
+          password: manualPassword,
+          confirm_password: manualPassword,
+        },
+      },
+    );
+    expect(manualResponse.status).toBe(201);
+    expect(await manualResponse.text()).not.toContain(manualPassword);
+    expect(
+      (
+        await create(
+          { ...base, capabilities: ["accounts.manage"] },
+          {
+            email: "mismatch@example.test",
+            username: "mismatch_user",
+            credential_setup: {
+              mode: "password",
+              password: manualPassword,
+              confirm_password: "not-the-same",
+            },
+          },
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await create(
+          { ...base, capabilities: ["accounts.manage"] },
+          {
+            email: "short@example.test",
+            username: "short_user",
+            credential_setup: { mode: "password", password: "short", confirm_password: "short" },
+          },
+        )
+      ).status,
+    ).toBe(400);
     expect(
       (await create({ ...base, kind: "api_key", capabilities: ["accounts.manage"] }, body)).status,
     ).toBe(403);
