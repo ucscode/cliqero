@@ -5,6 +5,7 @@ import {
   apiKeyBulkDeleteSchema,
   apiKeyCreateSchema,
   apiKeyListQuerySchema,
+  apiKeyReassignSchema,
   apiKeyUpdateSchema,
 } from "./contracts";
 
@@ -97,7 +98,7 @@ function metadata(key: ApiKeyRecord) {
     account_username: key.accountUsername ?? "",
     account_email: key.accountEmail ?? null,
     scopes: key.scopes,
-    state: key.revokedAt ? "deleted" : expired ? "expired" : "active",
+    state: key.revokedAt ? "revoked" : expired ? "expired" : "active",
     created_at: key.createdAt.toISOString(),
     last_used_at: key.lastUsedAt?.toISOString() ?? null,
     expires_at: key.expiresAt?.toISOString() ?? null,
@@ -123,14 +124,13 @@ export class InternalApiKeyManagementRoutes {
         state: query.state,
         sort: query.sort,
         direction: query.direction,
+        limit: query.limit,
+        cursor: query.cursor,
       });
-      const offset = Number(query.cursor ?? 0);
-      const items = result.items.slice(offset, offset + query.limit);
-      const nextOffset = offset + items.length;
       return response({
-        items: items.map(metadata),
+        items: result.items.map(metadata),
         manageable_scopes: result.manageableScopes,
-        next_cursor: nextOffset < result.items.length ? String(nextOffset) : null,
+        next_cursor: result.nextCursor,
       });
     } catch (error) {
       return apiError(error, request);
@@ -202,12 +202,13 @@ export class InternalApiKeyManagementRoutes {
                 : body.expires_at === null
                   ? null
                   : new Date(body.expires_at),
+            status: body.state,
           },
         );
         return response({ item: key ? metadata(key) : null });
       }
       if (request.method === "DELETE") {
-        await this.container.operatorApiKeys.revokeForSession(principal.accountId, keyId);
+        await this.container.operatorApiKeys.deleteForSession(principal.accountId, keyId);
         return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
       }
       return badRequest("Method not allowed.", "method_not_allowed", 405);
@@ -236,11 +237,35 @@ export class InternalApiKeyManagementRoutes {
       const parsed = await parseJson(request);
       if (parsed.error) return parsed.error;
       const body = apiKeyBulkDeleteSchema.parse(parsed.value);
-      const outcome = await this.container.operatorApiKeys.bulkDeleteForOperator(
+      const outcome = await this.container.operatorApiKeys.bulkDeleteForSession(
         principal.accountId,
         body.ids,
       );
       return response(outcome);
+    } catch (error) {
+      return apiError(error, request);
+    }
+  }
+
+  async reassign(request: Request, keyId: string): Promise<Response> {
+    const principal = await this.session(request, true);
+    if (principal instanceof Response) return principal;
+    if (!this.rateLimiter.allow(principal.accountId)) return rateLimited();
+    try {
+      const parsed = await parseJson(request);
+      if (parsed.error) return parsed.error;
+      const body = apiKeyReassignSchema.parse(parsed.value);
+      const key = await this.container.operatorApiKeys.reassignForSession(
+        principal.accountId,
+        keyId,
+        {
+          accountId: body.account_id,
+          name: body.name,
+          scopes: body.scopes,
+          expiresAt: body.expires_at === null ? null : new Date(body.expires_at),
+        },
+      );
+      return response({ ...metadata(key), secret: key.secret });
     } catch (error) {
       return apiError(error, request);
     }
@@ -257,6 +282,10 @@ export function internalApiKeyCreate(request: Request) {
 
 export function internalApiKeyItem(request: Request, keyId: string) {
   return new InternalApiKeyManagementRoutes(getContainer()).item(request, keyId);
+}
+
+export function internalApiKeyReassign(request: Request, keyId: string) {
+  return new InternalApiKeyManagementRoutes(getContainer()).reassign(request, keyId);
 }
 
 export function internalApiKeyBulkDelete(request: Request) {

@@ -63,6 +63,9 @@ suite("operator API-key administration", () => {
         }
         if (url.pathname === "/internal/api-keys/actions/delete" && request.method === "POST")
           return routes.bulkDelete(request);
+        const reassignMatch = /^\/internal\/api-keys\/([^/]+)\/reassign$/.exec(url.pathname);
+        if (reassignMatch && request.method === "POST")
+          return routes.reassign(request, decodeURIComponent(reassignMatch[1]));
         const match = /^\/internal\/api-keys\/([^/]+)$/.exec(url.pathname);
         if (match) return routes.item(request, decodeURIComponent(match[1]));
         return Promise.resolve(Response.json({ error: "Not found" }, { status: 404 }));
@@ -109,7 +112,7 @@ suite("operator API-key administration", () => {
     expect(invalid.status).toBe(400);
   });
 
-  it("creates safe target-scoped credentials, audits changes, and revokes idempotently", async () => {
+  it("creates safe target-scoped credentials, audits changes, and revokes without deleting", async () => {
     const actor = await account("keyoperator");
     const target = await account("keytarget");
     await grant(actor.id, "api_keys.manage");
@@ -166,16 +169,27 @@ suite("operator API-key administration", () => {
 
     const revoked = await api.fetch(
       new Request(`http://localhost/internal/api-keys/${created.id}`, {
-        method: "DELETE",
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ state: "revoked" }),
       }),
     );
-    expect(revoked.status).toBe(204);
+    expect(revoked.status).toBe(200);
+    expect((await revoked.json()).item.state).toBe("revoked");
+    const stillListed = await api.fetch(
+      new Request(`http://localhost/internal/api-keys?account_id=${target.id}&state=revoked`),
+    );
+    expect((await stillListed.json()).items.map((item: { id: string }) => item.id)).toContain(
+      created.id,
+    );
     const repeated = await api.fetch(
       new Request(`http://localhost/internal/api-keys/${created.id}`, {
-        method: "DELETE",
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ state: "revoked" }),
       }),
     );
-    expect(repeated.status).toBe(204);
+    expect(repeated.status).toBe(200);
     expect(await app.apiKeys.authenticate(created.secret)).toBeNull();
     const auditAfter = await app.database.query<{ count: string }>(
       `select count(*)::text count from kernel.audit_records where subject_type='api_key'`,
@@ -288,6 +302,8 @@ suite("operator API-key administration", () => {
     );
     expect(ownerChange.status).toBe(400);
     expect((await app.apiKeys.authenticate(created.secret))?.accountId).toBe(first.id);
+    expect(await app.apiKeys.delete(created.id, second.id)).toBe(false);
+    expect((await app.apiKeys.authenticate(created.secret))?.accountId).toBe(first.id);
 
     const deleted = await api.fetch(
       new Request(`http://localhost/internal/api-keys/${created.id}`, { method: "DELETE" }),
@@ -295,11 +311,11 @@ suite("operator API-key administration", () => {
     expect(deleted.status).toBe(204);
     expect(await app.apiKeys.authenticate(created.secret)).toBeNull();
     const deletedMetadata = await api.fetch(
-      new Request("http://localhost/internal/api-keys?account_id=" + first.id + "&state=deleted"),
+      new Request(`http://localhost/internal/api-keys?account_id=${first.id}&state=all`),
     );
-    expect((await deletedMetadata.json()).items.map((item: { id: string }) => item.id)).toContain(
-      created.id,
-    );
+    expect(
+      (await deletedMetadata.json()).items.map((item: { id: string }) => item.id),
+    ).not.toContain(created.id);
   });
 
   it("bulk-deletes server-side with independent per-key authorization and partial outcomes", async () => {
@@ -321,36 +337,144 @@ suite("operator API-key administration", () => {
       scopes: ["catalogue:manage"],
       createdBy: actor.id,
     });
-    const previouslyDeleted = await app.apiKeys.create({
+    const previouslyRevoked = await app.apiKeys.create({
       accountId: allowedTarget.id,
-      name: "already deleted",
+      name: "already revoked",
       scopes: [],
       createdBy: actor.id,
     });
-    await app.apiKeys.revoke(previouslyDeleted.id, allowedTarget.id);
+    await app.apiKeys.revoke(previouslyRevoked.id, allowedTarget.id);
 
     const api = sessionApi(actor.id, ["api_keys.manage"]);
     const response = await api.fetch(
       new Request("http://localhost/internal/api-keys/actions/delete", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ids: [allowed.id, restricted.id, previouslyDeleted.id] }),
+        body: JSON.stringify({ ids: [allowed.id, restricted.id, previouslyRevoked.id] }),
       }),
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      succeeded: [allowed.id],
+      succeeded: [allowed.id, previouslyRevoked.id],
       failed: [
         {
           id: restricted.id,
           message: expect.stringContaining("cannot assign the catalogue:manage scope"),
         },
-        { id: previouslyDeleted.id, message: "API key is already deleted." },
       ],
     });
     expect(await app.apiKeys.authenticate(allowed.secret)).toBeNull();
+    expect(await app.apiKeys.authenticate(previouslyRevoked.secret)).toBeNull();
     expect(await app.apiKeys.authenticate(restricted.secret)).not.toBeNull();
-    expect(await app.apiKeys.authenticate(previouslyDeleted.secret)).toBeNull();
+  });
+
+  it("restricts owner transfer to root, rotates credentials, validates destination scopes, and reactivates revoked keys only for root", async () => {
+    const ordinaryOperator = await account("transferoperator");
+    const source = await account("transfersource");
+    const destination = await account("transferdestination");
+    const restrictedDestination = await account("transferrestricted");
+    await grant(ordinaryOperator.id, "api_keys.manage");
+    await grant(source.id, "catalogue.manage");
+    await grant(destination.id, "catalogue.manage");
+    await grant(restrictedDestination.id, "api_keys.manage");
+    const key = await app.apiKeys.create({
+      accountId: source.id,
+      name: "transferable credential",
+      scopes: ["catalogue:manage"],
+      createdBy: ordinaryOperator.id,
+    });
+    const deniedApi = sessionApi(ordinaryOperator.id, ["api_keys.manage"]);
+    const transferBody = {
+      account_id: destination.id,
+      name: "transferred credential",
+      scopes: ["catalogue:manage"],
+      expires_at: null,
+    };
+    const denied = await deniedApi.fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}/reassign`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(transferBody),
+      }),
+    );
+    expect(denied.status).toBe(403);
+    expect(await app.apiKeys.authenticate(key.secret)).not.toBeNull();
+
+    const root = await account("transferroot");
+    await grant(root.id, "system.root");
+    const rootApi = sessionApi(root.id, ["system.root"]);
+    const invalidScopes = await rootApi.fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}/reassign`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...transferBody, account_id: restrictedDestination.id }),
+      }),
+    );
+    expect(invalidScopes.status).toBe(403);
+    expect((await invalidScopes.json()).code).toBe("target_scope_forbidden");
+
+    const movedResponse = await rootApi.fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}/reassign`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(transferBody),
+      }),
+    );
+    expect(movedResponse.status).toBe(200);
+    const moved = await movedResponse.json();
+    expect(moved.secret).toMatch(/^cliq_live_/);
+    expect(moved.secret).not.toBe(key.secret);
+    expect(moved.account_id).toBe(destination.id);
+    expect(await app.apiKeys.authenticate(key.secret)).toBeNull();
+    expect((await app.apiKeys.authenticate(moved.secret))?.accountId).toBe(destination.id);
+    const reassignmentAudit = await app.database.query<{
+      action: string;
+      previous_state: any;
+      new_state: any;
+    }>(
+      `select action,previous_state,new_state from kernel.audit_records where subject_type='api_key' and subject_id=$1 order by id desc limit 1`,
+      [key.id],
+    );
+    expect(reassignmentAudit.rows[0].action).toBe("api_key.reassigned");
+    expect(JSON.stringify(reassignmentAudit.rows[0])).not.toContain(moved.secret);
+
+    const revoke = await rootApi.fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ state: "revoked" }),
+      }),
+    );
+    expect(revoke.status).toBe(200);
+    expect(await app.apiKeys.authenticate(moved.secret)).toBeNull();
+    const ordinaryReactivate = await deniedApi.fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ state: "active" }),
+      }),
+    );
+    expect(ordinaryReactivate.status).toBe(403);
+    const rootReactivate = await rootApi.fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ state: "active" }),
+      }),
+    );
+    expect(rootReactivate.status).toBe(200);
+    expect((await app.apiKeys.authenticate(moved.secret))?.accountId).toBe(destination.id);
+
+    const deleteResponse = await rootApi.fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}`, { method: "DELETE" }),
+    );
+    expect(deleteResponse.status).toBe(204);
+    expect(await app.apiKeys.authenticate(moved.secret)).toBeNull();
+    const keyRows = await app.database.query<{ count: string }>(
+      `select count(*)::text count from identity_capability.api_keys where uuid=$1`,
+      [key.id],
+    );
+    expect(keyRows.rows[0].count).toBe("0");
   });
 
   it("paginates the collection deterministically within the applied filters", async () => {
@@ -609,11 +733,16 @@ suite("operator API-key administration", () => {
     const created = await createdResponse.json();
 
     const revokeUrl = `http://localhost/internal/api-keys/${created.id}`;
-    const results = await Promise.all([
-      api.fetch(new Request(revokeUrl, { method: "DELETE" })),
-      api.fetch(new Request(revokeUrl, { method: "DELETE" })),
-    ]);
-    expect(results.map((response) => response.status)).toEqual([204, 204]);
+    const revokeRequest = () =>
+      api.fetch(
+        new Request(revokeUrl, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ state: "revoked" }),
+        }),
+      );
+    const results = await Promise.all([revokeRequest(), revokeRequest()]);
+    expect(results.map((response) => response.status)).toEqual([200, 200]);
     expect(await app.apiKeys.authenticate(created.secret)).toBeNull();
     const audits = await app.database.query<{ count: string }>(
       `select count(*)::text count from kernel.audit_records where subject_type='api_key' and subject_id=$1`,

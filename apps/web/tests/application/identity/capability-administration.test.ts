@@ -102,7 +102,7 @@ describe("CapabilityAdministrationService", () => {
     });
   });
 
-  it("reports direct assignments without expanding root authority", async () => {
+  it("marks root authority as covering ordinary permissions without expanding assignments", async () => {
     const { service, assignments } = makeService();
     assignments.values.set(
       ids.actor,
@@ -110,7 +110,31 @@ describe("CapabilityAdministrationService", () => {
     );
     const view = await service.inspect(ids.actor, ids.actor);
     expect(view.assignments.map((item) => item.capability)).toEqual(["system.root"]);
-    expect(view.manageableCapabilities).toContain("treasury.manage");
+    expect(view.rootAuthority).toBe(true);
+    expect(view.manageableCapabilities).toEqual(["system.root"]);
+  });
+
+  it("preserves existing ordinary assignments when granting root and blocks subsequent ordinary edits", async () => {
+    const { service, assignments } = makeService();
+    assignments.values.set(
+      ids.actor,
+      new Map<Capability, string>([["system.root", new Date().toISOString()]]),
+    );
+    assignments.values.set(
+      ids.target,
+      new Map<Capability, string>([["catalogue.manage", new Date().toISOString()]]),
+    );
+    await service.grant(ids.actor, ids.target, "system.root");
+    await expect(
+      service.replaceOrdinary(ids.actor, ids.target, ["reviews.moderate"]),
+    ).rejects.toMatchObject({ code: "root_authority_covers_capabilities", status: 403 });
+    await expect(service.grant(ids.actor, ids.target, "reviews.moderate")).rejects.toMatchObject({
+      code: "root_authority_covers_capabilities",
+      status: 403,
+    });
+    expect(
+      (await assignments.assignments(ids.target)).map((item) => item.capability).sort(),
+    ).toEqual(["catalogue.manage", "system.root"]);
   });
 
   it("rejects capabilities outside the canonical registry", async () => {

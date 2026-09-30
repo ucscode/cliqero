@@ -1,12 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
+  CapabilityCard,
   OperatorUserFormFields,
   OperatorUsersListView,
   applyOperatorUserSearch,
   operatorUsersEmptyDescription,
   operatorUserRowActions,
 } from "@/components/operator/users";
+import type { CapabilityAdministrationView } from "@/lib/api-client";
 import type { OperatorAccountPage } from "@/lib/api-client";
 
 const page: OperatorAccountPage = {
@@ -229,5 +231,61 @@ describe("operator users list", () => {
     expect(operatorUsersEmptyDescription("central_left_1")).toBe(
       "No accounts matched this search.",
     );
+  });
+});
+
+describe("operator capability administration", () => {
+  const view: CapabilityAdministrationView = {
+    accountId: "root-target",
+    assignments: [
+      { capability: "system.root", grantedAt: "2026-01-01T00:00:00.000Z" },
+      { capability: "catalogue.manage", grantedAt: "2026-01-01T00:00:00.000Z" },
+    ],
+    manageableCapabilities: ["system.root"],
+    isSelf: false,
+    rootAuthority: true,
+  };
+
+  it("keeps the separate root control, preserves ordinary assignments, and disables ordinary edits", () => {
+    const html = renderToStaticMarkup(
+      <CapabilityCard
+        view={view}
+        saving={null}
+        onChange={vi.fn(async () => {})}
+        draft={["catalogue.manage"]}
+        onToggle={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(html).toContain("Root authority already includes every ordinary platform permission.");
+    expect(html).toContain("Existing direct assignments are preserved");
+    expect(html).not.toContain("Save capabilities");
+    expect(html).not.toContain("Assigned</");
+    expect(html).not.toContain("Not assigned");
+    expect(html.indexOf('type="checkbox"')).toBeLessThan(html.indexOf("API-key administration"));
+    expect(html).toContain('aria-label="API-key administration"');
+    expect(html).toMatch(/<input[^>]*disabled=""[^>]*aria-label="Catalogue management" checked=""/);
+    expect(html).toMatch(/<input[^>]*disabled=""[^>]*aria-label="API-key administration"\/>/);
+  });
+
+  it("keeps one save operation and checkbox-first ordinary capability rows without assignment labels", () => {
+    const html = renderToStaticMarkup(
+      <CapabilityCard
+        view={{
+          ...view,
+          assignments: [],
+          manageableCapabilities: ["catalogue.manage"],
+          rootAuthority: false,
+        }}
+        saving={null}
+        onChange={vi.fn(async () => {})}
+        draft={[]}
+        onToggle={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(html).toContain("Save capabilities");
+    expect(html).not.toContain("Not assigned");
+    expect(html.indexOf('type="checkbox"')).toBeLessThan(html.indexOf("Catalogue management"));
   });
 });

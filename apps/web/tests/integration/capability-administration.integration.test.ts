@@ -73,10 +73,12 @@ suite("capability administration persistence", () => {
     await grantDirect(target.id, "catalogue.manage");
     await grantDirect(target.id, "system.root");
 
-    await app.capabilityAdministration.replaceOrdinary(actor.id, target.id, ["reviews.moderate"]);
+    await expect(
+      app.capabilityAdministration.replaceOrdinary(actor.id, target.id, ["reviews.moderate"]),
+    ).rejects.toMatchObject({ code: "root_authority_covers_capabilities" });
     const assigned = await app.capabilityAdministration.inspect(actor.id, target.id);
     expect(assigned.assignments.map((item) => item.capability).sort()).toEqual([
-      "reviews.moderate",
+      "catalogue.manage",
       "system.root",
     ]);
     await expect(

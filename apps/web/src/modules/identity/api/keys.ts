@@ -28,15 +28,36 @@ export interface ApiKeyManagementService {
     createdAt: Date;
     expiresAt: Date | null;
   }>;
-  list(
-    accountId?: string,
-    order?: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" },
-    filters?: { search?: string; state?: "active" | "expired" | "deleted" | "all" },
-  ): Promise<readonly ApiKeyRecord[]>;
+  listPage(input: {
+    accountId?: string;
+    search?: string;
+    state?: "active" | "expired" | "revoked" | "all";
+    sort?: "created" | "name" | "expires";
+    direction?: "asc" | "desc";
+    limit: number;
+    cursor?: string;
+    authorizationScope: string;
+  }): Promise<{
+    items: readonly (ApiKeyRecord & { pageCursor: string })[];
+    nextCursor: string | null;
+  }>;
   find(id: string, accountId?: string): Promise<ApiKeyRecord | null>;
   revoke(id: string, accountId?: string): Promise<boolean>;
   update(
     id: string,
-    input: { name: string; scopes: string[]; expiresAt: Date | null },
+    input: {
+      name: string;
+      scopes: string[];
+      expiresAt: Date | null;
+      status?: "active" | "revoked";
+    },
   ): Promise<boolean>;
+  reassign(input: {
+    id: string;
+    accountId: string;
+    name: string;
+    scopes: string[];
+    expiresAt: Date | null;
+  }): Promise<{ secret: string; keyPrefix: string } | null>;
+  delete(id: string, accountId?: string): Promise<boolean>;
 }

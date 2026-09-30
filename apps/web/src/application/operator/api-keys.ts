@@ -16,6 +16,7 @@ export type OperatorApiKeyInput = {
   name?: string;
   scopes?: string[];
   expiresAt?: Date | null;
+  status?: "active" | "revoked";
 };
 
 function forbidden(message: string, code = "forbidden") {
@@ -31,85 +32,83 @@ export class OperatorApiKeyService {
     private readonly uow: UnitOfWork,
   ) {}
 
-  async list(
-    actorId: string,
-    targetId: string,
-    order?: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" },
-  ) {
-    const actorCapabilities = await this.operators.capabilities(actorId);
-    if (!hasCapability(actorCapabilities, "api_keys.manage"))
-      throw forbidden("You are not allowed to administer API keys.");
-    await this.ensureAccount(targetId);
-    const targetCapabilities = await this.operators.capabilities(targetId);
-    return {
-      items: await this.apiKeys.list(targetId, order),
-      manageableScopes: this.manageableScopes(actorCapabilities, targetCapabilities),
-    };
-  }
-
-  async listAll(
-    actorId: string,
-    input: {
-      accountId?: string;
-      search?: string;
-      state?: "active" | "expired" | "deleted" | "all";
-      sort?: "created" | "name" | "expires";
-      direction?: "asc" | "desc";
-    } = {},
-  ) {
-    const actorCapabilities = await this.requireManager(actorId);
-    const all = await this.apiKeys.list(input.accountId, input, input);
-    const items = [];
-    for (const key of all) {
-      const targetCapabilities = await this.operators.capabilities(key.accountId);
-      try {
-        this.authorizeScopes(
-          actorCapabilities,
-          targetCapabilities,
-          this.validateScopes(key.scopes),
-        );
-        items.push(key);
-      } catch {
-        // Keys carrying scopes the actor cannot administer are outside this collection.
-      }
-    }
-    const target = input.accountId ? await this.scopesForTarget(actorId, input.accountId) : [];
-    return { items, manageableScopes: target };
-  }
-
-  /** Session-facing entry point shared by operator and future account-holder UI. */
   async listForSession(
     actorId: string,
     input: {
       accountId?: string;
       search?: string;
-      state?: "active" | "expired" | "deleted" | "all";
+      state?: "active" | "expired" | "revoked" | "all";
       sort?: "created" | "name" | "expires";
       direction?: "asc" | "desc";
-    } = {},
+      limit: number;
+      cursor?: string;
+    },
   ) {
     const actorCapabilities = await this.operators.capabilities(actorId);
-    if (hasCapability(actorCapabilities, "api_keys.manage")) return this.listAll(actorId, input);
-    this.requireSelfManagement(actorCapabilities);
-    if (input.accountId && input.accountId !== actorId) return this.keyNotFound();
+    const operator = hasCapability(actorCapabilities, "api_keys.manage");
+    if (!operator) {
+      this.requireSelfManagement(actorCapabilities);
+      if (input.accountId && input.accountId !== actorId) return this.keyNotFound();
+    }
+    if (input.accountId && operator) await this.ensureAccount(input.accountId);
 
-    const targetCapabilities = actorCapabilities;
-    const all = await this.apiKeys.list(actorId, input, input);
-    const items = all.filter((key) => {
-      try {
-        this.authorizeScopes(
-          actorCapabilities,
-          targetCapabilities,
-          this.validateScopes(key.scopes),
-        );
-        return true;
-      } catch {
-        return false;
+    const visible: Array<
+      Awaited<ReturnType<ApiKeyManagementService["listPage"]>>["items"][number]
+    > = [];
+    const capabilitiesByAccount = new Map<string, readonly string[]>();
+    let cursor = input.cursor;
+    let nextCursor: string | null = null;
+    const batchSize = Math.min(100, Math.max(input.limit, 50));
+    while (visible.length <= input.limit) {
+      const page = await this.apiKeys.listPage({
+        accountId: operator ? input.accountId : actorId,
+        search: input.search,
+        state: input.state,
+        sort: input.sort,
+        direction: input.direction,
+        limit: batchSize,
+        cursor,
+        authorizationScope: actorId,
+      });
+      for (const key of page.items) {
+        let targetCapabilities = capabilitiesByAccount.get(key.accountId);
+        if (!targetCapabilities) {
+          targetCapabilities = operator
+            ? await this.operators.capabilities(key.accountId)
+            : actorCapabilities;
+          capabilitiesByAccount.set(key.accountId, targetCapabilities);
+        }
+        try {
+          this.authorizeExistingScopes(actorCapabilities, targetCapabilities, key.scopes);
+          visible.push(key);
+          if (visible.length > input.limit) break;
+        } catch (error) {
+          if (!(error instanceof PublicApplicationError) || error.status !== 403) throw error;
+        }
       }
-    });
+      if (visible.length > input.limit) {
+        nextCursor = visible[input.limit - 1].pageCursor;
+        visible.length = input.limit;
+        break;
+      }
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+
+    let manageableScopes: ApiScope[] = [];
+    if (input.accountId) {
+      const targetCapabilities = operator
+        ? (capabilitiesByAccount.get(input.accountId) ??
+          (await this.operators.capabilities(input.accountId)))
+        : actorCapabilities;
+      manageableScopes = this.manageableScopes(actorCapabilities, targetCapabilities);
+    } else if (!operator) {
+      manageableScopes = this.manageableScopes(actorCapabilities, actorCapabilities);
+    }
     return {
-      items,
-      manageableScopes: this.manageableScopes(actorCapabilities, targetCapabilities),
+      items: visible,
+      manageableScopes,
+      nextCursor,
     };
   }
 
@@ -119,8 +118,120 @@ export class OperatorApiKeyService {
     this.requireSelfManagement(actorCapabilities);
     const key = await this.apiKeys.find(keyId, actorId);
     if (!key) return this.keyNotFound();
-    this.authorizeScopes(actorCapabilities, actorCapabilities, this.validateScopes(key.scopes));
+    this.authorizeExistingScopes(actorCapabilities, actorCapabilities, key.scopes);
     return key;
+  }
+
+  async reassignForSession(
+    actorId: string,
+    keyId: string,
+    input: Required<Pick<OperatorApiKeyInput, "name" | "scopes">> & {
+      accountId: string;
+      expiresAt: Date | null;
+    },
+  ) {
+    const actorCapabilities = await this.operators.capabilities(actorId);
+    if (!actorCapabilities.includes("system.root"))
+      throw forbidden("Only a system-root session can reassign API-key ownership.");
+    return this.uow.transaction(async () => {
+      const key = await this.apiKeys.find(keyId);
+      if (!key) return this.keyNotFound();
+      await this.ensureAccount(input.accountId);
+      const targetCapabilities = await this.operators.capabilities(input.accountId);
+      const scopes = this.validateScopes(input.scopes);
+      this.authorizeScopes(actorCapabilities, targetCapabilities, scopes);
+      const name = input.name.trim();
+      if (!name)
+        throw new PublicApplicationError("API-key name is required.", "invalid_request", 400);
+      if (input.expiresAt && input.expiresAt <= new Date())
+        throw new PublicApplicationError("Expiry must be in the future.", "invalid_request", 400);
+
+      const replacement = await this.apiKeys.reassign({
+        id: keyId,
+        accountId: input.accountId,
+        name,
+        scopes,
+        expiresAt: input.expiresAt,
+      });
+      if (!replacement)
+        throw new PublicApplicationError(
+          "Destination account not found.",
+          "account_not_found",
+          404,
+        );
+      const updated = await this.apiKeys.find(keyId);
+      await this.audit.record({
+        actorId,
+        action: "api_key.reassigned",
+        subjectType: "api_key",
+        subjectId: keyId,
+        previousState: {
+          accountId: key.accountId,
+          name: key.name,
+          scopes: key.scopes,
+          expiresAt: key.expiresAt?.toISOString() ?? null,
+          status: key.revokedAt ? "revoked" : "active",
+          credentialReplaced: true,
+        },
+        newState: {
+          accountId: input.accountId,
+          name,
+          scopes,
+          expiresAt: input.expiresAt?.toISOString() ?? null,
+          status: "active",
+          credentialReplaced: true,
+        },
+      });
+      return { ...updated!, secret: replacement.secret };
+    });
+  }
+
+  async deleteForSession(actorId: string, keyId: string) {
+    const actorCapabilities = await this.operators.capabilities(actorId);
+    if (hasCapability(actorCapabilities, "api_keys.manage")) {
+      const key = await this.get(actorId, keyId);
+      return this.delete(actorId, key.accountId, key.id);
+    }
+    this.requireSelfManagement(actorCapabilities);
+    const key = await this.apiKeys.find(keyId, actorId);
+    if (!key) return this.keyNotFound();
+    this.authorizeExistingScopes(actorCapabilities, actorCapabilities, key.scopes);
+    return this.deleteRecord(actorId, key);
+  }
+
+  async delete(actorId: string, targetId: string, keyId: string) {
+    const actorCapabilities = await this.requireManager(actorId);
+    const key = await this.apiKeys.find(keyId, targetId);
+    if (!key) return this.keyNotFound();
+    const targetCapabilities = await this.operators.capabilities(targetId);
+    this.authorizeExistingScopes(actorCapabilities, targetCapabilities, key.scopes);
+    return this.deleteRecord(actorId, key);
+  }
+
+  private async deleteRecord(
+    actorId: string,
+    key: NonNullable<Awaited<ReturnType<ApiKeyManagementService["find"]>>>,
+  ) {
+    return this.uow.transaction(async () => {
+      const current = await this.apiKeys.find(key.id, key.accountId);
+      if (!current) return this.keyNotFound();
+      await this.audit.record({
+        actorId,
+        action: "api_key.deleted",
+        subjectType: "api_key",
+        subjectId: key.id,
+        previousState: {
+          accountId: current.accountId,
+          name: current.name,
+          scopes: current.scopes,
+          expiresAt: current.expiresAt?.toISOString() ?? null,
+          status: current.revokedAt ? "revoked" : "active",
+        },
+        newState: { deleted: true },
+      });
+      if (!(await this.apiKeys.delete(current.id, current.accountId)))
+        throw new PublicApplicationError("API key not found.", "not_found", 404);
+    });
   }
 
   async createForSession(
@@ -175,7 +286,7 @@ export class OperatorApiKeyService {
     const key = await this.apiKeys.find(keyId);
     if (!key) throw new PublicApplicationError("API key not found.", "not_found", 404);
     const targetCapabilities = await this.operators.capabilities(key.accountId);
-    this.authorizeScopes(actorCapabilities, targetCapabilities, this.validateScopes(key.scopes));
+    this.authorizeExistingScopes(actorCapabilities, targetCapabilities, key.scopes);
     return key;
   }
 
@@ -192,7 +303,6 @@ export class OperatorApiKeyService {
   ) {
     return this.uow.transaction(async () => {
       const key = await loadKey();
-      if (key.revokedAt) throw new PublicApplicationError("API key is deleted.", "not_found", 404);
       const actorCapabilities =
         authorizedActorCapabilities ?? (await this.operators.capabilities(actorId));
       const targetCapabilities = await this.operators.capabilities(key.accountId);
@@ -200,35 +310,53 @@ export class OperatorApiKeyService {
         input.scopes === undefined
           ? this.validateScopes(key.scopes)
           : this.validateScopes(input.scopes);
-      this.authorizeScopes(actorCapabilities, targetCapabilities, scopes);
+      if (input.scopes === undefined)
+        this.authorizeExistingScopes(actorCapabilities, targetCapabilities, scopes);
+      else this.authorizeScopes(actorCapabilities, targetCapabilities, scopes);
       const name = input.name === undefined ? key.name : input.name.trim();
       if (!name)
         throw new PublicApplicationError("API-key name is required.", "invalid_request", 400);
       const expiresAt = input.expiresAt === undefined ? key.expiresAt : input.expiresAt;
       if (expiresAt && expiresAt <= new Date())
         throw new PublicApplicationError("Expiry must be in the future.", "invalid_request", 400);
-      if (!(await this.apiKeys.update(keyId, { name, scopes, expiresAt })))
+      if (input.status === "active" && key.revokedAt && !actorCapabilities.includes("system.root"))
+        throw forbidden("Only a system-root administrator can reactivate a revoked API key.");
+      const status = input.status ?? (key.revokedAt ? "revoked" : "active");
+      const sameScopes =
+        scopes.length === key.scopes.length &&
+        scopes.every((scope, index) => scope === key.scopes[index]);
+      const sameExpiry = expiresAt?.getTime() === key.expiresAt?.getTime();
+      const currentStatus = key.revokedAt ? "revoked" : "active";
+      if (name === key.name && sameScopes && sameExpiry && status === currentStatus) return key;
+      if (!(await this.apiKeys.update(keyId, { name, scopes, expiresAt, status })))
         throw new PublicApplicationError("API key not found.", "not_found", 404);
       const updated = await this.apiKeys.find(keyId);
       await this.audit.record({
         actorId,
-        action: "api_key.updated",
+        action:
+          status !== (key.revokedAt ? "revoked" : "active")
+            ? status === "revoked"
+              ? "api_key.revoked"
+              : "api_key.reactivated"
+            : "api_key.updated",
         subjectType: "api_key",
         subjectId: keyId,
         previousState: {
           name: key.name,
           scopes: key.scopes,
           expiresAt: key.expiresAt?.toISOString() ?? null,
+          status: key.revokedAt ? "revoked" : "active",
         },
-        newState: { name, scopes, expiresAt: expiresAt?.toISOString() ?? null },
+        newState: {
+          accountId: key.accountId,
+          name,
+          scopes,
+          expiresAt: expiresAt?.toISOString() ?? null,
+          status,
+        },
       });
       return updated!;
     });
-  }
-
-  private async scopesForTarget(actorId: string, targetId: string) {
-    const result = await this.list(actorId, targetId);
-    return result.manageableScopes;
   }
 
   private async requireManager(actorId: string) {
@@ -311,7 +439,7 @@ export class OperatorApiKeyService {
       if (!key) throw new PublicApplicationError("API key not found.", "not_found", 404);
       if (key.revokedAt) return { changed: false, key };
       const targetCapabilities = await this.operators.capabilities(targetId);
-      this.authorizeScopes(actorCapabilities, targetCapabilities, this.validateScopes(key.scopes));
+      this.authorizeExistingScopes(actorCapabilities, targetCapabilities, key.scopes);
       const changed = await this.apiKeys.revoke(keyId, targetId);
       if (changed) {
         const state = {
@@ -333,25 +461,15 @@ export class OperatorApiKeyService {
     });
   }
 
-  /** Revoke selected keys server-side, rechecking operator authority per key. */
-  async bulkDeleteForOperator(actorId: string, keyIds: readonly string[]) {
-    const actorCapabilities = await this.operators.capabilities(actorId);
-    if (!hasCapability(actorCapabilities, "api_keys.manage"))
-      throw forbidden("You are not allowed to administer API keys.");
-
+  /** Permanently remove selected keys, checking session authority for every row. */
+  async bulkDeleteForSession(actorId: string, keyIds: readonly string[]) {
     const outcome: { succeeded: string[]; failed: Array<{ id: string; message: string }> } = {
       succeeded: [],
       failed: [],
     };
     for (const keyId of new Set(keyIds)) {
       try {
-        const key = await this.apiKeys.find(keyId);
-        if (!key) throw new PublicApplicationError("API key not found.", "not_found", 404);
-        if (key.revokedAt)
-          throw new PublicApplicationError("API key is already deleted.", "not_found", 404);
-        const result = await this.revoke(actorId, key.accountId, key.id);
-        if (!result.changed)
-          throw new PublicApplicationError("API key is already deleted.", "not_found", 404);
+        await this.deleteForSession(actorId, keyId);
         outcome.succeeded.push(keyId);
       } catch (error) {
         outcome.failed.push({
@@ -373,7 +491,7 @@ export class OperatorApiKeyService {
       await this.ensureAccount(targetId);
       const key = await this.apiKeys.find(keyId, targetId);
       if (!key) return this.keyNotFound();
-      this.authorizeScopes(actorCapabilities, actorCapabilities, this.validateScopes(key.scopes));
+      this.authorizeExistingScopes(actorCapabilities, actorCapabilities, key.scopes);
       if (key.revokedAt) return { changed: false, key };
       const changed = await this.apiKeys.revoke(keyId, targetId);
       if (changed)
@@ -449,6 +567,17 @@ export class OperatorApiKeyService {
           "target_scope_forbidden",
         );
     }
+  }
+
+  private authorizeExistingScopes(
+    actorCapabilities: readonly string[],
+    targetCapabilities: readonly string[],
+    rawScopes: readonly string[],
+  ) {
+    const scopes = this.validateScopes(rawScopes);
+    if (hasCapability(actorCapabilities, "system.root")) return scopes;
+    this.authorizeScopes(actorCapabilities, targetCapabilities, scopes);
+    return scopes;
   }
 
   private async ensureAccount(accountId: string) {

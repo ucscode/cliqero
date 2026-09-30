@@ -17,7 +17,7 @@ const sessionPrincipal = {
 function routes(principal: any = sessionPrincipal) {
   const resolve = vi.fn(async () => principal);
   const operatorApiKeys: any = {
-    listForSession: vi.fn(async () => ({ items: [], manageableScopes: [] })),
+    listForSession: vi.fn(async () => ({ items: [], manageableScopes: [], nextCursor: null })),
     createForSession: vi.fn(async () => ({
       id: "00000000-0000-4000-8000-000000000002",
       accountId: sessionPrincipal.accountId,
@@ -31,7 +31,9 @@ function routes(principal: any = sessionPrincipal) {
     getForSession: vi.fn(),
     updateForSession: vi.fn(),
     revokeForSession: vi.fn(),
-    bulkDeleteForOperator: vi.fn(async () => ({ succeeded: [], failed: [] })),
+    deleteForSession: vi.fn(),
+    bulkDeleteForSession: vi.fn(async () => ({ succeeded: [], failed: [] })),
+    reassignForSession: vi.fn(),
   };
   return {
     handler: new InternalApiKeyManagementRoutes(
@@ -103,7 +105,7 @@ describe("internal API-key management boundary", () => {
     expect(allowed.status).toBe(200);
     expect(noAuthority.operatorApiKeys.listForSession).toHaveBeenCalledWith(
       sessionPrincipal.accountId,
-      expect.objectContaining({ state: "all", sort: "created", direction: "desc" }),
+      expect.objectContaining({ state: "all", sort: "created", direction: "desc", limit: 25 }),
     );
   });
 
@@ -134,6 +136,7 @@ describe("internal API-key management boundary", () => {
         },
       ],
       manageableScopes: [],
+      nextCursor: null,
     });
     const listed = await boundary.handler.collection(request("/internal/api-keys"));
     const body = await listed.json();
@@ -155,7 +158,7 @@ describe("internal API-key management boundary", () => {
 
   it("accepts one same-origin bulk-delete request and delegates IDs once to the service", async () => {
     const boundary = routes();
-    boundary.operatorApiKeys.bulkDeleteForOperator.mockResolvedValue({
+    boundary.operatorApiKeys.bulkDeleteForSession.mockResolvedValue({
       succeeded: ["key-1"],
       failed: [{ id: "key-2", message: "API key not found." }],
     });
@@ -171,8 +174,8 @@ describe("internal API-key management boundary", () => {
       succeeded: ["key-1"],
       failed: [{ id: "key-2", message: "API key not found." }],
     });
-    expect(boundary.operatorApiKeys.bulkDeleteForOperator).toHaveBeenCalledOnce();
-    expect(boundary.operatorApiKeys.bulkDeleteForOperator).toHaveBeenCalledWith(
+    expect(boundary.operatorApiKeys.bulkDeleteForSession).toHaveBeenCalledOnce();
+    expect(boundary.operatorApiKeys.bulkDeleteForSession).toHaveBeenCalledWith(
       sessionPrincipal.accountId,
       ["00000000-0000-4000-8000-000000000001"],
     );
@@ -189,7 +192,7 @@ describe("internal API-key management boundary", () => {
     );
     expect(response.status).toBe(403);
     expect(boundary.resolve).not.toHaveBeenCalled();
-    expect(boundary.operatorApiKeys.bulkDeleteForOperator).not.toHaveBeenCalled();
+    expect(boundary.operatorApiKeys.bulkDeleteForSession).not.toHaveBeenCalled();
   });
 
   it("keeps API-key administration out of the external API scope registry", () => {

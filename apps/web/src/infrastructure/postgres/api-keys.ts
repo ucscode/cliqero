@@ -1,8 +1,50 @@
+import { Buffer } from "node:buffer";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { QueryExecutor } from "./shared/database";
 import { assertApiScopes } from "@/modules/identity/api/scopes";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { ApiKeyRecord as IdentityApiKeyRecord } from "@/modules/identity/api/keys";
+import { PublicApplicationError } from "@/kernel/errors";
+
+type ApiKeyCursor = {
+  scope: string;
+  sort: "created" | "name" | "expires";
+  direction: "asc" | "desc";
+  value: string | null;
+  id: string;
+};
+
+function encodeCursor(cursor: ApiKeyCursor) {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeCursor(
+  token: string | undefined,
+  scope: string,
+  sort: ApiKeyCursor["sort"],
+  direction: ApiKeyCursor["direction"],
+) {
+  if (!token) return null;
+  try {
+    const cursor = JSON.parse(Buffer.from(token, "base64url").toString("utf8")) as ApiKeyCursor;
+    if (
+      cursor.scope !== scope ||
+      cursor.sort !== sort ||
+      cursor.direction !== direction ||
+      typeof cursor.id !== "string" ||
+      !/^\d+$/.test(cursor.id) ||
+      (cursor.value !== null && typeof cursor.value !== "string")
+    )
+      throw new Error();
+    if (sort === "created" && (!cursor.value || Number.isNaN(Date.parse(cursor.value))))
+      throw new Error();
+    if (sort === "expires" && cursor.value !== null && Number.isNaN(Date.parse(cursor.value)))
+      throw new Error();
+    return cursor;
+  } catch {
+    throw new PublicApplicationError("Invalid or stale pagination cursor.", "invalid_cursor", 400);
+  }
+}
 
 export type ApiKeyRecord = IdentityApiKeyRecord;
 export class PostgresApiKeyRepository {
@@ -58,29 +100,84 @@ export class PostgresApiKeyRepository {
       [id],
     );
   }
-  async list(
-    accountId?: string,
-    order: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" } = {},
-    filters: { search?: string; state?: "active" | "expired" | "deleted" | "all" } = {},
-  ) {
-    const sort = order.sort ?? "created";
-    const direction = order.direction ?? "desc";
+  async listPage(input: {
+    accountId?: string;
+    search?: string;
+    state?: "active" | "expired" | "revoked" | "all";
+    sort?: "created" | "name" | "expires";
+    direction?: "asc" | "desc";
+    limit: number;
+    cursor?: string;
+    authorizationScope: string;
+  }) {
+    const sort = input.sort ?? "created";
+    const direction = input.direction ?? "desc";
+    const comparator = direction === "asc" ? ">" : "<";
+    const scope = JSON.stringify({
+      actor: input.authorizationScope,
+      accountId: input.accountId ?? null,
+      search: input.search?.trim() ?? "",
+      state: input.state ?? "all",
+      sort,
+      direction,
+    });
+    const cursor = decodeCursor(input.cursor, scope, sort, direction);
+    const conditions = [
+      "($1::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$1))",
+      "($2::text is null or (k.uuid::text||' '||k.name||' '||a.username||' '||coalesce(p.email,'')) ilike '%'||$2||'%')",
+      "($3::text='all' or ($3='revoked' and k.revoked_at is not null) or ($3='expired' and k.revoked_at is null and k.expires_at<=now()) or ($3='active' and k.revoked_at is null and (k.expires_at is null or k.expires_at>now())))",
+    ];
+    const values: unknown[] = [
+      input.accountId ?? null,
+      input.search?.trim() || null,
+      input.state ?? "all",
+    ];
+    if (cursor) {
+      values.push(cursor.value, cursor.id);
+      const valueParam = `$${values.length - 1}`;
+      const idParam = `$${values.length}`;
+      if (sort === "created") {
+        conditions.push(
+          `(k.created_at,k.id) ${comparator} (${valueParam}::timestamptz,${idParam}::bigint)`,
+        );
+      } else if (sort === "name") {
+        conditions.push(
+          `(lower(k.name),k.id) ${comparator} (${valueParam}::text,${idParam}::bigint)`,
+        );
+      } else if (cursor.value === null) {
+        conditions.push(`k.expires_at is null and k.id ${comparator} ${idParam}::bigint`);
+      } else {
+        conditions.push(
+          `(k.expires_at ${comparator} ${valueParam}::timestamptz or (k.expires_at=${valueParam}::timestamptz and k.id ${comparator} ${idParam}::bigint) or k.expires_at is null)`,
+        );
+      }
+    }
+    values.push(input.limit + 1);
     const orderBy =
       sort === "name" ? "lower(k.name)" : sort === "expires" ? "k.expires_at" : "k.created_at";
-    const nullOrder = sort === "expires" ? "(k.expires_at is null) asc," : "";
-    const state = filters.state;
-    const search = filters.search?.trim();
-    const rows = await this.sql.query<ApiKeyRecord>(
-      `select k.uuid as id,a.uuid as "accountId",a.username as "accountUsername",p.email as "accountEmail",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt"
+    const rows = (
+      await this.sql.query<ApiKeyRecord & { cursorId: string; cursorValue: string | null }>(
+        `select k.uuid as id,a.uuid as "accountId",a.username as "accountUsername",p.email as "accountEmail",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt",k.id::text as "cursorId",${sort === "name" ? "lower(k.name)" : sort === "expires" ? "k.expires_at::text" : "k.created_at::text"} as "cursorValue"
        from identity_capability.api_keys k join identity_capability.accounts a on a.id=k.account_id
        left join identity_capability.account_profiles p on p.id=a.id
-       where ($1::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$1))
-         and ($2::text is null or (k.uuid::text||' '||k.name||' '||a.username||' '||coalesce(p.email,'')) ilike '%'||$2||'%')
-         and ($3::text is null or $3='all' or ($3='deleted' and k.revoked_at is not null) or ($3='expired' and k.revoked_at is null and k.expires_at<=now()) or ($3='active' and k.revoked_at is null and (k.expires_at is null or k.expires_at>now())))
-       order by ${nullOrder}${orderBy} ${direction} nulls last,k.id ${direction}`,
-      [accountId ?? null, search || null, state ?? null],
-    );
-    return rows.rows;
+       where ${conditions.join(" and ")}
+       order by ${sort === "expires" ? "(k.expires_at is null) asc," : ""}${orderBy} ${direction} nulls last,k.id ${direction}
+       limit $${values.length}`,
+        values,
+      )
+    ).rows;
+    const visible = rows.slice(0, input.limit);
+    const toRecord = (row: (typeof rows)[number]) => {
+      const { cursorId, cursorValue, ...record } = row;
+      return {
+        ...record,
+        pageCursor: encodeCursor({ scope, sort, direction, value: cursorValue, id: cursorId }),
+      };
+    };
+    return {
+      items: visible.map(toRecord),
+      nextCursor: rows.length > input.limit ? toRecord(visible.at(-1)!).pageCursor : null,
+    };
   }
   async findById(id: string, accountId?: string) {
     const result = await this.sql.query<ApiKeyRecord>(
@@ -98,11 +195,53 @@ export class PostgresApiKeyRepository {
     );
     return (result.rowCount ?? 0) > 0;
   }
-  async update(id: string, input: { name: string; scopes: string[]; expiresAt: Date | null }) {
+  async update(
+    id: string,
+    input: {
+      name: string;
+      scopes: string[];
+      expiresAt: Date | null;
+      status?: "active" | "revoked";
+    },
+  ) {
     const result = await this.sql.query(
-      `update identity_capability.api_keys set name=$2,scopes=$3::jsonb,expires_at=$4
-       where uuid=$1 and revoked_at is null`,
-      [id, input.name, JSON.stringify(input.scopes), input.expiresAt],
+      `update identity_capability.api_keys set name=$2,scopes=$3::jsonb,expires_at=$4,
+         revoked_at=case when $5='active' then null when $5='revoked' then coalesce(revoked_at,now()) else revoked_at end
+       where uuid=$1`,
+      [id, input.name, JSON.stringify(input.scopes), input.expiresAt, input.status ?? null],
+    );
+    return (result.rowCount ?? 0) === 1;
+  }
+
+  async reassign(input: {
+    id: string;
+    accountId: string;
+    name: string;
+    keyPrefix: string;
+    secretHash: Buffer;
+    scopes: string[];
+    expiresAt: Date | null;
+  }) {
+    const result = await this.sql.query(
+      `update identity_capability.api_keys set account_id=(select id from identity_capability.accounts where uuid=$2 and deleted_at is null),name=$3,key_prefix=$4,secret_hash=$5,scopes=$6::jsonb,expires_at=$7,revoked_at=null
+       where uuid=$1 and exists(select 1 from identity_capability.accounts where uuid=$2 and deleted_at is null)`,
+      [
+        input.id,
+        input.accountId,
+        input.name,
+        input.keyPrefix,
+        input.secretHash,
+        JSON.stringify(input.scopes),
+        input.expiresAt,
+      ],
+    );
+    return (result.rowCount ?? 0) === 1;
+  }
+
+  async delete(id: string, accountId?: string) {
+    const result = await this.sql.query(
+      `delete from identity_capability.api_keys where uuid=$1 and ($2::uuid is null or account_id=(select id from identity_capability.accounts where uuid=$2))`,
+      [id, accountId ?? null],
     );
     return (result.rowCount ?? 0) === 1;
   }
@@ -156,12 +295,8 @@ export class ApiKeyService {
     await this.repository.touch(row.id);
     return { id: row.id, accountId: row.account_id, name: row.name, scopes: row.scopes };
   }
-  list(
-    accountId?: string,
-    order?: { sort?: "created" | "name" | "expires"; direction?: "asc" | "desc" },
-    filters?: { search?: string; state?: "active" | "expired" | "deleted" | "all" },
-  ) {
-    return this.repository.list(accountId, order, filters);
+  listPage(input: Parameters<PostgresApiKeyRepository["listPage"]>[0]) {
+    return this.repository.listPage(input);
   }
   revoke(id: string, accountId?: string) {
     return this.repository.revoke(id, accountId);
@@ -169,8 +304,38 @@ export class ApiKeyService {
   find(id: string, accountId?: string) {
     return this.repository.findById(id, accountId);
   }
-  update(id: string, input: { name: string; scopes: string[]; expiresAt: Date | null }) {
+  update(
+    id: string,
+    input: {
+      name: string;
+      scopes: string[];
+      expiresAt: Date | null;
+      status?: "active" | "revoked";
+    },
+  ) {
     return this.repository.update(id, input);
+  }
+  async reassign(input: {
+    id: string;
+    accountId: string;
+    name: string;
+    scopes: string[];
+    expiresAt: Date | null;
+  }) {
+    const secret = `cliq_live_${randomBytes(32).toString("base64url")}`;
+    const keyPrefix = secret.slice(0, 18);
+    const operation = async () => {
+      const changed = await this.repository.reassign({
+        ...input,
+        keyPrefix,
+        secretHash: hash(secret),
+      });
+      return changed ? { secret, keyPrefix } : null;
+    };
+    return this.uow ? this.uow.transaction(operation) : operation();
+  }
+  delete(id: string, accountId?: string) {
+    return this.repository.delete(id, accountId);
   }
 }
 function hash(secret: string) {

@@ -19,10 +19,12 @@ describe("Operator API-key create and edit pages", () => {
       "utf8",
     );
     expect(createPage).toContain('<OperatorApiKeyEditor mode="create" />');
-    expect(editPage).toContain('<OperatorApiKeyEditor mode="edit" apiKeyId={apiKeyId} />');
+    expect(editPage).toContain(
+      'canReassignOwner={hasCapability(access.capabilities, "system.root")}',
+    );
   });
 
-  it("uses the shared form composition and renders an immutable account projection on edit", () => {
+  it("uses shared edit composition, root-only ownership transfer, status controls, and one-time replacement", () => {
     const source = readFileSync(
       resolve(process.cwd(), "src/components/operator/api-keys/editor.tsx"),
       "utf8",
@@ -35,7 +37,10 @@ describe("Operator API-key create and edit pages", () => {
     );
     expect(source).toContain('method: "PATCH"');
     expect(source).toContain("Editing does not reveal or rotate the credential.");
-    expect(source).toContain('if (key?.state === "deleted")');
+    expect(source).toContain("canReassignOwner");
+    expect(source).toContain("value={status}");
+    expect(source).toContain("/reassign");
+    expect(source).toContain('setCredentialAction("reassigned")');
     expect(source).not.toContain("MultiSelect");
   });
 
@@ -45,6 +50,7 @@ describe("Operator API-key create and edit pages", () => {
       "utf8",
     );
     expect(source).toContain("setSecret(created.secret)");
+    expect(source).toContain("setSecret(replacement.secret)");
     expect(source).toContain('data-testid="api-key-secret"');
     expect(source).toContain("navigator.clipboard.writeText(secret)");
     expect(source).toContain('toast.success("API key created.")');

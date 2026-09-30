@@ -20,6 +20,7 @@ export type CapabilityAdministrationView = {
   assignments: CapabilityAssignment[];
   manageableCapabilities: Capability[];
   isSelf: boolean;
+  rootAuthority: boolean;
 };
 
 export type CapabilityMutation = {
@@ -65,13 +66,18 @@ export class CapabilityAdministrationService {
     if (!canManageCapability(actorCapabilities, "capabilities.manage"))
       throw forbidden("You are not allowed to inspect capability assignments.", "forbidden");
     await this.ensureAccount(targetId);
+    const assignments = await this.assignmentsStore.assignments(targetId);
+    const rootAuthority = assignments.some((item) => item.capability === "system.root");
     return {
       accountId: targetId,
-      assignments: await this.assignmentsStore.assignments(targetId),
-      manageableCapabilities: CAPABILITIES.filter((capability) =>
-        canManageCapability(actorCapabilities, capability),
+      assignments,
+      manageableCapabilities: CAPABILITIES.filter(
+        (capability) =>
+          (!rootAuthority || capability === "system.root") &&
+          canManageCapability(actorCapabilities, capability),
       ),
       isSelf: actorId === targetId,
+      rootAuthority,
     };
   }
 
@@ -100,6 +106,11 @@ export class CapabilityAdministrationService {
       await this.ensureAccount(targetId);
       const current = await this.assignmentsStore.assignments(targetId);
       const currentSet = new Set(current.map((item) => item.capability));
+      if (currentSet.has("system.root"))
+        throw forbidden(
+          "Ordinary capabilities are not editable while system.root is assigned.",
+          "root_authority_covers_capabilities",
+        );
       const manageable = new Set(
         CAPABILITIES.filter(
           (capability) =>
@@ -156,6 +167,14 @@ export class CapabilityAdministrationService {
         );
       }
       await this.ensureAccount(targetId);
+      if (
+        capability !== "system.root" &&
+        (await this.operators.capabilities(targetId)).includes("system.root")
+      )
+        throw forbidden(
+          "Ordinary capabilities are not editable while system.root is assigned.",
+          "root_authority_covers_capabilities",
+        );
       const rootCount =
         capability === "system.root" ? await this.assignmentsStore.lockRootAssignments() : null;
 

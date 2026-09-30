@@ -107,12 +107,11 @@ export function OperatorApiKeys() {
   }
 
   async function remove(key: OperatorApiKeyRow) {
-    if (!window.confirm(`Delete API key “${key.name}”? It will stop authenticating immediately.`))
-      return;
+    if (!window.confirm(`Permanently delete API key “${key.name}”? This cannot be undone.`)) return;
     try {
       await apiFetch(`/internal/api-keys/${key.id}`, { method: "DELETE" });
       await collection.refresh();
-      toast.success("API key deleted.");
+      toast.success("API key permanently deleted.");
     } catch (cause) {
       setActionError(message(cause));
     }
@@ -121,7 +120,9 @@ export function OperatorApiKeys() {
   async function deleteSelected(keys: readonly OperatorApiKeyRow[]) {
     if (!keys.length) return false;
     if (
-      !window.confirm(`Delete ${keys.length} selected API key(s)? They will stop authenticating.`)
+      !window.confirm(
+        `Permanently delete ${keys.length} selected API key(s)? This cannot be undone.`,
+      )
     )
       return false;
     try {
@@ -129,7 +130,7 @@ export function OperatorApiKeys() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          ids: keys.filter((key) => key.state !== "deleted").map((key) => key.id),
+          ids: keys.map((key) => key.id),
         }),
       });
       await collection.refresh();
@@ -147,7 +148,7 @@ export function OperatorApiKeys() {
         return false;
       }
       setBulkOutcome(null);
-      toast.success(`${outcome.succeeded.length} API key(s) deleted.`);
+      toast.success(`${outcome.succeeded.length} API key(s) permanently deleted.`);
       return true;
     } catch (cause) {
       setActionError(message(cause));
@@ -257,7 +258,7 @@ export function OperatorApiKeys() {
               <option value="all">All</option>
               <option value="active">Active</option>
               <option value="expired">Expired</option>
-              <option value="deleted">Deleted</option>
+              <option value="revoked">Revoked</option>
             </Select>
           </div>
         </>
@@ -303,14 +304,14 @@ export function OperatorApiKeys() {
       actionLabel={(key) => `Actions for ${key.name}`}
       selection={{
         labelForItem: (key) => `API key ${key.name}`,
-        canSelectItem: (key) => key.state !== "deleted",
+        canSelectItem: () => true,
       }}
       bulkActions={(selected) =>
-        selected.length && selected.every((key) => key.state !== "deleted")
+        selected.length
           ? [
               {
                 value: "delete",
-                label: "Delete selected",
+                label: "Permanently delete selected",
                 destructive: true,
                 onSelect: deleteSelected,
               },

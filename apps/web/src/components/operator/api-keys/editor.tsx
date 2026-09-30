@@ -2,13 +2,11 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import AsyncSelect from "react-select/async";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, type OperatorAccountPage, type OperatorAccountSummary } from "@/lib/api-client";
 import { CrudEdit } from "@/components/crud/edit";
 import { OperatorPage, OperatorPageHeader } from "@/components/operator/ui/page";
 import { OperatorSection } from "@/components/operator/ui/section";
-import { OperatorEmptyState } from "@/components/operator/ui/empty-state";
 import { useToast } from "../../toast/provider";
 import { Alert } from "../../ui/alert";
 import { Button } from "../../ui/button";
@@ -44,9 +42,11 @@ async function searchAccounts(query: string): Promise<AccountOption[]> {
 export function OperatorApiKeyEditor({
   mode,
   apiKeyId,
+  canReassignOwner = false,
 }: {
   mode: "create" | "edit";
   apiKeyId?: string;
+  canReassignOwner?: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -56,6 +56,9 @@ export function OperatorApiKeyEditor({
   const [manageableScopes, setManageableScopes] = useState<string[]>([]);
   const [scopes, setScopes] = useState<string[]>([]);
   const [expiry, setExpiry] = useState("");
+  const [status, setStatus] = useState<"active" | "revoked">("active");
+  const [originalAccountId, setOriginalAccountId] = useState<string | null>(null);
+  const [credentialAction, setCredentialAction] = useState<"created" | "reassigned">("created");
   const [loading, setLoading] = useState(mode === "edit");
   const [loadingScopes, setLoadingScopes] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,6 +75,7 @@ export function OperatorApiKeyEditor({
         const { item } = await apiFetch<ItemResponse>(`/internal/api-keys/${apiKeyId}`);
         if (!active) return;
         setKey(item);
+        setOriginalAccountId(item.account_id);
         setAccount({
           value: item.account_id,
           label: `@${item.account_username} · ${item.account_email ?? item.account_id}`,
@@ -83,6 +87,7 @@ export function OperatorApiKeyEditor({
         });
         setName(item.name);
         setExpiry(item.expires_at ? new Date(item.expires_at).toISOString().slice(0, 10) : "");
+        setStatus(item.state === "revoked" ? "revoked" : "active");
         const scopeResult = await apiFetch<ScopeResponse>(
           `/internal/api-keys?account_id=${encodeURIComponent(item.account_id)}`,
         );
@@ -103,7 +108,7 @@ export function OperatorApiKeyEditor({
   async function chooseAccount(value: AccountOption | null) {
     const requestId = ++scopeRequest.current;
     setAccount(value);
-    setScopes([]);
+    if (mode === "create") setScopes([]);
     setManageableScopes([]);
     setError(null);
     if (!value) return;
@@ -112,7 +117,10 @@ export function OperatorApiKeyEditor({
       const result = await apiFetch<ScopeResponse>(
         `/internal/api-keys?account_id=${encodeURIComponent(value.value)}`,
       );
-      if (requestId === scopeRequest.current) setManageableScopes(result.manageable_scopes);
+      if (requestId === scopeRequest.current) {
+        setManageableScopes(result.manageable_scopes);
+        setScopes((current) => current.filter((scope) => result.manageable_scopes.includes(scope)));
+      }
     } catch (cause) {
       if (requestId === scopeRequest.current) setError(message(cause));
     } finally {
@@ -122,7 +130,7 @@ export function OperatorApiKeyEditor({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!account || saving || loadingScopes || key?.state === "deleted") return;
+    if (!account || saving || loadingScopes) return;
     setSaving(true);
     setError(null);
     try {
@@ -130,8 +138,28 @@ export function OperatorApiKeyEditor({
         name: name.trim(),
         scopes: scopes.filter((scope) => manageableScopes.includes(scope)),
         expires_at: expiry ? new Date(`${expiry}T23:59:59.000Z`).toISOString() : null,
+        state: status,
       };
       if (mode === "edit" && apiKeyId) {
+        if (account.value !== originalAccountId) {
+          const replacement = await apiFetch<{ secret: string }>(
+            `/internal/api-keys/${apiKeyId}/reassign`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                account_id: account.value,
+                name: payload.name,
+                scopes: payload.scopes,
+                expires_at: payload.expires_at,
+              }),
+            },
+          );
+          setCredentialAction("reassigned");
+          setSecret(replacement.secret);
+          toast.success("API key reassigned and replaced.");
+          return;
+        }
         await apiFetch(`/internal/api-keys/${apiKeyId}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
@@ -144,8 +172,14 @@ export function OperatorApiKeyEditor({
       const created = await apiFetch<{ secret: string }>("/internal/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...payload, account_id: account.value }),
+        body: JSON.stringify({
+          account_id: account.value,
+          name: payload.name,
+          scopes: payload.scopes,
+          expires_at: payload.expires_at,
+        }),
       });
+      setCredentialAction("created");
       setSecret(created.secret);
       toast.success("API key created.");
     } catch (cause) {
@@ -160,8 +194,8 @@ export function OperatorApiKeyEditor({
       <OperatorPage className="max-w-4xl">
         <OperatorPageHeader
           eyebrow="Access management"
-          title="API key created"
-          description="Copy the secret now. It will not be shown again."
+          title={credentialAction === "reassigned" ? "API key reassigned" : "API key created"}
+          description="Copy the replacement secret now. It will not be shown again."
           actions={
             <Button type="button" onClick={() => router.push(COLLECTION)}>
               Done
@@ -188,25 +222,6 @@ export function OperatorApiKeyEditor({
       </OperatorPage>
     );
 
-  if (key?.state === "deleted")
-    return (
-      <OperatorPage className="max-w-4xl">
-        <OperatorPageHeader
-          eyebrow="Access management"
-          title="Edit API key"
-          actions={
-            <Button asChild type="button" variant="secondary" size="xs">
-              <Link href={COLLECTION}>Back to API keys</Link>
-            </Button>
-          }
-        />
-        <OperatorEmptyState
-          title="Deleted API keys cannot be edited"
-          description="This credential has been revoked and cannot be modified."
-        />
-      </OperatorPage>
-    );
-
   return (
     <CrudEdit
       mode={mode}
@@ -226,7 +241,7 @@ export function OperatorApiKeyEditor({
     >
       <div className="grid gap-2">
         <Label htmlFor="api-key-account">Account</Label>
-        {mode === "edit" ? (
+        {mode === "edit" && !canReassignOwner ? (
           <p
             id="api-key-account"
             className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-800"
@@ -248,7 +263,34 @@ export function OperatorApiKeyEditor({
           />
         )}
       </div>
+      {mode === "edit" && canReassignOwner && (
+        <p className="text-xs leading-5 text-slate-600">
+          Changing this owner will atomically invalidate the old credential, assign a fresh secret
+          to the destination account, and display that secret once.
+        </p>
+      )}
       <div className="grid gap-2">
+        {mode === "edit" && (
+          <>
+            <Label htmlFor="api-key-state">Status</Label>
+            <select
+              id="api-key-state"
+              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as "active" | "revoked")}
+            >
+              <option value="active" disabled={key?.state === "revoked" && !canReassignOwner}>
+                Active
+              </option>
+              <option value="revoked">Revoked</option>
+            </select>
+            {key?.state === "revoked" && !canReassignOwner && (
+              <p className="text-xs text-slate-500">
+                Only a system-root administrator can reactivate a revoked credential.
+              </p>
+            )}
+          </>
+        )}
         <Label htmlFor="api-key-name">Name</Label>
         <Input
           id="api-key-name"

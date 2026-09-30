@@ -5,13 +5,13 @@ export type OperatorApiKeyRow = ApiKeyMetadata & {
   account_id: string;
   account_username: string;
   account_email: string | null;
-  state: "active" | "expired" | "deleted";
+  state: "active" | "expired" | "revoked";
 };
 
 export type ApiKeyCollectionFilters = {
   search: string;
   accountId: string | null;
-  state: "all" | "active" | "expired" | "deleted";
+  state: "all" | "active" | "expired" | "revoked";
   sort: "created" | "name" | "expires";
   direction: "asc" | "desc";
 };
@@ -63,12 +63,11 @@ export function operatorApiKeyRowActions(
   key: OperatorApiKeyRow,
   onDelete: (key: OperatorApiKeyRow) => void,
 ): readonly OperatorAction[] {
-  if (key.state === "deleted") return [];
   return [
     { type: "link", label: "Edit API key", href: `/operator/api-keys/${key.id}` },
     {
       type: "action",
-      label: "Delete API key",
+      label: "Permanently delete API key",
       destructive: true,
       onSelect: () => onDelete(key),
     },

@@ -15,4 +15,5 @@ export type CapabilityAdministrationView = {
   assignments: CapabilityAssignment[];
   manageableCapabilities: string[];
   isSelf: boolean;
+  rootAuthority: boolean;
 };

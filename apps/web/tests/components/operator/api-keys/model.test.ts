@@ -19,7 +19,7 @@ const row = (state: OperatorApiKeyRow["state"]): OperatorApiKeyRow => ({
   created_at: "2026-01-01T00:00:00.000Z",
   last_used_at: null,
   expires_at: null,
-  revoked_at: state === "deleted" ? "2026-01-02T00:00:00.000Z" : null,
+  revoked_at: state === "revoked" ? "2026-01-02T00:00:00.000Z" : null,
 });
 
 describe("Operator API-key collection and row behavior", () => {
@@ -54,12 +54,15 @@ describe("Operator API-key collection and row behavior", () => {
     ).toBe(false);
   });
 
-  it.each(["active", "expired"] as const)(
-    "offers Edit API key and Delete API key for %s keys",
+  it.each(["active", "expired", "revoked"] as const)(
+    "offers Edit API key and permanent Delete API key for %s keys",
     (state) => {
       const onDelete = vi.fn();
       const actions = operatorApiKeyRowActions(row(state), onDelete);
-      expect(actions.map((action) => action.label)).toEqual(["Edit API key", "Delete API key"]);
+      expect(actions.map((action) => action.label)).toEqual([
+        "Edit API key",
+        "Permanently delete API key",
+      ]);
       expect(actions[0]).toMatchObject({ type: "link", href: "/operator/api-keys/key-1" });
       expect(actions[1]).toMatchObject({ type: "action", destructive: true });
       if (actions[1].type === "action") actions[1].onSelect();
@@ -67,8 +70,8 @@ describe("Operator API-key collection and row behavior", () => {
     },
   );
 
-  it("offers no invalid action for deleted keys", () => {
-    expect(operatorApiKeyRowActions(row("deleted"), vi.fn())).toEqual([]);
+  it("keeps revoked keys editable and distinguishes revocation from permanent deletion", () => {
+    expect(operatorApiKeyRowActions(row("revoked"), vi.fn())).toHaveLength(2);
   });
 
   it("adds and removes controlled scope values without losing other selections", () => {

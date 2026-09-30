@@ -20,7 +20,6 @@ import { OperatorPrimaryCell, OperatorSecondaryText, OperatorValueCell } from ".
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { OperatorLoadingState } from "./ui/loading-state";
-import { OperatorMetricCard } from "./ui/metric-card";
 import { OperatorSection } from "./ui/section";
 import { OperatorFilterField } from "./ui/toolbar";
 import { CrudIndex } from "@/components/crud/index-page";
@@ -531,6 +530,7 @@ export function OperatorUserDetail({
 
   async function searchParent() {
     if (!parentSearch.trim()) return;
+    setSelectedParent(null);
     setParentSearchState("searching");
     setParentResults([]);
     try {
@@ -603,12 +603,6 @@ export function OperatorUserDetail({
     <CrudDetail
       eyebrow="Account inspection"
       title={account.displayName || account.username}
-      description={
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          <span className="font-semibold text-slate-800">@{account.username}</span>
-          <span className="break-all">{account.email ?? "No authentication email"}</span>
-        </div>
-      }
       fieldsTitle="Identity"
       fieldsSurface={false}
       headerActions={
@@ -625,6 +619,12 @@ export function OperatorUserDetail({
       }
       fields={[
         { label: "Account ID", value: account.id, className: "break-all" },
+        { label: "Username", value: `@${account.username}`, className: "break-words" },
+        {
+          label: "Email",
+          value: account.email ?? "No authentication email",
+          className: "break-all",
+        },
         { label: "Country", value: account.country || "Not set" },
         { label: "Created", value: new Date(account.createdAt).toLocaleString() },
       ]}
@@ -680,11 +680,13 @@ export function OperatorUserDetail({
                 <Link href={`/operator/network?root=${account.id}`}>View network</Link>
               </Button>
             </OperatorSection>
-            <OperatorMetricCard
-              label="Purchases"
-              category="Commerce"
-              value={account.purchaseCount.toLocaleString("en-US")}
-            />
+            <OperatorSection title="Commerce" surface>
+              <CrudFieldList
+                fields={[
+                  { label: "Purchases", value: account.purchaseCount.toLocaleString("en-US") },
+                ]}
+              />
+            </OperatorSection>
           </div>
           {!account.deletedAt && (
             <OperatorSection
@@ -736,13 +738,23 @@ export function OperatorUserDetail({
                 </ul>
               )}
               {selectedParent && (
-                <div className="reassignment-confirm">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                   <span>
-                    New parent: <strong>@{selectedParent.username}</strong>
+                    Selected parent: <strong>@{selectedParent.username}</strong>
                   </span>
-                  <Button type="button" onClick={() => void reassign()} disabled={saving}>
-                    {saving ? "Saving…" : "Confirm reassignment"}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={saving}
+                      onClick={() => setSelectedParent(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="button" onClick={() => void reassign()} disabled={saving}>
+                      {saving ? "Assigning…" : "Assign parent"}
+                    </Button>
+                  </div>
                 </div>
               )}
             </OperatorSection>
@@ -948,7 +960,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
   );
 }
 
-function CapabilityCard({
+export function CapabilityCard({
   view,
   saving,
   onChange,
@@ -992,9 +1004,7 @@ function CapabilityCard({
               system.root
             </code>
           </div>
-          <Badge variant={rootAssigned ? "destructive" : "secondary"}>
-            {rootAssigned ? "Directly assigned" : "Not assigned"}
-          </Badge>
+          {rootAssigned && <Badge variant="destructive">Enabled</Badge>}
         </div>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-rose-900">
           {CAPABILITY_METADATA["system.root"].description}
@@ -1015,16 +1025,28 @@ function CapabilityCard({
           </div>
         )}
       </div>
+      {view.rootAuthority && (
+        <p className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">
+          Root authority already includes every ordinary platform permission. Existing direct
+          assignments are preserved and cannot be edited while this authority is enabled.
+        </p>
+      )}
       <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
         {ordinary.map((capability) => {
           const metadata = CAPABILITY_METADATA[capability];
           const grantedAt = assigned.get(capability);
           const canChange = manageable.has(capability);
           return (
-            <div
-              key={capability}
-              className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-            >
+            <div key={capability} className="flex items-start gap-3 px-4 py-4">
+              <label className="mt-0.5 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={draft.includes(capability)}
+                  disabled={!canChange || saving !== null || view.rootAuthority}
+                  onChange={(event) => onToggle(capability, event.target.checked)}
+                  aria-label={metadata.label}
+                />
+              </label>
               <div className="min-w-0">
                 <strong className="text-sm text-slate-900">{metadata.label}</strong>
                 <code className="mt-1 block w-fit max-w-full break-all rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">
@@ -1037,25 +1059,17 @@ function CapabilityCard({
                   </p>
                 )}
               </div>
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 sm:justify-end">
-                <input
-                  type="checkbox"
-                  checked={draft.includes(capability)}
-                  disabled={!canChange || saving !== null}
-                  onChange={(event) => onToggle(capability, event.target.checked)}
-                  aria-label={metadata.label}
-                />
-                {grantedAt ? "Assigned" : "Not assigned"}
-              </label>
             </div>
           );
         })}
       </div>
-      <div className="mt-4 flex justify-end">
-        <Button type="button" disabled={saving !== null} onClick={onSave}>
-          {saving === "set" ? "Saving…" : "Save capabilities"}
-        </Button>
-      </div>
+      {!view.rootAuthority && (
+        <div className="mt-4 flex justify-end">
+          <Button type="button" disabled={saving !== null} onClick={onSave}>
+            {saving === "set" ? "Saving…" : "Save capabilities"}
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
