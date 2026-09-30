@@ -44,8 +44,9 @@ OpenAPI exposes operation authorization through metadata such as
 
 Use resource-oriented routes, for example:
 
-- Accounts and keys: `/api/accounts`, `/api/accounts/{accountId}/capabilities`,
-  `/api/accounts/{accountId}/api-keys`.
+- Accounts: `/api/accounts` and `/api/accounts/{accountId}/capabilities`.
+- API-key administration is internal session-authenticated application traffic
+  at `/internal/api-keys`, outside the external OpenAPI contract.
 - Blog: `/api/blog/posts`, `/api/blog/categories`, and session-only
   `/api/blog/previews`.
 - Listings: `/api/listings`, `/api/catalogue/categories`, and

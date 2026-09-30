@@ -41,16 +41,10 @@ export class OperatorApiKeyService {
       throw forbidden("You are not allowed to administer API keys.");
     await this.ensureAccount(targetId);
     const targetCapabilities = await this.operators.capabilities(targetId);
-    const root = hasCapability(actorCapabilities, "system.root");
-    const manageableScopes = API_SCOPES.filter((scope) => {
-      const required = operatorCapabilitiesForScope(scope);
-      return (
-        !required.length ||
-        (required.every((capability) => hasCapability(targetCapabilities, capability)) &&
-          (root || required.every((capability) => hasCapability(actorCapabilities, capability))))
-      );
-    });
-    return { items: await this.apiKeys.list(targetId, order), manageableScopes };
+    return {
+      items: await this.apiKeys.list(targetId, order),
+      manageableScopes: this.manageableScopes(actorCapabilities, targetCapabilities),
+    };
   }
 
   async listAll(
@@ -83,6 +77,99 @@ export class OperatorApiKeyService {
     return { items, manageableScopes: target };
   }
 
+  /** Session-facing entry point shared by operator and future account-holder UI. */
+  async listForSession(
+    actorId: string,
+    input: {
+      accountId?: string;
+      search?: string;
+      state?: "active" | "expired" | "deleted" | "all";
+      sort?: "created" | "name" | "expires";
+      direction?: "asc" | "desc";
+    } = {},
+  ) {
+    const actorCapabilities = await this.operators.capabilities(actorId);
+    if (hasCapability(actorCapabilities, "api_keys.manage")) return this.listAll(actorId, input);
+    this.requireSelfManagement(actorCapabilities);
+    if (input.accountId && input.accountId !== actorId) return this.keyNotFound();
+
+    const targetCapabilities = actorCapabilities;
+    const all = await this.apiKeys.list(actorId, input, input);
+    const items = all.filter((key) => {
+      try {
+        this.authorizeScopes(
+          actorCapabilities,
+          targetCapabilities,
+          this.validateScopes(key.scopes),
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return {
+      items,
+      manageableScopes: this.manageableScopes(actorCapabilities, targetCapabilities),
+    };
+  }
+
+  async getForSession(actorId: string, keyId: string) {
+    const actorCapabilities = await this.operators.capabilities(actorId);
+    if (hasCapability(actorCapabilities, "api_keys.manage")) return this.get(actorId, keyId);
+    this.requireSelfManagement(actorCapabilities);
+    const key = await this.apiKeys.find(keyId, actorId);
+    if (!key) return this.keyNotFound();
+    this.authorizeScopes(actorCapabilities, actorCapabilities, this.validateScopes(key.scopes));
+    return key;
+  }
+
+  async createForSession(
+    actorId: string,
+    input: Required<Pick<OperatorApiKeyInput, "name" | "scopes">> &
+      Pick<OperatorApiKeyInput, "expiresAt"> & { accountId?: string },
+  ) {
+    const actorCapabilities = await this.operators.capabilities(actorId);
+    if (hasCapability(actorCapabilities, "api_keys.manage")) {
+      if (!input.accountId)
+        throw new PublicApplicationError("Target account is required.", "invalid_request", 400);
+      return this.create(actorId, input.accountId, input);
+    }
+
+    this.requireSelfManagement(actorCapabilities);
+    if (input.accountId && input.accountId !== actorId) return this.keyNotFound();
+    return this.createForAccount(actorId, actorId, input, actorCapabilities);
+  }
+
+  async updateForSession(actorId: string, keyId: string, input: OperatorApiKeyInput) {
+    const actorCapabilities = await this.operators.capabilities(actorId);
+    if (hasCapability(actorCapabilities, "api_keys.manage"))
+      return this.update(actorId, keyId, input);
+    this.requireSelfManagement(actorCapabilities);
+    return this.updateOwned(
+      actorId,
+      keyId,
+      input,
+      async () => {
+        const key = await this.apiKeys.find(keyId, actorId);
+        if (!key) return this.keyNotFound();
+        return key;
+      },
+      actorCapabilities,
+    );
+  }
+
+  async revokeForSession(actorId: string, keyId: string) {
+    const actorCapabilities = await this.operators.capabilities(actorId);
+    if (hasCapability(actorCapabilities, "api_keys.manage")) {
+      const key = await this.get(actorId, keyId);
+      return this.revoke(actorId, key.accountId, key.id);
+    }
+    this.requireSelfManagement(actorCapabilities);
+    const key = await this.apiKeys.find(keyId, actorId);
+    if (!key) return this.keyNotFound();
+    return this.revokeForAccount(actorId, actorId, keyId, actorCapabilities);
+  }
+
   async get(actorId: string, keyId: string) {
     const actorCapabilities = await this.requireManager(actorId);
     const key = await this.apiKeys.find(keyId);
@@ -93,10 +180,21 @@ export class OperatorApiKeyService {
   }
 
   async update(actorId: string, keyId: string, input: OperatorApiKeyInput) {
+    return this.updateOwned(actorId, keyId, input, () => this.get(actorId, keyId));
+  }
+
+  private async updateOwned(
+    actorId: string,
+    keyId: string,
+    input: OperatorApiKeyInput,
+    loadKey: () => Promise<Awaited<ReturnType<OperatorApiKeyService["get"]>>>,
+    authorizedActorCapabilities?: readonly string[],
+  ) {
     return this.uow.transaction(async () => {
-      const key = await this.get(actorId, keyId);
+      const key = await loadKey();
       if (key.revokedAt) throw new PublicApplicationError("API key is deleted.", "not_found", 404);
-      const actorCapabilities = await this.operators.capabilities(actorId);
+      const actorCapabilities =
+        authorizedActorCapabilities ?? (await this.operators.capabilities(actorId));
       const targetCapabilities = await this.operators.capabilities(key.accountId);
       const scopes =
         input.scopes === undefined
@@ -140,18 +238,36 @@ export class OperatorApiKeyService {
     return capabilities;
   }
 
+  private requireSelfManagement(capabilities: readonly string[]) {
+    if (!hasCapability(capabilities, "api_keys.self_manage"))
+      throw forbidden("You are not allowed to administer API keys.");
+  }
+
   async create(
     actorId: string,
     targetId: string,
     input: Required<Pick<OperatorApiKeyInput, "name" | "scopes">> &
       Pick<OperatorApiKeyInput, "expiresAt">,
   ) {
+    const actorCapabilities = await this.operators.capabilities(actorId);
+    if (!hasCapability(actorCapabilities, "api_keys.manage"))
+      throw forbidden("You are not allowed to administer API keys.");
+    const targetCapabilities = await this.operators.capabilities(targetId);
+    return this.createForAccount(actorId, targetId, input, actorCapabilities, targetCapabilities);
+  }
+
+  private async createForAccount(
+    actorId: string,
+    targetId: string,
+    input: Required<Pick<OperatorApiKeyInput, "name" | "scopes">> &
+      Pick<OperatorApiKeyInput, "expiresAt">,
+    actorCapabilities: readonly string[],
+    knownTargetCapabilities?: readonly string[],
+  ) {
     return this.uow.transaction(async () => {
-      const actorCapabilities = await this.operators.capabilities(actorId);
-      if (!hasCapability(actorCapabilities, "api_keys.manage"))
-        throw forbidden("You are not allowed to administer API keys.");
       await this.ensureAccount(targetId);
-      const targetCapabilities = await this.operators.capabilities(targetId);
+      const targetCapabilities =
+        knownTargetCapabilities ?? (await this.operators.capabilities(targetId));
       const scopes = this.validateScopes(input.scopes);
       this.authorizeScopes(actorCapabilities, targetCapabilities, scopes);
       const name = input.name.trim();
@@ -213,6 +329,61 @@ export class OperatorApiKeyService {
       }
       return { changed, key };
     });
+  }
+
+  private async revokeForAccount(
+    actorId: string,
+    targetId: string,
+    keyId: string,
+    actorCapabilities: readonly string[],
+  ) {
+    return this.uow.transaction(async () => {
+      await this.ensureAccount(targetId);
+      const key = await this.apiKeys.find(keyId, targetId);
+      if (!key) return this.keyNotFound();
+      this.authorizeScopes(actorCapabilities, actorCapabilities, this.validateScopes(key.scopes));
+      if (key.revokedAt) return { changed: false, key };
+      const changed = await this.apiKeys.revoke(keyId, targetId);
+      if (changed)
+        await this.audit.record({
+          actorId,
+          action: "api_key.revoked",
+          subjectType: "api_key",
+          subjectId: keyId,
+          previousState: {
+            target_account_id: targetId,
+            name: key.name,
+            scopes: key.scopes,
+            active: true,
+          },
+          newState: {
+            target_account_id: targetId,
+            name: key.name,
+            scopes: key.scopes,
+            active: false,
+          },
+        });
+      return { changed, key };
+    });
+  }
+
+  private manageableScopes(
+    actorCapabilities: readonly string[],
+    targetCapabilities: readonly string[],
+  ) {
+    const root = hasCapability(actorCapabilities, "system.root");
+    return API_SCOPES.filter((scope) => {
+      const required = operatorCapabilitiesForScope(scope);
+      return (
+        !required.length ||
+        (required.every((capability) => hasCapability(targetCapabilities, capability)) &&
+          (root || required.every((capability) => hasCapability(actorCapabilities, capability))))
+      );
+    });
+  }
+
+  private keyNotFound(): never {
+    throw new PublicApplicationError("API key not found.", "not_found", 404);
   }
 
   private validateScopes(rawScopes: readonly string[]): ApiScope[] {

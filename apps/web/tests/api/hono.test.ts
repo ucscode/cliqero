@@ -825,7 +825,9 @@ describe("Hono API foundation", () => {
       "Authentication:",
     );
     expect(paths["/api/treasury/entries"]).toBeDefined();
-    expect(paths["/api/api-keys"]?.get).toBeDefined();
+    expect(paths["/api/api-keys"]).toBeUndefined();
+    expect(paths["/internal/api-keys"]).toBeUndefined();
+    expect(paths["/internal/api-keys/{apiKeyId}"]).toBeUndefined();
     expect(paths["/api/accounts/{accountId}/api-keys"]).toBeUndefined();
     expect(paths["/api/accounts/{accountId}/api-keys/{apiKeyId}/revoke"]).toBeUndefined();
     expect(paths["/api/api-keys/{apiKeyId}/revoke"]).toBeUndefined();
@@ -1137,7 +1139,7 @@ describe("Hono API foundation", () => {
           }),
         )
       ).status,
-    ).toBe(401);
+    ).toBe(404);
   });
   it("fails closed for missing non-development schema configuration", async () => {
     expect(
@@ -1600,46 +1602,19 @@ describe("Hono API foundation", () => {
         .status,
     ).toBe(404);
   });
-  it("rejects unknown API-key scopes at the HTTP contract", async () => {
-    const principal = {
-      accountId: "00000000-0000-4000-8000-000000000001",
-      account: {},
-      kind: "user_session",
-      capabilities: ["system.root"],
-      scopes: new Set<string>(),
-    };
-    const response = await appWith(principal).fetch(
-      new Request("http://localhost/api/api-keys", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          account_id: "00000000-0000-4000-8000-000000000001",
-          name: "x",
-          scopes: ["hierachy:read"],
-        }),
-      }),
-    );
-    expect(response.status).toBe(400);
-  });
-  it("registers canonical API-key CRUD routes but denies customers without operator authority", async () => {
-    const principal = {
-      accountId: "00000000-0000-4000-8000-000000000001",
-      account: {},
-      kind: "user_session" as const,
-      capabilities: [],
-      scopes: new Set<string>(),
-    };
+  it("does not register API-key administration on the external API router", async () => {
+    const app = appWith();
     for (const [path, method] of [
       ["/api/api-keys", "GET"],
       ["/api/api-keys", "POST"],
       ["/api/api-keys/00000000-0000-4000-8000-000000000001", "GET"],
       ["/api/api-keys/00000000-0000-4000-8000-000000000001", "PATCH"],
       ["/api/api-keys/00000000-0000-4000-8000-000000000001", "DELETE"],
+      ["/api/accounts/00000000-0000-4000-8000-000000000001/api-keys", "GET"],
     ] as const) {
-      const response = await appWith(principal).fetch(
-        new Request(`http://localhost${path}`, { method }),
+      expect((await app.fetch(new Request(`http://localhost${path}`, { method }))).status).toBe(
+        404,
       );
-      expect(response.status).toBe(403);
     }
   });
   it("enforces capability and API-key scope intersection for compatibility routes", async () => {

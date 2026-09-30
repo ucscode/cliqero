@@ -12,6 +12,7 @@ export const CAPABILITIES = [
   "treasury.manage",
   "reviews.moderate",
   "api_keys.manage",
+  "api_keys.self_manage",
   "capabilities.manage",
 ] as const;
 
@@ -65,6 +66,10 @@ export const CAPABILITY_METADATA = {
   "api_keys.manage": {
     label: "API-key administration",
     description: "Administer API keys belonging to other accounts.",
+  },
+  "api_keys.self_manage": {
+    label: "Self-service API-key eligibility",
+    description: "Allow this account to administer its own API keys.",
   },
   "capabilities.manage": {
     label: "Capability administration",
@@ -123,6 +128,8 @@ export function canManageCapability(
   if (target === "system.root") return hasCapability(actorCapabilities, "system.root");
   return (
     hasCapability(actorCapabilities, "system.root") ||
+    (target === "api_keys.self_manage" &&
+      hasCapability(actorCapabilities, "capabilities.manage")) ||
     (hasCapability(actorCapabilities, "capabilities.manage") &&
       hasCapability(actorCapabilities, target))
   );

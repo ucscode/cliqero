@@ -74,7 +74,7 @@ export function OperatorApiKeys() {
         if (filters.search.trim()) params.set("search", filters.search.trim());
         if (filters.accountFilter) params.set("account_id", filters.accountFilter.value);
         const result = await apiFetch<OperatorApiKeyPage & { items: KeyRow[] }>(
-          `/api/api-keys?${params}`,
+          `/internal/api-keys?${params}`,
         );
         setItems(result.items);
         if (account?.value) setManageableScopes(result.manageable_scopes);
@@ -113,7 +113,9 @@ export function OperatorApiKeys() {
       return;
     }
     try {
-      const result = await apiFetch<OperatorApiKeyPage>(`/api/api-keys?account_id=${value.value}`);
+      const result = await apiFetch<OperatorApiKeyPage>(
+        `/internal/api-keys?account_id=${value.value}`,
+      );
       setManageableScopes(result.manageable_scopes);
     } catch (cause) {
       setError(message(cause));
@@ -136,7 +138,7 @@ export function OperatorApiKeys() {
     setError(null);
     try {
       const [{ item }, accounts] = await Promise.all([
-        apiFetch<{ item: KeyRow }>(`/api/api-keys/${key.id}`),
+        apiFetch<{ item: KeyRow }>(`/internal/api-keys/${key.id}`),
         loadAccounts(key.account_username),
       ]);
       const selected = accounts.find((candidate) => candidate.value === key.account_id) ?? {
@@ -154,7 +156,7 @@ export function OperatorApiKeys() {
       setScopes(item.scopes);
       setExpiry(item.expires_at ? new Date(item.expires_at).toISOString().slice(0, 10) : "");
       const result = await apiFetch<OperatorApiKeyPage>(
-        `/api/api-keys?account_id=${key.account_id}`,
+        `/internal/api-keys?account_id=${key.account_id}`,
       );
       setManageableScopes(result.manageable_scopes);
       setEditorOpen(true);
@@ -177,14 +179,14 @@ export function OperatorApiKeys() {
         expires_at: expiry ? new Date(`${expiry}T23:59:59.000Z`).toISOString() : null,
       };
       if (editing) {
-        await apiFetch(`/api/api-keys/${editing.id}`, {
+        await apiFetch(`/internal/api-keys/${editing.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
         });
         toast.success("API key updated.");
       } else {
-        const created = await apiFetch<{ secret: string } & KeyRow>("/api/api-keys", {
+        const created = await apiFetch<{ secret: string } & KeyRow>("/internal/api-keys", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ ...payload, account_id: account.value }),
@@ -205,7 +207,7 @@ export function OperatorApiKeys() {
     if (!window.confirm(`Delete API key “${key.name}”? It will stop authenticating immediately.`))
       return;
     try {
-      await apiFetch(`/api/api-keys/${key.id}`, { method: "DELETE" });
+      await apiFetch(`/internal/api-keys/${key.id}`, { method: "DELETE" });
       toast.success("API key deleted.");
       await loadKeys();
     } catch (cause) {

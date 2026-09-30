@@ -87,17 +87,18 @@ Compatibility operations that accept API keys apply the route's declared
 capability scope before invoking the existing account/capability/ownership checks;
 session-only and integration-credential routes reject API-key principals.
 
-| Method | Path                                                   | Auth                                                           | Capability             | Notes                                                                       |
-| ------ | ------------------------------------------------------ | -------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
-| GET    | `/api/openapi.json`                                    | development: no; otherwise `X-OpenAPI-Key` only                | API contract           | Generated from Hono/Zod route contracts; schema key is not an API principal |
-| GET    | `/api/hierarchy/tree`                                  | account or API key (`hierarchy:read`)                          | hierarchy projection   | Configured depth and child window; optional root                            |
-| GET    | `/api/hierarchy/search`                                | account or API key (`hierarchy:read`)                          | hierarchy search       | SQL-scoped descendant search; operators global                              |
-| GET    | `/api/hierarchy/children/{parentId}`                   | account or API key (`hierarchy:read`)                          | hierarchy continuation | Stable UUID cursor; server-controlled child batch size                      |
-| PUT    | `/api/hierarchy/{accountId}/parent`                    | operator or operator API key (`hierarchy:admin`)               | hierarchy command      | Assign/reassign one parent; PostgreSQL rejects cycles; audited              |
-| POST   | `/api/accounts/{accountId}/api-keys`                   | `api_keys.manage` (plus `api_keys:manage` for API-key callers) | API-key command        | Secret returned once; scopes restrict target authority                      |
-| GET    | `/api/accounts/{accountId}/api-keys`                   | `api_keys.manage` (plus `api_keys:manage` for API-key callers) | API-key projection     | Never returns secrets or hashes                                             |
-| POST   | `/api/accounts/{accountId}/api-keys/{apiKeyId}/revoke` | `api_keys.manage` (plus `api_keys:manage` for API-key callers) | API-key command        | Target ownership required; durable revocation                               |
+| Method | Path                                 | Auth                                             | Capability             | Notes                                                                       |
+| ------ | ------------------------------------ | ------------------------------------------------ | ---------------------- | --------------------------------------------------------------------------- |
+| GET    | `/api/openapi.json`                  | development: no; otherwise `X-OpenAPI-Key` only  | API contract           | Generated from Hono/Zod route contracts; schema key is not an API principal |
+| GET    | `/api/hierarchy/tree`                | account or API key (`hierarchy:read`)            | hierarchy projection   | Configured depth and child window; optional root                            |
+| GET    | `/api/hierarchy/search`              | account or API key (`hierarchy:read`)            | hierarchy search       | SQL-scoped descendant search; operators global                              |
+| GET    | `/api/hierarchy/children/{parentId}` | account or API key (`hierarchy:read`)            | hierarchy continuation | Stable UUID cursor; server-controlled child batch size                      |
+| PUT    | `/api/hierarchy/{accountId}/parent`  | operator or operator API key (`hierarchy:admin`) | hierarchy command      | Assign/reassign one parent; PostgreSQL rejects cycles; audited              |
 
 These routes use a unified `ApiPrincipal` resolved from Better Auth cookies or
 hashed database API keys. Compatibility handlers are invoked only after Hono
 route matching and authorization, without changing their domain services.
+
+API-key management is intentionally omitted from this external contract; it is
+available only to session-authenticated application requests under
+`/internal/api-keys`.

@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApiApp } from "@/api/hono";
+import { InternalApiKeyManagementRoutes } from "@/api/internal/api-keys/handler";
 import { createContainer } from "@/infrastructure/container";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -30,7 +31,7 @@ suite("operator API-key administration", () => {
     );
   }
   function sessionApi(accountId: string, capabilities: string[]) {
-    return createApiApp({
+    return internalApi({
       ...app,
       principalResolver: {
         resolve: async () => ({
@@ -42,6 +43,29 @@ suite("operator API-key administration", () => {
         }),
       },
     } as any);
+  }
+  function internalApi(container: any) {
+    const routes = new InternalApiKeyManagementRoutes(container);
+    return {
+      fetch(request: Request) {
+        const url = new URL(request.url);
+        if (
+          ["POST", "PATCH", "DELETE"].includes(request.method) &&
+          !request.headers.has("origin")
+        ) {
+          const headers = new Headers(request.headers);
+          headers.set("origin", url.origin);
+          request = new Request(request, { headers });
+        }
+        if (url.pathname === "/internal/api-keys") {
+          if (request.method === "GET") return routes.collection(request);
+          if (request.method === "POST") return routes.create(request);
+        }
+        const match = /^\/internal\/api-keys\/([^/]+)$/.exec(url.pathname);
+        if (match) return routes.item(request, decodeURIComponent(match[1]));
+        return Promise.resolve(Response.json({ error: "Not found" }, { status: 404 }));
+      },
+    };
   }
 
   it("sorts target keys by normalized name and expiry with no-expiry keys last", async () => {
@@ -56,7 +80,9 @@ suite("operator API-key administration", () => {
     );
     const api = sessionApi(actor.id, ["api_keys.manage"]);
     const byName = await api.fetch(
-      new Request(`http://localhost/api/api-keys?account_id=${target.id}&sort=name&direction=asc`),
+      new Request(
+        `http://localhost/internal/api-keys?account_id=${target.id}&sort=name&direction=asc`,
+      ),
     );
     expect(byName.status).toBe(200);
     const nameItems = (await byName.json()).items;
@@ -67,7 +93,7 @@ suite("operator API-key administration", () => {
     ]);
     const byExpiry = await api.fetch(
       new Request(
-        `http://localhost/api/api-keys?account_id=${target.id}&sort=expires&direction=asc`,
+        `http://localhost/internal/api-keys?account_id=${target.id}&sort=expires&direction=asc`,
       ),
     );
     expect((await byExpiry.json()).items.map((item: { name: string }) => item.name)).toEqual([
@@ -76,7 +102,7 @@ suite("operator API-key administration", () => {
       "Never expires",
     ]);
     const invalid = await api.fetch(
-      new Request(`http://localhost/api/api-keys?account_id=${target.id}&sort=unknown`),
+      new Request(`http://localhost/internal/api-keys?account_id=${target.id}&sort=unknown`),
     );
     expect(invalid.status).toBe(400);
   });
@@ -91,7 +117,7 @@ suite("operator API-key administration", () => {
     const api = sessionApi(actor.id, ["api_keys.manage", "catalogue.manage"]);
 
     const createdResponse = await api.fetch(
-      new Request(`http://localhost/api/api-keys`, {
+      new Request(`http://localhost/internal/api-keys`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -107,7 +133,7 @@ suite("operator API-key administration", () => {
     expect(created.key_prefix).toBeUndefined();
 
     const listed = await api.fetch(
-      new Request(`http://localhost/api/api-keys?account_id=${target.id}`),
+      new Request(`http://localhost/internal/api-keys?account_id=${target.id}`),
     );
     expect(listed.status).toBe(200);
     const body = await listed.json();
@@ -137,13 +163,13 @@ suite("operator API-key administration", () => {
     expect(JSON.stringify(audit.rows[0].new_state)).not.toContain(created.secret);
 
     const revoked = await api.fetch(
-      new Request(`http://localhost/api/api-keys/${created.id}`, {
+      new Request(`http://localhost/internal/api-keys/${created.id}`, {
         method: "DELETE",
       }),
     );
     expect(revoked.status).toBe(204);
     const repeated = await api.fetch(
-      new Request(`http://localhost/api/api-keys/${created.id}`, {
+      new Request(`http://localhost/internal/api-keys/${created.id}`, {
         method: "DELETE",
       }),
     );
@@ -190,7 +216,7 @@ suite("operator API-key administration", () => {
     });
     const api = sessionApi(actor.id, ["api_keys.manage"]);
     const createdResponse = await api.fetch(
-      new Request("http://localhost/api/api-keys", {
+      new Request("http://localhost/internal/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -205,7 +231,7 @@ suite("operator API-key administration", () => {
     expect(created.secret).toMatch(/^cliq_live_/);
 
     const list = await api.fetch(
-      new Request("http://localhost/api/api-keys?sort=name&direction=asc"),
+      new Request("http://localhost/internal/api-keys?sort=name&direction=asc"),
     );
     expect(list.status).toBe(200);
     const listed = await list.json();
@@ -224,17 +250,17 @@ suite("operator API-key administration", () => {
     }
 
     const searched = await api.fetch(
-      new Request("http://localhost/api/api-keys?search=Second+account"),
+      new Request("http://localhost/internal/api-keys?search=Second+account"),
     );
     expect((await searched.json()).items.map((item: { id: string }) => item.id)).toEqual([
       existing.id,
     ]);
-    const detail = await api.fetch(new Request(`http://localhost/api/api-keys/${created.id}`));
+    const detail = await api.fetch(new Request(`http://localhost/internal/api-keys/${created.id}`));
     expect(detail.status).toBe(200);
     expect((await detail.json()).item.secret).toBeUndefined();
 
     const updated = await api.fetch(
-      new Request(`http://localhost/api/api-keys/${created.id}`, {
+      new Request(`http://localhost/internal/api-keys/${created.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -252,7 +278,7 @@ suite("operator API-key administration", () => {
     });
 
     const ownerChange = await api.fetch(
-      new Request(`http://localhost/api/api-keys/${created.id}`, {
+      new Request(`http://localhost/internal/api-keys/${created.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ account_id: second.id, name: "No reassignment", scopes: [] }),
@@ -262,12 +288,12 @@ suite("operator API-key administration", () => {
     expect((await app.apiKeys.authenticate(created.secret))?.accountId).toBe(first.id);
 
     const deleted = await api.fetch(
-      new Request(`http://localhost/api/api-keys/${created.id}`, { method: "DELETE" }),
+      new Request(`http://localhost/internal/api-keys/${created.id}`, { method: "DELETE" }),
     );
     expect(deleted.status).toBe(204);
     expect(await app.apiKeys.authenticate(created.secret)).toBeNull();
     const deletedMetadata = await api.fetch(
-      new Request("http://localhost/api/api-keys?account_id=" + first.id + "&state=deleted"),
+      new Request("http://localhost/internal/api-keys?account_id=" + first.id + "&state=deleted"),
     );
     expect((await deletedMetadata.json()).items.map((item: { id: string }) => item.id)).toContain(
       created.id,
@@ -292,7 +318,7 @@ suite("operator API-key administration", () => {
       "finance.read",
     ]);
     const denied = await api.fetch(
-      new Request(`http://localhost/api/api-keys`, {
+      new Request(`http://localhost/internal/api-keys`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -306,7 +332,7 @@ suite("operator API-key administration", () => {
     expect((await denied.json()).code).toBe("scope_delegation_forbidden");
 
     const broadDenied = await api.fetch(
-      new Request(`http://localhost/api/api-keys`, {
+      new Request(`http://localhost/internal/api-keys`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -323,7 +349,7 @@ suite("operator API-key administration", () => {
     await grant(root.id, "system.root");
     const rootApi = sessionApi(root.id, ["system.root"]);
     const targetDenied = await rootApi.fetch(
-      new Request(`http://localhost/api/api-keys`, {
+      new Request(`http://localhost/internal/api-keys`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -337,21 +363,83 @@ suite("operator API-key administration", () => {
     expect((await targetDenied.json()).code).toBe("target_scope_forbidden");
   });
 
-  it("requires api_keys.manage plus the operator scope for API-key principals", async () => {
+  it("keeps self-management eligibility separate and derives ownership from the session", async () => {
+    const owner = await account("selfkeyowner");
+    const other = await account("selfkeyother");
+    const ordinary = sessionApi(owner.id, []);
+    expect((await ordinary.fetch(new Request("http://localhost/internal/api-keys"))).status).toBe(
+      403,
+    );
+
+    await grant(owner.id, "api_keys.self_manage");
+    const self = sessionApi(owner.id, ["api_keys.self_manage"]);
+    const createdResponse = await self.fetch(
+      new Request("http://localhost/internal/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "own integration", scopes: [] }),
+      }),
+    );
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    expect(created.account_id).toBe(owner.id);
+    expect((await app.apiKeys.authenticate(created.secret))?.accountId).toBe(owner.id);
+
+    const crossAccountCreate = await self.fetch(
+      new Request("http://localhost/internal/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ account_id: other.id, name: "not mine", scopes: [] }),
+      }),
+    );
+    expect(crossAccountCreate.status).toBe(404);
+
+    const foreignKey = await app.apiKeys.create({
+      accountId: other.id,
+      name: "other account key",
+      scopes: [],
+      createdBy: other.id,
+    });
+    expect(
+      (await self.fetch(new Request(`http://localhost/internal/api-keys/${foreignKey.id}`))).status,
+    ).toBe(404);
+
+    const ownKey = await self.fetch(
+      new Request(`http://localhost/internal/api-keys/${created.id}`),
+    );
+    expect(ownKey.status).toBe(200);
+    expect((await ownKey.json()).item.secret).toBeUndefined();
+    const updated = await self.fetch(
+      new Request(`http://localhost/internal/api-keys/${created.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "renamed own integration", scopes: [] }),
+      }),
+    );
+    expect(updated.status).toBe(200);
+    expect((await updated.json()).item.name).toBe("renamed own integration");
+    const deleted = await self.fetch(
+      new Request(`http://localhost/internal/api-keys/${created.id}`, { method: "DELETE" }),
+    );
+    expect(deleted.status).toBe(204);
+    expect(await app.apiKeys.authenticate(created.secret)).toBeNull();
+  });
+
+  it("rejects every API-key credential at the internal session-only boundary", async () => {
     const actor = await account("keyprincipal");
     const scopeOnly = await app.apiKeys.create({
       accountId: actor.id,
       name: "scope only",
-      scopes: ["api_keys:manage"],
+      scopes: ["catalogue:read"],
       createdBy: actor.id,
     });
-    const scopeOnlyDenied = await createApiApp(app as any).fetch(
-      new Request("http://localhost/api/api-keys", {
+    const internal = internalApi(app as any);
+    const scopeOnlyDenied = await internal.fetch(
+      new Request("http://localhost/internal/api-keys", {
         headers: { authorization: `Bearer ${scopeOnly.secret}` },
       }),
     );
-    expect(scopeOnlyDenied.status).toBe(403);
-    expect((await scopeOnlyDenied.json()).code).toBe("forbidden");
+    expect(scopeOnlyDenied.status).toBe(401);
     await grant(actor.id, "api_keys.manage");
     const missingScope = await app.apiKeys.create({
       accountId: actor.id,
@@ -359,27 +447,26 @@ suite("operator API-key administration", () => {
       scopes: [],
       createdBy: actor.id,
     });
-    const denied = await createApiApp(app as any).fetch(
-      new Request("http://localhost/api/api-keys", {
+    const denied = await internal.fetch(
+      new Request("http://localhost/internal/api-keys", {
         method: "GET",
         headers: { authorization: `Bearer ${missingScope.secret}` },
       }),
     );
-    expect(denied.status).toBe(403);
-    expect((await denied.json()).code).toBe("forbidden");
+    expect(denied.status).toBe(401);
 
     const scoped = await app.apiKeys.create({
       accountId: actor.id,
       name: "operator scope",
-      scopes: ["api_keys:manage"],
+      scopes: ["operations:manage"],
       createdBy: actor.id,
     });
-    const allowed = await createApiApp(app as any).fetch(
-      new Request("http://localhost/api/api-keys", {
+    const allowed = await internal.fetch(
+      new Request("http://localhost/internal/api-keys", {
         headers: { authorization: `Bearer ${scoped.secret}` },
       }),
     );
-    expect(allowed.status).toBe(200);
+    expect(allowed.status).toBe(401);
 
     const root = await account("keyroot");
     await grant(root.id, "system.root");
@@ -389,26 +476,25 @@ suite("operator API-key administration", () => {
       scopes: [],
       createdBy: root.id,
     });
-    const rootDenied = await createApiApp(app as any).fetch(
-      new Request("http://localhost/api/api-keys", {
+    const rootDenied = await internal.fetch(
+      new Request("http://localhost/internal/api-keys", {
         headers: { authorization: `Bearer ${rootKey.secret}` },
       }),
     );
-    expect(rootDenied.status).toBe(403);
-    expect((await rootDenied.json()).code).toBe("forbidden");
+    expect(rootDenied.status).toBe(401);
 
     const rootScoped = await app.apiKeys.create({
       accountId: root.id,
       name: "root scoped",
-      scopes: ["api_keys:manage"],
+      scopes: ["operations:manage"],
       createdBy: root.id,
     });
-    const rootAllowed = await createApiApp(app as any).fetch(
-      new Request("http://localhost/api/api-keys", {
+    const rootAllowed = await internal.fetch(
+      new Request("http://localhost/internal/api-keys", {
         headers: { authorization: `Bearer ${rootScoped.secret}` },
       }),
     );
-    expect(rootAllowed.status).toBe(200);
+    expect(rootAllowed.status).toBe(401);
   });
 
   it("enforces target ownership and converges concurrent revocation", async () => {
@@ -418,7 +504,7 @@ suite("operator API-key administration", () => {
     await grant(actor.id, "api_keys.manage");
     const api = sessionApi(actor.id, ["api_keys.manage"]);
     const createdResponse = await api.fetch(
-      new Request("http://localhost/api/api-keys", {
+      new Request("http://localhost/internal/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ account_id: target.id, name: "ownership", scopes: [] }),
@@ -427,7 +513,7 @@ suite("operator API-key administration", () => {
     expect(createdResponse.status).toBe(201);
     const created = await createdResponse.json();
 
-    const revokeUrl = `http://localhost/api/api-keys/${created.id}`;
+    const revokeUrl = `http://localhost/internal/api-keys/${created.id}`;
     const results = await Promise.all([
       api.fetch(new Request(revokeUrl, { method: "DELETE" })),
       api.fetch(new Request(revokeUrl, { method: "DELETE" })),

@@ -68,7 +68,6 @@ export function hierarchyReadOrAdmin(c: ApiContext, value: AuthenticatedApiPrinc
 export function grantableScopes(value: AuthenticatedApiPrincipal): Set<string> {
   const allowed = new Set([
     "hierarchy:read",
-    "api_keys:manage",
     "catalogue:read",
     "wallet:read",
     "wallet:fund",

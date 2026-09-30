@@ -184,7 +184,7 @@ describe("architectural boundaries", () => {
     ]);
   });
 
-  it("keeps the API root as composition and gives each capability its own route module", () => {
+  it("keeps Hono as external API composition and internal API-key management outside it", () => {
     const hono = resolve(sourceRoot, "api/hono.ts");
     const honoSource = readFileSync(hono, "utf8");
     const routeModules = filesUnder(resolve(sourceRoot, "api/routes"));
@@ -208,9 +208,11 @@ describe("architectural boundaries", () => {
         "treasury/index.ts",
         "payments/index.ts",
         "catalogue/categories.ts",
-        "api-keys/index.ts",
       ]),
     );
+    expect(existsSync(resolve(sourceRoot, "api/internal/api-keys/handler.ts"))).toBe(true);
+    expect(existsSync(resolve(sourceRoot, "app/internal/api-keys/route.ts"))).toBe(true);
+    expect(honoSource).not.toContain("registerApiKeyRoutes");
     expect(existsSync(resolve(sourceRoot, "api/routes/contracts.ts"))).toBe(false);
     expect(honoSource).not.toContain("x-required-api-scope");
     expect(honoSource).not.toContain("/api/operator/");

@@ -4,7 +4,6 @@ import type { Capability } from "../capabilities";
 export const API_SCOPES = [
   "hierarchy:read",
   "hierarchy:admin",
-  "api_keys:manage",
   "catalogue:read",
   "catalogue:manage",
   "wallet:read",
@@ -41,7 +40,6 @@ export const apiScopeSchema = z.enum(API_SCOPES);
 export const OPERATOR_SCOPE_CAPABILITIES: Partial<Record<ApiScope, readonly Capability[]>> = {
   "hierarchy:admin": ["hierarchy.manage"],
   "accounts:manage": ["accounts.manage"],
-  "api_keys:manage": ["api_keys.manage"],
   "catalogue:manage": ["catalogue.manage"],
   "withdrawals:manage": ["withdrawals.manage"],
   "treasury:read": ["treasury.manage"],
@@ -67,10 +65,6 @@ export const API_SCOPE_METADATA = {
   "hierarchy:admin": {
     label: "Hierarchy administration",
     description: "Restricts this key to hierarchy administration requests.",
-  },
-  "api_keys:manage": {
-    label: "API-key management",
-    description: "Restricts this key to API-key management requests.",
   },
   "catalogue:read": {
     label: "Catalogue reads",

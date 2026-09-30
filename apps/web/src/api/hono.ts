@@ -19,7 +19,6 @@ import { registerWithdrawalRoutes } from "./routes/withdrawals";
 import { registerTreasuryRoutes } from "./routes/treasury";
 import { registerPaymentRoutes } from "./routes/payments";
 import { registerHierarchyRoutes } from "./routes/hierarchy";
-import { registerApiKeyRoutes } from "./routes/api-keys";
 import { registerFundingRoutes } from "./routes/funding";
 import { registerPaymentCallbackRoutes } from "./routes/payment-callbacks";
 import { registerReviewRoutes } from "./routes/reviews";
@@ -77,7 +76,6 @@ export function createApiApp(
   registerTreasuryRoutes(app, container);
   registerPaymentRoutes(app, container);
   registerHierarchyRoutes(app, container);
-  registerApiKeyRoutes(app, container);
   registerReviewRoutes(app, container);
   registerFundingRoutes(app, container);
   registerPaymentCallbackRoutes(app, container);

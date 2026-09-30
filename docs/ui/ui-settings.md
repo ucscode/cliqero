@@ -31,7 +31,10 @@ than a safe saved-destination resource.
 ## API keys
 
 API keys are not an ordinary customer Settings feature. Operators may provision
-and manage keys for a selected account through the account-scoped operator API
-at `/api/accounts/{accountId}/api-keys`. Key secrets are shown only at
-creation; persistence, bearer authentication, scope enforcement, and revocation
-remain part of the platform's controlled integration functionality.
+and manage keys for eligible accounts through the session-only internal
+application routes `/internal/api-keys` and `/internal/api-keys/{apiKeyId}`.
+Key secrets are shown only at creation; persistence, external bearer
+authentication, scope enforcement, and revocation remain part of the platform's
+controlled integration functionality. The `api_keys.self_manage` eligibility
+capability is available for future account-holder self-management, but no
+customer-facing API-key interface is exposed.

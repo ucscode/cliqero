@@ -42,6 +42,12 @@ describe("direct account capabilities", () => {
     expect(canManageCapability(["system.root"], "system.root")).toBe(true);
   });
 
+  it("lets capability administrators configure API-key self-management eligibility", () => {
+    expect(canManageCapability(["capabilities.manage"], "api_keys.self_manage")).toBe(true);
+    expect(hasCapability(["api_keys.self_manage"], "api_keys.self_manage")).toBe(true);
+    expect(canAccessOperator(["api_keys.self_manage"])).toBe(false);
+  });
+
   it("only treats capabilities with an operator section as operator-console access", () => {
     expect(canAccessOperator(["capabilities.manage"])).toBe(false);
     expect(canAccessOperator(["api_keys.manage"])).toBe(false);

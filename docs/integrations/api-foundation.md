@@ -14,7 +14,7 @@ plaintext. Compatibility handler modules are internal adapters and are not
 independently routable Next.js endpoints.
 
 The API-key scope registry is capability-oriented and finite: `hierarchy:read`,
-`hierarchy:admin`, `api_keys:manage`, `catalogue:read`, `catalogue:manage`,
+`hierarchy:admin`, `catalogue:read`, `catalogue:manage`,
 `wallet:read`, `wallet:fund`, `checkout:create`, `purchases:read`,
 `referrals:read`, `referrals:manage`, `earnings:read`, `withdrawals:read`,
 `withdrawals:create`, `withdrawals:manage`, `treasury:read`,
@@ -27,12 +27,16 @@ verification compatibility route is session-only and disabled whenever
 workers/webhooks instead. A scope never elevates the owning account's Cliqero
 capability.
 
-Operator API-key administration is account-scoped at
-`/api/accounts/{accountId}/api-keys`. It requires the actor's
-`api_keys.manage` capability (and `api_keys:manage` when the actor is itself an
-API-key principal). Operator-sensitive scopes are only assignable when the
-actor and target currently hold the corresponding account capability; the
-target's capability remains required on every subsequent request.
+API-key administration is an internal application capability, not part of the
+external API. The Operator API Keys page uses `/internal/api-keys` and
+`/internal/api-keys/{apiKeyId}`. These Next.js route handlers resolve a valid
+Better Auth session and reject every `Authorization` header; mutations require
+an exact same-origin `Origin` and are rate-limited. Operators need
+`api_keys.manage` to administer eligible accounts. Future account-holder
+self-management uses the separately assigned `api_keys.self_manage` capability
+and derives key ownership from the session account. No customer API-key UI is
+currently exposed. Operator-sensitive scopes remain constrained by both actor
+and target account capabilities.
 
 ## API route ownership
 
