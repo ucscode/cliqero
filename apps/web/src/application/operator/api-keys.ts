@@ -128,6 +128,7 @@ export class OperatorApiKeyService {
     input: Required<Pick<OperatorApiKeyInput, "name" | "scopes">> & {
       accountId: string;
       expiresAt: Date | null;
+      status: "active" | "revoked";
     },
   ) {
     const actorCapabilities = await this.operators.capabilities(actorId);
@@ -152,6 +153,7 @@ export class OperatorApiKeyService {
         name,
         scopes,
         expiresAt: input.expiresAt,
+        status: input.status,
       });
       if (!replacement)
         throw new PublicApplicationError(
@@ -178,7 +180,7 @@ export class OperatorApiKeyService {
           name,
           scopes,
           expiresAt: input.expiresAt?.toISOString() ?? null,
-          status: "active",
+          status: input.status,
           credentialReplaced: true,
         },
       });
@@ -237,7 +239,7 @@ export class OperatorApiKeyService {
   async createForSession(
     actorId: string,
     input: Required<Pick<OperatorApiKeyInput, "name" | "scopes">> &
-      Pick<OperatorApiKeyInput, "expiresAt"> & { accountId?: string },
+      Pick<OperatorApiKeyInput, "expiresAt" | "status"> & { accountId?: string },
   ) {
     const actorCapabilities = await this.operators.capabilities(actorId);
     if (hasCapability(actorCapabilities, "api_keys.manage")) {
@@ -375,7 +377,7 @@ export class OperatorApiKeyService {
     actorId: string,
     targetId: string,
     input: Required<Pick<OperatorApiKeyInput, "name" | "scopes">> &
-      Pick<OperatorApiKeyInput, "expiresAt">,
+      Pick<OperatorApiKeyInput, "expiresAt" | "status">,
   ) {
     const actorCapabilities = await this.operators.capabilities(actorId);
     if (!hasCapability(actorCapabilities, "api_keys.manage"))
@@ -388,7 +390,7 @@ export class OperatorApiKeyService {
     actorId: string,
     targetId: string,
     input: Required<Pick<OperatorApiKeyInput, "name" | "scopes">> &
-      Pick<OperatorApiKeyInput, "expiresAt">,
+      Pick<OperatorApiKeyInput, "expiresAt" | "status">,
     actorCapabilities: readonly string[],
     knownTargetCapabilities?: readonly string[],
   ) {
@@ -409,6 +411,7 @@ export class OperatorApiKeyService {
         scopes,
         createdBy: actorId,
         expiresAt: input.expiresAt ?? null,
+        status: input.status ?? "active",
       });
       await this.audit.record({
         actorId,
@@ -422,7 +425,7 @@ export class OperatorApiKeyService {
           key_prefix: created.keyPrefix,
           scopes: created.scopes,
           expires_at: created.expiresAt?.toISOString() ?? null,
-          active: true,
+          status: input.status ?? "active",
         },
       });
       return created;

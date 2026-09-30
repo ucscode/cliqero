@@ -108,7 +108,6 @@ export function OperatorApiKeyEditor({
   async function chooseAccount(value: AccountOption | null) {
     const requestId = ++scopeRequest.current;
     setAccount(value);
-    if (mode === "create") setScopes([]);
     setManageableScopes([]);
     setError(null);
     if (!value) return;
@@ -152,6 +151,7 @@ export function OperatorApiKeyEditor({
                 name: payload.name,
                 scopes: payload.scopes,
                 expires_at: payload.expires_at,
+                state: payload.state,
               }),
             },
           );
@@ -169,18 +169,23 @@ export function OperatorApiKeyEditor({
         router.push(COLLECTION);
         return;
       }
-      const created = await apiFetch<{ secret: string }>("/internal/api-keys", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          account_id: account.value,
-          name: payload.name,
-          scopes: payload.scopes,
-          expires_at: payload.expires_at,
-        }),
-      });
+      const created = await apiFetch<{ secret: string; state: "active" | "revoked" }>(
+        "/internal/api-keys",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            account_id: account.value,
+            name: payload.name,
+            scopes: payload.scopes,
+            expires_at: payload.expires_at,
+            state: payload.state,
+          }),
+        },
+      );
       setCredentialAction("created");
       setSecret(created.secret);
+      setStatus(created.state);
       toast.success("API key created.");
     } catch (cause) {
       setError(message(cause));
@@ -195,7 +200,7 @@ export function OperatorApiKeyEditor({
         <OperatorPageHeader
           eyebrow="Access management"
           title={credentialAction === "reassigned" ? "API key reassigned" : "API key created"}
-          description="Copy the replacement secret now. It will not be shown again."
+          description={`Copy the replacement secret now. It will not be shown again. ${status === "revoked" ? "This credential is revoked and will not authenticate." : "This credential is active."}`}
           actions={
             <Button type="button" onClick={() => router.push(COLLECTION)}>
               Done
@@ -270,27 +275,6 @@ export function OperatorApiKeyEditor({
         </p>
       )}
       <div className="grid gap-2">
-        {mode === "edit" && (
-          <>
-            <Label htmlFor="api-key-state">Status</Label>
-            <select
-              id="api-key-state"
-              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
-              value={status}
-              onChange={(event) => setStatus(event.target.value as "active" | "revoked")}
-            >
-              <option value="active" disabled={key?.state === "revoked" && !canReassignOwner}>
-                Active
-              </option>
-              <option value="revoked">Revoked</option>
-            </select>
-            {key?.state === "revoked" && !canReassignOwner && (
-              <p className="text-xs text-slate-500">
-                Only a system-root administrator can reactivate a revoked credential.
-              </p>
-            )}
-          </>
-        )}
         <Label htmlFor="api-key-name">Name</Label>
         <Input
           id="api-key-name"
@@ -299,6 +283,28 @@ export function OperatorApiKeyEditor({
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="api-key-state">Status</Label>
+        <select
+          id="api-key-state"
+          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+          value={status}
+          onChange={(event) => setStatus(event.target.value as "active" | "revoked")}
+        >
+          <option
+            value="active"
+            disabled={mode === "edit" && key?.state === "revoked" && !canReassignOwner}
+          >
+            Active
+          </option>
+          <option value="revoked">Revoked</option>
+        </select>
+        {mode === "edit" && key?.state === "revoked" && !canReassignOwner && (
+          <p className="text-xs text-slate-500">
+            Only a system-root administrator can reactivate a revoked credential.
+          </p>
+        )}
       </div>
       <ApiKeyScopeList
         availableScopes={manageableScopes}

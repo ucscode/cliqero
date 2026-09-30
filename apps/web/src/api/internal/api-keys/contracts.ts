@@ -24,6 +24,7 @@ export const apiKeyCreateSchema = z
     name: z.string().min(1).max(100),
     scopes: z.array(apiScopeSchema).max(20).default([]),
     expires_at: z.string().datetime().nullable().optional(),
+    state: z.enum(["active", "revoked"]).default("active"),
   })
   .strict();
 
@@ -46,5 +47,6 @@ export const apiKeyReassignSchema = z
     name: z.string().min(1).max(100),
     scopes: z.array(apiScopeSchema).max(20),
     expires_at: z.string().datetime().nullable(),
+    state: z.enum(["active", "revoked"]),
   })
   .strict();

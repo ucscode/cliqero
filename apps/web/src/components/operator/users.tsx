@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import AsyncSelect from "react-select/async";
 import {
   apiFetch,
   ApiClientError,
@@ -42,6 +43,27 @@ import { useToast } from "../toast/provider";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The account service is temporarily unavailable.";
+}
+
+type ParentOption = { value: string; label: string; account: OperatorAccountSummary };
+
+const parentSelectStyles = {
+  control: (base: object) => ({ ...base, minHeight: 42 }),
+  menuPortal: (base: object) => ({ ...base, zIndex: 80 }),
+};
+
+async function searchParentAccounts(query: string, currentAccountId: string) {
+  if (!query.trim()) return [];
+  const result = await apiFetch<OperatorAccountPage>(
+    `/api/accounts?search=${encodeURIComponent(query.trim())}&limit=10`,
+  );
+  return result.items
+    .filter((candidate) => candidate.id !== currentAccountId)
+    .map((candidate) => ({
+      value: candidate.id,
+      label: `@${candidate.username} · ${candidate.displayName || candidate.email || candidate.id}`,
+      account: candidate,
+    }));
 }
 
 export function operatorUserRowActions(
@@ -404,13 +426,8 @@ export function OperatorUserDetail({
   const [account, setAccount] = useState<OperatorAccountDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [parentSearch, setParentSearch] = useState("");
-  const [parentResults, setParentResults] = useState<OperatorAccountSummary[]>([]);
-  const [parentSearchState, setParentSearchState] = useState<
-    "idle" | "searching" | "empty" | "results" | "error"
-  >("idle");
-  const [selectedParent, setSelectedParent] = useState<OperatorAccountSummary | null>(null);
   const [saving, setSaving] = useState(false);
+  const [parentError, setParentError] = useState<string | null>(null);
   const [capabilityView, setCapabilityView] = useState<CapabilityAdministrationView | null>(null);
   const [capabilityLoading, setCapabilityLoading] = useState(true);
   const [capabilityError, setCapabilityError] = useState<string | null>(null);
@@ -528,42 +545,34 @@ export function OperatorUserDetail({
     }
   }
 
-  async function searchParent() {
-    if (!parentSearch.trim()) return;
-    setSelectedParent(null);
-    setParentSearchState("searching");
-    setParentResults([]);
-    try {
-      const result = await apiFetch<OperatorAccountPage>(
-        `/api/accounts?search=${encodeURIComponent(parentSearch.trim())}&limit=10`,
-      );
-      const matches = result.items.filter((item) => item.id !== accountId);
-      setParentResults(matches);
-      setParentSearchState(matches.length ? "results" : "empty");
-    } catch {
-      setParentSearchState("error");
-    }
-  }
-
-  async function reassign() {
-    if (!selectedParent || !account) return;
-    if (!window.confirm(`Move @${account.username} under @${selectedParent.username}?`)) return;
+  async function reassign(parent: OperatorAccountSummary | null) {
+    if (!parent || !account || parent.id === account.id || parent.id === account.parent?.id) return;
     setSaving(true);
-    setError(null);
+    setParentError(null);
     try {
       await apiFetch(`/api/hierarchy/${account.id}/parent`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ parent_account_id: selectedParent.id }),
+        body: JSON.stringify({ parent_account_id: parent.id }),
       });
-      setSelectedParent(null);
-      setParentResults([]);
-      await load();
+      const updated = await load();
+      if (!updated)
+        throw new Error("Parent was reassigned, but referral context could not refresh.");
       toast.success("Parent reassigned successfully.");
     } catch (cause) {
-      setError(message(cause));
+      setParentError(message(cause));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function loadParentOptions(query: string): Promise<ParentOption[]> {
+    setParentError(null);
+    try {
+      return await searchParentAccounts(query, accountId);
+    } catch (cause) {
+      setParentError(message(cause));
+      return [];
     }
   }
 
@@ -637,128 +646,106 @@ export function OperatorUserDetail({
             </div>
           )}
           {error && <OperatorErrorState message={error} />}
-          <div className="grid gap-4 lg:grid-cols-2">
-            {!account.deletedAt && !capabilityLoading && capabilityView && (
-              <CapabilityCard
-                view={capabilityView}
-                saving={capabilitySaving}
-                onChange={changeCapability}
-                draft={capabilityDraft}
-                onToggle={(capability, checked) =>
-                  setCapabilityDraft((current) =>
-                    checked
-                      ? [...new Set([...current, capability])]
-                      : current.filter((item) => item !== capability),
-                  )
-                }
-                onSave={() => void saveCapabilities()}
-              />
-            )}
-            {!account.deletedAt && capabilityLoading && (
-              <OperatorLoadingState variant="section" label="Loading platform capabilities" />
-            )}
-            {!account.deletedAt && capabilityError && (
-              <OperatorErrorState message={capabilityError} />
-            )}
-            <OperatorSection title="Referral context" surface>
-              <CrudFieldList
-                fields={[
-                  {
-                    label: "Immediate parent",
-                    value: account.parent ? (
-                      <Link href={`/operator/users/${account.parent.id}`}>
-                        @{account.parent.username}
-                      </Link>
-                    ) : (
-                      "No parent"
-                    ),
-                  },
-                  { label: "Direct referrals", value: account.directReferralCount },
-                ]}
-              />
-              <Button asChild variant="secondary">
-                <Link href={`/operator/network?root=${account.id}`}>View network</Link>
-              </Button>
-            </OperatorSection>
-            <OperatorSection title="Commerce" surface>
-              <CrudFieldList
-                fields={[
-                  { label: "Purchases", value: account.purchaseCount.toLocaleString("en-US") },
-                ]}
-              />
-            </OperatorSection>
-          </div>
-          {!account.deletedAt && (
-            <OperatorSection
-              title="Reassign immediate parent"
-              description="Descendants remain attached. PostgreSQL prevents cycles and the action is audited."
-              surface
-            >
-              <div className="reassignment-current">
-                <span>Current parent</span>
-                <strong>{account.parent ? `@${account.parent.username}` : "None"}</strong>
-              </div>
-              <form
-                className="reassignment-search"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void searchParent();
-                }}
-              >
-                <label>
-                  Find new parent
-                  <Input
-                    value={parentSearch}
-                    type="search"
-                    onChange={(event) => setParentSearch(event.target.value)}
-                    placeholder="Username, email, or account ID"
+          {!account.deletedAt && !capabilityLoading && capabilityView && (
+            <CapabilityCard
+              view={capabilityView}
+              saving={capabilitySaving}
+              onChange={changeCapability}
+              draft={capabilityDraft}
+              onToggle={(capability, checked) =>
+                setCapabilityDraft((current) =>
+                  checked
+                    ? [...new Set([...current, capability])]
+                    : current.filter((item) => item !== capability),
+                )
+              }
+              onSave={() => void saveCapabilities()}
+            />
+          )}
+          {!account.deletedAt && capabilityLoading && (
+            <OperatorLoadingState variant="section" label="Loading platform capabilities" />
+          )}
+          {!account.deletedAt && capabilityError && (
+            <OperatorErrorState message={capabilityError} />
+          )}
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <div className="grid content-start gap-4">
+              <OperatorSection title="Referral context" surface>
+                <div className="grid content-start gap-5">
+                  <CrudFieldList
+                    fields={[
+                      {
+                        label: "Immediate parent",
+                        value: account.parent ? (
+                          <Link href={`/operator/users/${account.parent.id}`}>
+                            @{account.parent.username}
+                          </Link>
+                        ) : (
+                          "No parent"
+                        ),
+                      },
+                      { label: "Direct referrals", value: account.directReferralCount },
+                    ]}
                   />
-                </label>
-                <Button type="submit" variant="action">
-                  Search
-                </Button>
-              </form>
-              {parentSearchState === "searching" && <p role="status">Searching…</p>}
-              {parentSearchState === "empty" && <p role="status">No matching account found.</p>}
-              {parentSearchState === "error" && <Alert>Unable to search accounts.</Alert>}
-              {parentResults.length > 0 && (
-                <ul className="operator-search-results">
-                  {parentResults.map((result) => (
-                    <li key={result.id}>
-                      <button
-                        type="button"
-                        className={selectedParent?.id === result.id ? "selected" : ""}
-                        onClick={() => setSelectedParent(result)}
-                      >
-                        <strong>@{result.username}</strong>
-                        <span>{result.displayName || result.email}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {selectedParent && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                  <span>
-                    Selected parent: <strong>@{selectedParent.username}</strong>
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={saving}
-                      onClick={() => setSelectedParent(null)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="button" onClick={() => void reassign()} disabled={saving}>
-                      {saving ? "Assigning…" : "Assign parent"}
-                    </Button>
+                  <Button asChild variant="secondary" className="w-fit">
+                    <Link href={`/operator/network?root=${account.id}`}>View network</Link>
+                  </Button>
+                </div>
+              </OperatorSection>
+              <OperatorSection title="Commerce" surface>
+                <CrudFieldList
+                  fields={[
+                    { label: "Purchases", value: account.purchaseCount.toLocaleString("en-US") },
+                  ]}
+                />
+              </OperatorSection>
+            </div>
+            {!account.deletedAt && (
+              <OperatorSection
+                title="Reassign immediate parent"
+                description="Descendants stay attached. The server prevents cycles and records the change."
+                surface
+                className="lg:col-start-2"
+              >
+                <div className="grid gap-5">
+                  <div className="grid gap-1">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Current parent
+                    </span>
+                    <strong className="text-sm text-slate-900">
+                      {account.parent ? `@${account.parent.username}` : "None"}
+                    </strong>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="operator-new-parent">New parent</Label>
+                    <AsyncSelect<ParentOption, false>
+                      inputId="operator-new-parent"
+                      cacheOptions
+                      defaultOptions={false}
+                      loadOptions={loadParentOptions}
+                      value={null}
+                      isDisabled={saving}
+                      isClearable
+                      isLoading={saving}
+                      onChange={(option) => void reassign(option?.account ?? null)}
+                      placeholder="Search username, email or account ID"
+                      noOptionsMessage={({ inputValue }) =>
+                        inputValue.trim() ? "No eligible account found." : "Start typing to search."
+                      }
+                      styles={parentSelectStyles}
+                      menuPortalTarget={typeof document === "undefined" ? undefined : document.body}
+                    />
+                    {saving && (
+                      <p role="status" className="text-sm text-slate-600">
+                        Reassigning parent…
+                      </p>
+                    )}
+                    {parentError && <Alert role="alert">{parentError}</Alert>}
                   </div>
                 </div>
-              )}
-            </OperatorSection>
-          )}
+              </OperatorSection>
+            )}
+          </div>
           {account.latestParentReassignment && (
             <OperatorSection title="Latest hierarchy audit" surface>
               <p className="panel-note">
@@ -992,27 +979,26 @@ export function CapabilityCard({
             capabilities stored on the account.
           </p>
         </div>
-        {rootAssigned && <Badge variant="destructive">system.root · master authority</Badge>}
       </div>
-      <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50/80 p-4 sm:p-5">
+      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h4 className="font-semibold text-rose-950">
+            <h4 className="font-semibold text-slate-900">
               {CAPABILITY_METADATA["system.root"].label}
             </h4>
-            <code className="mt-1 inline-block rounded bg-white/70 px-2 py-1 text-xs text-rose-900">
+            <code className="mt-1 inline-block rounded bg-white px-2 py-1 text-xs text-slate-600">
               system.root
             </code>
           </div>
-          {rootAssigned && <Badge variant="destructive">Enabled</Badge>}
+          {rootAssigned && <Badge variant="secondary">Enabled</Badge>}
         </div>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-rose-900">
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
           {CAPABILITY_METADATA["system.root"].description}
         </p>
         {manageable.has("system.root") && (
           <div className="mt-4">
             <Button
-              variant="destructive"
+              variant={rootAssigned ? "destructive" : "action"}
               disabled={saving === "system.root"}
               onClick={() => void onChange("system.root", rootAssigned ? "revoke" : "grant")}
             >
@@ -1026,18 +1012,21 @@ export function CapabilityCard({
         )}
       </div>
       {view.rootAuthority && (
-        <p className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">
+        <p className="mt-4 rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
           Root authority already includes every ordinary platform permission. Existing direct
           assignments are preserved and cannot be edited while this authority is enabled.
         </p>
       )}
-      <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
+      <div className="mt-4 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
         {ordinary.map((capability) => {
           const metadata = CAPABILITY_METADATA[capability];
           const grantedAt = assigned.get(capability);
           const canChange = manageable.has(capability);
           return (
-            <div key={capability} className="flex items-start gap-3 px-4 py-4">
+            <div
+              key={capability}
+              className={`flex items-start gap-3 px-4 py-4 ${view.rootAuthority ? "cursor-not-allowed opacity-60" : ""}`}
+            >
               <label className="mt-0.5 shrink-0">
                 <input
                   type="checkbox"
@@ -1048,11 +1037,21 @@ export function CapabilityCard({
                 />
               </label>
               <div className="min-w-0">
-                <strong className="text-sm text-slate-900">{metadata.label}</strong>
-                <code className="mt-1 block w-fit max-w-full break-all rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                <strong
+                  className={`text-sm ${view.rootAuthority ? "text-slate-500" : "text-slate-900"}`}
+                >
+                  {metadata.label}
+                </strong>
+                <code
+                  className={`mt-1 block w-fit max-w-full break-all rounded px-2 py-1 text-xs ${view.rootAuthority ? "bg-slate-100 text-slate-500" : "bg-slate-100 text-slate-600"}`}
+                >
                   {capability}
                 </code>
-                <p className="mt-2 text-sm leading-5 text-slate-600">{metadata.description}</p>
+                <p
+                  className={`mt-2 text-sm leading-5 ${view.rootAuthority ? "text-slate-500" : "text-slate-600"}`}
+                >
+                  {metadata.description}
+                </p>
                 {grantedAt && (
                   <p className="mt-1 text-xs text-slate-500">
                     Granted {new Date(grantedAt).toLocaleString()}

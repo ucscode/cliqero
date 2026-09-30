@@ -55,7 +55,14 @@ export class ListingReviewService {
     await this.operators.requireCapability(account.id, "reviews.moderate");
     const operation = async () => {
       const current = await this.reviews.findById(reviewId);
-      if (!current || current.status !== "pending")
+      if (!current)
+        throw new PublicApplicationError(
+          "Review not found or is no longer pending",
+          "review_not_pending",
+          409,
+        );
+      if (current.status === status) return current;
+      if (current.status !== "pending")
         throw new PublicApplicationError(
           "Review not found or is no longer pending",
           "review_not_pending",

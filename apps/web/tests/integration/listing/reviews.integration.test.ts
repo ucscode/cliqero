@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createContainer } from "@/infrastructure/container";
+import { OperatorBulkWorkflow } from "@/application/operator/bulk-workflow";
 import { newId } from "@/kernel/ids";
 import { Account } from "@/modules/identity/account";
 
@@ -463,5 +464,84 @@ suite("listing review visibility", () => {
       "review.updated",
       "review.deleted",
     ]);
+  });
+
+  it("bulk-moderates mixed statuses and permanently deletes selected reviews with partial outcomes", async () => {
+    const operator = await app.authentication.register({
+      email: "review_bulk_operator@example.test",
+      username: "review_bulk_operator",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'reviews.moderate')`,
+      [operator.id],
+    );
+    const listing = await app.listingService.createPublished(operator, {
+      title: "Bulk review listing",
+      shortDescription: "Bulk moderation fixture",
+      longDescription: "Used to verify review bulk workflows.",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/review-bulk",
+    });
+    const reviews = [];
+    for (let index = 0; index < 3; index++) {
+      const author = await app.authentication.register({
+        email: `review_bulk_author_${index}@example.test`,
+        username: `review_bulk_author_${index}`,
+        password: "correct-horse-battery",
+        country: "NG",
+      });
+      reviews.push(
+        await app.listingReviews.submit(author, listing.id, {
+          rating: index + 3,
+          body: `Bulk review ${index}`,
+        }),
+      );
+    }
+    await app.listingReviews.moderate(operator, reviews[0]!.id, "approved");
+    await app.listingReviews.moderate(operator, reviews[1]!.id, "rejected");
+    const workflow = new OperatorBulkWorkflow(app);
+
+    await expect(
+      workflow.execute(operator, {
+        resource: "reviews",
+        action: "moderate",
+        status: "approved",
+        ids: [reviews[0]!.id, reviews[2]!.id],
+      }),
+    ).resolves.toEqual({ succeeded: [reviews[0]!.id, reviews[2]!.id], failed: [] });
+    expect((await app.listingReviews.summariesForListings([listing.id])).get(listing.id)).toEqual({
+      average: 4,
+      count: 2,
+    });
+
+    const missingId = newId();
+    await expect(
+      workflow.execute(operator, {
+        resource: "reviews",
+        action: "delete",
+        ids: [...reviews.map(({ id }) => id), missingId],
+      }),
+    ).resolves.toEqual({
+      succeeded: reviews.map(({ id }) => id),
+      failed: [{ id: missingId, message: "Review not found." }],
+    });
+    expect((await app.listingReviews.visible({ listingId: listing.id, limit: 10 })).items).toEqual(
+      [],
+    );
+    expect((await app.listingReviews.summariesForListings([listing.id])).has(listing.id)).toBe(
+      false,
+    );
+    expect(
+      (await app.listingReviews.operatorQueue(operator, { listingId: listing.id, limit: 10 }))
+        .items,
+    ).toEqual([]);
+    const deletedAudit = await app.database.query<{ count: string }>(
+      `select count(*)::text count from kernel.audit_records where action='review.deleted' and subject_type='review'`,
+    );
+    expect(deletedAudit.rows[0]?.count).toBe("3");
   });
 });

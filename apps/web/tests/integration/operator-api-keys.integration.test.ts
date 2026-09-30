@@ -219,6 +219,29 @@ suite("operator API-key administration", () => {
     expect(afterRevoke.status).toBe(403);
   });
 
+  it("creates a revoked credential without ever making it authenticatable", async () => {
+    const actor = await account("revokedcreateoperator");
+    const target = await account("revokedcreatetarget");
+    await grant(actor.id, "api_keys.manage");
+    const api = sessionApi(actor.id, ["api_keys.manage"]);
+    const response = await api.fetch(
+      new Request("http://localhost/internal/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          account_id: target.id,
+          name: "pre-revoked key",
+          scopes: [],
+          state: "revoked",
+        }),
+      }),
+    );
+    expect(response.status).toBe(201);
+    const created = await response.json();
+    expect(created.state).toBe("revoked");
+    expect(await app.apiKeys.authenticate(created.secret)).toBeNull();
+  });
+
   it("provides a canonical cross-account CRUD collection without exposing secrets after creation", async () => {
     const actor = await account("crudkeyoperator");
     const first = await account("crudkeyfirst");
@@ -389,6 +412,7 @@ suite("operator API-key administration", () => {
       name: "transferred credential",
       scopes: ["catalogue:manage"],
       expires_at: null,
+      state: "active",
     };
     const denied = await deniedApi.fetch(
       new Request(`http://localhost/internal/api-keys/${key.id}/reassign`, {
@@ -427,6 +451,32 @@ suite("operator API-key administration", () => {
     expect(moved.account_id).toBe(destination.id);
     expect(await app.apiKeys.authenticate(key.secret)).toBeNull();
     expect((await app.apiKeys.authenticate(moved.secret))?.accountId).toBe(destination.id);
+
+    const revokedTransfer = await rootApi.fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}/reassign`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...transferBody, account_id: source.id, state: "revoked" }),
+      }),
+    );
+    expect(revokedTransfer.status).toBe(200);
+    const revokedReplacement = await revokedTransfer.json();
+    expect(revokedReplacement.state).toBe("revoked");
+    expect(await app.apiKeys.authenticate(revokedReplacement.secret)).toBeNull();
+
+    const activeTransfer = await rootApi.fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}/reassign`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...transferBody, account_id: destination.id, state: "active" }),
+      }),
+    );
+    expect(activeTransfer.status).toBe(200);
+    const activeReplacement = await activeTransfer.json();
+    expect(activeReplacement.state).toBe("active");
+    expect((await app.apiKeys.authenticate(activeReplacement.secret))?.accountId).toBe(
+      destination.id,
+    );
     const reassignmentAudit = await app.database.query<{
       action: string;
       previous_state: any;
@@ -463,13 +513,15 @@ suite("operator API-key administration", () => {
       }),
     );
     expect(rootReactivate.status).toBe(200);
-    expect((await app.apiKeys.authenticate(moved.secret))?.accountId).toBe(destination.id);
+    expect((await app.apiKeys.authenticate(activeReplacement.secret))?.accountId).toBe(
+      destination.id,
+    );
 
     const deleteResponse = await rootApi.fetch(
       new Request(`http://localhost/internal/api-keys/${key.id}`, { method: "DELETE" }),
     );
     expect(deleteResponse.status).toBe(204);
-    expect(await app.apiKeys.authenticate(moved.secret)).toBeNull();
+    expect(await app.apiKeys.authenticate(activeReplacement.secret)).toBeNull();
     const keyRows = await app.database.query<{ count: string }>(
       `select count(*)::text count from identity_capability.api_keys where uuid=$1`,
       [key.id],

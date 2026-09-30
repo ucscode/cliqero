@@ -57,10 +57,16 @@ export class PostgresApiKeyRepository {
     scopes: string[];
     createdBy: string;
     expiresAt: Date | null;
+    status: "active" | "revoked";
   }) {
     const id = (
-      await this.sql.query<{ id: string; created_at: Date; expires_at: Date | null }>(
-        `insert into identity_capability.api_keys(account_id,name,key_prefix,secret_hash,scopes,created_by,expires_at) values((select id from identity_capability.accounts where uuid=$1),$2,$3,$4,$5::jsonb,(select id from identity_capability.accounts where uuid=$6),$7) returning uuid as id,created_at,expires_at`,
+      await this.sql.query<{
+        id: string;
+        created_at: Date;
+        expires_at: Date | null;
+        revoked_at: Date | null;
+      }>(
+        `insert into identity_capability.api_keys(account_id,name,key_prefix,secret_hash,scopes,created_by,expires_at,revoked_at) values((select id from identity_capability.accounts where uuid=$1),$2,$3,$4,$5::jsonb,(select id from identity_capability.accounts where uuid=$6),$7,case when $8='revoked' then now() else null end) returning uuid as id,created_at,expires_at,revoked_at`,
         [
           input.accountId,
           input.name,
@@ -69,6 +75,7 @@ export class PostgresApiKeyRepository {
           JSON.stringify(input.scopes),
           input.createdBy,
           input.expiresAt,
+          input.status,
         ],
       )
     ).rows[0];
@@ -221,9 +228,10 @@ export class PostgresApiKeyRepository {
     secretHash: Buffer;
     scopes: string[];
     expiresAt: Date | null;
+    status: "active" | "revoked";
   }) {
     const result = await this.sql.query(
-      `update identity_capability.api_keys set account_id=(select id from identity_capability.accounts where uuid=$2 and deleted_at is null),name=$3,key_prefix=$4,secret_hash=$5,scopes=$6::jsonb,expires_at=$7,revoked_at=null
+      `update identity_capability.api_keys set account_id=(select id from identity_capability.accounts where uuid=$2 and deleted_at is null),name=$3,key_prefix=$4,secret_hash=$5,scopes=$6::jsonb,expires_at=$7,revoked_at=case when $8='revoked' then coalesce(revoked_at,now()) else null end
        where uuid=$1 and exists(select 1 from identity_capability.accounts where uuid=$2 and deleted_at is null)`,
       [
         input.id,
@@ -233,6 +241,7 @@ export class PostgresApiKeyRepository {
         input.secretHash,
         JSON.stringify(input.scopes),
         input.expiresAt,
+        input.status,
       ],
     );
     return (result.rowCount ?? 0) === 1;
@@ -258,6 +267,7 @@ export class ApiKeyService {
     scopes: string[];
     createdBy: string;
     expiresAt?: Date | null;
+    status?: "active" | "revoked";
   }) {
     const operation = async () => {
       const scopes = [...assertApiScopes(input.scopes)];
@@ -271,6 +281,7 @@ export class ApiKeyService {
         scopes,
         createdBy: input.createdBy,
         expiresAt: input.expiresAt ?? null,
+        status: input.status ?? "active",
       });
       return {
         id: inserted.id,
@@ -280,6 +291,7 @@ export class ApiKeyService {
         keyPrefix: prefix,
         createdAt: inserted.created_at,
         expiresAt: inserted.expires_at,
+        revokedAt: inserted.revoked_at,
       };
     };
     return this.uow ? this.uow.transaction(operation) : operation();
@@ -321,6 +333,7 @@ export class ApiKeyService {
     name: string;
     scopes: string[];
     expiresAt: Date | null;
+    status: "active" | "revoked";
   }) {
     const secret = `cliq_live_${randomBytes(32).toString("base64url")}`;
     const keyPrefix = secret.slice(0, 18);

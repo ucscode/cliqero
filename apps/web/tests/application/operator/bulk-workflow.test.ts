@@ -51,4 +51,26 @@ describe("OperatorBulkWorkflow", () => {
     ).rejects.toThrow("Forbidden");
     expect(moderate).not.toHaveBeenCalled();
   });
+
+  it("deletes each selected review independently and reports partial failures", async () => {
+    const remove = vi.fn(async (_account: Account, id: string) => {
+      if (id === "review-b") throw new Error("Review not found.");
+    });
+    const workflow = new OperatorBulkWorkflow({
+      operators: { requireCapability: vi.fn(async () => undefined) },
+      listingReviews: { moderate: vi.fn(), delete: remove },
+    } as never);
+
+    await expect(
+      workflow.execute(actor, {
+        resource: "reviews",
+        action: "delete",
+        ids: ["review-a", "review-b", "review-a"],
+      }),
+    ).resolves.toEqual({
+      succeeded: ["review-a"],
+      failed: [{ id: "review-b", message: "Review not found." }],
+    });
+    expect(remove).toHaveBeenCalledTimes(2);
+  });
 });

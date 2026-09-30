@@ -89,6 +89,9 @@ export function CrudBulkActions<T>({
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-slate-600" aria-live="polite">
+          {countLabel}
+        </span>
         <Select
           aria-label="Bulk actions"
           value={selectedAction}
@@ -112,9 +115,6 @@ export function CrudBulkActions<T>({
         >
           {busy ? "Applying…" : "Apply"}
         </Button>
-        <span className="text-sm text-slate-600" aria-live="polite">
-          {countLabel}
-        </span>
       </div>
       {error && (
         <p className="text-sm text-red-700" role="alert">

@@ -149,6 +149,7 @@ export class InternalApiKeyManagementRoutes {
         accountId: body.account_id,
         name: body.name,
         scopes: body.scopes,
+        status: body.state,
         expiresAt:
           body.expires_at === undefined
             ? undefined
@@ -164,7 +165,7 @@ export class InternalApiKeyManagementRoutes {
             accountUsername: "",
             accountEmail: null,
             lastUsedAt: null,
-            revokedAt: null,
+            revokedAt: created.revokedAt,
           }),
           secret: created.secret,
         },
@@ -263,6 +264,7 @@ export class InternalApiKeyManagementRoutes {
           name: body.name,
           scopes: body.scopes,
           expiresAt: body.expires_at === null ? null : new Date(body.expires_at),
+          status: body.state,
         },
       );
       return response({ ...metadata(key), secret: key.secret });

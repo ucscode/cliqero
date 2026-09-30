@@ -1,4 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   CapabilityCard,
@@ -259,9 +261,15 @@ describe("operator capability administration", () => {
     );
     expect(html).toContain("Root authority already includes every ordinary platform permission.");
     expect(html).toContain("Existing direct assignments are preserved");
+    expect(html).toContain("opacity-60");
+    expect(html).toContain("mt-4 rounded-lg border border-slate-200");
+    expect(html).toContain("mt-4 divide-y divide-slate-200");
+    expect(html).toContain('bg-slate-100 text-slate-800">Enabled</div>');
+    expect([...html.matchAll(/bg-rose-800/g)]).toHaveLength(1);
     expect(html).not.toContain("Save capabilities");
     expect(html).not.toContain("Assigned</");
     expect(html).not.toContain("Not assigned");
+    expect(html).not.toContain("master authority</span>");
     expect(html.indexOf('type="checkbox"')).toBeLessThan(html.indexOf("API-key administration"));
     expect(html).toContain('aria-label="API-key administration"');
     expect(html).toMatch(/<input[^>]*disabled=""[^>]*aria-label="Catalogue management" checked=""/);
@@ -287,5 +295,22 @@ describe("operator capability administration", () => {
     expect(html).toContain("Save capabilities");
     expect(html).not.toContain("Not assigned");
     expect(html.indexOf('type="checkbox"')).toBeLessThan(html.indexOf("Catalogue management"));
+  });
+
+  it("uses an async parent selector and assigns immediately on selection", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/operator/users.tsx"),
+      "utf8",
+    );
+    expect(source).toContain('import AsyncSelect from "react-select/async"');
+    expect(source).toContain("loadOptions={loadParentOptions}");
+    expect(source).toContain("onChange={(option) => void reassign(option?.account ?? null)}");
+    expect(source).toContain("Current parent");
+    expect(source).toContain('toast.success("Parent reassigned successfully.")');
+    expect(source).toContain("setParentError(message(cause))");
+    expect(source).toContain("candidate.id !== currentAccountId");
+    expect(source).not.toContain("Assign parent</button>");
+    expect(source).not.toContain("Search</Button>");
+    expect(source).not.toContain("Selected parent:");
   });
 });

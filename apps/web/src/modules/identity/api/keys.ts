@@ -19,6 +19,7 @@ export interface ApiKeyManagementService {
     scopes: string[];
     createdBy: string;
     expiresAt?: Date | null;
+    status?: "active" | "revoked";
   }): Promise<{
     id: string;
     secret: string;
@@ -27,6 +28,7 @@ export interface ApiKeyManagementService {
     keyPrefix: string;
     createdAt: Date;
     expiresAt: Date | null;
+    revokedAt: Date | null;
   }>;
   listPage(input: {
     accountId?: string;
@@ -58,6 +60,7 @@ export interface ApiKeyManagementService {
     name: string;
     scopes: string[];
     expiresAt: Date | null;
+    status: "active" | "revoked";
   }): Promise<{ secret: string; keyPrefix: string } | null>;
   delete(id: string, accountId?: string): Promise<boolean>;
 }

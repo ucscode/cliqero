@@ -32,9 +32,7 @@ export function reviewQueueBulkActions<T extends { status: string }>(
   selectedItems: readonly T[],
   bulkActions: readonly CrudBulkAction<T>[],
 ) {
-  return selectedItems.length > 0 && selectedItems.every((item) => item.status === "pending")
-    ? bulkActions
-    : [];
+  return selectedItems.length > 0 ? bulkActions : [];
 }
 
 export function OperatorReviewEditor({ reviewId }: { reviewId: string }) {
@@ -277,13 +275,52 @@ export function OperatorReviews({ initialListingId = "" }: { initialListingId?: 
       return false;
     }
   }
+  async function deleteMany(reviews: readonly Review[]) {
+    if (!window.confirm(`Permanently delete ${reviews.length} selected review(s)?`)) return false;
+    try {
+      setActionError(null);
+      setBulkOutcome(null);
+      const results = await runOperatorBulkAction({
+        resource: "reviews",
+        action: "delete",
+        ids: reviews.map((review) => review.id),
+      });
+      const failures = results.failed;
+      if (failures.length)
+        setBulkOutcome({
+          resource: "reviews",
+          selectedCount: reviews.length,
+          failures: failures.map(({ id, message }) => ({
+            id,
+            label: reviews.find((review) => review.id === id)?.reviewer ?? id,
+            message,
+          })),
+        });
+      await collection.retry();
+      if (!failures.length) toast.success(`${reviews.length} review(s) permanently deleted.`);
+      return failures.length === 0;
+    } catch (cause) {
+      setActionError(errorMessage(cause));
+      return false;
+    }
+  }
   const bulkActions: readonly CrudBulkAction<Review>[] = [
-    { value: "approve", label: "Approve", onSelect: (items) => moderateMany(items, "approve") },
+    {
+      value: "approve",
+      label: "Approve selected",
+      onSelect: (items) => moderateMany(items, "approve"),
+    },
     {
       value: "reject",
-      label: "Reject",
+      label: "Reject selected",
       destructive: true,
       onSelect: (items) => moderateMany(items, "reject"),
+    },
+    {
+      value: "delete",
+      label: "Delete selected",
+      destructive: true,
+      onSelect: deleteMany,
     },
   ];
   const columns: readonly CrudColumn<Review>[] = [
@@ -413,6 +450,20 @@ export function OperatorReviews({ initialListingId = "" }: { initialListingId?: 
       bulkActions={(selected) => reviewQueueBulkActions(selected, bulkActions)}
       actions={(review) => [
         { type: "link" as const, label: "Edit review", href: `/operator/reviews/${review.id}` },
+        {
+          type: "action" as const,
+          label: "Delete review",
+          destructive: true,
+          onSelect: () => {
+            if (!window.confirm("Permanently delete this review?")) return;
+            void apiFetch(`/api/reviews/${review.id}`, { method: "DELETE" })
+              .then(async () => {
+                toast.success("Review deleted.");
+                await collection.retry();
+              })
+              .catch((cause) => setActionError(errorMessage(cause)));
+          },
+        },
         ...(review.status === "pending"
           ? [
               {

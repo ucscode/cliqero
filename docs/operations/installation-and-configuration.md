@@ -262,6 +262,20 @@ just dev-seed-users
 just dev-seed-catalogue
 ```
 
+To reconcile safe additive column drift in an existing local PostgreSQL
+development database without deleting data, run:
+
+```bash
+just dev-db-sync
+```
+
+The command compares the local Compose database with a temporary database
+created from `database/migrations/001_initial_schema.sql`. It adds only missing
+nullable columns that require no data backfill, then removes its temporary
+reference database. It refuses missing tables, required columns, or other
+unsafe drift rather than guessing values. Use the explicitly destructive
+`just dev-db-reset` only when a complete PostgreSQL reset is intended.
+
 To reset only Blog SQLite and recreate its fixtures:
 
 ```bash

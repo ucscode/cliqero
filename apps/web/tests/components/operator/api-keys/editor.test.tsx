@@ -42,6 +42,19 @@ describe("Operator API-key create and edit pages", () => {
     expect(source).toContain("/reassign");
     expect(source).toContain('setCredentialAction("reassigned")');
     expect(source).not.toContain("MultiSelect");
+    expect(source).toContain('useState<"active" | "revoked">("active")');
+    expect(source).toContain("state: payload.state");
+    expect(source).toContain("account.value !== originalAccountId");
+    expect(source).toContain('mode === "create" ? "New API key" : "Edit API key"');
+    const positions = [
+      source.indexOf('Label htmlFor="api-key-account"'),
+      source.indexOf('Label htmlFor="api-key-name"'),
+      source.indexOf('Label htmlFor="api-key-state"'),
+      source.indexOf("<ApiKeyScopeList"),
+      source.indexOf('Label htmlFor="api-key-expiry"'),
+    ];
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 
   it("keeps the one-time secret inline until Done navigates back, never in a URL or toast", () => {
@@ -74,5 +87,42 @@ describe("Operator API-key create and edit pages", () => {
     expect(html).toContain("Catalogue reads");
     expect(html).not.toContain('type="search"');
     expect(html).not.toContain("combobox");
+  });
+
+  it("shows the full permission matrix disabled before selecting an account", () => {
+    const html = renderToStaticMarkup(
+      <ApiKeyScopeList
+        availableScopes={[]}
+        selectedScopes={[]}
+        loading={false}
+        accountSelected={false}
+        onChange={() => {}}
+      />,
+    );
+    expect(html).toContain("Permissions");
+    expect(html).toContain("Select an account to check which of these permissions it may receive.");
+    expect(html).toContain("Catalogue reads");
+    expect(html).toContain("treasury:read");
+    expect([...html.matchAll(/<input type="checkbox" disabled=""/g)]).toHaveLength(26);
+  });
+
+  it("renders Create in Account, Name, Status, Permissions, Expiry order", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/operator/api-keys/editor.tsx"),
+      "utf8",
+    );
+    const positions = [
+      source.indexOf('Label htmlFor="api-key-account"'),
+      source.indexOf('Label htmlFor="api-key-name"'),
+      source.indexOf('Label htmlFor="api-key-state"'),
+      source.indexOf("<ApiKeyScopeList"),
+      source.indexOf('Label htmlFor="api-key-expiry"'),
+    ];
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    expect(source).toContain("state: payload.state");
+    expect(source).toContain(
+      "setScopes((current) => current.filter((scope) => result.manageable_scopes.includes(scope)))",
+    );
   });
 });

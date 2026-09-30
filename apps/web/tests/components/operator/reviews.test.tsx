@@ -17,8 +17,9 @@ const review = {
 };
 const selection = { labelForItem: (item: typeof review) => `review by ${item.reviewer}` };
 const actions = [
-  { value: "approve", label: "Approve", onSelect: vi.fn() },
-  { value: "reject", label: "Reject", onSelect: vi.fn() },
+  { value: "approve", label: "Approve selected", onSelect: vi.fn() },
+  { value: "reject", label: "Reject selected", onSelect: vi.fn() },
+  { value: "delete", label: "Delete selected", onSelect: vi.fn() },
 ];
 
 function renderQueue(appliedStatus: string) {
@@ -39,29 +40,35 @@ function renderQueue(appliedStatus: string) {
 }
 
 describe("operator review queue bulk selection", () => {
-  it("shows selection controls and leaves bulk actions unavailable before selection", () => {
+  it("shows the disabled bulk toolbar before selection", () => {
     const html = renderQueue("all");
     expect(html).toContain('aria-label="Select all visible records"');
     expect(html).toContain('aria-label="Select review by A customer"');
-    expect(html).not.toContain('aria-label="Bulk actions"');
+    expect(html).toContain('aria-label="Bulk actions"');
+    expect(html).toContain(">Approve selected</option>");
+    expect(html).toContain(">Reject selected</option>");
+    expect(html).toContain(">Delete selected</option>");
+    expect(html).toContain('type="button" disabled=""');
     expect(reviewQueueBulkActions([review], actions)).toBe(actions);
   });
 
-  it.each(["approved", "rejected"])("hides invalid actions for selected %s reviews", (status) => {
-    expect(reviewQueueBulkActions([{ ...review, status }], actions)).toEqual([]);
-  });
-
-  it("derives bulk moderation availability from selected row states", () => {
+  it("keeps actions visible for mixed states and supplies approve, reject, and delete", () => {
     expect(reviewQueueBulkActions([review], actions)).toBe(actions);
     expect(
       reviewQueueBulkActions(
         [
           { ...review, status: "pending" },
           { ...review, status: "approved" },
+          { ...review, id: "review-3", status: "rejected" },
         ],
         actions,
       ),
-    ).toEqual([]);
+    ).toEqual(actions);
+    expect(actions.map(({ label }) => label)).toEqual([
+      "Approve selected",
+      "Reject selected",
+      "Delete selected",
+    ]);
     expect(reviewQueueBulkActions([], actions)).toEqual([]);
   });
 
@@ -86,5 +93,8 @@ describe("operator review queue bulk selection", () => {
     expect(source).toContain('status: "all"');
     expect(source).toContain('label: "Edit review"');
     expect(source).toContain("line-clamp-3 max-w-[20rem] break-words whitespace-pre-wrap");
+    expect(source).toContain('resource: "reviews",\n        action: "delete"');
+    expect(source).toContain("Delete review");
+    expect(source).toContain("reviewQueueBulkActions(selected, bulkActions)");
   });
 });
