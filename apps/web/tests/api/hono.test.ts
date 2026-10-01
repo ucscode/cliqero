@@ -846,7 +846,12 @@ describe("Hono API foundation", () => {
     expect(paths["/api/payments"].get.tags).toEqual(["Payments"]);
     expect(paths["/api/payments/{paymentId}/reconcile"].post).toBeDefined();
     expect(paths["/api/payments/events"].get).toBeDefined();
-    expect(Object.keys(paths).filter((path) => path.startsWith("/api/operator/"))).toEqual([]);
+    expect(Object.keys(paths).filter((path) => path.startsWith("/api/operator/"))).toEqual([
+      "/api/operator/purchases",
+      "/api/operator/purchases/{purchaseId}",
+    ]);
+    expect(paths["/api/operator/purchases"].get).toBeDefined();
+    expect(paths["/api/operator/purchases/{purchaseId}"].get).toBeDefined();
     expect(paths).not.toHaveProperty("/api/payments/{provider}/ipn");
     expect(paths["/api/accounts"].post).toMatchObject({
       "x-authentication-mode": "mixed",

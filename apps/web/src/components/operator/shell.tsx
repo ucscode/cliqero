@@ -54,6 +54,7 @@ export function OperatorShell({
     | "apiKeys"
     | "network"
     | "funding"
+    | "purchases"
     | "distributions"
     | "earnings"
     | "withdrawals"
@@ -134,6 +135,12 @@ export function OperatorShell({
     {
       label: "Finance",
       items: [
+        {
+          key: "purchases",
+          href: "/operator/purchases",
+          label: "Purchases",
+          visible: hasCapability(capabilities, "finance.read"),
+        },
         {
           key: "funding",
           href: "/operator/funding",

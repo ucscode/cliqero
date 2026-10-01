@@ -70,9 +70,10 @@ export class OperatorAccountManagementService {
       username: string;
       country?: string | null;
       credentialSetup: { mode: "email" } | { mode: "password"; password: string };
+      notifyUser: boolean;
     },
   ) {
-    const { credentialSetup, ...identity } = input;
+    const { credentialSetup, notifyUser, ...identity } = input;
     const account =
       credentialSetup.mode === "password"
         ? await this.authentication.registerForOperator(
@@ -82,6 +83,7 @@ export class OperatorAccountManagementService {
         : await this.authentication.registerForOperatorWithoutPassword(identity, actorId);
 
     let passwordSetupEmailRequested = false;
+    let accountCreatedEmailRequested = false;
     if (credentialSetup.mode === "email") {
       passwordSetupEmailRequested = true;
       try {
@@ -94,12 +96,24 @@ export class OperatorAccountManagementService {
         // the public password-reset request if delivery is temporarily unavailable.
         passwordSetupEmailRequested = false;
       }
+    } else if (notifyUser) {
+      try {
+        await this.authentication.sendOperatorAccountCreatedEmail(
+          account.id,
+          input.email,
+          input.username,
+        );
+        accountCreatedEmailRequested = true;
+      } catch {
+        // Account creation is durable even when optional notification delivery fails.
+      }
     }
 
     return {
       account: await this.accounts.get(account.id),
       credentialSetupMode: credentialSetup.mode,
       passwordSetupEmailRequested,
+      accountCreatedEmailRequested,
     };
   }
 

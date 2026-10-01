@@ -18,6 +18,7 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     registerForOperator: register,
     registerForOperatorWithoutPassword: registerWithoutPassword,
     requestPasswordSetup,
+    sendOperatorAccountCreatedEmail: vi.fn(async () => undefined),
     removeAccountIdentity: vi.fn(async () => undefined),
   };
   const profiles = {
@@ -76,6 +77,7 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     register,
     registerWithoutPassword,
     requestPasswordSetup,
+    sendOperatorAccountCreatedEmail: vi.fn(async () => undefined),
     updateProfile,
     deletion,
     authentication,
@@ -90,6 +92,7 @@ describe("OperatorAccountManagementService", () => {
       username: "new_user",
       country: "NG",
       credentialSetup: { mode: "email" },
+      notifyUser: true,
     });
 
     expect(registerWithoutPassword).toHaveBeenCalledWith(
@@ -116,6 +119,7 @@ describe("OperatorAccountManagementService", () => {
         email: "new@example.test",
         username: "new_user",
         credentialSetup: { mode: "email" },
+        notifyUser: true,
       }),
     ).resolves.toMatchObject({
       account: { id: target.id },
@@ -125,13 +129,15 @@ describe("OperatorAccountManagementService", () => {
     expect(audits).toHaveLength(0);
   });
 
-  it("creates a manual-password account without requesting email or returning the password", async () => {
-    const { service, register, registerWithoutPassword, requestPasswordSetup } = fixture();
+  it("creates a manual-password account without email unless notification is requested", async () => {
+    const { service, register, registerWithoutPassword, requestPasswordSetup, authentication } =
+      fixture();
     const suppliedPassword = "OperatorChosenPassword!";
     const result = await service.create(actorId, {
       email: "new@example.test",
       username: "new_user",
       credentialSetup: { mode: "password", password: suppliedPassword },
+      notifyUser: false,
     });
 
     expect(register).toHaveBeenCalledWith(
@@ -140,11 +146,31 @@ describe("OperatorAccountManagementService", () => {
     );
     expect(registerWithoutPassword).not.toHaveBeenCalled();
     expect(requestPasswordSetup).not.toHaveBeenCalled();
+    expect(authentication.sendOperatorAccountCreatedEmail).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       credentialSetupMode: "password",
       passwordSetupEmailRequested: false,
+      accountCreatedEmailRequested: false,
     });
     expect(JSON.stringify(result)).not.toContain(suppliedPassword);
+  });
+
+  it("sends a password-free account notification only when explicitly selected", async () => {
+    const { service, authentication } = fixture();
+    await service.create(actorId, {
+      email: "new@example.test",
+      username: "new_user",
+      credentialSetup: { mode: "password", password: "OperatorChosenPassword!" },
+      notifyUser: true,
+    });
+    expect(authentication.sendOperatorAccountCreatedEmail).toHaveBeenCalledWith(
+      target.id,
+      "new@example.test",
+      "new_user",
+    );
+    expect(authentication.sendOperatorAccountCreatedEmail.mock.calls[0].join(" ")).not.toContain(
+      "OperatorChosenPassword!",
+    );
   });
 
   it("updates only supported profile fields and records before/after audit state", async () => {

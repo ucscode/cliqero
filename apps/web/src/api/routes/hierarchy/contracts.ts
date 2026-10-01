@@ -50,7 +50,7 @@ export const descendantsSchema = z.object({
 });
 export const reassignmentSchema = z.object({
   childAccountId: z.string(),
-  parentAccountId: z.string(),
+  parentAccountId: z.string().nullable(),
   previousParentAccountId: z.string().nullable(),
   changed: z.boolean(),
 });

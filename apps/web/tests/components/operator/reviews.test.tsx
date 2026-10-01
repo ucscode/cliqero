@@ -97,4 +97,18 @@ describe("operator review queue bulk selection", () => {
     expect(source).not.toContain("Delete selected");
     expect(source).toContain("reviewQueueBulkActions(selected, bulkActions)");
   });
+
+  it("provides a non-navigating full-review View dialog alongside concise row actions", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/operator/reviews.tsx"),
+      "utf8",
+    );
+    expect(source).toContain('label: "View"');
+    expect(source).toContain("setViewingReview(review)");
+    expect(source).toContain("open={viewingReview !== null}");
+    for (const label of ["Listing", "Reviewer", "Rating", "Status", "Submitted"])
+      expect(source).toContain(`<dt className="font-medium text-slate-500">${label}</dt>`);
+    expect(source).toContain('{viewingReview.body || "—"}');
+    expect(source).toContain("whitespace-pre-wrap break-words");
+  });
 });

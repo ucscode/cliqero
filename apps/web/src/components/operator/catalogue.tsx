@@ -70,6 +70,15 @@ export function operatorListingDescriptionPayload(form: {
   };
 }
 
+export function createCatalogueImagePreview(file: File) {
+  const previewUrl = URL.createObjectURL(file);
+  return {
+    file,
+    previewUrl,
+    dispose: () => URL.revokeObjectURL(previewUrl),
+  };
+}
+
 export function OperatorCatalogueList() {
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
@@ -187,6 +196,41 @@ export function OperatorCatalogueList() {
     }
   }
 
+  async function bulkDelete(listings: readonly OperatorListing[]) {
+    if (
+      !window.confirm(
+        `Delete ${listings.length} selected listing${listings.length === 1 ? "" : "s"}? Historical purchases and accounting records will be retained.`,
+      )
+    )
+      return false;
+    setActionError(null);
+    setBulkOutcome(null);
+    try {
+      const results = await runOperatorBulkAction({
+        resource: "listings",
+        action: "delete",
+        ids: listings.map((listing) => listing.id),
+      });
+      if (results.failed.length)
+        setBulkOutcome({
+          resource: "listings",
+          selectedCount: listings.length,
+          failures: results.failed.map(({ id, message }) => ({
+            id,
+            label: listings.find((listing) => listing.id === id)?.title ?? id,
+            message,
+          })),
+        });
+      await collection.retry();
+      if (!results.failed.length)
+        toast.success(`${listings.length} listing${listings.length === 1 ? "" : "s"} deleted.`);
+      return results.failed.length === 0;
+    } catch (cause) {
+      setActionError(errorMessage(cause));
+      return false;
+    }
+  }
+
   const bulkActions: readonly CrudBulkAction<OperatorListing>[] = [
     { value: "publish", label: "Publish", onSelect: (items) => bulkState(items, "publish") },
     {
@@ -196,6 +240,12 @@ export function OperatorCatalogueList() {
       onSelect: (items) => bulkState(items, "archive"),
     },
     { value: "restore", label: "Restore", onSelect: (items) => bulkState(items, "restore") },
+    {
+      value: "delete",
+      label: "Delete",
+      destructive: true,
+      onSelect: (items) => bulkDelete(items),
+    },
   ];
 
   async function importFile(event: FormEvent<HTMLFormElement>) {
@@ -303,10 +353,19 @@ export function OperatorCatalogueList() {
     },
   ];
   const actions = (listing: OperatorListing): readonly OperatorAction[] => [
-    { type: "link", label: "Edit listing", href: `/operator/catalogue/${listing.id}` },
+    { type: "link", label: "Edit", href: `/operator/catalogue/${listing.id}` },
     { type: "link", label: "View reviews", href: `/operator/reviews?listing=${listing.id}` },
+    { type: "link", label: "View purchases", href: `/operator/purchases?listing=${listing.id}` },
     ...(listing.state === "published"
-      ? [{ type: "link" as const, label: "Open listing", href: `/listings/${listing.id}` }]
+      ? [
+          {
+            type: "link" as const,
+            label: "Open listing",
+            href: `/listings/${listing.id}`,
+            target: "_blank" as const,
+            rel: "noopener noreferrer" as const,
+          },
+        ]
       : []),
     ...(listing.state === "draft"
       ? [
@@ -338,7 +397,7 @@ export function OperatorCatalogueList() {
       : []),
     {
       type: "action",
-      label: "Delete listing",
+      label: "Delete",
       destructive: true,
       onSelect: () => void deleteListing(listing),
     },
@@ -471,7 +530,7 @@ export function OperatorCatalogueList() {
           onNext: () => void collection.next(),
         }}
         sectionTitle="Catalogue"
-        sectionDescription="Archive preserves the listing record; it does not hard-delete history."
+        sectionDescription="Delete removes a listing from catalogue management while preserving purchase and accounting history."
       />
       <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -546,6 +605,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
     featuredPosition: "",
     compareAtPrice: "",
     visibility: "public" as "public" | "authenticated",
+    state: "draft" as "draft" | "published" | "archived",
     categoryIds: [] as string[],
   });
   const [categories, setCategories] = useState<ListingCategory[]>([]);
@@ -579,6 +639,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             ? minorToUsdInput(value.compare_at_price.minor_amount)
             : "",
           visibility: value.visibility,
+          state: value.state ?? "draft",
           categoryIds: value.categories.map((category) => category.id),
         });
       })
@@ -615,6 +676,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
               ? parseUsdMinor(form.compareAtPrice)
               : null,
             visibility: form.visibility,
+            state: form.state,
             category_ids: form.categoryIds,
           }),
         });
@@ -636,6 +698,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
               ? parseUsdMinor(form.compareAtPrice)
               : null,
             visibility: form.visibility,
+            state: form.state,
             category_ids: form.categoryIds,
           }),
         });
@@ -669,7 +732,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       headerActions={
         listing?.state === "published" ? (
           <Button asChild type="button" variant="secondary" size="xs">
-            <Link href={`/listings/${listing.id}`} target="_blank" rel="noreferrer">
+            <Link href={`/listings/${listing.id}`} target="_blank" rel="noopener noreferrer">
               Open listing
             </Link>
           </Button>
@@ -776,6 +839,23 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <option value="public">Public</option>
           <option value="authenticated">Members only</option>
         </Select>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="listing-state">State</Label>
+        <Select
+          id="listing-state"
+          value={form.state}
+          onChange={(event) =>
+            setForm({ ...form, state: event.target.value as "draft" | "published" | "archived" })
+          }
+        >
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+          <option value="archived">Archived</option>
+        </Select>
+        <p className="text-xs leading-5 text-slate-500">
+          Published listings require a short description.
+        </p>
       </div>
       <fieldset className="grid gap-2">
         <legend className="text-sm font-semibold text-slate-800">Categories</legend>
@@ -900,8 +980,8 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
   }
   return (
     <OperatorSection
-      title="Listing credentials"
-      description="Credentials let an external destination verify an entitled buyer. Secrets are shown once."
+      title="Access credentials"
+      description="Use a listing-scoped bearer credential on your external destination to verify a buyer’s entitlement through Cliqero’s access API. The secret is shown only when created or rotated; store it securely."
       surface
     >
       {error && <OperatorErrorState message={error} />}
@@ -975,6 +1055,13 @@ function CatalogueMedia({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<ReturnType<
+    typeof createCatalogueImagePreview
+  > | null>(null);
+  useEffect(() => {
+    if (!selectedImage) return;
+    return () => selectedImage.dispose();
+  }, [selectedImage]);
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -996,6 +1083,7 @@ function CatalogueMedia({
         ...listing,
         media: [...listing.media, media].sort((a, b) => a.position - b.position),
       });
+      setSelectedImage(null);
       form.reset();
     } catch (cause) {
       setError(errorMessage(cause));
@@ -1036,8 +1124,28 @@ function CatalogueMedia({
   return (
     <OperatorSection title="Listing images" surface>
       {error && <OperatorErrorState message={error} />}
+      {selectedImage && (
+        <figure className="grid gap-1">
+          <img
+            src={selectedImage.previewUrl}
+            alt={`Preview of ${selectedImage.file.name}`}
+            className="max-h-64 w-fit max-w-full rounded-md border border-slate-200 object-contain"
+          />
+          <figcaption className="text-xs text-slate-500">Preview before upload</figcaption>
+        </figure>
+      )}
       <form className="media-upload-form" onSubmit={(event) => void upload(event)}>
-        <Input name="file" type="file" accept="image/*" required />
+        <Input
+          name="file"
+          type="file"
+          accept="image/*"
+          required
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) setSelectedImage(createCatalogueImagePreview(file));
+            else setSelectedImage(null);
+          }}
+        />
         <Button type="submit" variant="secondary" disabled={busy}>
           {busy ? "Uploading…" : "Add image"}
         </Button>
@@ -1066,12 +1174,12 @@ function CatalogueMedia({
             </div>
           ))}
         </div>
-      ) : (
+      ) : !selectedImage ? (
         <OperatorEmptyState
           title="No media yet"
           description="Add a browser-renderable image to improve the public listing."
         />
-      )}
+      ) : null}
     </OperatorSection>
   );
 }

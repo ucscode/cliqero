@@ -79,6 +79,10 @@ describe("operator console shared page migration", () => {
     expect(html).toContain("Detailed listing content saved as Markdown.");
     expect(html).toContain("Set 0.00 for a free listing.");
     expect(html).toContain('for="listing-access-url"');
+    expect(html).toContain('for="listing-state"');
+    expect(html).toContain('value="draft" selected="">Draft');
+    expect(html).toContain('value="published">Published');
+    expect(html).toContain('value="archived">Archived');
     expect(html).toContain("not the public listing page");
     expect(html).not.toContain("Destination URL");
     expect(html).toContain("react-select");
@@ -90,6 +94,15 @@ describe("operator console shared page migration", () => {
     expect(html).toContain("New API key");
     expect(html).toContain('type="search"');
     expect(html).toContain("API key collection");
+  });
+
+  it("exposes canonical draft/published status in the Blog editor itself", () => {
+    const html = renderPage(<OperatorBlogEditor />);
+    expect(html).toContain('for="blog-status"');
+    expect(html).toContain('id="blog-status"');
+    expect(html).toContain("Status");
+    expect(html).toContain('value="draft" selected="">Draft');
+    expect(html).toContain('value="published">Published');
   });
 
   it.each([
@@ -113,6 +126,7 @@ describe("operator console shared page migration", () => {
     const html = renderPage(<OperatorCatalogueList />);
     expect(html).toContain(">Transfer</button>");
     expect(html).toContain("New listing");
+    expect(html).toContain("Delete");
     expect(html).not.toContain("Manage categories");
     expect(html).not.toContain("Import listings");
   });

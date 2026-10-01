@@ -76,4 +76,30 @@ describe("OperatorBulkWorkflow", () => {
     });
     expect(remove).toHaveBeenCalledTimes(2);
   });
+
+  it("deletes selected listings through one authorized server workflow and retains per-item outcomes", async () => {
+    const remove = vi.fn(async (_account: Account, id: string) => {
+      if (id === "listing-b") throw new Error("Listing has dependent history.");
+    });
+    const requireCapability = vi.fn(async () => undefined);
+    const workflow = new OperatorBulkWorkflow({
+      operators: { requireCapability },
+      listingService: { deleteCatalogue: remove },
+    } as never);
+
+    await expect(
+      workflow.execute(actor, {
+        resource: "listings",
+        action: "delete",
+        ids: ["listing-a", "listing-b", "listing-a"],
+      }),
+    ).resolves.toEqual({
+      succeeded: ["listing-a"],
+      failed: [{ id: "listing-b", message: "Listing has dependent history." }],
+    });
+    expect(requireCapability).toHaveBeenCalledWith(actor.id, "catalogue.manage");
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(remove).toHaveBeenNthCalledWith(1, actor, "listing-a");
+    expect(remove).toHaveBeenNthCalledWith(2, actor, "listing-b");
+  });
 });

@@ -145,6 +145,43 @@ describe("apiFetch validation errors", () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(new Headers(init.headers).get("x-cliqero-honeypot")).toBe("submitting-form");
   });
+
+  it.each([200, 201])("parses JSON success responses (%i)", async (status) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ item: "saved" }, { status })));
+    await expect(apiFetch("/api/test")).resolves.toEqual({ item: "saved" });
+  });
+
+  it.each([204, 205])("accepts bodyless success responses (%i)", async (status) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status })));
+    await expect(apiFetch("/api/test")).resolves.toBeUndefined();
+  });
+
+  it("accepts an empty successful response with a non-special status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
+    await expect(apiFetch("/api/test")).resolves.toBeUndefined();
+  });
+
+  it.each([
+    [{ error: "Name already exists", code: "conflict" }, "Name already exists"],
+    [{ fields: { name: "Required" } }, "name: Required"],
+    [{ issues: [{ path: ["name"], message: "Required" }] }, "Required"],
+    [{ details: { message: "Nested failure" } }, "Nested failure"],
+  ])("normalizes structured error payloads", async (body, message) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(body, { status: 400 })));
+    await expect(apiFetch("/api/test")).rejects.toMatchObject({ message });
+  });
+
+  it("normalizes plain-text and malformed error responses without object coercion", async () => {
+    for (const text of ["Service unavailable", "{invalid json"] as const) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(text, { status: 500 })));
+      await expect(apiFetch("/api/test")).rejects.toMatchObject({ message: text });
+    }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(Response.json({ error: { code: "failure" } }, { status: 500 })),
+    );
+    await expect(apiFetch("/api/test")).rejects.not.toHaveProperty("message", "[object Object]");
+  });
 });
 
 describe("form API error presentation", () => {

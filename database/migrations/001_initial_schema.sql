@@ -185,6 +185,9 @@ CREATE FUNCTION referral_capability.enforce_account_referral_hierarchy() RETURNS
 declare cycle_exists boolean;
 begin
   perform pg_advisory_xact_lock(hashtext('cliqero:referral-graph-mutation'));
+  if new.parent_account_id is null then
+    return new;
+  end if;
   if new.child_account_id = new.parent_account_id then
     raise exception 'Referral relationship would create a cycle' using errcode='23514';
   end if;
@@ -1468,7 +1471,7 @@ ALTER TABLE purchase_capability.purchases ALTER COLUMN id ADD GENERATED ALWAYS A
 CREATE TABLE referral_capability.account_referrals (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     child_account_id bigint NOT NULL,
-    parent_account_id bigint NOT NULL
+    parent_account_id bigint
 );
 
 

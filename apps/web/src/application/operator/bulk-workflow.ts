@@ -5,6 +5,7 @@ export interface OperatorBulkWorkflowDependencies {
   operators: { requireCapability(accountId: string, capability: Capability): Promise<unknown> };
   operatorAccountManagement: { delete(actorId: string, accountId: string): Promise<unknown> };
   listingService: {
+    deleteCatalogue(actor: Account, listingId: string): Promise<unknown>;
     setCatalogueState(
       actor: Account,
       listingId: string,
@@ -35,6 +36,7 @@ export type OperatorBulkCommand =
       state: "draft" | "published" | "archived";
       ids: string[];
     }
+  | { resource: "listings"; action: "delete"; ids: string[] }
   | {
       resource: "reviews";
       action: "moderate";
@@ -79,7 +81,11 @@ export class OperatorBulkWorkflow {
             await this.container.operatorAccountManagement.delete(actor.id, id);
             break;
           case "listings":
-            await this.container.listingService.setCatalogueState(actor, id, command.state);
+            if (command.action === "delete") {
+              await this.container.listingService.deleteCatalogue(actor, id);
+            } else {
+              await this.container.listingService.setCatalogueState(actor, id, command.state);
+            }
             break;
           case "reviews":
             if (command.action === "delete") {

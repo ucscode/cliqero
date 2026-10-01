@@ -1,4 +1,4 @@
-import { ApiClientError } from "./errors";
+import { ApiClientError, normalizeApiError } from "./errors";
 
 export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -8,19 +8,18 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
     credentials: "include",
     headers,
   });
-  if (!response.ok) {
-    let body: { error?: string; code?: string; fields?: Record<string, string> } = {};
+  const text = response.status === 204 || response.status === 205 ? "" : await response.text();
+  let body: unknown;
+  if (text.trim()) {
     try {
-      body = (await response.json()) as typeof body;
+      body = JSON.parse(text) as unknown;
     } catch {
-      // Keep the API error useful even when a protocol route returns no JSON.
+      body = text;
     }
-    throw new ApiClientError(
-      body.error ?? "Something went wrong",
-      response.status,
-      body.code,
-      body.fields,
-    );
   }
-  return (await response.json()) as T;
+  if (!response.ok) {
+    const error = normalizeApiError(body);
+    throw new ApiClientError(error.message, response.status, error.code, error.fields);
+  }
+  return body as T;
 }

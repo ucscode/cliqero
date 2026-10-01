@@ -11,9 +11,10 @@ export interface ReferralPage {
 }
 export interface ReferralGraphRepository {
   assignParent(childAccountId: Id, parentAccountId: Id): Promise<void>;
+  wouldCreateCycle(childAccountId: Id, parentAccountId: Id): Promise<boolean>;
   reassignParent(
     childAccountId: Id,
-    parentAccountId: Id,
+    parentAccountId: Id | null,
   ): Promise<{ changed: boolean; previousParentId: Id | null }>;
   getUplines(accountId: Id, maxDepth: number): Promise<readonly ReferralLevel[]>;
   getDirectReferrals(accountId: Id, page: { after?: Id; limit: number }): Promise<ReferralPage>;

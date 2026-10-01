@@ -162,6 +162,37 @@ export class BetterAuthBoundary implements AuthenticationGateway {
     return { id: user.id };
   }
 
+  async createOperatorUserWithPassword(input: { email: string; password: string }) {
+    const context = await this.auth.$context;
+    const user = await context.internalAdapter.createUser(
+      { name: "", email: input.email.trim().toLowerCase(), emailVerified: true },
+      { method: "admin" },
+    );
+    try {
+      const password = await context.password.hash(input.password);
+      const { createLocalAccountIssuer } = await import("@better-auth/core/db");
+      await context.internalAdapter.createAccount({
+        userId: user.id,
+        providerId: "credential",
+        issuer: createLocalAccountIssuer("credential"),
+        accountId: user.id,
+        password,
+      });
+      return { id: user.id };
+    } catch (error) {
+      await context.internalAdapter.deleteUser(user.id);
+      throw error;
+    }
+  }
+
+  async sendOperatorAccountCreatedEmail(input: { email: string; username: string }) {
+    await sendAuthEmail("account-created", {
+      user: { email: input.email, name: input.username },
+      url: `${siteConfig.url}/sign-in`,
+      token: "",
+    });
+  }
+
   async signInEmail(input: { email: string; password: string }): Promise<AuthSession> {
     const result = await this.auth.api.signInEmail({
       body: { email: input.email, password: input.password },

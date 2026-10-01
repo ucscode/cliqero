@@ -5,16 +5,24 @@ import type { ApiContext } from "./context";
 export function domainError(c: ApiContext, error: unknown): never {
   const publicError = publicErrorPayload(error);
   const validation = validationErrorPayload(error);
-  logDevelopmentError(error, {
-    event: "api.error",
-    method: c.req.raw.method,
-    path: new URL(c.req.raw.url).pathname,
-    ...(publicError
-      ? { publicCode: publicError.payload.code }
-      : validation
-        ? { publicCode: validation.code }
-        : {}),
-  });
+  logDevelopmentError(
+    error,
+    {
+      event: "api.error",
+      method: c.req.raw.method,
+      path: new URL(c.req.raw.url).pathname,
+      ...(publicError
+        ? { publicCode: publicError.payload.code }
+        : validation
+          ? { publicCode: validation.code }
+          : {}),
+    },
+    publicError || validation
+      ? publicError?.status === 401 || publicError?.status === 403
+        ? "warn"
+        : "info"
+      : "error",
+  );
   if (publicError)
     return c.json(
       publicError.payload,

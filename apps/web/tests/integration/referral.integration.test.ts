@@ -255,6 +255,19 @@ suite("referral graph and trusted purchase attribution", () => {
     await app.referralGraphService.establish(a.id, b.id);
     await app.referralGraphService.establish(b.id, c.id);
     await expect(app.referralGraphService.establish(c.id, a.id)).rejects.toThrow("cycle");
+    await expect(
+      app.database.query(
+        `update referral_capability.account_referrals set parent_account_id=(select id from identity_capability.accounts where uuid=$1) where child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+        [a.id],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      app.database.query(
+        `insert into referral_capability.account_referrals(child_account_id,parent_account_id)
+         values((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2))`,
+        [c.id, a.id],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
   });
   it("reassigns one adjacency row, audits it, and treats a repeated target as a no-op", async () => {
     const x = await account("x"),
@@ -343,6 +356,38 @@ suite("referral graph and trusted purchase attribution", () => {
         [b.id, 0],
       ),
     ).rejects.toThrow("foreign key");
+  });
+  it("removes only the selected account parent, preserves descendants, and audits the detach", async () => {
+    const parent = await account("remove_parent"),
+      child = await account("remove_child"),
+      descendant = await account("remove_descendant"),
+      actor = await account("remove_actor");
+    await app.referralGraphService.establish(child.id, parent.id);
+    await app.referralGraphService.establish(descendant.id, child.id);
+    const result = await app.referralGraphService.reassignParent(child.id, null, actor.id);
+    expect(result).toMatchObject({
+      parentAccountId: null,
+      previousParentAccountId: parent.id,
+      changed: true,
+    });
+    expect(await app.referralGraph.getUplines(child.id, 10)).toEqual([]);
+    expect(await app.referralGraph.getUplines(descendant.id, 10)).toEqual([
+      { accountId: child.id, depth: 1 },
+    ]);
+    const relationship = await app.database.query<{ parent_account_id: string | null }>(
+      `select parent.uuid parent_account_id from referral_capability.account_referrals r left join identity_capability.accounts parent on parent.id=r.parent_account_id where r.child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [child.id],
+    );
+    expect(relationship.rows[0].parent_account_id).toBeNull();
+    const audit = await app.database.query<{ previous_state: any; new_state: any }>(
+      `select previous_state,new_state from kernel.audit_records where action='referral.parent_reassigned' and subject_id=$1 order by occurred_at desc limit 1`,
+      [child.id],
+    );
+    expect(audit.rows[0].previous_state.parent_account_id).toBe(parent.id);
+    expect(audit.rows[0].new_state.parent_account_id).toBeNull();
+    await expect(
+      app.referralGraphService.reassignParent(child.id, child.id, actor.id),
+    ).rejects.toMatchObject({ code: "self_referral", status: 400 });
   });
   it("rejects a cycle beyond the old traversal depth", async () => {
     const ids = Array.from({ length: 41 }, () => newId());

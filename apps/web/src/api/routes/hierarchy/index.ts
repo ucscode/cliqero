@@ -298,7 +298,7 @@ export function registerHierarchyRoutes(app: OpenAPIHono<Env>, container: Applic
         body: {
           content: {
             "application/json": {
-              schema: z.object({ parent_account_id: z.string().uuid() }).strict(),
+              schema: z.object({ parent_account_id: z.string().uuid().nullable() }).strict(),
             },
           },
         },

@@ -7,43 +7,89 @@ import {
   type ReferralPage,
 } from "@/modules/referral/referral";
 import { CommissionPolicy, type CommissionPolicyRepository } from "@/modules/referral/commission";
+import { PublicApplicationError } from "@/kernel/errors";
 
 export class PostgresReferralGraphRepository implements ReferralGraphRepository {
   constructor(private readonly sql: QueryExecutor) {}
+  private async writeHierarchy<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "23514")
+        throw new PublicApplicationError(
+          "Referral relationship would create a cycle.",
+          "referral_cycle",
+          400,
+        );
+      throw error;
+    }
+  }
   async assignParent(childAccountId: string, parentAccountId: string): Promise<void> {
-    await this.sql.query(
-      `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2))`,
+    await this.writeHierarchy(() =>
+      this.sql
+        .query(
+          `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2))`,
+          [childAccountId, parentAccountId],
+        )
+        .then(() => undefined),
+    );
+  }
+  async wouldCreateCycle(childAccountId: string, parentAccountId: string): Promise<boolean> {
+    const result = await this.sql.query(
+      `with recursive ancestors(account_id,path) as (
+         select parent_account_id,array[parent_account_id]
+           from referral_capability.account_referrals
+          where child_account_id=(select id from identity_capability.accounts where uuid=$2)
+         union all
+         select relationship.parent_account_id,ancestors.path||relationship.parent_account_id
+           from ancestors
+           join referral_capability.account_referrals relationship
+             on relationship.child_account_id=ancestors.account_id
+          where ancestors.account_id is not null
+            and relationship.parent_account_id is not null
+            and not relationship.parent_account_id=any(ancestors.path)
+       ) select 1 from ancestors where account_id=(select id from identity_capability.accounts where uuid=$1) limit 1`,
       [childAccountId, parentAccountId],
     );
+    return result.rowCount === 1;
   }
   async reassignParent(
     childAccountId: string,
-    parentAccountId: string,
+    parentAccountId: string | null,
   ): Promise<{ changed: boolean; previousParentId: string | null }> {
     // Serialize the read/no-op/update decision with the database hierarchy guard.
     await this.sql.query(
       `select pg_advisory_xact_lock(hashtext('cliqero:referral-graph-mutation'))`,
     );
     const current = (
-      await this.sql.query<{ parent_account_id: string }>(
-        `select parent.uuid as parent_account_id from referral_capability.account_referrals r join identity_capability.accounts parent on parent.id=r.parent_account_id where r.child_account_id=(select id from identity_capability.accounts where uuid=$1) for update`,
+      await this.sql.query<{ parent_account_id: string | null }>(
+        `select parent.uuid as parent_account_id from referral_capability.account_referrals r left join identity_capability.accounts parent on parent.id=r.parent_account_id where r.child_account_id=(select id from identity_capability.accounts where uuid=$1) for update of r`,
         [childAccountId],
       )
     ).rows[0];
     if (!current) {
-      await this.sql.query(
-        `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2))`,
-        [childAccountId, parentAccountId],
+      if (parentAccountId === null) return { changed: false, previousParentId: null };
+      await this.writeHierarchy(() =>
+        this.sql
+          .query(
+            `insert into referral_capability.account_referrals(child_account_id,parent_account_id) values((select id from identity_capability.accounts where uuid=$1),(select id from identity_capability.accounts where uuid=$2))`,
+            [childAccountId, parentAccountId],
+          )
+          .then(() => undefined),
       );
       return { changed: true, previousParentId: null };
     }
-    if (current.parent_account_id === parentAccountId)
-      return { changed: false, previousParentId: current.parent_account_id };
-    await this.sql.query(
-      `update referral_capability.account_referrals set parent_account_id=(select id from identity_capability.accounts where uuid=$2) where child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
-      [childAccountId, parentAccountId],
+    const previousParentId = current.parent_account_id ?? null;
+    if (previousParentId === parentAccountId) return { changed: false, previousParentId };
+    await this.writeHierarchy(() =>
+      this.sql
+        .query(
+          `update referral_capability.account_referrals set parent_account_id=(select id from identity_capability.accounts where uuid=$2) where child_account_id=(select id from identity_capability.accounts where uuid=$1)`,
+          [childAccountId, parentAccountId],
+        )
+        .then(() => undefined),
     );
-    return { changed: true, previousParentId: current.parent_account_id };
+    return { changed: true, previousParentId };
   }
   async getUplines(accountId: string, maxDepth: number): Promise<readonly ReferralLevel[]> {
     assertTraversalDepth(maxDepth);

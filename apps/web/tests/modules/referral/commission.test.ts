@@ -29,6 +29,7 @@ describe("hierarchy commission calculation", () => {
     const service = new CommissionDistributionService({
       assignParent: async () => undefined,
       reassignParent: async () => ({ changed: false, previousParentId: null }),
+      wouldCreateCycle: async () => false,
       getUplines: async () => [
         { accountId: "level-one", depth: 1 },
         { accountId: "level-two", depth: 2 },
@@ -59,6 +60,7 @@ describe("hierarchy commission calculation", () => {
     const service = new CommissionDistributionService({
       assignParent: async () => undefined,
       reassignParent: async () => ({ changed: false, previousParentId: null }),
+      wouldCreateCycle: async () => false,
       getUplines: async () => [{ accountId: "level-one", depth: 1 }],
       getDirectReferrals: async () => ({ accounts: [], nextCursor: null }),
       getDownlineAtDepth: async () => ({ accounts: [], nextCursor: null }),

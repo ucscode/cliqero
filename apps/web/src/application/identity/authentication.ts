@@ -74,6 +74,18 @@ export class AuthenticationService {
     await this.gateway.requestPasswordReset({ email: email.trim().toLowerCase(), redirectTo });
   }
 
+  async sendOperatorAccountCreatedEmail(
+    accountId: string,
+    email: string,
+    username: string,
+  ): Promise<void> {
+    if (!accountId) throw new Error("The account must exist before it can be notified");
+    await this.gateway.sendOperatorAccountCreatedEmail({
+      email: email.trim().toLowerCase(),
+      username,
+    });
+  }
+
   private async createAccount(
     input: {
       email: string;
@@ -100,7 +112,14 @@ export class AuthenticationService {
     let result: { user: { id: string }; token?: string | null };
     try {
       result = input.password
-        ? await this.gateway.signUpEmail({ email, password: input.password })
+        ? operatorActorId
+          ? {
+              user: await this.gateway.createOperatorUserWithPassword({
+                email,
+                password: input.password,
+              }),
+            }
+          : await this.gateway.signUpEmail({ email, password: input.password })
         : { user: await this.gateway.createUserWithoutPassword({ email }) };
     } catch {
       throw new PublicApplicationError(

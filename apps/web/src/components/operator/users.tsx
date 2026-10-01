@@ -547,20 +547,19 @@ export function OperatorUserDetail({
   }
 
   async function reassign(parent: OperatorAccountSummary | null) {
-    if (!parent || !account || parent.id === account.id || parent.id === account.parent?.id) return;
+    if (!account || parent?.id === account.id || parent?.id === account.parent?.id) return;
     setSaving(true);
     setParentError(null);
     try {
       await apiFetch(`/api/hierarchy/${account.id}/parent`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ parent_account_id: parent.id }),
+        body: JSON.stringify({ parent_account_id: parent?.id ?? null }),
       });
       const updated = await load();
-      if (!updated)
-        throw new Error("Parent was reassigned, but referral context could not refresh.");
+      if (!updated) throw new Error("Parent was updated, but referral context could not refresh.");
       setSelectedParent(null);
-      toast.success("Parent reassigned successfully.");
+      toast.success(parent ? "Parent reassigned successfully." : "Parent removed successfully.");
     } catch (cause) {
       setParentError(message(cause));
     } finally {
@@ -690,90 +689,96 @@ export function OperatorUserDetail({
                       { label: "Direct referrals", value: account.directReferralCount },
                     ]}
                   />
+                  {!account.deletedAt && canManage && (
+                    <div className="grid gap-3">
+                      <div className="grid gap-2">
+                        <Label htmlFor="operator-new-parent">New parent</Label>
+                        <AsyncSelect<ParentOption, false>
+                          inputId="operator-new-parent"
+                          cacheOptions
+                          defaultOptions={false}
+                          loadOptions={loadParentOptions}
+                          value={selectedParent}
+                          isDisabled={saving}
+                          isClearable
+                          isLoading={saving}
+                          onChange={(option) => {
+                            setSelectedParent(option);
+                            setParentError(null);
+                          }}
+                          placeholder="Search username, email or account ID"
+                          noOptionsMessage={({ inputValue }) =>
+                            inputValue.trim()
+                              ? "No eligible account found."
+                              : "Start typing to search."
+                          }
+                          styles={parentSelectStyles}
+                          menuPortalTarget={
+                            typeof document === "undefined" ? undefined : document.body
+                          }
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          disabled={
+                            saving ||
+                            !selectedParent ||
+                            selectedParent.account.id === account.id ||
+                            selectedParent.account.id === account.parent?.id
+                          }
+                          onClick={() => void reassign(selectedParent?.account ?? null)}
+                        >
+                          {saving ? "Saving…" : "Assign parent"}
+                        </Button>
+                        {account.parent && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={saving}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Remove @${account.parent!.username} as this account’s parent? Descendants will remain attached.`,
+                                )
+                              )
+                                void reassign(null);
+                            }}
+                          >
+                            Remove parent
+                          </Button>
+                        )}
+                      </div>
+                      {saving && (
+                        <p role="status" className="text-sm text-slate-600">
+                          Updating referral parent…
+                        </p>
+                      )}
+                      {parentError && <Alert role="alert">{parentError}</Alert>}
+                    </div>
+                  )}
                   <Button asChild variant="secondary" className="w-fit">
                     <Link href={`/operator/network?root=${account.id}`}>View network</Link>
                   </Button>
                 </div>
               </OperatorSection>
-              <OperatorSection title="Commerce" surface>
-                <CrudFieldList
-                  layout="stacked"
-                  fields={[
-                    { label: "Purchases", value: account.purchaseCount.toLocaleString("en-US") },
-                  ]}
-                />
-              </OperatorSection>
             </div>
-            {!account.deletedAt && (
-              <OperatorSection
-                title="Reassign parent"
-                description="Descendants stay attached. The server prevents cycles and records the change."
-                surface
-                className="lg:col-start-2"
-              >
-                <div className="grid gap-5">
-                  <div className="grid gap-1">
-                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                      Current parent
-                    </span>
-                    <strong className="text-sm text-slate-900">
-                      {account.parent ? `@${account.parent.username}` : "None"}
-                    </strong>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="operator-new-parent">New parent</Label>
-                    <AsyncSelect<ParentOption, false>
-                      inputId="operator-new-parent"
-                      cacheOptions
-                      defaultOptions={false}
-                      loadOptions={loadParentOptions}
-                      value={selectedParent}
-                      isDisabled={saving}
-                      isClearable
-                      isLoading={saving}
-                      onChange={(option) => {
-                        setSelectedParent(option);
-                        setParentError(null);
-                      }}
-                      placeholder="Search username, email or account ID"
-                      noOptionsMessage={({ inputValue }) =>
-                        inputValue.trim() ? "No eligible account found." : "Start typing to search."
-                      }
-                      styles={parentSelectStyles}
-                      menuPortalTarget={typeof document === "undefined" ? undefined : document.body}
-                    />
-                    <Button
-                      type="button"
-                      disabled={
-                        saving ||
-                        !selectedParent ||
-                        selectedParent.account.id === account.id ||
-                        selectedParent.account.id === account.parent?.id
-                      }
-                      onClick={() => void reassign(selectedParent?.account ?? null)}
-                    >
-                      {saving ? "Assigning…" : "Assign parent"}
-                    </Button>
-                    {saving && (
-                      <p role="status" className="text-sm text-slate-600">
-                        Reassigning parent…
-                      </p>
-                    )}
-                    {parentError && <Alert role="alert">{parentError}</Alert>}
-                  </div>
-                </div>
-              </OperatorSection>
-            )}
-          </div>
-          {account.latestParentReassignment && (
-            <OperatorSection title="Latest hierarchy audit" surface>
-              <p className="panel-note">
-                Parent changed on{" "}
-                {new Date(account.latestParentReassignment.occurredAt).toLocaleString()} by{" "}
-                {account.latestParentReassignment.actorId || "an operator"}.
-              </p>
+            <OperatorSection title="Commerce" surface className="lg:col-start-2">
+              <CrudFieldList
+                layout="stacked"
+                fields={[
+                  {
+                    label: "Purchases",
+                    value: (
+                      <Link href={`/operator/purchases?buyer=${encodeURIComponent(account.id)}`}>
+                        {account.purchaseCount.toLocaleString("en-US")}
+                      </Link>
+                    ),
+                  },
+                ]}
+              />
             </OperatorSection>
-          )}
+          </div>
         </>
       }
     />
@@ -850,6 +855,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [credentialMode, setCredentialMode] = useState<"email" | "password">("email");
+  const [notifyUser, setNotifyUser] = useState(true);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const toast = useToast();
@@ -889,6 +895,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
           account: OperatorAccountDetail;
           credentialSetupMode: "email" | "password";
           passwordSetupEmailRequested: boolean;
+          accountCreatedEmailRequested: boolean;
         }>("/api/accounts", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -900,11 +907,16 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
               credentialMode === "email"
                 ? { mode: "email" }
                 : { mode: "password", password, confirm_password: confirmPassword },
+            notify_user: credentialMode === "email" ? true : notifyUser,
           }),
         });
         const confirmation =
           result.credentialSetupMode === "password"
-            ? "Account created with the password supplied by the operator."
+            ? notifyUser
+              ? result.accountCreatedEmailRequested
+                ? "Account created. The account holder was notified; the password was not included."
+                : "Account created. The account holder notification could not be sent."
+              : "Account created with the password supplied by the operator."
             : result.passwordSetupEmailRequested
               ? "Account created. A password setup link was requested."
               : "Account created. Password setup email could not be requested; the account holder can use Forgot password.";
@@ -934,10 +946,10 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
       title={create ? "Add user" : "Edit account"}
       description={
         create
-          ? "Create an account without handling or storing its password."
+          ? "Choose how the account holder sets their credential, then choose whether to notify them."
           : "Update the account username or country. Email and referral relationships are managed separately."
       }
-      backHref={accountId ? `/operator/users/${accountId}` : "/operator/users"}
+      backHref="/operator/users"
       saving={saving}
       loading={loading}
       onSubmit={(event) => void submit(event)}
@@ -966,7 +978,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
               checked={credentialMode === "email"}
               onChange={() => setCredentialMode("email")}
             />
-            <span>Send account setup email</span>
+            <span>User chooses password via setup link</span>
           </label>
           <label className="flex items-start gap-3 text-sm text-slate-800">
             <input
@@ -1005,6 +1017,27 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
             </div>
           )}
         </fieldset>
+      )}
+      {create && (
+        <label className="flex items-start gap-3 text-sm text-slate-800">
+          <input
+            type="checkbox"
+            checked={credentialMode === "email" || notifyUser}
+            disabled={credentialMode === "email"}
+            onChange={(event) => setNotifyUser(event.target.checked)}
+          />
+          <span>
+            <span className="block font-medium">Notify user by email</span>
+            {credentialMode === "email" && (
+              <span className="text-slate-600">Required when sending a password setup link.</span>
+            )}
+            {credentialMode === "password" && (
+              <span className="text-slate-600">
+                The email will not contain the password; communicate it separately.
+              </span>
+            )}
+          </span>
+        </label>
       )}
       <p className="text-sm text-slate-600">
         {create

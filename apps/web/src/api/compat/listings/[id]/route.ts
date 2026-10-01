@@ -14,6 +14,7 @@ const listingSchema = z
     destination: z.url(),
     metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
     compare_at_price_minor: z.string().regex(/^\d+$/).nullable(),
+    featured_position: z.number().int().positive().nullable(),
     visibility: z.enum(["public", "authenticated"]),
     state: z.enum(["draft", "published", "archived"]),
     category_ids: z
@@ -97,14 +98,13 @@ export async function PATCH(
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    await getContainer().operators.requireCapability(account.id, "catalogue.manage");
+    const container = getContainer();
+    await container.operators.requireCapability(account.id, "catalogue.manage");
     const body = listingSchema.parse(await request.json());
-    if (body.state !== undefined) {
-      if (Object.keys(body).length !== 1)
-        return Response.json({ error: "State changes must be sent alone." }, { status: 400 });
+    if (body.state !== undefined && Object.keys(body).length === 1) {
       return Response.json(
         ownerListingView(
-          await getContainer().listingService.setCatalogueState(
+          await container.listingService.setCatalogueState(
             account,
             (await params).listingId,
             body.state,
@@ -112,7 +112,7 @@ export async function PATCH(
         ),
       );
     }
-    const listing = await getContainer().listingService.updateCatalogue(
+    const listing = await container.listingService.updateCatalogue(
       account,
       (await params).listingId,
       {
@@ -124,11 +124,21 @@ export async function PATCH(
         destination: body.destination,
         metadata: body.metadata,
         compareAtPriceMinor: body.compare_at_price_minor,
+        featuredPosition: body.featured_position,
         visibility: body.visibility,
         categoryIds: body.category_ids,
+        state: body.state,
       },
     );
-    return Response.json(ownerListingView(listing));
+    return Response.json(
+      listingWithMediaView(
+        listing,
+        await container.listingMediaRepository.listByListing(listing.id),
+        container.listingMedia,
+        true,
+        (await container.listingReviews.summariesForListings([listing.id])).get(listing.id) ?? null,
+      ),
+    );
   } catch (error) {
     return apiError(error);
   }

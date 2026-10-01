@@ -757,6 +757,34 @@ Before claiming a substantial feature or refactor complete, report:
 A completion report that cannot answer these points should not claim the work is
 architecturally complete.
 
+# Operator CRUD invariants
+
+Operator-managed mutable resources must provide Create, Read, Update, and
+Delete operations wherever those operations are meaningful for the resource.
+Archive, revoke, reject, disable, unpublish, and similar lifecycle actions are
+status changes, not substitutes for Delete. Delete should physically remove a
+mutable record when referential integrity permits it. If immutable historical
+or financial facts must be retained, preserve those facts in explicit history
+or audit storage rather than representing the mutable record as deleted.
+
+Status/state is not special in Operator CRUD. When a mutable resource has a
+status/state field, expose the supported states in its canonical Create/Edit
+form, subject to the operator's authority. System-root operators can select all
+legitimate domain states. Row actions such as Publish, Archive, Restore,
+Approve, Reject, or Revoke may remain as convenient shortcuts, but do not
+replace the editable field in the form.
+
+Every mutable CRUD collection that supports row selection must provide a bulk
+Delete action unless code documents a concrete immutable-history reason that
+prevents it. Bulk mutations must use one browser request/server-side workflow
+and report per-record outcomes; do not implement bulk actions as one browser
+request per selected row.
+
+Keep Operator action labels concise when the surrounding interface already
+identifies the resource or selection: Edit, Delete, Publish, Archive, Restore,
+Approve, and Reject. Avoid redundant labels such as "Edit listing", "Delete
+review", "Approve selected", or "Delete selected" in that context.
+
 # Contributor checks
 
 ## YAML configuration comments

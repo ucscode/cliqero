@@ -23,6 +23,7 @@ const listingSchema = z
       .optional(),
     external_key: z.string().max(128).optional(),
     featured_position: z.number().int().positive().nullable().optional(),
+    state: z.enum(["draft", "published", "archived"]).optional(),
     compare_at_price_minor: z.string().regex(/^\d+$/).nullable().optional(),
     visibility: z.enum(["public", "authenticated"]).optional(),
     category_ids: z
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
       metadata: body.metadata,
       externalKey: body.external_key,
       featuredPosition: body.featured_position,
+      state: body.state,
       compareAtPriceMinor: body.compare_at_price_minor,
       visibility: body.visibility,
       categoryIds: body.category_ids,

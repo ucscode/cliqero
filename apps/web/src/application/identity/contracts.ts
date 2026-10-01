@@ -10,6 +10,8 @@ export interface AuthSession {
 export interface AuthenticationGateway {
   signUpEmail(input: { email: string; password: string }): Promise<AuthSession>;
   createUserWithoutPassword(input: { email: string }): Promise<AuthUser>;
+  createOperatorUserWithPassword(input: { email: string; password: string }): Promise<AuthUser>;
+  sendOperatorAccountCreatedEmail(input: { email: string; username: string }): Promise<void>;
   signInEmail(input: { email: string; password: string }): Promise<AuthSession>;
   requestPasswordReset(input: { email: string; redirectTo: string }): Promise<void>;
   getSession(headers: Headers): Promise<AuthSession | null>;

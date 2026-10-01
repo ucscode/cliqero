@@ -1,5 +1,10 @@
 import { newId, type Id } from "@/kernel/ids";
-import { Listing, type ListingMetadata, type ListingRepository } from "@/modules/listing";
+import {
+  Listing,
+  type ListingMetadata,
+  type ListingRepository,
+  type ListingState,
+} from "@/modules/listing";
 import { Money } from "@/modules/money/money";
 import type { ListingVisibility, ListingCategorySummary } from "@/modules/listing";
 import type { ListingCategoryService } from "@/application/listing/category/service";
@@ -83,9 +88,15 @@ export class ListingService {
     return this.publish(seller, listing.id);
   }
   /** Catalogue-managed creation. The manager is an audit actor, not a seller/payee. */
-  async createCatalogue(actor: Account, input: Parameters<ListingService["create"]>[1]) {
+  async createCatalogue(
+    actor: Account,
+    input: Parameters<ListingService["create"]>[1] & { state?: ListingState },
+  ) {
     return this.catalogueMutation(async () => {
-      const listing = await this.create(actor, input);
+      const { state = "draft", ...listingInput } = input;
+      const listing = await this.create(actor, listingInput);
+      this.applyCatalogueState(listing, state);
+      if (state !== "draft") await this.listings.save(listing);
       await this.audit(actor.id, "listing.created", listing.id, null, {
         state: listing.state,
         title: listing.title,
@@ -131,7 +142,8 @@ export class ListingService {
       ),
       destination: input.destination ?? listing.destination,
       metadata: input.metadata ?? listing.metadata,
-      featuredPosition: input.featuredPosition ?? listing.featuredPosition,
+      featuredPosition:
+        input.featuredPosition === undefined ? listing.featuredPosition : input.featuredPosition,
       compareAtPrice:
         input.compareAtPriceMinor === undefined
           ? listing.compareAtPrice
@@ -144,7 +156,11 @@ export class ListingService {
     await this.listings.save(listing);
     return listing;
   }
-  async updateCatalogue(_actor: Account, id: Id, input: Parameters<ListingService["update"]>[2]) {
+  async updateCatalogue(
+    _actor: Account,
+    id: Id,
+    input: Parameters<ListingService["update"]>[2] & { state?: ListingState },
+  ) {
     return this.catalogueMutation(async () => {
       const listing = await this.listings.findById(id);
       if (!listing) throw new Error("Listing not found");
@@ -170,7 +186,8 @@ export class ListingService {
         ),
         destination: input.destination ?? listing.destination,
         metadata: input.metadata ?? listing.metadata,
-        featuredPosition: input.featuredPosition ?? listing.featuredPosition,
+        featuredPosition:
+          input.featuredPosition === undefined ? listing.featuredPosition : input.featuredPosition,
         compareAtPrice:
           input.compareAtPriceMinor === undefined
             ? listing.compareAtPrice
@@ -183,6 +200,7 @@ export class ListingService {
         visibility: input.visibility,
         categories,
       });
+      if (input.state !== undefined) this.applyCatalogueState(listing, input.state);
       await this.listings.save(listing);
       await this.audit(_actor.id, "listing.updated", listing.id, previous, {
         state: listing.state,
@@ -380,6 +398,20 @@ export class ListingService {
       return [];
     }
     return this.categoryService.requireIds(ids);
+  }
+  private applyCatalogueState(listing: Listing, state: ListingState) {
+    if (listing.state === state) return;
+    if (state === "archived") {
+      listing.archive();
+      return;
+    }
+    if (state === "draft") {
+      if (listing.state === "published") listing.archive();
+      if (listing.state === "archived") listing.restore();
+      return;
+    }
+    if (listing.state === "archived") listing.restore();
+    listing.publish();
   }
   private catalogueMutation<T>(operation: () => Promise<T>) {
     return this.uow ? this.uow.transaction(operation) : operation();

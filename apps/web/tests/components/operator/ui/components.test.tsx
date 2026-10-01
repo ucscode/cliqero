@@ -229,8 +229,10 @@ describe("operator UI composition components", () => {
     const action = vi.fn();
     const link = operatorActionMenuItem({
       type: "link",
-      label: "Edit account",
-      href: "/operator/users/1/edit",
+      label: "Open listing",
+      href: "/listings/listing-1",
+      target: "_blank",
+      rel: "noopener noreferrer",
     });
     const destructive = operatorActionMenuItem({
       type: "action",
@@ -246,7 +248,9 @@ describe("operator UI composition components", () => {
     });
 
     expect(link.props.asChild).toBe(true);
-    expect(link.props.children.props.href).toBe("/operator/users/1/edit");
+    expect(link.props.children.props.href).toBe("/listings/listing-1");
+    expect(link.props.children.props.target).toBe("_blank");
+    expect(link.props.children.props.rel).toBe("noopener noreferrer");
     expect(destructive.props.className).toContain("text-red-700");
     destructive.props.onSelect();
     expect(action).toHaveBeenCalledOnce();

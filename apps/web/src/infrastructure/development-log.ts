@@ -4,6 +4,10 @@ import type { LifecycleDiagnostic, LifecycleDiagnosticWriter } from "@/kernel/di
 
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_LOG_FILE = "development.log";
+const DEFAULT_MINIMUM_LEVEL = "warn";
+const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+type LogLevel = (typeof LOG_LEVELS)[number];
+const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 const SAFE_LOG_FILE = /^[A-Za-z0-9][A-Za-z0-9_-]*\.log$/;
 
 type DiagnosticValue =
@@ -70,6 +74,13 @@ function maximumLogBytes(): number {
   return Number.isSafeInteger(configured) && configured > 0 ? configured : DEFAULT_MAX_BYTES;
 }
 
+function minimumLogLevel(): LogLevel {
+  const configured = process.env.DEVELOPMENT_LOG_LEVEL;
+  return configured && LOG_LEVELS.includes(configured as LogLevel)
+    ? (configured as LogLevel)
+    : DEFAULT_MINIMUM_LEVEL;
+}
+
 function safeLogFileName(fileName: string): string {
   if (path.basename(fileName) !== fileName || !SAFE_LOG_FILE.test(fileName))
     throw new Error(`Invalid development diagnostic log file: ${fileName}`);
@@ -132,6 +143,7 @@ export function writeDevelopmentDiagnostic(
   options: { fileName?: string } = {},
 ): void {
   if (process.env.NODE_ENV !== "development") return;
+  if (LOG_LEVEL_PRIORITY[entry.level] < LOG_LEVEL_PRIORITY[minimumLogLevel()]) return;
   writeToDevelopmentLog(entry, options.fileName ?? DEFAULT_LOG_FILE);
 }
 
@@ -172,6 +184,7 @@ export function installDevelopmentProcessDiagnostics(): void {
 export function logDevelopmentError(
   error: unknown,
   context: Omit<DevelopmentDiagnostic, "level" | "error">,
+  level: DevelopmentDiagnostic["level"] = "error",
 ): void {
-  writeApiDevelopmentDiagnostic({ ...context, level: "error", error });
+  writeApiDevelopmentDiagnostic({ ...context, level, error });
 }

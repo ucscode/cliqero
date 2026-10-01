@@ -20,7 +20,12 @@ type OperatorActionBase = {
 };
 
 export type OperatorAction =
-  | (OperatorActionBase & { type: "link"; href: string })
+  | (OperatorActionBase & {
+      type: "link";
+      href: string;
+      target?: "_blank";
+      rel?: "noopener noreferrer";
+    })
   | (OperatorActionBase & { type: "action"; onSelect: () => void });
 
 export function operatorActionMenuItem(action: OperatorAction) {
@@ -31,7 +36,9 @@ export function operatorActionMenuItem(action: OperatorAction) {
         {action.disabled ? (
           <span>{action.label}</span>
         ) : (
-          <Link href={action.href}>{action.label}</Link>
+          <Link href={action.href} target={action.target} rel={action.rel}>
+            {action.label}
+          </Link>
         )}
       </DropdownMenuItem>
     );

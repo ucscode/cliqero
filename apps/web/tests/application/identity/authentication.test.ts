@@ -39,6 +39,8 @@ function dependencies(
   const gateway: AuthenticationGateway = {
     signUpEmail: async () => ({ user: { id: "auth-user" }, token: "session-token" }),
     createUserWithoutPassword: async () => ({ id: "auth-user" }),
+    createOperatorUserWithPassword: async () => ({ id: "auth-user" }),
+    sendOperatorAccountCreatedEmail: async () => undefined,
     signInEmail: async () => ({ user: { id: "auth-user" }, token: "session-token" }),
     requestPasswordReset: async () => undefined,
     getSession: async () => options.session ?? null,

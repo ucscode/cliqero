@@ -10,7 +10,7 @@ export type AuthEmail = {
 };
 
 export type AuthenticationEmailPurpose =
-  "signup-verification" | "email-change" | "verification" | "reset";
+  "signup-verification" | "email-change" | "verification" | "reset" | "account-created";
 
 const emailSchema = z.object({
   provider: z.literal("smtp").default("smtp"),
@@ -73,6 +73,13 @@ export function authenticationEmailContent(purpose: AuthenticationEmailPurpose, 
       action: "Choose a new password",
       safety:
         "If you did not request a password reset, you can safely ignore this email. This link is only usable once and may expire.",
+    },
+    "account-created": {
+      subject: `${siteConfig.name}: your account is ready`,
+      title: "Your account is ready",
+      intro: `An account has been created for you on ${siteConfig.name}. Sign in with the email address this message was sent to. If an operator provided a password separately, use that password; it is not included in this email.`,
+      action: "Sign in",
+      safety: "If you were not expecting this account, contact support.",
     },
   }[purpose];
   const escapedUrl = escapeHtml(url);

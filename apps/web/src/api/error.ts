@@ -28,13 +28,28 @@ export type PublicErrorPayload = {
 export function publicErrorPayload(
   error: unknown,
 ): { payload: PublicErrorPayload; status: number } | null {
-  if (!(error instanceof PublicApplicationError)) return null;
+  const candidate =
+    error && typeof error === "object" ? (error as Partial<PublicApplicationError>) : null;
+  const recognized =
+    error instanceof PublicApplicationError ||
+    (candidate !== null &&
+      typeof candidate.name === "string" &&
+      candidate.name.endsWith("Error") &&
+      typeof candidate.message === "string" &&
+      typeof candidate.code === "string" &&
+      Number.isInteger(candidate.status) &&
+      candidate.status! >= 400 &&
+      candidate.status! <= 599 &&
+      candidate.fields !== null &&
+      typeof candidate.fields === "object" &&
+      !Array.isArray(candidate.fields));
+  if (!recognized || !candidate) return null;
   return {
-    status: error.status,
+    status: candidate.status!,
     payload: {
-      error: error.message,
-      code: error.code,
-      ...(Object.keys(error.fields).length ? { fields: error.fields } : {}),
+      error: candidate.message!,
+      code: candidate.code!,
+      ...(Object.keys(candidate.fields!).length ? { fields: candidate.fields } : {}),
     },
   };
 }

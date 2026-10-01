@@ -139,13 +139,13 @@ suite("Better Auth and Cliqero identity boundary", () => {
   });
 
   it("operator-provisions an account through Better Auth, sends password setup, and audits supported updates", async () => {
-    emailDelivery.messages.length = 0;
     const actor = await app.authentication.register({
       email: "operator-account-actor@example.test",
       username: "operatoractor",
       password: "correct-horse-battery",
       country: "NG",
     });
+    emailDelivery.messages.length = 0;
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
        values((select id from identity_capability.accounts where uuid=$1),'accounts.manage')`,
@@ -156,6 +156,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
       email: "operator-created@example.test",
       username: "operatorcreated",
       credentialSetup: { mode: "email" },
+      notifyUser: true,
     });
     expect(created).toMatchObject({
       account: {
@@ -215,6 +216,7 @@ suite("Better Auth and Cliqero identity boundary", () => {
         email: "duplicate-username@example.test",
         username: "operatorupdated",
         credentialSetup: { mode: "email" },
+        notifyUser: true,
       }),
     ).rejects.toMatchObject({ code: "username_taken", status: 409 });
     await expect(
@@ -222,12 +224,36 @@ suite("Better Auth and Cliqero identity boundary", () => {
         email: "operator-created@example.test",
         username: "unique-new-name",
         credentialSetup: { mode: "email" },
+        notifyUser: true,
       }),
     ).rejects.toMatchObject({ code: "registration_failed" });
     const createdIdentityCount = await app.database.query<{ count: number }>(
       `select count(*)::int count from identity_capability.accounts where username in ('operatorupdated','unique-new-name')`,
     );
     expect(createdIdentityCount.rows[0].count).toBe(1);
+  });
+
+  it("creates a manual-password operator account through trusted Better Auth APIs without implicit mail", async () => {
+    const actor = await app.authentication.register({
+      email: "manual-provision-actor@example.test",
+      username: "manualactor",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    emailDelivery.messages.length = 0;
+    const password = "OperatorProvidedPassword!2026";
+    const created = await app.operatorAccountManagement.create(actor.id, {
+      email: "manual-provisioned@example.test",
+      username: "manualprovisioned",
+      credentialSetup: { mode: "password", password },
+      notifyUser: false,
+    });
+    expect(emailDelivery.messages).toEqual([]);
+    await expect(
+      app.authentication.login("manual-provisioned@example.test", password),
+    ).resolves.toMatchObject({
+      account: { id: created.account.id, username: "manualprovisioned" },
+    });
   });
 
   it("compensates a newly-created Better Auth identity when the username is already taken", async () => {

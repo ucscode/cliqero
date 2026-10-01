@@ -47,6 +47,21 @@ describe("public application errors", () => {
     });
   });
 
+  it("preserves a public error reconstructed across a duplicated runtime module boundary", async () => {
+    const error = Object.assign(new Error("A catalogue category with this name already exists."), {
+      name: "ListingCategoryConflictError",
+      code: "category_name_conflict",
+      status: 409,
+      fields: {},
+    });
+    const response = apiError(error);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: "A catalogue category with this name already exists.",
+      code: "category_name_conflict",
+    });
+  });
+
   it("sanitizes unexpected compatibility API errors to a generic 500", async () => {
     const message = "connection to postgres host db.internal failed: password leaked";
     const response = apiError(new Error(message));

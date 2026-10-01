@@ -84,9 +84,10 @@ because they also affect application/Compose runtime behavior.
 
 ## Logging and diagnostics
 
-| Variable                    | Required | Default                 | Used by                       | Description                                                                                                                                                     |
-| --------------------------- | -------- | ----------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEVELOPMENT_LOG_MAX_BYTES` | No       | `5242880` bytes (5 MiB) | Development diagnostic logger | Per-file size cap for development diagnostic logs. A missing, invalid, non-integer, or non-positive value safely uses the default; logging remains best effort. |
+| Variable                    | Required | Default                 | Used by                       | Description                                                                                                                                                           |
+| --------------------------- | -------- | ----------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEVELOPMENT_LOG_MAX_BYTES` | No       | `5242880` bytes (5 MiB) | Development diagnostic logger | Per-file size cap for development diagnostic logs. A missing, invalid, non-integer, or non-positive value safely uses the default; logging remains best effort.       |
+| `DEVELOPMENT_LOG_LEVEL`     | No       | `warn`                  | Development diagnostic logger | Minimum persisted level (`debug`, `info`, `warn`, `error`). Set to `info` or `debug` locally when investigating normal lifecycle activity; invalid values use `warn`. |
 
 The development diagnostic logger is enabled only when `NODE_ENV=development`.
 It is not a production log rotation setting.

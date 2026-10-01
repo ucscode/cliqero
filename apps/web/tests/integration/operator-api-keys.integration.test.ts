@@ -133,7 +133,9 @@ suite("operator API-key administration", () => {
         body: JSON.stringify({
           account_id: target.id,
           name: "central catalogue access",
+          state: "active",
           scopes: ["catalogue:manage"],
+          expires_at: null,
         }),
       }),
     );

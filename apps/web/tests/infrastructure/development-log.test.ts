@@ -55,6 +55,7 @@ describe("development diagnostics", () => {
 
   it("appends while the development log is under its configured cap", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEVELOPMENT_LOG_LEVEL", "info");
     vi.stubEnv("DEVELOPMENT_LOG_MAX_BYTES", "1000");
     fsMocks.stat.mockResolvedValue({ size: 99 });
 
@@ -67,6 +68,7 @@ describe("development diagnostics", () => {
 
   it("truncates before appending when the development log reaches its cap", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEVELOPMENT_LOG_LEVEL", "info");
     vi.stubEnv("DEVELOPMENT_LOG_MAX_BYTES", "100");
     fsMocks.stat.mockResolvedValue({ size: 100 });
 
@@ -86,6 +88,7 @@ describe("development diagnostics", () => {
 
   it("uses the default cap when the configured limit is invalid", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEVELOPMENT_LOG_LEVEL", "info");
     vi.stubEnv("DEVELOPMENT_LOG_MAX_BYTES", "not-a-number");
     fsMocks.stat.mockResolvedValue({ size: 5 * 1024 * 1024 });
 
@@ -119,6 +122,7 @@ describe("development diagnostics", () => {
 
   it("supports safe named log writers and rejects path traversal", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEVELOPMENT_LOG_LEVEL", "info");
     const writer = createDevelopmentDiagnosticWriter("worker.log");
     writer.write({ level: "info", event: "worker.started" });
     expect(() => createDevelopmentDiagnosticWriter("../outside.log")).toThrow(
@@ -148,6 +152,7 @@ describe("development diagnostics", () => {
 
   it("considers the incoming record before deciding whether to truncate", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEVELOPMENT_LOG_LEVEL", "info");
     vi.stubEnv("DEVELOPMENT_LOG_MAX_BYTES", "1000");
     fsMocks.stat.mockResolvedValue({ size: 999 });
     writeDevelopmentDiagnostic({ level: "info", event: "record_would_overshoot" });
@@ -157,11 +162,29 @@ describe("development diagnostics", () => {
 
   it("truncates an oversized record to the configured cap without reading the file", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEVELOPMENT_LOG_LEVEL", "info");
     vi.stubEnv("DEVELOPMENT_LOG_MAX_BYTES", "80");
     writeDevelopmentDiagnostic({ level: "info", event: "x".repeat(500) });
     await new Promise((resolve) => setImmediate(resolve));
     const record = String(fsMocks.appendFile.mock.calls[0]?.[1]);
     expect(Buffer.byteLength(record, "utf8")).toBeLessThanOrEqual(80);
     expect(fsMocks.stat).toHaveBeenCalled();
+  });
+
+  it("persists only warnings and errors by default", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    writeDevelopmentDiagnostic({ level: "info", event: "routine.event" });
+    writeDevelopmentDiagnostic({ level: "warn", event: "security.warning" });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(fsMocks.appendFile).toHaveBeenCalledOnce();
+    expect(fsMocks.appendFile.mock.calls[0]?.[1]).toContain('"event":"security.warning"');
+  });
+
+  it("falls back to warning when the configured minimum level is invalid", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEVELOPMENT_LOG_LEVEL", "verbose");
+    writeDevelopmentDiagnostic({ level: "info", event: "routine.event" });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(fsMocks.appendFile).not.toHaveBeenCalled();
   });
 });

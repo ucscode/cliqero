@@ -21,6 +21,7 @@ import { CrudSortSelect } from "@/components/crud/sort-select";
 import { CrudEdit } from "@/components/crud/edit";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 
 type Review = ListingReview & { reviewer?: string; listing_title?: string };
 type OperatorReviewDetail = Review & { moderated_by?: string | null };
@@ -203,6 +204,7 @@ export function reviewQueueQuery(
 
 export function OperatorReviews({ initialListingId = "" }: { initialListingId?: string }) {
   const toast = useToast();
+  const [viewingReview, setViewingReview] = useState<Review | null>(null);
   const [status, setStatus] = useState("all");
   const [listingId, setListingId] = useState(initialListingId);
   const [appliedListingId, setAppliedListingId] = useState(initialListingId);
@@ -443,12 +445,59 @@ export function OperatorReviews({ initialListingId = "" }: { initialListingId?: 
           Apply
         </Button>
       }
+      afterTable={
+        <Dialog
+          open={viewingReview !== null}
+          onOpenChange={(open) => !open && setViewingReview(null)}
+        >
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            {viewingReview && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Review details</DialogTitle>
+                </DialogHeader>
+                <dl className="grid gap-3 text-sm">
+                  <div>
+                    <dt className="font-medium text-slate-500">Listing</dt>
+                    <dd>{viewingReview.listing_title ?? viewingReview.listing_id}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-500">Reviewer</dt>
+                    <dd>{viewingReview.reviewer ?? "Customer"}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-500">Rating</dt>
+                    <dd>{viewingReview.rating}/5</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-500">Status</dt>
+                    <dd>{viewingReview.status}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-500">Submitted</dt>
+                    <dd>{new Date(viewingReview.created_at).toLocaleString()}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-500">Full review</dt>
+                    <dd className="whitespace-pre-wrap break-words">{viewingReview.body || "—"}</dd>
+                  </div>
+                </dl>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+      }
       items={collection.items}
       columns={columns}
       getRowKey={(review) => review.id}
       selection={{ labelForItem: (review) => `review by ${review.reviewer ?? "customer"}` }}
       bulkActions={(selected) => reviewQueueBulkActions(selected, bulkActions)}
       actions={(review) => [
+        {
+          type: "action" as const,
+          label: "View",
+          onSelect: () => setViewingReview(review),
+        },
         { type: "link" as const, label: "Edit", href: `/operator/reviews/${review.id}` },
         {
           type: "action" as const,

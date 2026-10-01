@@ -54,6 +54,8 @@ import { PostgresPaymentOperationsRepository } from "./postgres/payment/operatio
 import { PaymentReconciliationService } from "@/application/payment/reconciliation";
 import { OperatorPaymentService } from "@/application/payment/operator";
 import { PostgresOperatorPaymentReader } from "@/infrastructure/postgres/operator/payments";
+import { OperatorPurchaseService } from "@/application/operator/purchases";
+import { PostgresOperatorPurchaseReader } from "@/infrastructure/postgres/operator/purchases";
 import { PostgresReversalRepository } from "./postgres/purchase/reversals";
 import { PurchaseReversalProcessor } from "@/processors/purchase/reversal";
 import { SettlementProcessor } from "@/processors/ledger/settlement";
@@ -358,6 +360,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     return provider ? new NowPaymentsIpnIngress(provider, funding(), database) : null;
   });
   const operatorPaymentReader = lazy(() => new PostgresOperatorPaymentReader(database));
+  const operatorPurchaseReader = lazy(() => new PostgresOperatorPurchaseReader(database));
   const paymentInitialization = lazy(
     () =>
       new PaymentInitializationProcessor(
@@ -564,6 +567,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   );
   const operatorPayments = lazy(
     () => new OperatorPaymentService(operatorPaymentReader(), operators()),
+  );
+  const operatorPurchases = lazy(
+    () => new OperatorPurchaseService(operatorPurchaseReader(), operators()),
   );
   const purchaseReversal = lazy(
     () => new PurchaseReversalProcessor(purchases(), ledger(), reversals(), outbox(), database),
@@ -799,6 +805,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get operatorPayments() {
       return operatorPayments();
+    },
+    get operatorPurchases() {
+      return operatorPurchases();
     },
     get settlementPolicy() {
       return settlementPolicy();

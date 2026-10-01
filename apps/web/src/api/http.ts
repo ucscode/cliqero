@@ -47,15 +47,23 @@ function cookieSource(request: Request, name: string): string | undefined {
 export function apiError(error: unknown, request?: Request): Response {
   const publicError = publicErrorPayload(error);
   const validation = validationErrorPayload(error);
-  logDevelopmentError(error, {
-    event: "api.error",
-    ...(request ? { method: request.method, path: new URL(request.url).pathname } : {}),
-    ...(publicError
-      ? { publicCode: publicError.payload.code }
-      : validation
-        ? { publicCode: validation.code }
-        : {}),
-  });
+  logDevelopmentError(
+    error,
+    {
+      event: "api.error",
+      ...(request ? { method: request.method, path: new URL(request.url).pathname } : {}),
+      ...(publicError
+        ? { publicCode: publicError.payload.code }
+        : validation
+          ? { publicCode: validation.code }
+          : {}),
+    },
+    publicError || validation
+      ? publicError?.status === 401 || publicError?.status === 403
+        ? "warn"
+        : "info"
+      : "error",
+  );
   if (publicError) return Response.json(publicError.payload, { status: publicError.status });
   if (validation) return Response.json(validation, { status: 400 });
   const result = apiErrorResult(error);

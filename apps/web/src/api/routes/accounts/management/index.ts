@@ -49,6 +49,7 @@ export function registerAccountManagementRoutes(
         .transform((value) => value.toUpperCase())
         .optional(),
       credential_setup: credentialSetupSchema.default({ mode: "email" }),
+      notify_user: z.boolean().default(true),
     })
     .strict();
   const publicRegistrationBody = z
@@ -101,6 +102,7 @@ export function registerAccountManagementRoutes(
                   account: operatorAccountDetailSchema,
                   credentialSetupMode: z.enum(["email", "password"]),
                   passwordSetupEmailRequested: z.boolean(),
+                  accountCreatedEmailRequested: z.boolean(),
                 }),
                 publicRegistrationResponse,
               ]),
@@ -141,10 +143,11 @@ export function registerAccountManagementRoutes(
       try {
         const body = c.req.valid("json");
         if ("credential_setup" in body) {
-          const { credential_setup, ...identity } = body;
+          const { credential_setup, notify_user, ...identity } = body;
           const created = await container.operatorAccountManagement.create(p.accountId, {
             ...identity,
             credentialSetup: credential_setup,
+            notifyUser: credential_setup.mode === "email" ? true : notify_user,
           });
           return c.json(created, 201);
         }

@@ -309,14 +309,18 @@ describe("operator capability administration", () => {
     expect(source).toContain("setSelectedParent(option)");
     expect(source).not.toContain("onChange={(option) => void reassign");
     expect(source).toContain("onClick={() => void reassign(selectedParent?.account ?? null)}");
-    expect(source).toContain("Current parent");
-    expect(source).toContain('title="Reassign parent"');
+    expect(source).toContain('title="Referral context"');
     expect(source).toContain('label: "Parent"');
-    expect(source).toContain('toast.success("Parent reassigned successfully.")');
+    expect(source).toContain(
+      'toast.success(parent ? "Parent reassigned successfully." : "Parent removed successfully.")',
+    );
     expect(source).toContain("setParentError(message(cause))");
     expect(source).toContain("candidate.id !== currentAccountId");
-    expect(source).toContain("Assigning…");
+    expect(source).toContain("Updating referral parent…");
     expect(source).toContain("Assign parent");
+    expect(source).toContain("Remove parent");
+    expect(source).not.toContain("Latest hierarchy audit");
+    expect(source).toContain('title="Commerce"');
     expect(source).not.toContain("Assign parent</button>");
     expect(source).not.toContain("Immediate parent");
   });
@@ -326,12 +330,21 @@ describe("operator capability administration", () => {
       resolve(process.cwd(), "src/components/operator/users.tsx"),
       "utf8",
     );
-    expect(source).toContain("Send account setup email");
+    expect(source).toContain("User chooses password via setup link");
     expect(source).toContain("Set password manually");
+    expect(source).toContain("Notify user by email");
     expect(source).toContain('type="radio"');
     expect(source).toContain('type="password"');
     expect(source).toContain("confirm_password: confirmPassword");
     expect(source).toContain("router.push(`/operator/users/${result.account.id}`)");
     expect(source).toContain("credential_setup:");
+  });
+
+  it("returns account edit Cancel to the user collection", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/operator/users.tsx"),
+      "utf8",
+    );
+    expect(source).toContain('backHref="/operator/users"');
   });
 });
