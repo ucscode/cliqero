@@ -863,3 +863,41 @@ explicit `TEST_DATABASE_URL` override is supplied, it prepares a disposable
 available. Report them skipped only when the PostgreSQL service or required
 tooling cannot be used. `just test-db-reset` recreates only the disposable test
 database without running the suite.
+
+## Finance resource and ledger semantics
+
+Treat mutable operational resources and historical financial facts differently:
+
+- Mutable operational resources support normal Operator CRUD only where posted
+  accounting and external evidence remain intact.
+- Generated distributions and earnings, earning adjustments, Treasury entries,
+  and completed payout evidence are immutable historical facts. Correct them
+  with compensating entries or explicit reversal workflows, never ordinary
+  edit/delete.
+- Distributions and generated Earnings inspection pages have no row selection
+  or bulk actions. Earning adjustments are append-only. Treasury is an
+  append-only platform-owned ledger. Funding Operator CRUD must refuse changes
+  that would erase posted ledger effects; withdrawal CRUD must preserve
+  completed external payout facts.
+- A wallet transfer posts the source debit, destination credit/earnings
+  adjustment, and any Treasury fee in one PostgreSQL transaction. Retries must
+  be idempotent and all legs share a stable correlation identity.
+- Cliqero's canonical internal accounting currency is USD. Provider collection
+  currency conversion is provider-owned and does not make internal ledger
+  currency configurable.
+- Administrative Funding is an internal source, never fabricated provider
+  evidence. Its mutable record is separate from its accounting effect; amount,
+  state, and deletion corrections append signed USD adjustments atomically.
+  Delete physically removes the mutable record only after a compensating
+  adjustment can be applied without making available funding negative.
+- Withdrawal requests in mutable pre-payout states support Operator CRUD.
+  Status edits must invoke the canonical withdrawal state machine. Amount edits
+  reconcile the fee snapshot, Treasury fee delta, and earnings reservation in
+  one transaction. Deleting a mutable request releases and removes operational
+  reservation state atomically; completed payout evidence is immutable.
+- Append-only accounting history must correlate to a stable operation identity
+  and must not require a mutable administrative Funding or Withdrawal row to
+  remain forever.
+- Internal Operator HTTP calls use the session-only `/internal/*` surface.
+  There is no `/api/operator/*` namespace; `/api/*` is the canonical external
+  API surface.

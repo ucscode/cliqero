@@ -103,7 +103,7 @@ describe("Operator API-key create and edit pages", () => {
     expect(html).toContain("Select an account to check which of these permissions it may receive.");
     expect(html).toContain("Catalogue reads");
     expect(html).toContain("treasury:read");
-    expect([...html.matchAll(/<input type="checkbox" disabled=""/g)]).toHaveLength(26);
+    expect([...html.matchAll(/<input type="checkbox" disabled=""/g)]).toHaveLength(27);
   });
 
   it("renders Create in Account, Name, Status, Permissions, Expiry order", () => {

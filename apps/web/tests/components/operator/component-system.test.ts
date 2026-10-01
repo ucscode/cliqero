@@ -30,16 +30,23 @@ describe("operator component-system migration", () => {
     }
   });
 
-  it.each([
-    ["treasury.tsx", "Treasury"],
-    ["earnings.tsx", "Earnings"],
-    ["distributions.tsx", "Distributions"],
-    ["withdrawals.tsx", "Withdrawals"],
-  ])("keeps %s selectable without adding unsafe bulk deletion", (file) => {
+  it("offers withdrawal bulk Delete through one internal server workflow", () => {
+    const file = "withdrawals.tsx";
     const source = readFileSync(resolve(operatorRoot, file), "utf8");
     expect(source, file).toContain("selection={{");
-    expect(source, file).not.toContain('value: "delete"');
+    expect(source, file).toContain('value: "delete"');
+    expect(source, file).toContain("/internal/withdrawals/bulk-delete");
   });
+
+  it.each(["treasury.tsx", "distributions.tsx", "earnings.tsx"])(
+    "keeps historical %s facts inspection-only",
+    (file) => {
+      const source = readFileSync(resolve(operatorRoot, file), "utf8");
+      expect(source, file).not.toContain("selection={{");
+      expect(source, file).not.toContain("bulkActions");
+      expect(source, file).not.toContain("selectedCount");
+    },
+  );
 
   it("limits account bulk deletion to account managers", () => {
     const source = readFileSync(resolve(operatorRoot, "users.tsx"), "utf8");
@@ -69,7 +76,7 @@ describe("operator component-system migration", () => {
   it("requests the authorized all-state withdrawal collection for operator tables", () => {
     const source = readFileSync(resolve(operatorRoot, "withdrawals.tsx"), "utf8");
     expect(source).toContain('params.set("state", filters.state || "all")');
-    expect(source).toContain("`/api/withdrawals?${params}`");
+    expect(source).toContain("`/internal/withdrawals?${params}`");
     expect(source).not.toContain("/api/operator/withdrawals");
   });
 

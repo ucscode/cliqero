@@ -66,49 +66,350 @@ function psql(database, args, input) {
   );
 }
 
-const columnsSql = `
-select coalesce(json_agg(json_build_object(
-  'schema', n.nspname,
-  'table', c.relname,
-  'column', a.attname,
-  'type', format_type(a.atttypid, a.atttypmod),
-  'notNull', a.attnotnull,
-  'default', pg_get_expr(d.adbin, d.adrelid),
-  'identity', a.attidentity,
-  'generated', a.attgenerated
-) order by n.nspname, c.relname, a.attnum), '[]'::json)::text
-from pg_attribute a
-join pg_class c on c.oid=a.attrelid
-join pg_namespace n on n.oid=c.relnamespace
-left join pg_attrdef d on d.adrelid=c.oid and d.adnum=a.attnum
-where a.attnum > 0 and not a.attisdropped and c.relkind in ('r','p')
-  and n.nspname not in ('pg_catalog','information_schema')
+const schemaSnapshotSql = `
+select json_build_object(
+  'tables', coalesce((select json_agg(json_build_object('schema',n.nspname,'table',c.relname) order by n.nspname,c.relname)
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p') and n.nspname not in ('pg_catalog','information_schema')), '[]'::json),
+  'columns', coalesce((select json_agg(json_build_object(
+    'schema', n.nspname,'table',c.relname,'column',a.attname,
+    'type',format_type(a.atttypid,a.atttypmod),'notNull',a.attnotnull,
+    'default',pg_get_expr(d.adbin,d.adrelid),'identity',a.attidentity,'generated',a.attgenerated
+  ) order by n.nspname,c.relname,a.attnum)
+    from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace
+    left join pg_attrdef d on d.adrelid=c.oid and d.adnum=a.attnum
+    where a.attnum>0 and not a.attisdropped and c.relkind in ('r','p') and n.nspname not in ('pg_catalog','information_schema')), '[]'::json),
+  'constraints', coalesce((select json_agg(json_build_object('schema',n.nspname,'table',c.relname,'name',con.conname,'definition',pg_get_constraintdef(con.oid,true)) order by n.nspname,c.relname,con.conname)
+    from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace), '[]'::json),
+  'indexes', coalesce((select json_agg(json_build_object('schema',schemaname,'table',tablename,'name',indexname,'definition',indexdef) order by schemaname,tablename,indexname)
+    from pg_indexes where schemaname not in ('pg_catalog','information_schema')), '[]'::json),
+  'triggers', coalesce((select json_agg(json_build_object('schema',n.nspname,'table',c.relname,'name',t.tgname,'definition',pg_get_triggerdef(t.oid,true)) order by n.nspname,c.relname,t.tgname)
+    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where not t.tgisinternal), '[]'::json)
+)::text
 `;
 
-export function columnDrift(canonical, current) {
-  const currentByTable = new Map();
-  for (const column of current) {
-    const key = `${column.schema}.${column.table}`;
-    const columns = currentByTable.get(key) ?? new Set();
-    columns.add(column.column);
-    currentByTable.set(key, columns);
-  }
-  const additions = [];
-  const unsafe = [];
-  for (const column of canonical) {
-    if (currentByTable.get(`${column.schema}.${column.table}`)?.has(column.column)) continue;
-    const absentTable = !currentByTable.has(`${column.schema}.${column.table}`);
-    if (absentTable || column.notNull || column.default || column.identity || column.generated) {
-      unsafe.push(`${column.schema}.${column.table}.${column.column}`);
-    } else {
-      additions.push(column);
+/** Split baseline SQL without splitting semicolons inside quoted or dollar-quoted bodies. */
+export function splitSqlStatements(sql) {
+  const statements = [];
+  let start = 0;
+  let single = false;
+  let double = false;
+  let lineComment = false;
+  let blockComment = false;
+  let dollarTag = null;
+  for (let i = 0; i < sql.length; i += 1) {
+    const char = sql[i];
+    const next = sql[i + 1];
+    if (lineComment) {
+      if (char === "\n") lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (char === "*" && next === "/") {
+        blockComment = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (dollarTag) {
+      if (sql.startsWith(dollarTag, i)) {
+        i += dollarTag.length - 1;
+        dollarTag = null;
+      }
+      continue;
+    }
+    if (single) {
+      if (char === "'" && next === "'") i += 1;
+      else if (char === "'") single = false;
+      continue;
+    }
+    if (double) {
+      if (char === '"' && next === '"') i += 1;
+      else if (char === '"') double = false;
+      continue;
+    }
+    if (char === "-" && next === "-") {
+      lineComment = true;
+      i += 1;
+    } else if (char === "/" && next === "*") {
+      blockComment = true;
+      i += 1;
+    } else if (char === "'") single = true;
+    else if (char === '"') double = true;
+    else if (char === "$" && /^\$[A-Za-z_0-9]*\$/.test(sql.slice(i))) {
+      dollarTag = sql.slice(i).match(/^\$[A-Za-z_0-9]*\$/)[0];
+      i += dollarTag.length - 1;
+    } else if (char === ";") {
+      const statement = sql.slice(start, i + 1).trim();
+      if (statement) statements.push(statement);
+      start = i + 1;
     }
   }
-  return { additions, unsafe };
+  const tail = sql.slice(start).trim();
+  if (tail) statements.push(tail);
+  return statements;
 }
 
-function readColumns(database) {
-  return JSON.parse(psql(database, ["-At", "-c", columnsSql]));
+function stripLeadingComments(value) {
+  return value.replace(/^(?:\s|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)+/, "").trim();
+}
+
+function splitTopLevel(value) {
+  const parts = [];
+  let start = 0;
+  let depth = 0;
+  let single = false;
+  let double = false;
+  for (let i = 0; i < value.length; i += 1) {
+    const char = value[i];
+    if (single) {
+      if (char === "'" && value[i + 1] === "'") i += 1;
+      else if (char === "'") single = false;
+    } else if (double) {
+      if (char === '"' && value[i + 1] === '"') i += 1;
+      else if (char === '"') double = false;
+    } else if (char === "'") single = true;
+    else if (char === '"') double = true;
+    else if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+    else if (char === "," && depth === 0) {
+      parts.push(value.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(value.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+function targetName(value) {
+  return value.replaceAll('"', "").split(".");
+}
+
+function tableKey(value) {
+  const [schema, table] = targetName(value);
+  return `${schema}.${table}`;
+}
+
+function additionsFromStatements(baselineSql) {
+  const tables = new Map();
+  const columns = new Map();
+  const constraints = new Map();
+  const indexes = new Map();
+  const triggers = new Map();
+  for (const original of splitSqlStatements(baselineSql)) {
+    const statement = stripLeadingComments(original);
+    let match = statement.match(
+      /^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w"]+\.[\w"]+)\s*\(/i,
+    );
+    if (match) {
+      tables.set(tableKey(match[1]), statement);
+      continue;
+    }
+    match = statement.match(/^ALTER\s+TABLE\s+(?:ONLY\s+)?([\w"]+\.[\w"]+)\s+([\s\S]*);$/i);
+    if (match) {
+      const key = tableKey(match[1]);
+      for (const action of splitTopLevel(match[2])) {
+        const constraint = action.match(/^ADD\s+CONSTRAINT\s+([\w"]+)\s+([\s\S]+)$/i);
+        if (constraint)
+          constraints.set(
+            `${key}.${constraint[1].replaceAll('"', "")}`,
+            `ALTER TABLE ${match[1]} ${action};`,
+          );
+        const column = action.match(
+          /^ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w"]+)\s+([\s\S]+)$/i,
+        );
+        if (column)
+          columns.set(`${key}.${column[1].replaceAll('"', "")}`, {
+            table: match[1],
+            name: column[1],
+            definition: column[2],
+          });
+      }
+      continue;
+    }
+    match = statement.match(
+      /^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w"]+)\s+ON\s+([\w"]+\.[\w"]+)/i,
+    );
+    if (match) {
+      indexes.set(`${tableKey(match[2])}.${match[1].replaceAll('"', "")}`, statement);
+      continue;
+    }
+    match = statement.match(/^CREATE\s+TRIGGER\s+([\w"]+)\s+[\s\S]+?\s+ON\s+([\w"]+\.[\w"]+)/i);
+    if (match) triggers.set(`${tableKey(match[2])}.${match[1].replaceAll('"', "")}`, statement);
+  }
+  return { tables, columns, constraints, indexes, triggers };
+}
+
+function mapBy(items, keyOf) {
+  return new Map(items.map((item) => [keyOf(item), item]));
+}
+
+/** Plan additive-only DDL. It never emits DROP, ALTER TYPE, or replacement DDL. */
+export function planAdditiveSync(baselineSql, canonical, current) {
+  const ddl = additionsFromStatements(baselineSql);
+  const currentTables = mapBy(current.tables, (item) => `${item.schema}.${item.table}`);
+  const canonicalTables = mapBy(canonical.tables, (item) => `${item.schema}.${item.table}`);
+  const currentColumns = mapBy(
+    current.columns,
+    (item) => `${item.schema}.${item.table}.${item.column}`,
+  );
+  const canonicalColumns = mapBy(
+    canonical.columns,
+    (item) => `${item.schema}.${item.table}.${item.column}`,
+  );
+  const currentConstraints = mapBy(
+    current.constraints,
+    (item) => `${item.schema}.${item.table}.${item.name}`,
+  );
+  const canonicalConstraints = mapBy(
+    canonical.constraints,
+    (item) => `${item.schema}.${item.table}.${item.name}`,
+  );
+  const currentIndexes = mapBy(
+    current.indexes,
+    (item) => `${item.schema}.${item.table}.${item.name}`,
+  );
+  const canonicalIndexes = mapBy(
+    canonical.indexes,
+    (item) => `${item.schema}.${item.table}.${item.name}`,
+  );
+  const currentTriggers = mapBy(
+    current.triggers,
+    (item) => `${item.schema}.${item.table}.${item.name}`,
+  );
+  const canonicalTriggers = mapBy(
+    canonical.triggers,
+    (item) => `${item.schema}.${item.table}.${item.name}`,
+  );
+  const unsafe = [];
+  const statements = [];
+  const pendingTables = new Set();
+
+  for (const [key] of currentColumns) {
+    if (!canonicalColumns.has(key))
+      unsafe.push(`${key}: local-only column drift; destructive column removal is unsupported`);
+  }
+  for (const [key, existing] of currentConstraints) {
+    if (!canonicalConstraints.has(key))
+      unsafe.push(
+        `${key}: local-only constraint drift (${existing.definition}); destructive constraint removal is unsupported`,
+      );
+  }
+
+  for (const [key] of canonicalTables) {
+    if (currentTables.has(key)) continue;
+    const create = ddl.tables.get(key);
+    if (!create)
+      unsafe.push(`${key}: canonical table creation is not a recognized additive statement`);
+    else {
+      pendingTables.add(key);
+      statements.push(create);
+    }
+  }
+
+  const addedColumns = new Set();
+  for (const [key, canonicalColumn] of canonicalColumns) {
+    const currentColumn = currentColumns.get(key);
+    if (currentColumn) {
+      if (currentColumn.type !== canonicalColumn.type)
+        unsafe.push(`${key}: type drift (${currentColumn.type} != ${canonicalColumn.type})`);
+      if (currentColumn.notNull !== canonicalColumn.notNull)
+        unsafe.push(`${key}: nullability drift`);
+      if (
+        currentColumn.identity !== canonicalColumn.identity ||
+        currentColumn.generated !== canonicalColumn.generated
+      )
+        unsafe.push(`${key}: identity/generated drift`);
+      if ((currentColumn.default ?? null) !== (canonicalColumn.default ?? null))
+        unsafe.push(`${key}: default drift`);
+      continue;
+    }
+    const [schema, table] = key.split(".");
+    if (pendingTables.has(`${schema}.${table}`)) continue;
+    const addition = ddl.columns.get(key);
+    if (!addition) {
+      unsafe.push(`${key}: missing column has no recognized ADD COLUMN statement`);
+      continue;
+    }
+    const defaultIsSafe =
+      canonicalColumn.default !== null &&
+      /^(?:\(?\s*(?:0|1|true|false|null|'[^']*'|"[^"]*")\s*\)?(?:::[\w\s]+)?)$/i.test(
+        canonicalColumn.default,
+      );
+    if (
+      canonicalColumn.identity ||
+      canonicalColumn.generated ||
+      (canonicalColumn.notNull && !defaultIsSafe)
+    ) {
+      unsafe.push(`${key}: non-null/identity column cannot be added safely to populated table`);
+      continue;
+    }
+    statements.push(
+      `ALTER TABLE ${addition.table} ADD COLUMN ${addition.name} ${addition.definition};`,
+    );
+    addedColumns.add(key);
+    if (key === "withdrawal_capability.withdrawals.net_amount_minor")
+      statements.push(
+        "UPDATE withdrawal_capability.withdrawals SET net_amount_minor=amount_minor-fee_minor;",
+      );
+  }
+
+  for (const [key, constraint] of canonicalConstraints) {
+    const existing = currentConstraints.get(key);
+    if (existing) {
+      if (existing.definition !== constraint.definition)
+        unsafe.push(`${key}: constraint definition drift`);
+      continue;
+    }
+    const statement = ddl.constraints.get(key);
+    const [schema, table] = key.split(".");
+    if (pendingTables.has(`${schema}.${table}`) && !statement) continue;
+    if (!statement)
+      unsafe.push(`${key}: missing constraint has no recognized ADD CONSTRAINT statement`);
+    else statements.push(statement);
+  }
+
+  for (const [key, index] of canonicalIndexes) {
+    const existing = currentIndexes.get(key);
+    if (existing) {
+      if (existing.definition !== index.definition) unsafe.push(`${key}: index definition drift`);
+      continue;
+    }
+    const statement = ddl.indexes.get(key);
+    const [schema, table] = key.split(".");
+    if (pendingTables.has(`${schema}.${table}`) && !statement && canonicalConstraints.has(key))
+      continue;
+    if (!statement) unsafe.push(`${key}: missing index has no recognized CREATE INDEX statement`);
+    else statements.push(statement);
+  }
+
+  for (const [key, trigger] of canonicalTriggers) {
+    const existing = currentTriggers.get(key);
+    if (existing) {
+      if (existing.definition !== trigger.definition)
+        unsafe.push(`${key}: trigger definition drift`);
+      continue;
+    }
+    const statement = ddl.triggers.get(key);
+    const [schema, table] = key.split(".");
+    if (pendingTables.has(`${schema}.${table}`) && !statement) {
+      unsafe.push(`${key}: missing trigger has no recognized CREATE TRIGGER statement`);
+      continue;
+    }
+    if (!statement)
+      unsafe.push(`${key}: missing trigger has no recognized CREATE TRIGGER statement`);
+    else statements.push(statement);
+  }
+
+  return {
+    statements: unsafe.length ? [] : statements,
+    unsafe,
+    addedColumns: unsafe.length ? [] : [...addedColumns],
+    addedTables: unsafe.length ? [] : [...pendingTables],
+  };
+}
+
+function readSnapshot(database) {
+  return JSON.parse(psql(database, ["-At", "-c", schemaSnapshotSql]));
 }
 
 function dropReferenceDatabase(name, developmentDatabase) {
@@ -129,30 +430,30 @@ function syncDevelopmentDatabase() {
     referenceCreated = true;
     const baseline = readFileSync(baselinePath, "utf8");
     psql(reference, ["-f", "-"], baseline);
-    const { additions, unsafe } = columnDrift(readColumns(reference), readColumns(database));
-    if (unsafe.length)
+    const canonical = readSnapshot(reference);
+    const current = readSnapshot(database);
+    const plan = planAdditiveSync(baseline, canonical, current);
+    if (plan.unsafe.length)
       throw new Error(
-        `Schema drift needs deliberate review; this safe sync will not alter or backfill: ${unsafe.join(", ")}`,
+        `Schema drift needs deliberate review; no changes made: ${plan.unsafe.join(", ")}`,
       );
-    for (const column of additions) {
-      psql(database, [
-        "-c",
-        `alter table ${quoteIdentifier(column.schema)}.${quoteIdentifier(column.table)} add column ${quoteIdentifier(column.column)} ${column.type}`,
-      ]);
+    if (plan.statements.length) {
+      psql(database, ["-f", "-"], `BEGIN;\n${plan.statements.join("\n")}\nCOMMIT;\n`);
     }
-    const remaining = columnDrift(readColumns(reference), readColumns(database));
-    if (remaining.additions.length || remaining.unsafe.length)
+    const remaining = planAdditiveSync(baseline, canonical, readSnapshot(database));
+    if (remaining.unsafe.length || remaining.statements.length)
       throw new Error(
-        "Development schema reconciliation did not converge to the canonical columns.",
+        "Development database synchronization did not converge to the canonical baseline.",
       );
     process.stdout.write(
-      additions.length
-        ? `Added ${additions.length} safe nullable column(s) from the canonical baseline: ${additions.map((column) => `${column.schema}.${column.table}.${column.column}`).join(", ")}\n`
-        : "Development database columns already match the canonical baseline. No changes made.\n",
+      plan.statements.length
+        ? `Applied ${plan.statements.length} additive schema change(s) to the local development database.\n`
+        : "Development database schema already matches the canonical baseline. No changes made.\n",
     );
   } finally {
     if (referenceCreated) dropReferenceDatabase(reference, database);
   }
 }
 
-syncDevelopmentDatabase();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
+  syncDevelopmentDatabase();

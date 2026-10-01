@@ -7,7 +7,7 @@ import {
   withdrawalPolicyFromYaml,
 } from "@/modules/withdrawal/policy/loader";
 
-const validPolicy = `parameters:\n  enabled: true\n  currency: USD\n  minimum_amount_minor: 100\n  maximum_amount_minor: null\n`;
+const validPolicy = `parameters:\n  enabled: true\n  minimum_amount_minor: 100\n  maximum_amount_minor: null\n`;
 
 describe("withdrawal YAML policy", () => {
   it("uses the required runtime policy path", () => {
@@ -25,18 +25,16 @@ describe("withdrawal YAML policy", () => {
     });
   });
 
-  it("requires enabled and validates uppercase 3-letter currency codes", () => {
+  it("requires enabled and rejects configurable currency because domain money is canonical USD", () => {
     expect(() => withdrawalPolicyFromYaml({ currency: "USD" })).toThrow("enabled");
-    for (const currency of ["usd", "US", "USDD"]) {
-      expect(() =>
-        withdrawalPolicyFromYaml({
-          enabled: true,
-          currency,
-          minimum_amount_minor: 1,
-          maximum_amount_minor: null,
-        }),
-      ).toThrow("uppercase 3-letter currency code");
-    }
+    expect(() =>
+      withdrawalPolicyFromYaml({
+        enabled: true,
+        currency: "NGN",
+        minimum_amount_minor: 1,
+        maximum_amount_minor: null,
+      }),
+    ).toThrow("Unrecognized key");
   });
 
   it("requires positive integer minor-unit limits and validates their range", () => {
@@ -44,7 +42,6 @@ describe("withdrawal YAML policy", () => {
       expect(() =>
         withdrawalPolicyFromYaml({
           enabled: true,
-          currency: "USD",
           minimum_amount_minor: minimum,
           maximum_amount_minor: null,
         }),
@@ -54,7 +51,6 @@ describe("withdrawal YAML policy", () => {
       expect(() =>
         withdrawalPolicyFromYaml({
           enabled: true,
-          currency: "USD",
           minimum_amount_minor: 1,
           maximum_amount_minor: maximum,
         }),
@@ -63,7 +59,6 @@ describe("withdrawal YAML policy", () => {
     expect(
       withdrawalPolicyFromYaml({
         enabled: false,
-        currency: "USD",
         minimum_amount_minor: 200,
         maximum_amount_minor: null,
       }).maximumAmount,
@@ -71,7 +66,6 @@ describe("withdrawal YAML policy", () => {
     expect(() =>
       withdrawalPolicyFromYaml({
         enabled: true,
-        currency: "USD",
         minimum_amount_minor: 200,
         maximum_amount_minor: 199,
       }),
@@ -82,7 +76,6 @@ describe("withdrawal YAML policy", () => {
     expect(() =>
       withdrawalPolicyFromYaml({
         enabled: true,
-        currency: "USD",
         minimum_amount_minor: 100,
         maximum_amount_minor: null,
         unexpected: true,
@@ -95,7 +88,7 @@ describe("withdrawal YAML policy", () => {
     const directory = mkdtempSync(join(tmpdir(), "cliqero-withdrawal-policy-"));
     const path = join(directory, "policy.yaml");
     try {
-      writeFileSync(path, "parameters:\n  enabled: yes\n  currency: USD\n");
+      writeFileSync(path, "parameters:\n  enabled: yes\n");
       await expect(new WithdrawalPolicyLoader(path).getActive()).rejects.toThrow(
         "Invalid withdrawal policy at",
       );

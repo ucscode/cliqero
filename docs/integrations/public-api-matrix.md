@@ -1,6 +1,12 @@
 # Public HTTP API verification matrix
 
-The development audit is reproducible with `node scripts/audit-http-api.mjs`. It uses synthetic accounts and the development funding provider, never Paystack. `Idem.` means the endpoint requires or honors `Idempotency-Key`.
+For a non-destructive route/OpenAPI check, run `just api-surface-audit`. It only
+reads `/api/openapi.json` and `/api/health`; it does not create application data.
+
+`node scripts/audit-http-api.mjs` is a separate mutation smoke test. It creates
+synthetic accounts, listings, development funding, and checkout/purchase data;
+run it only against a disposable development database. It never calls Paystack.
+`Idem.` means the endpoint requires or honors `Idempotency-Key`.
 
 | Method                    | Path                                     | Auth                                | Capability                 | Input                                                       |          Success | Persisted fact                                                | Dependencies                               | Idem.                 | HTTP result                                                 |
 | ------------------------- | ---------------------------------------- | ----------------------------------- | -------------------------- | ----------------------------------------------------------- | ---------------: | ------------------------------------------------------------- | ------------------------------------------ | --------------------- | ----------------------------------------------------------- |

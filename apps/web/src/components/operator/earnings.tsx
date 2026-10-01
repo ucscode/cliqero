@@ -99,6 +99,11 @@ export function OperatorEarningsList() {
       eyebrow="Ledger inspection"
       title="User earnings"
       description="Append-only referral commission facts, separated from buyer wallet funds. Reads never settle or mutate entries."
+      headerActions={
+        <Link className="text-sm underline" href="/operator/earnings-adjustments">
+          Earning adjustments
+        </Link>
+      }
       beforeTable={
         totals && (
           <div className="grid gap-3 sm:grid-cols-3">
@@ -184,7 +189,6 @@ export function OperatorEarningsList() {
       items={collection.items}
       columns={columns}
       getRowKey={(entry) => entry.id}
-      selection={{ labelForItem: (entry) => `earnings entry ${entry.id}` }}
       actions={(entry) => [
         { type: "link", label: "View account", href: `/operator/users/${entry.account.id}` },
         ...(entry.distributionId

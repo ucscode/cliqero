@@ -78,8 +78,8 @@ describe("owner withdrawal resource mutation", () => {
   it("serves the effective configured policy contract to authenticated callers", async () => {
     const getActive = vi.fn(async () => ({
       enabled: false,
-      minimumAmount: Money.of(750n, "NGN"),
-      maximumAmount: Money.of(50_000n, "NGN"),
+      minimumAmount: Money.of(750n, "USD"),
+      maximumAmount: Money.of(50_000n, "USD"),
     }));
     fixtures.container = {
       principalResolver: {
@@ -92,9 +92,10 @@ describe("owner withdrawal resource mutation", () => {
         })),
       },
       withdrawalPolicy: { getActive },
+      feePolicy: { getActive: () => ({ withdrawal: { basisPoints: 500n, maximumMinor: 2000n } }) },
     };
     const response = await withdrawalPolicyRoute.GET(
-      new Request("http://localhost/api/withdrawals/policy"),
+      new Request("http://localhost/api/me/withdrawals/policy"),
     );
     expect(response.status).toBe(200);
     expect(getActive).toHaveBeenCalledOnce();
@@ -102,7 +103,9 @@ describe("owner withdrawal resource mutation", () => {
       enabled: false,
       minimum_amount_minor: "750",
       maximum_amount_minor: "50000",
-      currency: "NGN",
+      currency: "USD",
+      fee_basis_points: "500",
+      fee_maximum_amount_minor: "2000",
     });
   });
 

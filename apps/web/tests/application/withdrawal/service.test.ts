@@ -27,6 +27,14 @@ function fixture(
   };
   const completedAt = new Date("2026-02-01T00:00:00Z");
   const complete = vi.fn(async () => completedAt);
+  const create = vi.fn(async () => undefined);
+  const reserve = vi.fn(async () => ({
+    id: "reservation-1",
+    withdrawalId: withdrawal.id,
+    accountId: withdrawal.accountId,
+    amount: withdrawal.amount,
+  }));
+  const treasuryCreate = vi.fn(async () => undefined);
   const releaseOrComplete = vi.fn(async () => undefined);
   const append = vi.fn(async () => undefined);
   const requireCapability = vi.fn(async () => undefined);
@@ -37,7 +45,9 @@ function fixture(
       findByIdempotencyKey: async () => null,
       listForAccount: async () => ({ items: [], nextCursor: null }),
       listForOperator: async () => [],
-      create: async () => undefined,
+      create,
+      updateMutable: async () => undefined,
+      deleteMutable: async () => undefined,
       transition: async () => undefined,
       complete,
     },
@@ -49,14 +59,11 @@ function fixture(
       }),
     },
     {
-      reserve: async () => ({
-        id: "reservation-1",
-        withdrawalId: withdrawal.id,
-        accountId: withdrawal.accountId,
-        amount: withdrawal.amount,
-      }),
+      reserve,
       available: async () => 0n,
       releaseOrComplete,
+      resize: async () => undefined,
+      remove: async () => undefined,
       summarize: async () => [],
     },
     { append },
@@ -68,9 +75,61 @@ function fixture(
     },
     { withIdempotencyLock: async (_accountId, _key, operation) => operation() },
     { resolveForWithdrawal: async () => withdrawal.destination } as any,
+    {
+      getActive: () => ({
+        withdrawal: { basisPoints: 500n, maximumMinor: 2_000n },
+        funding_to_earning: { basisPoints: 200n, maximumMinor: 1_000n },
+        earning_to_funding: { basisPoints: 100n, maximumMinor: 500n },
+      }),
+    },
+    { create: treasuryCreate } as any,
   );
-  return { service, withdrawal, complete, releaseOrComplete, append, requireCapability };
+  return {
+    service,
+    withdrawal,
+    complete,
+    releaseOrComplete,
+    append,
+    requireCapability,
+    create,
+    reserve,
+    treasuryCreate,
+  };
 }
+
+describe("WithdrawalService request fees", () => {
+  it("snapshots gross, capped fee, and net and posts the fee to Treasury atomically", async () => {
+    const { service, create, reserve, treasuryCreate } = fixture();
+    const withdrawal = await service.request({
+      accountId: "account-1",
+      amountMinor: 50_000n,
+      currency: "USD",
+      destinationId: "destination-1",
+      idempotencyKey: "fee-snapshot",
+      correlationId: "withdrawal-correlation",
+    });
+
+    expect(withdrawal.amount.minorAmount).toBe(50_000n);
+    expect(withdrawal.fee?.minorAmount).toBe(2_000n);
+    expect(withdrawal.netAmount?.minorAmount).toBe(48_000n);
+    expect(create).toHaveBeenCalledWith(withdrawal);
+    expect(reserve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: withdrawal.amount,
+        correlationId: "withdrawal-correlation",
+      }),
+    );
+    expect(treasuryCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direction: "credit",
+        amountMinor: 2_000n,
+        sourceKind: "withdrawal_fee",
+        sourceId: withdrawal.id,
+        idempotencyKey: `withdrawal:${withdrawal.id}:fee`,
+      }),
+    );
+  });
+});
 
 describe("WithdrawalService manual completion", () => {
   it("records completion facts and completes the reserved funds once", async () => {

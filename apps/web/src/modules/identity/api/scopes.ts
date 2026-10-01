@@ -8,6 +8,7 @@ export const API_SCOPES = [
   "catalogue:manage",
   "wallet:read",
   "wallet:fund",
+  "wallet:transfer",
   "checkout:create",
   "purchases:read",
   "referrals:read",
@@ -81,6 +82,10 @@ export const API_SCOPE_METADATA = {
   "wallet:fund": {
     label: "Wallet funding",
     description: "Restricts this key to wallet funding requests.",
+  },
+  "wallet:transfer": {
+    label: "Wallet transfers",
+    description: "Restricts this key to moving value between the account's wallet balances.",
   },
   "checkout:create": { label: "Checkout", description: "Restricts this key to checkout creation." },
   "purchases:read": {

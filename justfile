@@ -33,10 +33,18 @@ dev-db-reset:
 	docker compose run --rm --no-deps --entrypoint sh postgres -ec 'find /var/lib/postgresql/data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
 	docker compose up -d postgres main outbox-worker
 
-# Non-destructively add safe nullable columns missing from the canonical baseline.
-# Refuses to backfill data or alter incompatible schema; use the explicit reset only when approved.
+# Non-destructively apply supported additive tables, columns, indexes, constraints, and triggers
+# from the canonical baseline. Refuses incompatible or destructive drift.
 dev-db-sync:
 	node scripts/dev-database-sync.mjs
+
+# Unit tests for the development database schema-sync planner
+dev-db-sync-test:
+	node --test scripts/dev-database-sync.test.mjs
+
+# Read-only OpenAPI and public HTTP-surface audit; does not create application data.
+api-surface-audit:
+	node scripts/audit-http-surface.mjs
 
 # Destructive: reset development Blog SQLite only, including WAL/SHM, then
 # restart the web app. PostgreSQL, media, and dependency volumes are untouched.

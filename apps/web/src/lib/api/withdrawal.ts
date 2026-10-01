@@ -4,6 +4,8 @@ export type WithdrawalState =
 export type Withdrawal = {
   id: string;
   amount_minor: string;
+  fee_minor: string;
+  net_amount_minor: string;
   currency: string;
   destination: { method: string; method_name: string; name: string };
   state: WithdrawalState;
@@ -17,6 +19,8 @@ export type WithdrawalPolicy = {
   minimum_amount_minor: string;
   maximum_amount_minor: string | null;
   currency: string;
+  fee_basis_points: string;
+  fee_maximum_amount_minor: string | null;
 };
 
 export type WithdrawalReservation = {

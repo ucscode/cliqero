@@ -26,6 +26,7 @@ export function capabilityForPath(pathname: string): Capability | null {
   if (pathname.startsWith("/operator/purchases")) return "finance.read";
   if (pathname.startsWith("/operator/distributions")) return "finance.read";
   if (pathname.startsWith("/operator/earnings")) return "finance.read";
+  if (pathname.startsWith("/operator/earnings-adjustments")) return "finance.read";
   if (pathname.startsWith("/operator/withdrawals")) return "withdrawals.manage";
   if (pathname.startsWith("/operator/treasury")) return "treasury.manage";
   if (pathname.startsWith("/operator/reviews")) return "reviews.moderate";

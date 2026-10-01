@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { createApiApp } from "@/api/hono";
+import { InternalPurchaseRoutes } from "@/api/internal/purchases/handler";
 import { createContainer } from "@/infrastructure/container";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -7,7 +7,7 @@ const suite = databaseUrl ? describe : describe.skip;
 
 suite("operator purchase inspection", () => {
   const container = createContainer(databaseUrl!);
-  let api: ReturnType<typeof createApiApp>;
+  let routes: InternalPurchaseRoutes;
 
   beforeEach(async () => {
     await container.database.query(`truncate table
@@ -75,7 +75,7 @@ suite("operator purchase inspection", () => {
          from purchase_capability.purchases where uuid=$1`,
       [purchaseIds[1]],
     );
-    api = createApiApp({
+    routes = new InternalPurchaseRoutes({
       ...container,
       principalResolver: {
         resolve: async () => ({
@@ -101,8 +101,8 @@ suite("operator purchase inspection", () => {
       )
     ).rows[0].uuid;
     const query = new URLSearchParams({ buyer, state: "completed", limit: "1" });
-    const firstResponse = await api.fetch(
-      new Request(`http://localhost/api/operator/purchases?${query}`),
+    const firstResponse = await routes.collection(
+      new Request(`http://localhost/internal/purchases?${query}`),
     );
     expect(firstResponse.status).toBe(200);
     const first = await firstResponse.json();
@@ -114,16 +114,17 @@ suite("operator purchase inspection", () => {
     });
     expect(first.nextCursor).toBeTruthy();
     query.set("cursor", first.nextCursor);
-    const secondResponse = await api.fetch(
-      new Request(`http://localhost/api/operator/purchases?${query}`),
+    const secondResponse = await routes.collection(
+      new Request(`http://localhost/internal/purchases?${query}`),
     );
     const second = await secondResponse.json();
     expect(second.items).toHaveLength(1);
     expect(second.items[0].id).not.toBe(first.items[0].id);
     expect(second.nextCursor).toBeNull();
 
-    const detailResponse = await api.fetch(
-      new Request(`http://localhost/api/operator/purchases/${first.items[0].id}`),
+    const detailResponse = await routes.item(
+      new Request(`http://localhost/internal/purchases/${first.items[0].id}`),
+      first.items[0].id,
     );
     expect(detailResponse.status).toBe(200);
     expect(await detailResponse.json()).toMatchObject({

@@ -58,7 +58,7 @@ export function OperatorPurchaseList({
       if (filters.listing) query.set("listing", filters.listing.trim());
       if (filters.state) query.set("state", filters.state);
       if (cursor) query.set("cursor", cursor);
-      return apiFetch<PurchasePage>(`/api/operator/purchases?${query}`);
+      return apiFetch<PurchasePage>(`/internal/purchases?${query}`);
     },
     { buyer: initialBuyer, listing: initialListing, state: "", sort: "created:desc" },
   );
@@ -188,7 +188,7 @@ export function OperatorPurchaseDetail({ purchaseId }: { purchaseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    void apiFetch<any>(`/api/operator/purchases/${purchaseId}`)
+    void apiFetch<any>(`/internal/purchases/${purchaseId}`)
       .then(setPurchase)
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Purchase unavailable."))
       .finally(() => setLoading(false));

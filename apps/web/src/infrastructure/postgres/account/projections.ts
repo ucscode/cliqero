@@ -89,7 +89,13 @@ export class AccountProjectionService {
   async earnings(accountId: string) {
     const rows = (
       await this.sql.query<any>(
-        `select currency,balance_state,sum(case direction when 'credit' then amount_minor else -amount_minor end)::bigint amount_minor from ledger_capability.entries where account_id=(select id from identity_capability.accounts where uuid=$1) group by currency,balance_state order by currency,balance_state`,
+        `select currency,balance_state,sum(amount_minor)::bigint amount_minor from (
+           select currency,balance_state,case direction when 'credit' then amount_minor else -amount_minor end amount_minor
+             from ledger_capability.entries where account_id=(select id from identity_capability.accounts where uuid=$1)
+           union all
+           select 'USD'::text,'available'::text,amount_minor from ledger_capability.earnings_adjustments
+             where account_id=(select id from identity_capability.accounts where uuid=$1)
+         ) effective group by currency,balance_state order by currency,balance_state`,
         [accountId],
       )
     ).rows;

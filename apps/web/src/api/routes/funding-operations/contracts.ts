@@ -8,6 +8,7 @@ export const fundingStateSchema = z.enum([
   "confirmed",
   "failed",
   "blocked",
+  "cancelled",
   "expired",
   "reconciliation_pending",
 ]);
@@ -22,9 +23,13 @@ export const operatorFundingWalletCreditSchema = z.object({
 export const operatorFundingSummarySchema = z.object({
   id: z.string().uuid(),
   account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),
-  provider: z.string(),
-  providerReference: z.string(),
+  origin: z.enum(["provider", "administrative"]),
+  provider: z.string().nullable(),
+  providerReference: z.string().nullable(),
   providerTransactionId: z.string().nullable(),
+  reason: z.string().nullable(),
+  administrativeReference: z.string().nullable(),
+  createdBy: z.string().uuid().nullable(),
   canonicalAmountMinor: z.string(),
   canonicalCurrency: z.literal("USD"),
   collectionAmountMinor: z.string(),

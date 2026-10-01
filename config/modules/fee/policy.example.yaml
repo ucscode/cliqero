@@ -1,0 +1,16 @@
+# Central platform fee policy. Amount caps use canonical USD minor units.
+parameters:
+  # Percentage is exact to at most two decimal places; fee rounding is half up.
+  withdrawal:
+    percentage: 5
+    maximum_amount_minor: 2000
+
+  # Applied to transfers from buyer funding balance into earnings.
+  funding_to_earning:
+    percentage: 2
+    maximum_amount_minor: 1000
+
+  # Applied to transfers from earnings into buyer funding balance.
+  earning_to_funding:
+    percentage: 1
+    maximum_amount_minor: 500

@@ -48,6 +48,7 @@ import * as walletFundingVerify from "@/api/compat/wallet/fund/[id]/verify/route
 import * as walletFundingPrepare from "@/api/compat/wallet/funding/prepare/route";
 import * as walletFundingHistory from "@/api/compat/wallet/funding/route";
 import * as walletTransactions from "@/api/compat/wallet/transactions/route";
+import * as walletTransfers from "@/api/compat/wallet/transfers/route";
 import * as withdrawals from "@/api/compat/withdrawals/route";
 import * as withdrawalById from "@/api/compat/withdrawals/[id]/route";
 import * as withdrawalPolicy from "@/api/compat/withdrawals/policy/route";
@@ -67,7 +68,7 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/checkout/:checkoutId/pay", module: checkoutPay },
   { pattern: "/api/checkout/:checkoutId", module: checkoutById },
   { pattern: "/api/checkout", module: checkout },
-  { pattern: "/api/earnings/entries", module: earningsEntries },
+  { pattern: "/api/me/earnings/entries", module: earningsEntries },
   { pattern: "/api/earnings", module: earnings },
   { pattern: "/api/funding/development/verify", module: developmentFundingVerify },
   { pattern: "/api/health", module: health },
@@ -120,8 +121,9 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/wallet/funding/prepare", module: walletFundingPrepare },
   { pattern: "/api/wallet/funding", module: walletFundingHistory },
   { pattern: "/api/wallet/transactions", module: walletTransactions },
+  { pattern: "/api/wallet/transfers", module: walletTransfers },
   { pattern: "/api/wallet", module: wallet },
-  { pattern: "/api/withdrawals/policy", module: withdrawalPolicy },
+  { pattern: "/api/me/withdrawals/policy", module: withdrawalPolicy },
   { pattern: "/api/withdrawals/:withdrawalId", module: withdrawalById },
   { pattern: "/api/withdrawals", module: withdrawals },
   { pattern: "/api/withdrawal-methods", module: withdrawalMethods },

@@ -46,7 +46,10 @@ function routes(principal: any = sessionPrincipal) {
 }
 
 const request = (path: string, init?: RequestInit) =>
-  new Request(`https://cliqero.test${path}`, init);
+  new Request(`https://cliqero.test${path}`, {
+    ...init,
+    headers: { host: "cliqero.test", ...Object.fromEntries(new Headers(init?.headers)) },
+  });
 
 describe("internal API-key management boundary", () => {
   it("requires a resolved user session and rejects any bearer header, including alongside a session", async () => {

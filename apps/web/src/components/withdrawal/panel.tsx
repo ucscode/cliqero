@@ -56,7 +56,7 @@ export function WithdrawalsPanel() {
     setError(null);
     try {
       const [nextPolicy, nextPage, nextDestinations] = await Promise.all([
-        apiFetch<WithdrawalPolicy>("/api/withdrawals/policy"),
+        apiFetch<WithdrawalPolicy>("/api/me/withdrawals/policy"),
         apiFetch<WithdrawalPage>(`/api/withdrawals?limit=${WITHDRAWAL_HISTORY_PREVIEW_SIZE}`),
         apiFetch<WithdrawalDestination[]>("/api/withdrawal-destinations"),
       ]);
@@ -82,6 +82,19 @@ export function WithdrawalsPanel() {
   const reservedMinor =
     page?.reservations.find((reservation) => reservation.currency === currency)?.reserved_minor ??
     "0";
+  const withdrawalFeeMinor = (() => {
+    if (!policy || !amount) return null;
+    try {
+      const gross = BigInt(parseWithdrawalAmount(amount, currency));
+      const raw = (gross * BigInt(policy.fee_basis_points) + 5_000n) / 10_000n;
+      const cap =
+        policy.fee_maximum_amount_minor === null ? null : BigInt(policy.fee_maximum_amount_minor);
+      const fee = cap === null || raw < cap ? raw : cap;
+      return fee > gross ? gross : fee;
+    } catch {
+      return null;
+    }
+  })();
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
@@ -281,6 +294,42 @@ export function WithdrawalsPanel() {
                   ? ` · Maximum ${formatMinorCurrency(policy.maximum_amount_minor, currency)}`
                   : ""}
               </span>
+              {withdrawalFeeMinor !== null && (
+                <div className="grid gap-1 rounded-md bg-slate-50 p-3 text-sm">
+                  <p>
+                    Withdrawal amount{" "}
+                    <span className="float-right">
+                      {formatMinorCurrency(
+                        (() => {
+                          try {
+                            return parseWithdrawalAmount(amount, currency);
+                          } catch {
+                            return "0";
+                          }
+                        })(),
+                        currency,
+                      )}
+                    </span>
+                  </p>
+                  <p>
+                    Platform fee{" "}
+                    <span className="float-right">
+                      {formatMinorCurrency(withdrawalFeeMinor.toString(), currency)}
+                    </span>
+                  </p>
+                  <p className="font-semibold">
+                    You receive{" "}
+                    <span className="float-right">
+                      {formatMinorCurrency(
+                        (
+                          BigInt(parseWithdrawalAmount(amount, currency)) - withdrawalFeeMinor
+                        ).toString(),
+                        currency,
+                      )}
+                    </span>
+                  </p>
+                </div>
+              )}
               {destinations.length ? (
                 <>
                   <Label htmlFor="withdrawal-destination">Payout method</Label>
@@ -314,7 +363,7 @@ export function WithdrawalsPanel() {
                 </>
               ) : (
                 <p className="text-sm text-slate-600">
-                  No payout method is available for withdrawals.
+                  Add a payout method before requesting a withdrawal.
                 </p>
               )}
               <Button

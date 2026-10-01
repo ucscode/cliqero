@@ -129,7 +129,6 @@ export function OperatorDistributionList() {
       items={collection.items}
       columns={columns}
       getRowKey={(item) => item.id}
-      selection={{ labelForItem: (item) => `distribution ${item.id}` }}
       actions={actions}
       actionLabel={(item) => `Actions for distribution ${item.id}`}
       loading={collection.loading}

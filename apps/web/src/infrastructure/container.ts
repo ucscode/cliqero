@@ -73,7 +73,10 @@ import { PaymentInitializationProcessor } from "@/processors/payment/initializat
 import { PaymentInitializationWorker } from "@/workers/payment/initialization/worker";
 import { PaymentVerificationProcessor } from "@/processors/payment/verification";
 import { PostgresFundingRepository } from "./postgres/funding/repository";
+import { PostgresAdministrativeFundingRepository } from "./postgres/funding/administrative";
 import { PostgresWalletRepository } from "./postgres/wallet/repository";
+import { PostgresWalletTransferService } from "@/infrastructure/postgres/wallet/transfers";
+import { FeePolicyLoader } from "@/modules/fee/policy";
 import { PostgresCheckoutRepository } from "./postgres/checkout/repository";
 import { FundingService } from "@/application/funding/service";
 import { FundingInitializationProcessor } from "@/application/funding/initialization";
@@ -101,6 +104,8 @@ import { TreasuryService } from "@/modules/treasury/treasury";
 import { TreasuryProcessor } from "@/processors/treasury/processor";
 import { PostgresTreasuryDistributionStore } from "@/infrastructure/postgres/treasury/distributions";
 import { OperatorTreasuryService } from "@/infrastructure/postgres/operator/treasury";
+import { EarningsAdjustmentService } from "@/application/finance/earnings-adjustments";
+import { PostgresEarningsAdjustmentRepository } from "@/infrastructure/postgres/ledger/earnings-adjustments";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
 import { ApiPrincipalResolver } from "@/infrastructure/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
@@ -217,6 +222,17 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const providerEvents = lazy(() => new PostgresProviderEventRepository(database));
   const funding = lazy(() => new PostgresFundingRepository(database));
   const walletRepository = lazy(() => new PostgresWalletRepository(database));
+  const feePolicy = lazy(() => new FeePolicyLoader());
+  const walletTransfers = lazy(
+    () =>
+      new PostgresWalletTransferService(
+        database,
+        database,
+        () => feePolicy().getActive(),
+        wallet(),
+        fundsReservation(),
+      ),
+  );
   const checkoutRepository = lazy(() => new PostgresCheckoutRepository(database));
   const referralGraph = lazy(() => new PostgresReferralGraphRepository(database));
   const commissionPolicy = lazy(() => new PostgresCommissionPolicyRepository(database));
@@ -275,6 +291,8 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         operators(),
         withdrawalPersistence(),
         withdrawalDestinations(),
+        feePolicy(),
+        treasuryRepository(),
       ),
   );
 
@@ -506,6 +524,12 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
       new OperatorFundingService(
         new PostgresOperatorFundingReader(database),
         bankTransferConfirmation(),
+        {
+          repository: new PostgresAdministrativeFundingRepository(database),
+          operators: operators(),
+          wallet: wallet(),
+          uow: database,
+        },
       ),
   );
   const bankTransferEvidence = lazy(() => {
@@ -604,6 +628,14 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const operatorEarnings = lazy(() => new OperatorEarningsService(database));
   const operatorWithdrawals = lazy(() => new OperatorWithdrawalService(database));
   const operatorTreasury = lazy(() => new OperatorTreasuryService(database));
+  const earningsAdjustments = lazy(
+    () =>
+      new EarningsAdjustmentService(
+        new PostgresEarningsAdjustmentRepository(database),
+        operators(),
+        database,
+      ),
+  );
   const blog = lazy(() => getBlogService());
 
   return {
@@ -736,6 +768,12 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get walletRepository() {
       return walletRepository();
+    },
+    get walletTransfers() {
+      return walletTransfers();
+    },
+    get feePolicy() {
+      return feePolicy();
     },
     get walletCredit() {
       return walletCredit();
@@ -880,6 +918,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get operatorTreasury() {
       return operatorTreasury();
+    },
+    get earningsAdjustments() {
+      return earningsAdjustments();
     },
     get blog() {
       return blog();

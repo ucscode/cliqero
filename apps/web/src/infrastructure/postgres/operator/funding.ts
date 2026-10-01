@@ -11,9 +11,13 @@ function summary(row: any): OperatorFundingSummary {
   return {
     id: row.id,
     account: { id: row.account_id, username: row.username, email: row.email },
-    provider: row.provider_name,
-    providerReference: row.provider_reference,
+    origin: row.origin,
+    provider: row.provider_name ?? null,
+    providerReference: row.provider_reference ?? null,
     providerTransactionId: row.provider_transaction_id ?? null,
+    reason: row.reason ?? null,
+    administrativeReference: row.administrative_reference ?? null,
+    createdBy: row.created_by ?? null,
     canonicalAmountMinor: String(row.canonical_amount_minor),
     canonicalCurrency: "USD",
     collectionAmountMinor: String(row.collection_amount_minor),
@@ -42,35 +46,51 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
     const sort = input.sort ?? "created";
     const direction = input.direction ?? "desc";
     const cursor = decodeOperatorSortCursor(input.cursor, sort, direction);
-    const orderBy = sort === "amount" ? "f.canonical_amount_minor" : "f.created_at";
+    const orderBy = sort === "amount" ? "q.canonical_amount_minor" : "q.created_at";
     const cursorType = sort === "amount" ? "bigint" : "timestamptz";
     const rawSearch = input.search?.trim() || "";
     const search = rawSearch ? rawSearch.replace(/[\\%_]/g, "\\$&") : null;
     const values: unknown[] = [search, input.state ?? null, input.provider ?? null];
     const conditions = [
-      "($1::text is null or f.uuid::text=$1 or f.provider_reference ilike '%'||$1||'%' escape '\\' or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\')",
-      "($2::text is null or f.state=$2)",
-      "($3::text is null or f.provider_name=$3)",
+      "($1::text is null or q.id::text=$1 or coalesce(q.provider_reference,q.administrative_reference,'') ilike '%'||$1||'%' escape '\\' or coalesce(q.reason,'') ilike '%'||$1||'%' escape '\\' or q.username ilike '%'||$1||'%' escape '\\' or q.email ilike '%'||$1||'%' escape '\\')",
+      "($2::text is null or q.state=$2)",
+      "($3::text is null or q.provider_name=$3)",
     ];
     if (cursor) {
       values.push(cursor.value, cursor.id);
       conditions.push(
-        `(${orderBy},f.id) ${direction === "asc" ? ">" : "<"} ($4::${cursorType},$5::bigint)`,
+        `(${orderBy},q.cursor_id) ${direction === "asc" ? ">" : "<"} ($4::${cursorType},$5::bigint)`,
       );
     }
     values.push(input.limit + 1);
     const rows = (
       await this.sql.query<any>(
-        `select f.uuid as id,f.id::text cursor_id,${orderBy}::text cursor_sort_value,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,f.provider_transaction_id,
-                f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
-                f.state,f.created_at,f.updated_at,f.confirmed_at,
-                c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
-                c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at
-           from funding_capability.funding_transactions f
-           join identity_capability.account_profiles a on a.id=f.account_id
-           left join wallet_capability.credits c on c.funding_id=f.id
+        `with q as (
+          select f.uuid id,f.id cursor_id,a.uuid account_id,a.username,a.email,
+                 'provider'::text origin,f.provider_name,f.provider_reference,f.provider_transaction_id,
+                 null::text reason,null::text administrative_reference,null::uuid created_by,
+                 f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
+                 f.state,f.created_at,f.updated_at,f.confirmed_at,
+                 c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
+                 c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at
+            from funding_capability.funding_transactions f
+            join identity_capability.account_profiles a on a.id=f.account_id
+            left join wallet_capability.credits c on c.funding_id=f.id
+          union all
+          select f.uuid id,f.id cursor_id,a.uuid account_id,a.username,a.email,
+                 'administrative'::text origin,null::text provider_name,null::text provider_reference,
+                 null::text provider_transaction_id,f.reason,f.reference administrative_reference,
+                 actor.uuid created_by,f.amount_minor canonical_amount_minor,f.amount_minor collection_amount_minor,
+                 'USD'::text collection_currency,f.state,f.created_at,f.updated_at,
+                 case when f.state='confirmed' then f.created_at else null end confirmed_at,
+                 null::uuid credit_id,null::bigint credit_amount_minor,null::text credit_currency,
+                 null::text credit_state,null::timestamptz credit_created_at,null::timestamptz credit_available_at
+            from funding_capability.administrative_fundings f
+            join identity_capability.account_profiles a on a.id=f.account_id
+            join identity_capability.accounts actor on actor.id=f.created_by
+        ) select q.*,${orderBy}::text cursor_sort_value from q
           where ${conditions.join(" and ")}
-          order by ${orderBy} ${direction},f.id ${direction} limit $${values.length}`,
+          order by ${orderBy} ${direction},q.cursor_id ${direction} limit $${values.length}`,
         values,
       )
     ).rows;
@@ -110,7 +130,34 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
         [id],
       )
     ).rows[0];
-    if (!row) throw new Error("Funding not found");
+    if (!row) {
+      const administrative = (
+        await this.sql.query<any>(
+          `select f.uuid id,a.uuid account_id,a.username,a.email,'administrative'::text origin,
+                  null::text provider_name,null::text provider_reference,null::text provider_transaction_id,
+                  f.reason,f.reference administrative_reference,actor.uuid created_by,
+                  f.amount_minor canonical_amount_minor,f.amount_minor collection_amount_minor,
+                  'USD'::text collection_currency,f.state,f.created_at,f.updated_at,
+                  case when f.state='confirmed' then f.created_at else null end confirmed_at,
+                  null::uuid credit_id,null::bigint credit_amount_minor,null::text credit_currency,
+                  null::text credit_state,null::timestamptz credit_created_at,null::timestamptz credit_available_at
+             from funding_capability.administrative_fundings f
+             join identity_capability.account_profiles a on a.id=f.account_id
+             join identity_capability.accounts actor on actor.id=f.created_by
+            where f.uuid=$1`,
+          [id],
+        )
+      ).rows[0];
+      if (!administrative) throw new Error("Funding not found");
+      return {
+        ...summary(administrative),
+        conversionSnapshot: null,
+        providerInitialization: null,
+        operations: [],
+        events: [],
+        evidence: null,
+      };
+    }
     const operations = (
       await this.sql.query<any>(
         `select uuid as id,operation,outcome,http_status,provider_status,provider_message,provider_code,failure_kind,occurred_at
@@ -141,14 +188,19 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
               order by o.occurred_at desc,o.id desc
               limit 1
            ) o on true
-          where e.provider_name=$1 and e.provider_reference=$2
+          where $1::text is not null and $2::text is not null
+            and e.provider_name=$1 and e.provider_reference=$2
           order by e.received_at desc,e.id desc limit 50`,
-        [row.provider_name, row.provider_reference],
+        [row.provider_name ?? null, row.provider_reference ?? null],
       )
     ).rows;
     const base = summary(row);
     return {
       ...base,
+      origin: "provider",
+      reason: null,
+      administrativeReference: null,
+      createdBy: null,
       conversionSnapshot: row.conversion_snapshot
         ? {
             fromCurrency: row.conversion_snapshot.fromCurrency,

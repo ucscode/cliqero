@@ -1,6 +1,7 @@
 import { getContainer, type ApplicationContainer } from "@/infrastructure/container";
 import type { ApiKeyRecord } from "@/modules/identity/api/keys";
 import { apiError } from "@/api/http";
+import { isSameOriginRequest } from "@/api/internal/security/same-origin";
 import {
   apiKeyBulkDeleteSchema,
   apiKeyCreateSchema,
@@ -60,18 +61,6 @@ function rateLimited() {
 
 function badRequest(message: string, code = "invalid_request", status = 400) {
   return response({ error: message, code }, status);
-}
-
-function assertSameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return false;
-  try {
-    if (new URL(origin).origin !== new URL(request.url).origin) return false;
-  } catch {
-    return false;
-  }
-  const fetchSite = request.headers.get("sec-fetch-site");
-  return fetchSite === null || fetchSite === "same-origin";
 }
 
 async function parseJson(request: Request) {
@@ -220,7 +209,7 @@ export class InternalApiKeyManagementRoutes {
 
   private async session(request: Request, mutation = false) {
     if (request.headers.has("authorization")) return unauthorized();
-    if (mutation && !assertSameOrigin(request)) return forbidden();
+    if (mutation && !isSameOriginRequest(request)) return forbidden();
     try {
       const principal = await this.container.principalResolver.resolve(request);
       if (principal.kind !== "user_session") return unauthorized();

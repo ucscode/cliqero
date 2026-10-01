@@ -55,7 +55,7 @@ export function customerEarningBadgeVariant(state: EarningsEntry["balance_state"
 export function earningsEntriesUrl(cursor?: string) {
   const params = new URLSearchParams({ limit: String(EARNINGS_PAGE_SIZE) });
   if (cursor) params.set("cursor", cursor);
-  return `/api/earnings/entries?${params.toString()}`;
+  return `/api/me/earnings/entries?${params.toString()}`;
 }
 
 export function EarningsPanel() {

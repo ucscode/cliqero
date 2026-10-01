@@ -22,6 +22,13 @@ export interface LedgerFundsReservationService {
     kind: "released" | "completed";
     correlationId: string;
   }): Promise<void>;
+  resize(input: {
+    withdrawalId: string;
+    accountId: string;
+    amount: Money;
+    correlationId: string;
+  }): Promise<void>;
+  remove(withdrawalId: string, accountId: string): Promise<void>;
   summarize(
     accountId: string,
   ): Promise<Array<{ currency: string; reservedMinor: bigint; completedMinor: bigint }>>;

@@ -9,6 +9,8 @@ function row(id: string, cursor_id: string) {
     cursor_created_at: "2026-03-01 12:00:00.123456+00",
     account_id: "account-1",
     amount_minor: "1200",
+    fee_minor: "60",
+    net_amount_minor: "1140",
     currency: "USD",
     saved_destination_id: "destination-1",
     destination_method: "bank_ng",
@@ -40,6 +42,14 @@ describe("PostgresWithdrawalRepository account history pagination", () => {
     const repository = new PostgresWithdrawalRepository(sql);
     const first = await repository.listForAccount("account-1", { limit: 2 });
     expect(first.items.map((item) => item.id)).toEqual(["w1", "w2"]);
+    expect(first.items[0]).toMatchObject({
+      amount: { minorAmount: 1200n },
+      fee: { minorAmount: 60n },
+      netAmount: { minorAmount: 1140n },
+    });
+    expect(calls[0].statement).toContain(
+      "w.amount_minor,w.fee_minor,w.net_amount_minor,w.currency",
+    );
     expect(first.nextCursor).toBeTruthy();
     expect(calls[0].statement).toContain(
       "w.account_id=(select id from identity_capability.accounts where uuid=$1)",

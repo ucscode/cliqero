@@ -11,6 +11,9 @@ import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import { Money } from "@/modules/money/money";
 import type { WithdrawalPersistence } from "@/application/withdrawal/contracts";
 import type { WithdrawalDestinationService } from "@/application/withdrawal/destinations";
+import { calculateFee, type FeePolicySource } from "@/modules/fee/policy";
+import type { TreasuryRepository } from "@/modules/treasury/treasury";
+import { PublicApplicationError } from "@/kernel/errors";
 export class WithdrawalService {
   constructor(
     private readonly withdrawals: WithdrawalRepository,
@@ -21,7 +24,35 @@ export class WithdrawalService {
     private readonly operators: OperatorAuthorizationService,
     private readonly persistence: WithdrawalPersistence,
     private readonly destinations: WithdrawalDestinationService,
+    private readonly feePolicy: FeePolicySource,
+    private readonly treasury: TreasuryRepository,
   ) {}
+  async requestByOperator(
+    actorId: string,
+    input: {
+      accountId: string;
+      amountMinor: string;
+      destinationId: string;
+      idempotencyKey: string;
+    },
+  ) {
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
+    if (!/^\d+$/.test(input.amountMinor) || BigInt(input.amountMinor) <= 0n)
+      throw new PublicApplicationError(
+        "Withdrawal amount must be positive.",
+        "invalid_amount",
+        400,
+      );
+    const policy = await this.policy.getActive();
+    return this.request({
+      accountId: input.accountId,
+      amountMinor: BigInt(input.amountMinor),
+      currency: policy.minimumAmount.currency,
+      destinationId: input.destinationId,
+      idempotencyKey: input.idempotencyKey,
+      correlationId: newId(),
+    });
+  }
   async request(input: {
     accountId: string;
     amountMinor: bigint;
@@ -59,6 +90,8 @@ export class WithdrawalService {
         id,
         accountId: input.accountId,
         amount,
+        fee: Money.of(0n, "USD"),
+        netAmount: amount,
         destination,
         state: "requested",
         idempotencyKey: input.idempotencyKey,
@@ -67,6 +100,10 @@ export class WithdrawalService {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+      const feeAmounts = (await this.feePolicy.getActive()).withdrawal;
+      const { feeMinor, netMinor } = calculateFee(amount.minorAmount, feeAmounts);
+      withdrawal.fee = Money.of(feeMinor, "USD");
+      withdrawal.netAmount = Money.of(netMinor, "USD");
       await this.withdrawals.create(withdrawal);
       await this.funds.reserve({
         withdrawalId: id,
@@ -74,6 +111,20 @@ export class WithdrawalService {
         amount,
         correlationId: input.correlationId,
       });
+      if (feeMinor > 0n) {
+        await this.treasury.create({
+          id: newId(),
+          direction: "credit",
+          amountMinor: feeMinor,
+          title: "Withdrawal fee",
+          note: `Withdrawal ${id}; gross ${amount.minorAmount}; net ${netMinor}`,
+          sourceKind: "withdrawal_fee",
+          sourceId: id,
+          idempotencyKey: `withdrawal:${id}:fee`,
+          actorId: input.accountId,
+          createdAt: new Date(),
+        });
+      }
       await this.outbox.append([
         {
           id: newId(),
@@ -217,6 +268,160 @@ export class WithdrawalService {
         completedAt,
         updatedAt: completedAt,
       };
+    });
+  }
+  async updateByOperator(
+    actorId: string,
+    id: string,
+    input: {
+      amountMinor: string;
+      destinationId: string;
+      state: "requested" | "approved" | "rejected";
+      reason: string;
+    },
+  ) {
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
+    if (!/^\d+$/.test(input.amountMinor) || BigInt(input.amountMinor) <= 0n)
+      throw new PublicApplicationError(
+        "Withdrawal amount must be positive.",
+        "invalid_amount",
+        400,
+      );
+    const reason = input.reason.trim();
+    return this.uow.transaction(async () => {
+      const current = await this.withdrawals.findByIdForUpdate(id);
+      if (!current) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
+      if (current.state !== "requested")
+        throw new PublicApplicationError(
+          "Only requested withdrawals can be edited.",
+          "withdrawal_immutable",
+          409,
+        );
+      const policy = await this.policy.getActive();
+      const amountMinor = BigInt(input.amountMinor);
+      if (!policy.enabled)
+        throw new PublicApplicationError("Withdrawals are disabled.", "withdrawals_disabled", 409);
+      if (amountMinor < policy.minimumAmount.minorAmount)
+        throw new PublicApplicationError(
+          "Withdrawal amount is below the minimum.",
+          "invalid_amount",
+          400,
+        );
+      if (policy.maximumAmount && amountMinor > policy.maximumAmount.minorAmount)
+        throw new PublicApplicationError(
+          "Withdrawal amount exceeds the maximum.",
+          "invalid_amount",
+          400,
+        );
+      if (input.state === "rejected" && !reason)
+        throw new PublicApplicationError("A rejection reason is required.", "reason_required", 400);
+
+      const destination = await this.destinations.resolveForWithdrawal(
+        current.accountId,
+        input.destinationId,
+      );
+      const amount = Money.of(amountMinor, current.amount.currency);
+      const { feeMinor, netMinor } = calculateFee(
+        amountMinor,
+        (await this.feePolicy.getActive()).withdrawal,
+      );
+      const updated: Withdrawal = {
+        ...current,
+        amount,
+        fee: Money.of(feeMinor, "USD"),
+        netAmount: Money.of(netMinor, "USD"),
+        destination,
+        reason: reason || null,
+        updatedAt: new Date(),
+      };
+      if (amountMinor !== current.amount.minorAmount)
+        await this.funds.resize({
+          withdrawalId: id,
+          accountId: current.accountId,
+          amount,
+          correlationId: current.correlationId,
+        });
+      await this.withdrawals.updateMutable(updated);
+
+      const feeDelta = feeMinor - (current.fee?.minorAmount ?? 0n);
+      if (feeDelta !== 0n)
+        await this.treasury.create({
+          id: newId(),
+          direction: feeDelta > 0n ? "credit" : "debit",
+          amountMinor: feeDelta > 0n ? feeDelta : -feeDelta,
+          title: "Withdrawal fee correction",
+          note: `Withdrawal ${id}; fee changed from ${current.fee?.minorAmount ?? 0n} to ${feeMinor}`,
+          sourceKind: "withdrawal_fee_adjustment",
+          sourceId: id,
+          idempotencyKey: `withdrawal:${id}:fee-adjustment:${newId()}`,
+          actorId,
+          createdAt: new Date(),
+        });
+
+      if (input.state !== "requested") {
+        const target = input.state;
+        await this.withdrawals.transition(
+          id,
+          "requested",
+          target,
+          target === "rejected" ? reason : undefined,
+        );
+        if (target === "rejected")
+          await this.funds.releaseOrComplete({
+            withdrawalId: id,
+            accountId: current.accountId,
+            kind: "released",
+            correlationId: current.correlationId,
+          });
+        await this.outbox.append([
+          {
+            id: newId(),
+            name: target === "approved" ? "withdrawal.approved" : "withdrawal.rejected",
+            aggregateId: id,
+            correlationId: current.correlationId,
+            occurredAt: new Date(),
+            payload: { withdrawalId: id, updatedBy: actorId },
+          },
+        ]);
+        return { ...updated, state: target };
+      }
+      return updated;
+    });
+  }
+
+  async deleteByOperator(actorId: string, id: string) {
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
+    return this.uow.transaction(async () => {
+      const current = await this.withdrawals.findByIdForUpdate(id);
+      if (!current) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
+      if (!["requested", "rejected", "cancelled", "failed"].includes(current.state))
+        throw new PublicApplicationError(
+          "This withdrawal contains immutable payout history and cannot be deleted.",
+          "withdrawal_immutable",
+          409,
+        );
+      await this.funds.releaseOrComplete({
+        withdrawalId: id,
+        accountId: current.accountId,
+        kind: "released",
+        correlationId: current.correlationId,
+      });
+      await this.funds.remove(id, current.accountId);
+      if ((current.fee?.minorAmount ?? 0n) > 0n)
+        await this.treasury.create({
+          id: newId(),
+          direction: "debit",
+          amountMinor: current.fee!.minorAmount,
+          title: "Withdrawal fee reversal",
+          note: `Mutable withdrawal ${id} deleted before payout`,
+          sourceKind: "withdrawal_fee_reversal",
+          sourceId: id,
+          idempotencyKey: `withdrawal:${id}:fee-reversal`,
+          actorId,
+          createdAt: new Date(),
+        });
+      await this.withdrawals.deleteMutable(id);
+      return { id, deleted: true };
     });
   }
   private async operatorTransition(

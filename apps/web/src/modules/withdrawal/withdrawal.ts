@@ -34,6 +34,9 @@ export interface Withdrawal {
   id: string;
   accountId: string;
   amount: Money;
+  /** Gross requested/reserved amount, separate from immutable fee and net snapshots. */
+  fee?: Money;
+  netAmount?: Money;
   destination: WithdrawalDestinationSnapshot;
   state: WithdrawalState;
   idempotencyKey: string;
@@ -67,6 +70,8 @@ export interface WithdrawalRepository {
     limit?: number;
   }): Promise<readonly Withdrawal[]>;
   create(withdrawal: Withdrawal): Promise<void>;
+  updateMutable(withdrawal: Withdrawal): Promise<void>;
+  deleteMutable(id: string): Promise<void>;
   transition(
     id: string,
     from: WithdrawalState,

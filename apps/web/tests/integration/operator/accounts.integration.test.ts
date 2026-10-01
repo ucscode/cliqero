@@ -282,8 +282,8 @@ suite("operator account index PostgreSQL projection", () => {
       [destinationId, target.id],
     );
     await app.database.query(
-      `insert into withdrawal_capability.withdrawals(uuid,amount_minor,currency,saved_destination_id,destination_method,destination_method_name,destination_name,destination_details,idempotency_key,correlation_id,account_id)
-       values(gen_random_uuid(),500,'USD',$1,'bank_transfer','Bank Transfer','Private destination','[]'::jsonb,'history-withdrawal-key',gen_random_uuid(),(select id from identity_capability.accounts where uuid=$2))`,
+      `insert into withdrawal_capability.withdrawals(uuid,amount_minor,fee_minor,net_amount_minor,currency,saved_destination_id,destination_method,destination_method_name,destination_name,destination_details,idempotency_key,correlation_id,account_id)
+       values(gen_random_uuid(),500,0,500,'USD',$1,'bank_transfer','Bank Transfer','Private destination','[]'::jsonb,'history-withdrawal-key',gen_random_uuid(),(select id from identity_capability.accounts where uuid=$2))`,
       [destinationId, target.id],
     );
     await app.database.query(

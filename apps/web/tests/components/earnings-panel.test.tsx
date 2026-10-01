@@ -289,9 +289,9 @@ describe("earnings panel presentation", () => {
   });
 
   it("builds cursor pagination requests without losing the page size", () => {
-    expect(earningsEntriesUrl()).toBe("/api/earnings/entries?limit=25");
+    expect(earningsEntriesUrl()).toBe("/api/me/earnings/entries?limit=25");
     expect(earningsEntriesUrl("next-page-cursor")).toBe(
-      "/api/earnings/entries?limit=25&cursor=next-page-cursor",
+      "/api/me/earnings/entries?limit=25&cursor=next-page-cursor",
     );
   });
 });

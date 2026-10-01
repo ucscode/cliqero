@@ -57,8 +57,10 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
   if (pattern.startsWith("/api/listings/"))
     return { mode: "account", scope: "catalogue:manage", capability: "catalogue.manage" };
   if (pattern === "/api/me/listings") return { mode: "account", scope: "catalogue:read" };
+  if (pattern === "/api/me/earnings/entries") return { mode: "account", scope: "earnings:read" };
   if (pattern === "/api/wallet") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/transactions") return { mode: "account", scope: "wallet:read" };
+  if (pattern === "/api/wallet/transfers") return { mode: "account", scope: "wallet:transfer" };
   if (pattern === "/api/wallet/funding/prepare") return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/wallet/funding") return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/wallet/fund/:fundingId") return { mode: "account", scope: "wallet:read" };
@@ -84,7 +86,8 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
       scope: pattern.endsWith("/parent") ? "referrals:manage" : "referrals:read",
     };
   if (pattern.startsWith("/api/earnings")) return { mode: "account", scope: "earnings:read" };
-  if (pattern === "/api/withdrawals/policy") return { mode: "account", scope: "withdrawals:read" };
+  if (pattern === "/api/me/withdrawals/policy")
+    return { mode: "account", scope: "withdrawals:read" };
   if (pattern === "/api/withdrawal-methods") return { mode: "account", scope: "withdrawals:read" };
   if (pattern === "/api/withdrawal-destinations")
     return { mode: "account", scope: method === "GET" ? "withdrawals:read" : "withdrawals:create" };

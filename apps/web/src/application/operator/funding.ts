@@ -1,4 +1,48 @@
 import type { BankTransferConfirmationService } from "@/application/funding/bank-transfer/confirmation";
+import type { UnitOfWork } from "@/kernel/unit-of-work";
+import type { OperatorAuthorizationService } from "@/modules/identity/operator";
+import type { WalletService } from "@/application/wallet/service";
+import { newId } from "@/kernel/ids";
+import { PublicApplicationError } from "@/kernel/errors";
+
+export type AdministrativeFundingState = "confirmed" | "failed" | "blocked" | "cancelled";
+
+export interface AdministrativeFundingRepository {
+  lockAccount(accountId: string): Promise<void>;
+  create(input: {
+    id: string;
+    accountId: string;
+    amountMinor: bigint;
+    state: AdministrativeFundingState;
+    reason: string;
+    reference: string | null;
+    actorId: string;
+  }): Promise<void>;
+  findForUpdate(id: string): Promise<{
+    id: string;
+    accountId: string;
+    amountMinor: bigint;
+    state: AdministrativeFundingState;
+    reason: string;
+    reference: string | null;
+  } | null>;
+  update(input: {
+    id: string;
+    amountMinor: bigint;
+    state: AdministrativeFundingState;
+    reason: string;
+    reference: string | null;
+  }): Promise<void>;
+  delete(id: string): Promise<void>;
+  recordMovement(input: {
+    fundingId: string;
+    accountId: string;
+    amountMinor: bigint;
+    reason: string;
+    reference: string | null;
+    actorId: string;
+  }): Promise<void>;
+}
 
 export type OperatorFundingState =
   | "initialization_pending"
@@ -8,6 +52,7 @@ export type OperatorFundingState =
   | "confirmed"
   | "failed"
   | "blocked"
+  | "cancelled"
   | "expired"
   | "reconciliation_pending";
 
@@ -49,9 +94,13 @@ export type OperatorFundingEvent = {
 export type OperatorFundingSummary = {
   id: string;
   account: { id: string; username: string; email: string | null };
-  provider: string;
-  providerReference: string;
+  origin: "provider" | "administrative";
+  provider: string | null;
+  providerReference: string | null;
   providerTransactionId: string | null;
+  reason: string | null;
+  administrativeReference: string | null;
+  createdBy: string | null;
   canonicalAmountMinor: string;
   canonicalCurrency: "USD";
   collectionAmountMinor: string;
@@ -114,6 +163,12 @@ export class OperatorFundingService {
   constructor(
     private readonly reader: OperatorFundingReader,
     private readonly bankTransferConfirmation: BankTransferConfirmationService,
+    private readonly administration?: {
+      repository: AdministrativeFundingRepository;
+      operators: OperatorAuthorizationService;
+      wallet: Pick<WalletService, "summary">;
+      uow: UnitOfWork;
+    },
   ) {}
 
   list(input: OperatorFundingListInput) {
@@ -126,5 +181,165 @@ export class OperatorFundingService {
 
   confirmBankTransfer(actorId: string, fundingId: string) {
     return this.bankTransferConfirmation.confirm(actorId, fundingId);
+  }
+
+  async createAdministrative(
+    actorId: string,
+    input: {
+      accountId: string;
+      amountMinor: string;
+      state: AdministrativeFundingState;
+      reason: string;
+      reference?: string | null;
+    },
+  ) {
+    const { repository, operators, uow } = this.requireAdministration();
+    await operators.requireCapability(actorId, "finance.manage");
+    const amountMinor = this.positiveMinor(input.amountMinor);
+    const reason = this.requiredReason(input.reason);
+    const reference = this.normalizeReference(input.reference);
+    const id = newId();
+    return uow.transaction(async () => {
+      await repository.lockAccount(input.accountId);
+      await repository.create({ ...input, id, amountMinor, reason, reference, actorId });
+      if (input.state === "confirmed")
+        await repository.recordMovement({
+          fundingId: id,
+          accountId: input.accountId,
+          amountMinor,
+          reason,
+          reference,
+          actorId,
+        });
+      return {
+        id,
+        accountId: input.accountId,
+        amountMinor: amountMinor.toString(),
+        state: input.state,
+        reason,
+        reference,
+        createdBy: actorId,
+      };
+    });
+  }
+
+  async updateAdministrative(
+    actorId: string,
+    id: string,
+    input: {
+      amountMinor: string;
+      state: AdministrativeFundingState;
+      reason: string;
+      reference?: string | null;
+    },
+  ) {
+    const { repository, operators, wallet, uow } = this.requireAdministration();
+    await operators.requireCapability(actorId, "finance.manage");
+    const amountMinor = this.positiveMinor(input.amountMinor);
+    const reason = this.requiredReason(input.reason);
+    const reference = this.normalizeReference(input.reference);
+    return uow.transaction(async () => {
+      const current = await repository.findForUpdate(id);
+      if (!current) throw new Error("Administrative funding not found");
+      await repository.lockAccount(current.accountId);
+      const currentEffective = current.state === "confirmed" ? current.amountMinor : 0n;
+      const nextEffective = input.state === "confirmed" ? amountMinor : 0n;
+      const delta = nextEffective - currentEffective;
+      if (delta < 0n && (await wallet.summary(current.accountId)).available.minorAmount < -delta)
+        throw new PublicApplicationError(
+          "This funding cannot be reduced because its balance has already been consumed.",
+          "funding_balance_consumed",
+          409,
+        );
+      await repository.update({ id, amountMinor, state: input.state, reason, reference });
+      if (delta !== 0n)
+        await repository.recordMovement({
+          fundingId: id,
+          accountId: current.accountId,
+          amountMinor: delta,
+          reason: delta > 0n ? reason : `Funding correction: ${reason}`,
+          reference,
+          actorId,
+        });
+      return {
+        ...current,
+        amountMinor: amountMinor.toString(),
+        state: input.state,
+        reason,
+        reference,
+      };
+    });
+  }
+
+  async deleteAdministrative(actorId: string, id: string) {
+    const { repository, operators, wallet, uow } = this.requireAdministration();
+    await operators.requireCapability(actorId, "finance.manage");
+    return uow.transaction(async () => {
+      const current = await repository.findForUpdate(id);
+      if (!current) throw new Error("Administrative funding not found");
+      await repository.lockAccount(current.accountId);
+      if (
+        current.state === "confirmed" &&
+        (await wallet.summary(current.accountId)).available.minorAmount < current.amountMinor
+      )
+        throw new PublicApplicationError(
+          "This funding cannot be deleted because its balance has already been consumed.",
+          "funding_balance_consumed",
+          409,
+        );
+      if (current.state === "confirmed")
+        await repository.recordMovement({
+          fundingId: id,
+          accountId: current.accountId,
+          amountMinor: -current.amountMinor,
+          reason: `Funding deleted: ${current.reason}`,
+          reference: current.reference,
+          actorId,
+        });
+      await repository.delete(id);
+      return { id, deleted: true };
+    });
+  }
+
+  async bulkDeleteAdministrative(actorId: string, ids: readonly string[]) {
+    await this.requireAdministration().operators.requireCapability(actorId, "finance.manage");
+    const results = [];
+    for (const id of [...new Set(ids)]) {
+      try {
+        await this.deleteAdministrative(actorId, id);
+        results.push({ id, deleted: true, error: null });
+      } catch (error) {
+        results.push({
+          id,
+          deleted: false,
+          error: error instanceof Error ? error.message : "Funding could not be deleted.",
+        });
+      }
+    }
+    return { results };
+  }
+
+  private requireAdministration() {
+    if (!this.administration) throw new Error("Funding administration is unavailable");
+    return this.administration;
+  }
+
+  private positiveMinor(value: string) {
+    if (!/^\d+$/.test(value) || BigInt(value) <= 0n)
+      throw new Error("Funding amount must be positive.");
+    return BigInt(value);
+  }
+
+  private requiredReason(value: string) {
+    const reason = value.trim();
+    if (!reason) throw new Error("A reason is required for administrative funding.");
+    return reason;
+  }
+
+  private normalizeReference(value?: string | null) {
+    const reference = value?.trim() || null;
+    if (reference && reference.length > 200)
+      throw new Error("Reference must be 200 characters or fewer.");
+    return reference;
   }
 }

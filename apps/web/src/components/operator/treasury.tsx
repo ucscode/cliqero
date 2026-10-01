@@ -136,6 +136,14 @@ export function OperatorTreasuryPage() {
       render: (entry) =>
         entry.source?.kind === "distribution" ? (
           <Link href={`/operator/distributions/${entry.source.id}`}>Distribution</Link>
+        ) : entry.source?.kind === "withdrawal_fee" ? (
+          <Link href={`/operator/withdrawals/${entry.source.id}`}>Withdrawal fee</Link>
+        ) : entry.source?.kind === "wallet_transfer" ? (
+          <span className="break-all">Wallet transfer fee · {entry.source.id}</span>
+        ) : entry.source ? (
+          <span>
+            {entry.source.kind.replaceAll("_", " ")} · {entry.source.id}
+          </span>
         ) : entry.actor ? (
           `@${entry.actor.username}`
         ) : (
@@ -349,7 +357,6 @@ export function OperatorTreasuryPage() {
       items={collection.items}
       columns={columns}
       getRowKey={(entry) => entry.id}
-      selection={{ labelForItem: (entry) => `treasury entry ${entry.id}` }}
       actions={actions}
       actionLabel={(entry) => `Actions for treasury entry ${entry.id}`}
       loading={collection.loading}

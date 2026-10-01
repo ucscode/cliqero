@@ -71,6 +71,7 @@ export function grantableScopes(value: AuthenticatedApiPrincipal): Set<string> {
     "catalogue:read",
     "wallet:read",
     "wallet:fund",
+    "wallet:transfer",
     "checkout:create",
     "purchases:read",
     "referrals:read",

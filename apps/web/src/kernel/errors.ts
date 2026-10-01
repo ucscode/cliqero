@@ -5,8 +5,12 @@ export class DomainInvariantError extends Error {
   }
 }
 
+/** Stable across duplicated bundles so only explicitly branded errors are public. */
+export const PUBLIC_APPLICATION_ERROR = Symbol.for("cliqero.public-application-error");
+
 /** A deliberate, stable error that may cross an application HTTP boundary. */
 export class PublicApplicationError extends Error {
+  readonly [PUBLIC_APPLICATION_ERROR] = true;
   constructor(
     message: string,
     readonly code: string,

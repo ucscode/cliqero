@@ -18,10 +18,11 @@ describe("API-key permission checkbox list", () => {
     expect(html).toContain("Read catalogue data available to the account.");
     expect(html).toContain("Catalogue management");
     expect(html).toContain("wallet:read");
+    expect(html).toContain("wallet:transfer");
     expect(html).toContain("reviews:moderate");
-    expect(html.match(/type="checkbox"/g)).toHaveLength(26);
+    expect(html.match(/type="checkbox"/g)).toHaveLength(27);
     expect(html.match(/checked=""/g)).toHaveLength(1);
-    expect(html.match(/disabled=""/g)).toHaveLength(24);
+    expect(html.match(/disabled=""/g)).toHaveLength(25);
     expect(html).toContain("Unavailable for selected account.");
     expect(html).not.toContain("Search");
     expect(html).not.toContain("combobox");
@@ -39,7 +40,7 @@ describe("API-key permission checkbox list", () => {
     );
     expect(html).toContain("Select an account to check which of these permissions it may receive.");
     expect(html).toContain("catalogue:manage");
-    expect(html.match(/type="checkbox"/g)).toHaveLength(26);
-    expect(html.match(/disabled=""/g)).toHaveLength(26);
+    expect(html.match(/type="checkbox"/g)).toHaveLength(27);
+    expect(html.match(/disabled=""/g)).toHaveLength(27);
   });
 });

@@ -96,7 +96,10 @@ export async function policy(request: Request) {
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   try {
     return Response.json(
-      presentWithdrawalPolicy(await getContainer().withdrawalPolicy.getActive()),
+      presentWithdrawalPolicy(
+        await getContainer().withdrawalPolicy.getActive(),
+        (await getContainer().feePolicy.getActive()).withdrawal,
+      ),
     );
   } catch (error) {
     return apiError(error);

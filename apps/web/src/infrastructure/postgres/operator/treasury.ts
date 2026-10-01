@@ -70,9 +70,8 @@ export class OperatorTreasuryService {
     const conditions = [
       `($1::text is null or e.uuid::text=$1 or e.title ilike '%'||$1||'%' escape '\\' or e.note ilike '%'||$1||'%' escape '\\' or e.source_id::text=$1)`,
       `($2::text is null or e.direction=$2)`,
-      `($3::text is null or ($3::text='distribution' and e.source_kind='distribution') or ($3::text is null and e.source_kind is null))`,
+      `($3::text is null or ($3::text='automatic' and e.source_kind is not null) or ($3::text='manual' and e.source_kind is null))`,
     ];
-    if (input.source === "manual") conditions[2] = "e.source_kind is null";
     const cursorClause = cursor
       ? `and (${orderBy},e.id) ${direction === "asc" ? ">" : "<"} ($4::${cursorType},$5::bigint)`
       : "";

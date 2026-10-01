@@ -57,6 +57,7 @@ export function OperatorShell({
     | "purchases"
     | "distributions"
     | "earnings"
+    | "adjustments"
     | "withdrawals"
     | "treasury"
     | "blog"
@@ -157,6 +158,12 @@ export function OperatorShell({
           key: "earnings",
           href: "/operator/earnings",
           label: "Earnings",
+          visible: hasCapability(capabilities, "finance.read"),
+        },
+        {
+          key: "adjustments",
+          href: "/operator/earnings-adjustments",
+          label: "Earning adjustments",
           visible: hasCapability(capabilities, "finance.read"),
         },
         {

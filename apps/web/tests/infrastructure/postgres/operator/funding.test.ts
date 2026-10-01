@@ -64,13 +64,15 @@ describe("PostgresOperatorFundingReader", () => {
       },
     });
     const first = await reader.list({ limit: 1, sort: "amount", direction: "asc" });
-    expect(statements[0]).toContain("order by f.canonical_amount_minor asc,f.id asc");
+    expect(statements[0]).toContain("order by q.canonical_amount_minor asc,q.cursor_id asc");
     expect(first.nextCursor).toBeTruthy();
     await expect(
       reader.list({ limit: 1, sort: "created", direction: "desc", cursor: first.nextCursor! }),
     ).rejects.toThrow("Invalid or stale pagination cursor");
     await reader.list({ limit: 1, sort: "amount", direction: "asc", cursor: first.nextCursor! });
-    expect(statements[1]).toContain("(f.canonical_amount_minor,f.id) > ($4::bigint,$5::bigint)");
+    expect(statements[1]).toContain(
+      "(q.canonical_amount_minor,q.cursor_id) > ($4::bigint,$5::bigint)",
+    );
   });
 
   it("does not expose access codes or provider payloads in detail", async () => {

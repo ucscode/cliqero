@@ -201,6 +201,7 @@ suite("withdrawal lifecycle", () => {
     });
     const firstAccount = first.destination.fields.find((field) => field.name === "account_number");
     expect(firstAccount?.value).toBe("0123456789");
+    await app.withdrawals.approve(seller.id, first.id);
     await expect(
       app.database.query(
         `update withdrawal_capability.withdrawals set destination_name='mutated' where uuid=$1`,
@@ -418,6 +419,106 @@ suite("withdrawal lifecycle", () => {
       [withdrawal.id],
     );
     expect(events.rows[0]?.kind).toBe("released");
+  });
+  it("creates, edits, transitions, and deletes mutable operator withdrawals atomically", async () => {
+    const { seller, destinationId } = await setup();
+    const initialAvailable = await app.fundsReservation.available(seller.id, "USD");
+    const secondDestination = await app.withdrawalDestinations.create(seller.id, {
+      method: "bank_ng",
+      name: "Replacement account",
+      values: {
+        bank_name: "Replacement bank",
+        account_number: "9988776655",
+        account_name: "Seller",
+      },
+    });
+
+    const treasuryAtStart = (await app.treasuryRepository.summary()).balanceMinor;
+    const created = await app.withdrawals.requestByOperator(seller.id, {
+      accountId: seller.id,
+      amountMinor: "5000",
+      destinationId,
+      idempotencyKey: newId(),
+    });
+    expect(created).toMatchObject({ state: "requested", amount: { minorAmount: 5000n } });
+    const initialFee = created.fee!.minorAmount;
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initialAvailable - 5000n);
+
+    const edited = await app.withdrawals.updateByOperator(seller.id, created.id, {
+      amountMinor: "4000",
+      destinationId: secondDestination.id,
+      state: "requested",
+      reason: "Corrected request details",
+    });
+    expect(edited).toMatchObject({
+      amount: { minorAmount: 4000n },
+      destination: { savedDestinationId: secondDestination.id },
+      reason: "Corrected request details",
+    });
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initialAvailable - 4000n);
+    expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(4000n);
+    expect((await app.treasuryRepository.summary()).balanceMinor - treasuryAtStart).toBe(
+      edited.fee!.minorAmount,
+    );
+    expect(edited.fee!.minorAmount).not.toBe(initialFee);
+
+    const approved = await app.withdrawals.updateByOperator(seller.id, created.id, {
+      amountMinor: "4000",
+      destinationId: secondDestination.id,
+      state: "approved",
+      reason: "Approved after review",
+    });
+    expect(approved.state).toBe("approved");
+    await expect(
+      app.withdrawals.updateByOperator(seller.id, created.id, {
+        amountMinor: "3000",
+        destinationId: secondDestination.id,
+        state: "requested",
+        reason: "",
+      }),
+    ).rejects.toThrow("Only requested withdrawals can be edited");
+    await expect(app.withdrawals.deleteByOperator(seller.id, created.id)).rejects.toThrow(
+      "immutable payout history",
+    );
+
+    const deletable = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 2000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    const treasuryBeforeDelete = (await app.treasuryRepository.summary()).balanceMinor;
+    await app.withdrawals.deleteByOperator(seller.id, deletable.id);
+    expect(await app.withdrawalRepository.findById(deletable.id)).toBeNull();
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initialAvailable - 4000n);
+    const reservation = await app.database.query<{ count: string }>(
+      `select count(*)::text count from ledger_capability.withdrawal_reservations
+        where withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)`,
+      [deletable.id],
+    );
+    expect(reservation.rows[0]?.count).toBe("0");
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(
+      treasuryBeforeDelete - (deletable.fee?.minorAmount ?? 0n),
+    );
+
+    const completed = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.approve(seller.id, completed.id);
+    await app.withdrawals.complete(seller.id, completed.id, { externalReference: "payout-proof" });
+    await expect(app.withdrawals.deleteByOperator(seller.id, completed.id)).rejects.toThrow(
+      "immutable payout history",
+    );
+    expect((await app.withdrawalRepository.findById(completed.id))?.externalReference).toBe(
+      "payout-proof",
+    );
   });
   it("reflects reserved, released, and completed amounts in withdrawable earnings", async () => {
     const { seller, destinationId } = await setup();

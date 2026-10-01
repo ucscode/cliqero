@@ -10,12 +10,19 @@ import type {
 export class PostgresWalletRepository implements WalletRepository {
   constructor(private sql: QueryExecutor) {}
   async lockAccount(id: string) {
-    await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,7331))`, [id]);
+    await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [
+      `wallet-transfer:${id}`,
+    ]);
   }
   async summary(accountId: string) {
     const r = (
       await this.sql.query<any>(
-        `select coalesce((select sum(amount_minor) from wallet_capability.credits where account_id=(select id from identity_capability.accounts where uuid=$1) and state='available'),0)-coalesce((select sum(amount_minor) from wallet_capability.debits where account_id=(select id from identity_capability.accounts where uuid=$1)),0) available,coalesce((select sum(amount_minor) from wallet_capability.credits where account_id=(select id from identity_capability.accounts where uuid=$1) and state='pending'),0) pending`,
+        `select coalesce((select sum(amount_minor) from wallet_capability.credits where account_id=(select id from identity_capability.accounts where uuid=$1) and state='available'),0)
+           + coalesce((select sum(amount_minor) from wallet_capability.transfer_entries where wallet='funding' and direction='credit' and correlation_id in (select correlation_id from wallet_capability.transfers where account_id=(select id from identity_capability.accounts where uuid=$1))),0)
+           + coalesce((select sum(amount_minor) from wallet_capability.funding_adjustments where account_id=(select id from identity_capability.accounts where uuid=$1)),0)
+           - coalesce((select sum(amount_minor) from wallet_capability.debits where account_id=(select id from identity_capability.accounts where uuid=$1)),0)
+           - coalesce((select sum(amount_minor) from wallet_capability.transfer_entries where wallet='funding' and direction='debit' and correlation_id in (select correlation_id from wallet_capability.transfers where account_id=(select id from identity_capability.accounts where uuid=$1))),0) available,
+           coalesce((select sum(amount_minor) from wallet_capability.credits where account_id=(select id from identity_capability.accounts where uuid=$1) and state='pending'),0) pending`,
         [accountId],
       )
     ).rows[0];
@@ -94,6 +101,12 @@ export class PostgresWalletRepository implements WalletRepository {
          select 'purchase_debit',d.uuid,c.uuid,d.amount_minor,d.currency,'complete',d.created_at,null::text,null::text
            from wallet_capability.debits d join checkout_capability.checkouts c on c.id=d.checkout_id
           where d.account_id=(select id from identity_capability.accounts where uuid=$1)
+         union all
+         select 'funding_credit',f.uuid,f.uuid,f.amount_minor,'USD',
+                case when f.state='confirmed' then 'available' else 'pending' end,f.created_at,
+                'Administrative funding',f.reference
+           from funding_capability.administrative_fundings f
+          where f.account_id=(select id from identity_capability.accounts where uuid=$1)
           order by created_at desc limit $2`,
         [accountId, Math.max(1, Math.min(limit, 50))],
       )

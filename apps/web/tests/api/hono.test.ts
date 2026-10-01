@@ -846,12 +846,11 @@ describe("Hono API foundation", () => {
     expect(paths["/api/payments"].get.tags).toEqual(["Payments"]);
     expect(paths["/api/payments/{paymentId}/reconcile"].post).toBeDefined();
     expect(paths["/api/payments/events"].get).toBeDefined();
-    expect(Object.keys(paths).filter((path) => path.startsWith("/api/operator/"))).toEqual([
-      "/api/operator/purchases",
-      "/api/operator/purchases/{purchaseId}",
-    ]);
-    expect(paths["/api/operator/purchases"].get).toBeDefined();
-    expect(paths["/api/operator/purchases/{purchaseId}"].get).toBeDefined();
+    expect(Object.keys(paths).filter((path) => path.startsWith("/api/operator/"))).toEqual([]);
+    const internalOnlyApi = await appWith().fetch(
+      new Request("http://localhost/api/operator/purchases"),
+    );
+    expect(internalOnlyApi.status).toBe(404);
     expect(paths).not.toHaveProperty("/api/payments/{provider}/ipn");
     expect(paths["/api/accounts"].post).toMatchObject({
       "x-authentication-mode": "mixed",
@@ -1684,6 +1683,10 @@ describe("Hono API foundation", () => {
       mode: "account",
       scope: "payments:read",
       capability: "finance.read",
+    });
+    expect(getLegacyRouteAccess("/api/me/earnings/entries", "GET")).toEqual({
+      mode: "account",
+      scope: "earnings:read",
     });
     expect(getLegacyRouteAccess("/api/listings", "GET")).toEqual({
       mode: "anonymous",

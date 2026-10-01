@@ -6,7 +6,6 @@ import { Money } from "@/modules/money/money";
 const policySchema = z
   .object({
     enabled: z.boolean(),
-    currency: z.string().regex(/^[A-Z]{3}$/, "must be an uppercase 3-letter currency code"),
     minimum_amount_minor: z.number().int().positive().safe(),
     maximum_amount_minor: z.number().int().positive().safe().nullable(),
   })
@@ -35,11 +34,11 @@ export function withdrawalPolicyFromYaml(value: unknown): WithdrawalPolicy {
   const policy = parsed.data;
   return {
     enabled: policy.enabled,
-    minimumAmount: Money.of(BigInt(policy.minimum_amount_minor), policy.currency),
+    minimumAmount: Money.of(BigInt(policy.minimum_amount_minor), "USD"),
     maximumAmount:
       policy.maximum_amount_minor === null
         ? null
-        : Money.of(BigInt(policy.maximum_amount_minor), policy.currency),
+        : Money.of(BigInt(policy.maximum_amount_minor), "USD"),
   };
 }
 

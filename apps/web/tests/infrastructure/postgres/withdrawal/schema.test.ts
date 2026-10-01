@@ -50,4 +50,11 @@ describe("canonical withdrawal schema", () => {
       /ADD CONSTRAINT withdrawals_idempotency_key_key UNIQUE \(idempotency_key\)/,
     );
   });
+
+  it("stores immutable gross, fee, and net USD-minor snapshots on each withdrawal", () => {
+    expect(schema).toContain("ADD COLUMN fee_minor bigint NOT NULL DEFAULT 0");
+    expect(schema).toContain("ADD COLUMN net_amount_minor bigint NOT NULL DEFAULT 0");
+    expect(schema).toContain("withdrawals_fee_amounts_valid CHECK");
+    expect(schema).toContain("amount_minor = fee_minor + net_amount_minor");
+  });
 });

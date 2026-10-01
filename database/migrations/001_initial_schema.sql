@@ -276,7 +276,9 @@ CREATE FUNCTION withdrawal_capability.prevent_destination_snapshot_change() RETU
     AS $$ begin
   if row(new.saved_destination_id,new.destination_method,new.destination_method_name,new.destination_name,new.destination_details)
      is distinct from row(old.saved_destination_id,old.destination_method,old.destination_method_name,old.destination_name,old.destination_details) then
-    raise exception 'Withdrawal destination snapshots are immutable' using errcode='55000';
+    if old.state <> 'requested' or old.external_reference is not null or old.completed_at is not null then
+      raise exception 'Withdrawal destination snapshots are immutable after request approval or payout evidence' using errcode='55000';
+    end if;
   end if;
   return new;
 end $$;
@@ -3719,5 +3721,157 @@ VALUES (true, '00000000-0000-4000-8000-000000000001');
 
 INSERT INTO referral_capability.commission_policy (singleton, rates_basis_points)
 VALUES (true, '{}');
+
+-- Append-only user earnings corrections; amounts are signed canonical USD minor units.
+CREATE TABLE ledger_capability.earnings_adjustments (
+    uuid uuid DEFAULT gen_random_uuid() NOT NULL,
+    account_id bigint NOT NULL,
+    amount_minor bigint NOT NULL,
+    reason text NOT NULL,
+    reference text,
+    created_by bigint NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT earnings_adjustments_nonzero CHECK (amount_minor <> 0),
+    CONSTRAINT earnings_adjustments_reason_nonempty CHECK (length(btrim(reason)) > 0),
+    CONSTRAINT earnings_adjustments_uuid_unique UNIQUE (uuid)
+);
+CREATE INDEX earnings_adjustments_account_idx
+  ON ledger_capability.earnings_adjustments (account_id, created_at DESC, id DESC);
+ALTER TABLE ledger_capability.earnings_adjustments
+  ADD CONSTRAINT earnings_adjustments_account_fk
+    FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id),
+  ADD CONSTRAINT earnings_adjustments_actor_fk
+    FOREIGN KEY (created_by) REFERENCES identity_capability.accounts(id);
+CREATE TRIGGER earnings_adjustments_append_only
+  BEFORE UPDATE OR DELETE ON ledger_capability.earnings_adjustments
+  FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
+COMMENT ON TABLE ledger_capability.earnings_adjustments IS
+  'Append-only signed canonical USD earnings adjustments; corrections require opposite entries.';
+
+-- A transfer operation and its funding-wallet legs share one stable correlation ID.
+CREATE TABLE wallet_capability.transfers (
+    uuid uuid NOT NULL,
+    account_id bigint NOT NULL,
+    from_wallet text NOT NULL,
+    to_wallet text NOT NULL,
+    gross_minor bigint NOT NULL,
+    fee_minor bigint NOT NULL,
+    net_minor bigint NOT NULL,
+    idempotency_key text NOT NULL,
+    correlation_id uuid NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT wallet_transfers_direction_valid CHECK (
+      (from_wallet = 'funding' AND to_wallet = 'earnings') OR
+      (from_wallet = 'earnings' AND to_wallet = 'funding')
+    ),
+    CONSTRAINT wallet_transfers_amounts_valid CHECK (
+      gross_minor > 0 AND fee_minor >= 0 AND net_minor >= 0 AND gross_minor = fee_minor + net_minor
+    ),
+    CONSTRAINT wallet_transfers_uuid_unique UNIQUE (uuid),
+    CONSTRAINT wallet_transfers_idempotency_unique UNIQUE (account_id, idempotency_key),
+    CONSTRAINT wallet_transfers_correlation_unique UNIQUE (correlation_id)
+);
+CREATE TABLE wallet_capability.transfer_entries (
+    uuid uuid NOT NULL,
+    transfer_id bigint NOT NULL,
+    wallet text NOT NULL,
+    direction text NOT NULL,
+    amount_minor bigint NOT NULL,
+    idempotency_key text NOT NULL,
+    correlation_id uuid NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT wallet_transfer_entries_wallet_valid CHECK (wallet IN ('funding','earnings')),
+    CONSTRAINT wallet_transfer_entries_direction_valid CHECK (direction IN ('debit','credit')),
+    CONSTRAINT wallet_transfer_entries_amount_positive CHECK (amount_minor > 0),
+    CONSTRAINT wallet_transfer_entries_uuid_unique UNIQUE (uuid),
+    CONSTRAINT wallet_transfer_entries_idempotency_unique UNIQUE (idempotency_key)
+);
+ALTER TABLE wallet_capability.transfers
+  ADD CONSTRAINT wallet_transfers_account_fk
+    FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id);
+ALTER TABLE wallet_capability.transfer_entries
+  ADD CONSTRAINT wallet_transfer_entries_transfer_fk
+    FOREIGN KEY (transfer_id) REFERENCES wallet_capability.transfers(id);
+CREATE INDEX wallet_transfer_entries_correlation_idx
+  ON wallet_capability.transfer_entries (correlation_id);
+CREATE TRIGGER wallet_transfers_append_only
+  BEFORE UPDATE OR DELETE ON wallet_capability.transfers
+  FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
+CREATE TRIGGER wallet_transfer_entries_append_only
+  BEFORE UPDATE OR DELETE ON wallet_capability.transfer_entries
+  FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
+
+ALTER TABLE withdrawal_capability.withdrawals
+  ADD COLUMN fee_minor bigint NOT NULL DEFAULT 0,
+  ADD COLUMN net_amount_minor bigint NOT NULL DEFAULT 0,
+  ADD CONSTRAINT withdrawals_fee_amounts_valid CHECK (
+    fee_minor >= 0 AND net_amount_minor >= 0 AND amount_minor = fee_minor + net_amount_minor
+  );
+UPDATE withdrawal_capability.withdrawals SET net_amount_minor=amount_minor;
+COMMENT ON COLUMN withdrawal_capability.withdrawals.fee_minor IS
+  'Immutable fee snapshot in canonical USD minor units, calculated at request time.';
+COMMENT ON COLUMN withdrawal_capability.withdrawals.net_amount_minor IS
+  'Immutable payout amount after the fee snapshot; amount_minor remains the gross reservation.';
+
+-- Administrative funding is distinct from provider transactions. Its balance
+-- effects are recorded as signed append-only movements so edits/deletes can be
+-- reconciled without rewriting posted wallet facts or inventing a provider.
+CREATE TABLE funding_capability.administrative_fundings (
+    uuid uuid NOT NULL,
+    account_id bigint NOT NULL,
+    amount_minor bigint NOT NULL,
+    state text NOT NULL DEFAULT 'confirmed',
+    reason text NOT NULL,
+    reference text,
+    created_by bigint NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT administrative_fundings_uuid_unique UNIQUE (uuid),
+    CONSTRAINT administrative_fundings_amount_positive CHECK (amount_minor > 0),
+    CONSTRAINT administrative_fundings_state_valid CHECK (state IN ('confirmed','failed','blocked','cancelled')),
+    CONSTRAINT administrative_fundings_reason_nonempty CHECK (length(btrim(reason)) > 0)
+);
+ALTER TABLE funding_capability.administrative_fundings
+  ADD CONSTRAINT administrative_fundings_account_fk
+    FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id),
+  ADD CONSTRAINT administrative_fundings_actor_fk
+    FOREIGN KEY (created_by) REFERENCES identity_capability.accounts(id);
+CREATE INDEX administrative_fundings_account_idx
+  ON funding_capability.administrative_fundings (account_id, created_at DESC, id DESC);
+
+CREATE TABLE wallet_capability.funding_adjustments (
+    uuid uuid NOT NULL,
+    funding_id uuid NOT NULL,
+    account_id bigint NOT NULL,
+    amount_minor bigint NOT NULL,
+    reason text NOT NULL,
+    reference text,
+    idempotency_key text NOT NULL,
+    actor_id bigint NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT funding_adjustments_uuid_unique UNIQUE (uuid),
+    CONSTRAINT funding_adjustments_idempotency_unique UNIQUE (idempotency_key),
+    CONSTRAINT funding_adjustments_amount_nonzero CHECK (amount_minor <> 0),
+    CONSTRAINT funding_adjustments_reason_nonempty CHECK (length(btrim(reason)) > 0)
+);
+ALTER TABLE wallet_capability.funding_adjustments
+  ADD CONSTRAINT funding_adjustments_account_fk
+    FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id),
+  ADD CONSTRAINT funding_adjustments_actor_fk
+    FOREIGN KEY (actor_id) REFERENCES identity_capability.accounts(id);
+CREATE INDEX funding_adjustments_account_idx
+  ON wallet_capability.funding_adjustments (account_id, created_at DESC, id DESC);
+CREATE TRIGGER funding_adjustments_append_only
+  BEFORE UPDATE OR DELETE ON wallet_capability.funding_adjustments
+  FOR EACH ROW EXECUTE FUNCTION wallet_capability.prevent_movement_mutation();
+COMMENT ON TABLE funding_capability.administrative_fundings IS
+  'Operator-created internal funding records; never represent external provider evidence.';
+COMMENT ON TABLE wallet_capability.funding_adjustments IS
+  'Append-only signed USD funding-balance adjustments for administrative funding; corrections use compensating movements.';
 
 -- End of canonical PostgreSQL baseline.

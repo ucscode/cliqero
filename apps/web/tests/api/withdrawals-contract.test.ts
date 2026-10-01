@@ -82,18 +82,23 @@ describe("withdrawal API contract", () => {
 
   it("exposes the authoritative withdrawal policy and scope", () => {
     expect(
-      presentWithdrawalPolicy({
-        enabled: true,
-        minimumAmount: Money.of(1000n, "USD"),
-        maximumAmount: null,
-      }),
+      presentWithdrawalPolicy(
+        {
+          enabled: true,
+          minimumAmount: Money.of(1000n, "USD"),
+          maximumAmount: null,
+        },
+        { basisPoints: 500n, maximumMinor: 2000n },
+      ),
     ).toEqual({
       enabled: true,
       minimum_amount_minor: "1000",
       maximum_amount_minor: null,
       currency: "USD",
+      fee_basis_points: "500",
+      fee_maximum_amount_minor: "2000",
     });
-    expect(getLegacyRouteAccess("/api/withdrawals/policy", "GET")).toEqual({
+    expect(getLegacyRouteAccess("/api/me/withdrawals/policy", "GET")).toEqual({
       mode: "account",
       scope: "withdrawals:read",
     });

@@ -12,7 +12,7 @@ describe("withdrawal request UI contract", () => {
     expect(source).toContain("destination_id: destination");
     expect(source).toContain("amount_minor: amountMinor");
     expect(source).toContain("currency,");
-    expect(source).toContain("No payout method is available for withdrawals.");
+    expect(source).toContain("Add a payout method before requesting a withdrawal.");
     expect(source).toContain("/dashboard/payout-methods/new");
     expect(source).toContain("Add payout method");
     expect(source).toContain("Payout method</Label>");
@@ -59,6 +59,16 @@ describe("withdrawal request UI contract", () => {
   it("confirms a withdrawal request without exposing internal reviewer roles", () => {
     expect(source).toContain("Withdrawal request received. We’ll update its status after review.");
     expect(source).not.toContain("Payment follows operator review");
+  });
+
+  it("previews the server-configured fee and net payout using minor-unit arithmetic", () => {
+    expect(source).toContain("policy.fee_basis_points");
+    expect(source).toContain("policy.fee_maximum_amount_minor");
+    expect(source).toContain("Withdrawal amount");
+    expect(source).toContain("Platform fee");
+    expect(source).toContain("You receive");
+    expect(source).toContain("BigInt");
+    expect(source).not.toMatch(/Number\(|parseInt\(/);
   });
 
   it("loads initially and refreshes only after explicit or successful user actions", () => {

@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   apiFetch,
+  parseUsdMinor,
   type OperatorFundingDetail as FundingDetail,
   type OperatorFundingPage,
   type OperatorFundingState,
@@ -31,6 +33,7 @@ const states: Array<{ value: OperatorFundingState; label: string }> = [
   { value: "confirmed", label: "Confirmed" },
   { value: "failed", label: "Failed" },
   { value: "blocked", label: "Blocked" },
+  { value: "cancelled", label: "Cancelled" },
   { value: "expired", label: "Expired" },
   { value: "reconciliation_pending", label: "Reconciliation pending" },
 ];
@@ -45,6 +48,214 @@ function formatDate(value: string | null) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Funding data is temporarily unavailable.";
+}
+
+type FundingAccountOption = { id: string; username: string; email: string | null };
+type AdministrativeFundingState = "confirmed" | "failed" | "blocked" | "cancelled";
+const administrativeStates: AdministrativeFundingState[] = [
+  "confirmed",
+  "failed",
+  "blocked",
+  "cancelled",
+];
+
+function majorFromMinor(value: string) {
+  const amount = BigInt(value);
+  const whole = amount / 100n;
+  const fraction = (amount % 100n).toString().padStart(2, "0");
+  return `${whole}.${fraction}`;
+}
+
+export function AdministrativeFundingForm({ fundingId }: { fundingId?: string }) {
+  const router = useRouter();
+  const [accounts, setAccounts] = useState<FundingAccountOption[]>([]);
+  const [accountSearch, setAccountSearch] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [state, setState] = useState<AdministrativeFundingState>("confirmed");
+  const [reason, setReason] = useState("");
+  const [reference, setReference] = useState("");
+  const [loading, setLoading] = useState(Boolean(fundingId));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      fundingId ? apiFetch<FundingDetail>(`/api/funding/${fundingId}`) : Promise.resolve(null),
+      apiFetch<{ items: FundingAccountOption[] }>("/internal/funding/accounts?search=&limit=20"),
+    ])
+      .then(([funding, result]) => {
+        if (!active) return;
+        const eligible = result.items;
+        setAccounts(eligible);
+        if (funding) {
+          if (funding.origin !== "administrative")
+            throw new Error("Provider funding is immutable.");
+          setAccountId(funding.account.id);
+          setAmount(majorFromMinor(funding.canonicalAmountMinor));
+          setState(funding.state as AdministrativeFundingState);
+          setReason(funding.reason ?? "");
+          setReference(funding.administrativeReference ?? "");
+          if (!eligible.some((account) => account.id === funding.account.id))
+            setAccounts([
+              {
+                id: funding.account.id,
+                username: funding.account.username,
+                email: funding.account.email,
+              },
+              ...eligible,
+            ]);
+        } else if (eligible[0]) setAccountId(eligible[0].id);
+      })
+      .catch((cause: unknown) => active && setError(errorMessage(cause)))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [fundingId]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    let amountMinor: string;
+    try {
+      amountMinor = parseUsdMinor(amount);
+    } catch (cause) {
+      setError(errorMessage(cause));
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        amount_minor: amountMinor,
+        state,
+        reason,
+        reference: reference.trim() || null,
+        ...(fundingId ? {} : { account_id: accountId }),
+      };
+      await apiFetch(fundingId ? `/internal/funding/${fundingId}` : "/internal/funding", {
+        method: fundingId ? "PATCH" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      router.push("/operator/funding");
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function searchAccounts(value: string) {
+    setAccountSearch(value);
+    try {
+      const result = await apiFetch<{ items: FundingAccountOption[] }>(
+        `/internal/funding/accounts?search=${encodeURIComponent(value)}&limit=20`,
+      );
+      setAccounts((current) => {
+        const selected = current.find((account) => account.id === accountId);
+        return selected && !result.items.some((account) => account.id === selected.id)
+          ? [selected, ...result.items]
+          : result.items;
+      });
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
+  }
+
+  if (loading)
+    return <CrudDetail eyebrow="Funding management" title="Administrative funding" loading />;
+  return (
+    <CrudDetail
+      eyebrow="Funding management"
+      title={fundingId ? "Edit administrative funding" : "New funding"}
+      description="Administrative records are distinct from provider payments. Only confirmed records affect the USD funding balance."
+      sections={
+        <OperatorSection title="Funding record" surface>
+          {error && <OperatorErrorState message={error} />}
+          <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+            {!fundingId && (
+              <label className="grid gap-1 text-sm font-medium">
+                Account
+                <Input
+                  value={accountSearch}
+                  onChange={(event) => void searchAccounts(event.target.value)}
+                  placeholder="Search username or email"
+                />
+                <Select
+                  value={accountId}
+                  onChange={(event) => setAccountId(event.target.value)}
+                  required
+                >
+                  <option value="">Select account</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      @{account.username}
+                      {account.email ? ` · ${account.email}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            )}
+            <label className="grid gap-1 text-sm font-medium">
+              Amount (USD)
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                required
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Status
+              <Select
+                value={state}
+                onChange={(event) => setState(event.target.value as AdministrativeFundingState)}
+              >
+                {administrativeStates.map((value) => (
+                  <option key={value} value={value}>
+                    {stateLabel(value)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Reason
+              <Input
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                maxLength={1000}
+                required
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Reference (optional)
+              <Input
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+                maxLength={200}
+              />
+            </label>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={saving || (!fundingId && !accountId)}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => router.push("/operator/funding")}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </OperatorSection>
+      }
+    />
+  );
 }
 
 export type OperatorBankTransferEvidenceRow = { label: string; value: string };
@@ -69,7 +280,7 @@ export function operatorBankTransferEvidenceRows(
   ];
 }
 
-export function OperatorFundingList() {
+export function OperatorFundingList({ canManage = false }: { canManage?: boolean }) {
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorFundingState | "">("");
   const [provider, setProvider] = useState("");
@@ -118,7 +329,16 @@ export function OperatorFundingList() {
       key: "provider",
       label: "Provider / reference",
       render: (funding) => (
-        <OperatorPrimaryCell title={funding.provider} subtitle={funding.providerReference} />
+        <OperatorPrimaryCell
+          title={
+            funding.origin === "provider"
+              ? (funding.provider ?? "Provider")
+              : "Administrative funding"
+          }
+          subtitle={
+            funding.providerReference ?? funding.administrativeReference ?? funding.reason ?? "—"
+          }
+        />
       ),
     },
     {
@@ -149,6 +369,9 @@ export function OperatorFundingList() {
   ];
   const actions = (funding: OperatorFundingPage["items"][number]): readonly OperatorAction[] => [
     { type: "link", label: "Inspect funding", href: `/operator/funding/${funding.id}` },
+    ...(canManage && funding.origin === "administrative"
+      ? [{ type: "link" as const, label: "Edit", href: `/operator/funding/${funding.id}/edit` }]
+      : []),
     { type: "link", label: "View account", href: `/operator/users/${funding.account.id}` },
   ];
 
@@ -242,7 +465,45 @@ export function OperatorFundingList() {
       items={collection.items}
       columns={columns}
       getRowKey={(funding) => funding.id}
-      selection={{ labelForItem: (funding) => `funding ${funding.id}` }}
+      selection={{
+        labelForItem: (funding) => `funding ${funding.id}`,
+        canSelectItem: (funding) => funding.origin === "administrative",
+      }}
+      createAction={canManage ? { label: "New funding", href: "/operator/funding/new" } : undefined}
+      bulkActions={
+        canManage
+          ? [
+              {
+                value: "delete",
+                label: "Delete",
+                destructive: true,
+                onSelect: async (items) => {
+                  const ids = items
+                    .filter((item) => item.origin === "administrative")
+                    .map((item) => item.id);
+                  if (!ids.length) return false;
+                  if (
+                    !window.confirm(
+                      `Delete ${ids.length} administrative funding record(s)? Provider records will be retained.`,
+                    )
+                  )
+                    return false;
+                  const response = await apiFetch<{
+                    results: Array<{ id: string; deleted: boolean; error: string | null }>;
+                  }>("/internal/funding/bulk-delete", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ ids }),
+                  });
+                  await collection.retry();
+                  const rejected = response.results.filter((result) => !result.deleted);
+                  if (rejected.length)
+                    throw new Error(rejected.map((result) => result.error).join("; "));
+                },
+              },
+            ]
+          : []
+      }
       actions={actions}
       actionLabel={(funding) => `Actions for funding ${funding.id}`}
       loading={collection.loading}
@@ -296,8 +557,10 @@ export function OperatorFundingDetail({
 
   async function copyReference() {
     if (!funding) return;
+    const reference = funding.providerReference ?? funding.administrativeReference;
+    if (!reference) return;
     try {
-      await navigator.clipboard?.writeText(funding.providerReference);
+      await navigator.clipboard?.writeText(reference);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
@@ -382,22 +645,36 @@ export function OperatorFundingDetail({
                   </dd>
                 </div>
                 <div>
-                  <dt>Provider</dt>
-                  <dd>{funding.provider}</dd>
+                  <dt>Origin</dt>
+                  <dd>
+                    {funding.origin === "provider"
+                      ? `Provider · ${funding.provider}`
+                      : "Administrative funding"}
+                  </dd>
                 </div>
                 <div>
-                  <dt>Provider reference</dt>
+                  <dt>
+                    {funding.origin === "provider"
+                      ? "Provider reference"
+                      : "Administrative reference"}
+                  </dt>
                   <dd className="operator-funding-reference">
-                    <span className="break-value">{funding.providerReference}</span>
-                    <Button variant="ghost" onClick={() => void copyReference()}>
-                      {copied ? "Copied" : "Copy"}
-                    </Button>
+                    <span className="break-value">
+                      {funding.providerReference ?? funding.administrativeReference ?? "—"}
+                    </span>
+                    {(funding.providerReference || funding.administrativeReference) && (
+                      <Button variant="ghost" onClick={() => void copyReference()}>
+                        {copied ? "Copied" : "Copy"}
+                      </Button>
+                    )}
                   </dd>
                 </div>
                 <div>
                   <dt>Provider transaction ID</dt>
                   <dd className="break-value">
-                    {funding.providerTransactionId ?? "Not known yet"}
+                    {funding.origin === "provider"
+                      ? (funding.providerTransactionId ?? "Not known yet")
+                      : "Not applicable"}
                   </dd>
                 </div>
                 <div>

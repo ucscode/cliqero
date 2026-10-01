@@ -24,6 +24,8 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
         from ledger_capability.entries entry left join ledger_capability.entry_settlements settlement on settlement.original_entry_id=entry.id
         where entry.account_id=(select id from identity_capability.accounts where uuid=$1) and entry.currency=$2 and entry.entry_type='purchase-earnings'
           and (entry.balance_state='available' or settlement.id is not null)),0)
+      + coalesce((select sum(adjustment.amount_minor) from ledger_capability.earnings_adjustments adjustment
+        where adjustment.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
       - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
         and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
       )::bigint as minor`,
@@ -71,6 +73,8 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
         from ledger_capability.entries entry left join ledger_capability.entry_settlements settlement on settlement.original_entry_id=entry.id
         where entry.account_id=(select id from identity_capability.accounts where uuid=$1) and entry.currency=$2 and entry.entry_type='purchase-earnings'
           and (entry.balance_state='available' or settlement.id is not null)),0)
+      + coalesce((select sum(adjustment.amount_minor) from ledger_capability.earnings_adjustments adjustment
+        where adjustment.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
       - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
         and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
       )::bigint as minor`,
@@ -117,13 +121,100 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
       ],
     );
   }
+  async resize(input: {
+    withdrawalId: string;
+    accountId: string;
+    amount: Money;
+    correlationId: string;
+  }) {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `withdrawal:${input.accountId}`,
+    ]);
+    const reservation = (
+      await this.sql.query<{ id: string; amount_minor: string; currency: string; kind: string }>(
+        `select r.uuid id,r.amount_minor,r.currency,
+                (select e.kind from ledger_capability.withdrawal_reservation_events e
+                  where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) kind
+           from ledger_capability.withdrawal_reservations r
+          where r.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
+            and r.account_id=(select id from identity_capability.accounts where uuid=$2)
+          for update of r`,
+        [input.withdrawalId, input.accountId],
+      )
+    ).rows[0];
+    if (!reservation || reservation.kind !== "reserved")
+      throw new Error("Only an active withdrawal reservation can be adjusted");
+    if (reservation.currency !== input.amount.currency)
+      throw new Error("Withdrawal currency cannot be changed");
+    const availableIncludingCurrent =
+      (await this.available(input.accountId, input.amount.currency)) +
+      BigInt(reservation.amount_minor);
+    if (availableIncludingCurrent < input.amount.minorAmount)
+      throw new Error("Insufficient available funds for the revised withdrawal amount");
+    await this.sql.query(
+      `update ledger_capability.withdrawal_reservations set amount_minor=$2
+        where uuid=$1`,
+      [reservation.id, input.amount.minorAmount.toString()],
+    );
+    const revision = newId();
+    await this.sql.query(
+      `insert into ledger_capability.withdrawal_reservation_events
+        (uuid,reservation_id,withdrawal_id,account_id,kind,amount_minor,currency,idempotency_key,correlation_id)
+       values($1,(select id from ledger_capability.withdrawal_reservations where uuid=$2),
+         (select id from withdrawal_capability.withdrawals where uuid=$3),
+         (select id from identity_capability.accounts where uuid=$4),'reserved',$5,$6,$7,$8)`,
+      [
+        revision,
+        reservation.id,
+        input.withdrawalId,
+        input.accountId,
+        input.amount.minorAmount.toString(),
+        input.amount.currency,
+        `withdrawal:${input.withdrawalId}:resize:${revision}`,
+        input.correlationId,
+      ],
+    );
+  }
+  async remove(withdrawalId: string, accountId: string) {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `withdrawal:${accountId}`,
+    ]);
+    const reservation = (
+      await this.sql.query<{ id: string; kind: string | null }>(
+        `select r.id,(select e.kind from ledger_capability.withdrawal_reservation_events e
+                       where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) kind
+           from ledger_capability.withdrawal_reservations r
+          where r.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
+            and r.account_id=(select id from identity_capability.accounts where uuid=$2)
+          for update`,
+        [withdrawalId, accountId],
+      )
+    ).rows[0];
+    if (!reservation) return;
+    if (reservation.kind === "completed")
+      throw new Error("A completed payout reservation is immutable and cannot be removed");
+    // These rows are operational reservation state; withdrawal lifecycle/outbox records retain
+    // the request history, while no provider payout evidence is stored in these tables.
+    await this.sql.query(
+      `delete from ledger_capability.withdrawal_reservation_events where reservation_id=$1`,
+      [reservation.id],
+    );
+    await this.sql.query(`delete from ledger_capability.withdrawal_reservations where id=$1`, [
+      reservation.id,
+    ]);
+  }
   async summarize(accountId: string) {
     const rows = (
       await this.sql.query<{ currency: string; reserved_minor: string; completed_minor: string }>(
-        `select currency,
-    sum(case when event.kind='reserved' then event.amount_minor when event.kind in ('released','completed') then -event.amount_minor else 0 end)::bigint reserved_minor,
-    sum(case when event.kind='completed' then event.amount_minor else 0 end)::bigint completed_minor
-    from ledger_capability.withdrawal_reservation_events event where event.account_id=(select id from identity_capability.accounts where uuid=$1) group by currency`,
+        `with latest as (
+          select distinct on (event.reservation_id) event.kind,event.amount_minor,event.currency
+            from ledger_capability.withdrawal_reservation_events event
+           where event.account_id=(select id from identity_capability.accounts where uuid=$1)
+           order by event.reservation_id,event.created_at desc,event.id desc
+        ) select currency,
+          coalesce(sum(amount_minor) filter (where kind='reserved'),0)::bigint reserved_minor,
+          coalesce(sum(amount_minor) filter (where kind='completed'),0)::bigint completed_minor
+          from latest group by currency`,
         [accountId],
       )
     ).rows;

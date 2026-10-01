@@ -1,13 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   apiFetch,
   formatMinorUsd,
+  parseUsdMinor,
+  type OperatorAccountSummary,
   type OperatorWithdrawalDetail as Detail,
   type OperatorWithdrawalPage,
   type OperatorWithdrawalState,
+  type WithdrawalDestination,
 } from "@/lib/api-client";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -23,6 +27,261 @@ import type { CrudColumn } from "@/components/crud/table";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
 import { CrudSortSelect } from "@/components/crud/sort-select";
+import type { FormEvent } from "react";
+
+function minorToMajor(value: string) {
+  const amount = BigInt(value);
+  return `${amount / 100n}.${(amount % 100n).toString().padStart(2, "0")}`;
+}
+
+export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string }) {
+  const router = useRouter();
+  const [item, setItem] = useState<Detail | null>(null);
+  const [accounts, setAccounts] = useState<OperatorAccountSummary[]>([]);
+  const [accountSearch, setAccountSearch] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [destinations, setDestinations] = useState<WithdrawalDestination[]>([]);
+  const [destinationId, setDestinationId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [state, setState] = useState<"requested" | "approved" | "rejected">("requested");
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(Boolean(withdrawalId));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const [accountsResult, detail] = await Promise.all([
+          apiFetch<{ items: OperatorAccountSummary[] }>("/internal/withdrawals/accounts?search="),
+          withdrawalId
+            ? apiFetch<Detail>(`/internal/withdrawals/${withdrawalId}`)
+            : Promise.resolve(null),
+        ]);
+        if (!active) return;
+        let options = accountsResult.items;
+        if (detail) {
+          setItem(detail);
+          setAccountId(detail.account.id);
+          setAmount(minorToMajor(detail.amountMinor));
+          setState(
+            detail.state === "approved" || detail.state === "rejected" ? detail.state : "requested",
+          );
+          setReason(detail.reason ?? "");
+          if (!options.some((entry) => entry.id === detail.account.id))
+            options = [
+              {
+                id: detail.account.id,
+                username: detail.account.username,
+                displayName: null,
+                email: detail.account.email,
+                country: null,
+                createdAt: "",
+                directReferralCount: 0,
+              },
+              ...options,
+            ];
+          if (detail.state !== "requested")
+            throw new Error("Only requested withdrawals can be edited.");
+        } else if (options[0]) setAccountId(options[0].id);
+        setAccounts(options);
+      } catch (cause) {
+        if (active) setError(message(cause));
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [withdrawalId]);
+
+  useEffect(() => {
+    if (!accountId) return;
+    let active = true;
+    void apiFetch<WithdrawalDestination[]>(
+      `/internal/withdrawals/destinations?account_id=${encodeURIComponent(accountId)}`,
+    )
+      .then((result) => {
+        if (!active) return;
+        const available = result.filter(
+          (destination) => destination.status === "active" && destination.method.available,
+        );
+        setDestinations(available);
+        if (
+          item?.destination.savedDestinationId &&
+          available.some((entry) => entry.id === item.destination.savedDestinationId)
+        )
+          setDestinationId(item.destination.savedDestinationId);
+        else setDestinationId(available[0]?.id ?? "");
+      })
+      .catch((cause: unknown) => active && setError(message(cause)));
+    return () => {
+      active = false;
+    };
+  }, [accountId, item]);
+
+  async function searchAccounts(value: string) {
+    setAccountSearch(value);
+    try {
+      const result = await apiFetch<{ items: OperatorAccountSummary[] }>(
+        `/internal/withdrawals/accounts?search=${encodeURIComponent(value)}`,
+      );
+      setAccounts(result.items);
+    } catch (cause) {
+      setError(message(cause));
+    }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    let amountMinor: string;
+    try {
+      amountMinor = parseUsdMinor(amount);
+    } catch (cause) {
+      setError(message(cause));
+      return;
+    }
+    setSaving(true);
+    try {
+      if (withdrawalId) {
+        await apiFetch(`/internal/withdrawals/${withdrawalId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            amount_minor: amountMinor,
+            destination_id: destinationId,
+            state,
+            reason,
+          }),
+        });
+      } else {
+        await apiFetch("/internal/withdrawals", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            account_id: accountId,
+            amount_minor: amountMinor,
+            destination_id: destinationId,
+            idempotency_key: crypto.randomUUID(),
+          }),
+        });
+      }
+      router.push("/operator/withdrawals");
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <CrudDetail eyebrow="Withdrawal operations" title="Withdrawal" loading />;
+  return (
+    <CrudDetail
+      eyebrow="Withdrawal operations"
+      title={withdrawalId ? "Edit withdrawal" : "New withdrawal"}
+      description="Operator-created requests use the account’s saved payout destination and the same policy, fee, balance reservation, and idempotency rules as customer requests."
+      sections={
+        <OperatorSection title="Withdrawal request" surface>
+          {error && <OperatorErrorState message={error} />}
+          <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+            {!withdrawalId && (
+              <label className="grid gap-1 text-sm font-medium">
+                Account
+                <Input
+                  value={accountSearch}
+                  onChange={(event) => void searchAccounts(event.target.value)}
+                  placeholder="Search username or email"
+                />
+                <Select
+                  value={accountId}
+                  onChange={(event) => setAccountId(event.target.value)}
+                  required
+                >
+                  <option value="">Select account</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      @{account.username}
+                      {account.email ? ` · ${account.email}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            )}
+            <label className="grid gap-1 text-sm font-medium">
+              Amount (USD)
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                required
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Payout destination
+              <Select
+                value={destinationId}
+                onChange={(event) => setDestinationId(event.target.value)}
+                required
+                disabled={!destinations.length}
+              >
+                <option value="">
+                  {destinations.length ? "Select destination" : "No available saved destination"}
+                </option>
+                {destinations.map((destination) => (
+                  <option key={destination.id} value={destination.id}>
+                    {destination.name} · {destination.method.display_name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {withdrawalId && (
+              <label className="grid gap-1 text-sm font-medium">
+                Status
+                <Select
+                  value={state}
+                  onChange={(event) => setState(event.target.value as typeof state)}
+                >
+                  <option value="requested">Requested</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </Select>
+              </label>
+            )}
+            {withdrawalId && (
+              <label className="grid gap-1 text-sm font-medium">
+                Reason
+                <Input
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  maxLength={1000}
+                  placeholder="Required when rejecting"
+                />
+              </label>
+            )}
+            <div className="flex gap-2">
+              <Button type="submit" disabled={saving || !accountId || !destinationId}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => router.push("/operator/withdrawals")}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </OperatorSection>
+      }
+    />
+  );
+}
 
 const states: Array<[OperatorWithdrawalState, string]> = [
   ["requested", "Requested"],
@@ -34,7 +293,7 @@ const states: Array<[OperatorWithdrawalState, string]> = [
 ];
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Withdrawal data is temporarily unavailable.";
-export function OperatorWithdrawalList() {
+export function OperatorWithdrawalList({ canManage = false }: { canManage?: boolean }) {
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorWithdrawalState | "">("");
   const [attention, setAttention] = useState("");
@@ -59,7 +318,7 @@ export function OperatorWithdrawalList() {
       params.set("sort", filters.sort);
       params.set("direction", filters.direction);
       if (cursor) params.set("cursor", cursor);
-      const result = await apiFetch<OperatorWithdrawalPage>(`/api/withdrawals?${params}`);
+      const result = await apiFetch<OperatorWithdrawalPage>(`/internal/withdrawals?${params}`);
       return { items: result.items, nextCursor: result.nextCursor };
     },
     { search: "", state: "", attention: "", sort: "created", direction: "desc" },
@@ -197,8 +456,52 @@ export function OperatorWithdrawalList() {
       columns={columns}
       getRowKey={(item) => item.id}
       selection={{ labelForItem: (item) => `withdrawal ${item.id}` }}
+      createAction={
+        canManage ? { label: "New withdrawal", href: "/operator/withdrawals/new" } : undefined
+      }
+      bulkActions={
+        canManage
+          ? [
+              {
+                value: "delete",
+                label: "Delete",
+                destructive: true,
+                onSelect: async (items) => {
+                  if (
+                    !window.confirm(
+                      `Delete ${items.length} mutable withdrawal request(s)? Completed payouts cannot be deleted.`,
+                    )
+                  )
+                    return false;
+                  const result = await apiFetch<{
+                    results: Array<{ id: string; deleted: boolean; error: string | null }>;
+                  }>("/internal/withdrawals/bulk-delete", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ ids: items.map((item) => item.id) }),
+                  });
+                  await collection.retry();
+                  const failures = result.results.filter((entry) => !entry.deleted);
+                  if (failures.length)
+                    throw new Error(
+                      failures.map((entry) => `${entry.id}: ${entry.error}`).join("; "),
+                    );
+                },
+              },
+            ]
+          : []
+      }
       actions={(item) => [
         { type: "link", label: "Inspect withdrawal", href: `/operator/withdrawals/${item.id}` },
+        ...(canManage && item.state === "requested"
+          ? [
+              {
+                type: "link" as const,
+                label: "Edit",
+                href: `/operator/withdrawals/${item.id}/edit`,
+              },
+            ]
+          : []),
         { type: "link", label: "View account", href: `/operator/users/${item.account.id}` },
       ]}
       actionLabel={(item) => `Actions for withdrawal ${item.id}`}
@@ -219,7 +522,14 @@ export function OperatorWithdrawalList() {
   );
 }
 
-export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: string }) {
+export function OperatorWithdrawalDetail({
+  withdrawalId,
+  canManage = false,
+}: {
+  withdrawalId: string;
+  canManage?: boolean;
+}) {
+  const router = useRouter();
   const [item, setItem] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -231,7 +541,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
     setLoading(true);
     setError(null);
     try {
-      setItem(await apiFetch<Detail>(`/api/withdrawals/${withdrawalId}`));
+      setItem(await apiFetch<Detail>(`/internal/withdrawals/${withdrawalId}`));
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -249,12 +559,30 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
     try {
       const status =
         action === "approve" ? "approved" : action === "reject" ? "rejected" : "completed";
-      await apiFetch(`/api/withdrawals/${withdrawalId}`, {
-        method: "PATCH",
+      await apiFetch(`/internal/withdrawals/${withdrawalId}/transition`, {
+        method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status, ...body }),
       });
       await load();
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove() {
+    if (
+      !window.confirm(
+        "Delete this mutable withdrawal request? Completed payout history cannot be deleted.",
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiFetch(`/internal/withdrawals/${withdrawalId}`, { method: "DELETE" });
+      router.push("/operator/withdrawals");
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -279,7 +607,16 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
       eyebrow="Withdrawal fact"
       title={`${formatMinorUsd(item.amountMinor)} withdrawal`}
       description={item.id}
-      headerActions={<OperatorStatusCell status={item.state} />}
+      headerActions={
+        <>
+          {canManage && item.state === "requested" && (
+            <Button asChild>
+              <Link href={`/operator/withdrawals/${item.id}/edit`}>Edit</Link>
+            </Button>
+          )}
+          <OperatorStatusCell status={item.state} />
+        </>
+      }
       sections={
         <>
           {error && <OperatorErrorState message={error} />}
@@ -335,12 +672,18 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
           )}
           <OperatorSection title="Available actions" surface>
             <div className="operator-action-row">
-              {item.state === "requested" && (
+              {canManage &&
+                ["requested", "rejected", "cancelled", "failed"].includes(item.state) && (
+                  <Button variant="destructive" disabled={busy} onClick={() => void remove()}>
+                    Delete
+                  </Button>
+                )}
+              {canManage && item.state === "requested" && (
                 <Button disabled={busy} onClick={() => void act("approve")}>
                   Approve
                 </Button>
               )}
-              {item.state === "requested" || item.state === "approved" ? (
+              {canManage && (item.state === "requested" || item.state === "approved") ? (
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -358,7 +701,7 @@ export function OperatorWithdrawalDetail({ withdrawalId }: { withdrawalId: strin
                   </Button>
                 </form>
               ) : null}
-              {item.state === "approved" && (
+              {canManage && item.state === "approved" && (
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();

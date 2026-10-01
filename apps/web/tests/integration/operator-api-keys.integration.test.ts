@@ -54,7 +54,12 @@ suite("operator API-key administration", () => {
           !request.headers.has("origin")
         ) {
           const headers = new Headers(request.headers);
+          headers.set("host", url.host);
           headers.set("origin", url.origin);
+          request = new Request(request, { headers });
+        } else if (!request.headers.has("host")) {
+          const headers = new Headers(request.headers);
+          headers.set("host", url.host);
           request = new Request(request, { headers });
         }
         if (url.pathname === "/internal/api-keys") {
@@ -152,6 +157,96 @@ suite("operator API-key administration", () => {
       }),
     );
     expect(bearer.status).toBe(401);
+  });
+
+  it("creates a key through Better Auth's real session-to-canonical-account authorization path", async () => {
+    const root = await account("realrootkeyoperator");
+    await grant(root.id, "system.root");
+    const login = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "realrootkeyoperator@example.com",
+          password: "correct-horse-battery",
+        }),
+      }),
+    );
+    expect(login.status).toBe(200);
+    const cookie = login.headers.get("set-cookie")?.split(";")[0];
+    expect(cookie).toContain("better-auth");
+    const routes = new InternalApiKeyManagementRoutes(app);
+    const created = await routes.create(
+      new Request("http://localhost:3000/internal/api-keys", {
+        method: "POST",
+        headers: {
+          cookie: cookie!,
+          host: "localhost:3000",
+          origin: "http://localhost:3000",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          account_id: root.id,
+          name: "real-session-test-key",
+          scopes: [],
+          expires_at: null,
+          state: "active",
+        }),
+      }),
+    );
+    expect(created.status).toBe(201);
+    const key = await created.json();
+    expect(await app.apiKeys.authenticate(key.secret)).toMatchObject({ accountId: root.id });
+    const bearer = await routes.collection(
+      new Request("http://localhost:3000/internal/api-keys", {
+        headers: { authorization: `Bearer ${key.secret}` },
+      }),
+    );
+    expect(bearer.status).toBe(401);
+
+    const ordinary = await account("realordinarykeyoperator");
+    const ordinaryLogin = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "realordinarykeyoperator@example.com",
+          password: "correct-horse-battery",
+        }),
+      }),
+    );
+    const ordinaryCookie = ordinaryLogin.headers.get("set-cookie")?.split(";")[0];
+    expect(ordinaryLogin.status).toBe(200);
+    const ordinaryDenied = await routes.create(
+      new Request("http://localhost:3000/internal/api-keys", {
+        method: "POST",
+        headers: {
+          cookie: ordinaryCookie!,
+          host: "localhost:3000",
+          origin: "http://localhost:3000",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "ordinary-cannot-manage",
+          scopes: [],
+          state: "active",
+        }),
+      }),
+    );
+    expect(ordinaryDenied.status).toBe(403);
+    expect(ordinary.id).not.toBe(root.id);
+    const deleted = await routes.item(
+      new Request(`http://localhost:3000/internal/api-keys/${key.id}`, {
+        method: "DELETE",
+        headers: {
+          cookie: cookie!,
+          host: "localhost:3000",
+          origin: "http://localhost:3000",
+        },
+      }),
+      key.id,
+    );
+    expect(deleted.status).toBe(204);
   });
 
   it("creates safe target-scoped credentials, audits changes, and revokes without deleting", async () => {

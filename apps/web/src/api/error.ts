@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PublicApplicationError } from "@/kernel/errors";
+import { PUBLIC_APPLICATION_ERROR } from "@/kernel/errors";
 
 export type ValidationErrorPayload = {
   error: string;
@@ -28,28 +28,35 @@ export type PublicErrorPayload = {
 export function publicErrorPayload(
   error: unknown,
 ): { payload: PublicErrorPayload; status: number } | null {
-  const candidate =
-    error && typeof error === "object" ? (error as Partial<PublicApplicationError>) : null;
-  const recognized =
-    error instanceof PublicApplicationError ||
-    (candidate !== null &&
-      typeof candidate.name === "string" &&
-      candidate.name.endsWith("Error") &&
-      typeof candidate.message === "string" &&
-      typeof candidate.code === "string" &&
-      Number.isInteger(candidate.status) &&
-      candidate.status! >= 400 &&
-      candidate.status! <= 599 &&
-      candidate.fields !== null &&
-      typeof candidate.fields === "object" &&
-      !Array.isArray(candidate.fields));
-  if (!recognized || !candidate) return null;
+  if (!error || typeof error !== "object") return null;
+  const candidate = error as {
+    [PUBLIC_APPLICATION_ERROR]?: unknown;
+    message?: unknown;
+    code?: unknown;
+    status?: unknown;
+    fields?: unknown;
+  };
+  if (
+    candidate[PUBLIC_APPLICATION_ERROR] !== true ||
+    typeof candidate.message !== "string" ||
+    typeof candidate.code !== "string" ||
+    !Number.isInteger(candidate.status) ||
+    (candidate.status as number) < 400 ||
+    (candidate.status as number) > 599 ||
+    !candidate.fields ||
+    typeof candidate.fields !== "object" ||
+    Array.isArray(candidate.fields) ||
+    Object.values(candidate.fields).some((value) => typeof value !== "string")
+  )
+    return null;
   return {
-    status: candidate.status!,
+    status: candidate.status as number,
     payload: {
-      error: candidate.message!,
-      code: candidate.code!,
-      ...(Object.keys(candidate.fields!).length ? { fields: candidate.fields } : {}),
+      error: candidate.message,
+      code: candidate.code,
+      ...(Object.keys(candidate.fields).length
+        ? { fields: candidate.fields as Record<string, string> }
+        : {}),
     },
   };
 }

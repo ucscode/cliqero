@@ -41,6 +41,7 @@ import {
 import { LoaderCircle } from "lucide-react";
 import { PaymentProviderComponent } from "../payment/provider";
 import { FundingSettlementPolling } from "../payment/shared/status";
+import { WalletTransferForm } from "./transfers";
 
 export {
   createFundingStatusPoller,
@@ -484,6 +485,7 @@ export function WalletPanel({
           </Card>
         </section>
       )}
+      {composition.showOverview && <WalletTransferForm onComplete={() => void loadWallet(true)} />}
 
       {persistedFunding && !funding && (
         <Card className="flex items-center gap-3 p-5" aria-live="polite">

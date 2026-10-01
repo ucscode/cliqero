@@ -6,6 +6,7 @@ export type OperatorFundingState =
   | "confirmed"
   | "failed"
   | "blocked"
+  | "cancelled"
   | "expired"
   | "reconciliation_pending";
 
@@ -21,9 +22,13 @@ export type OperatorFundingWalletCredit = {
 export type OperatorFunding = {
   id: string;
   account: { id: string; username: string; email: string | null };
-  provider: string;
-  providerReference: string;
+  origin: "provider" | "administrative";
+  provider: string | null;
+  providerReference: string | null;
   providerTransactionId: string | null;
+  reason: string | null;
+  administrativeReference: string | null;
+  createdBy: string | null;
   canonicalAmountMinor: string;
   canonicalCurrency: "USD";
   collectionAmountMinor: string;
