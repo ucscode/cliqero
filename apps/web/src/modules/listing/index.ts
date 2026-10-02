@@ -226,6 +226,7 @@ export interface ListingRepository {
   }): Promise<{ items: readonly Listing[]; nextCursor: string | null }>;
   save(listing: Listing): Promise<void>;
   delete(id: Id): Promise<boolean>;
+  deleteForRoot(id: Id): Promise<boolean>;
 }
 
 function validateCompareAtPrice(price: Money, compareAtPrice: Money | null) {

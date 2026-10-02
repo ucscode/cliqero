@@ -87,7 +87,7 @@ export function OperatorTreasuryForm({ onCreated }: { onCreated?: () => void | P
   return (
     <OperatorSection
       title="Record a company entry"
-      description="Append-only accounting. Corrections are made with a separate opposite entry."
+      description="Creates a treasury accounting entry."
       surface
     >
       <form className="grid gap-5 sm:grid-cols-2" onSubmit={(event) => void createEntry(event)}>
@@ -248,7 +248,12 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
             destructive: true,
             onSelect: async () => {
               if (!window.confirm("Delete this treasury entry?")) return;
-              await apiFetch(`/api/treasury/entries/${entry.id}`, { method: "DELETE" });
+              const result = await runOperatorBulkAction({
+                resource: "treasury",
+                action: "delete",
+                ids: [entry.id],
+              });
+              if (result.failed.length) throw new Error(result.failed[0]!.message);
               await collection.retry();
             },
           },
@@ -287,7 +292,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
     <CrudIndex
       eyebrow="Company accounting"
       title="Treasury"
-      description="Inspect Cliqero-owned allocations and append-only operator entries. Wallet deposits and user earnings remain separate."
+      description="Inspect Cliqero-owned allocations and operator entries. Wallet deposits and user earnings remain separate."
       createAction={{ label: "New entry", href: "/operator/treasury/new" }}
       beforeTable={
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -401,7 +406,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
       error={collection.error}
       onRetry={() => void collection.retry()}
       emptyTitle="No treasury entries"
-      emptyDescription="Append-only entries will appear here."
+      emptyDescription="Treasury entries will appear here."
       pagination={{
         hasPrevious: collection.hasPrevious,
         hasNext: collection.hasNext,
@@ -409,7 +414,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
         onNext: () => void collection.next(),
       }}
       sectionTitle="Treasury entries"
-      sectionDescription="Immutable ledger history."
+      sectionDescription="Treasury history and current allocations."
       afterTable={bulkOutcome ? <OperatorBulkOutcome outcome={bulkOutcome} /> : undefined}
     />
   );

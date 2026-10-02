@@ -65,6 +65,15 @@ describe("BlogService SQLite workflow", () => {
     expect(() => service.deleteCategory(other.id)).toThrow(/assigned/);
     expect(service.list({ publishedOnly: true, category: "guides" }).items).toEqual([]);
   });
+  it("root category deletion removes assignments but preserves the article", () => {
+    const category = service.createCategory("Root cleanup category");
+    const post = service.create(input({ category_ids: [category.id] }), "author");
+
+    service.deleteCategoryForRoot(category.id);
+
+    expect(service.get(post.id)).toMatchObject({ id: post.id, categories: [] });
+    expect(service.categories()).not.toContainEqual(category);
+  });
   it("paginates canonical published posts deterministically and excludes drafts", () => {
     for (let i = 0; i < 5; i++)
       service.create(input({ title: `Published ${i}`, status: "published" }), null);

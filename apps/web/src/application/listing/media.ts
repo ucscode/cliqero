@@ -178,6 +178,18 @@ export class ListingMediaService {
       key: value.objectKey,
     });
   }
+  async deleteAllForRoot(listingId: string) {
+    const values = await this.media.listByListing(listingId, true);
+    for (const value of values) {
+      await this.storage.get(value.storageProvider).delete({
+        provider: value.storageProvider,
+        container: value.storageContainer,
+        key: value.objectKey,
+      });
+    }
+    await this.media.deleteForRoot(listingId);
+    return values.length;
+  }
   private async getUnchecked(listingId: string, id: string) {
     const value = await this.media.findById(id);
     if (!value || value.listingId !== listingId || value.state === "deleted")

@@ -592,6 +592,17 @@ suite("withdrawal lifecycle", () => {
       deleted: true,
     });
     expect(await app.withdrawalRepository.findById(completed.id)).toBeNull();
+    expect(
+      await app.database.query(
+        `select previous_state->>'state' state,previous_state->>'amountMinor' amount_minor,
+                new_state->>'mode' mode
+           from kernel.audit_records
+          where action='root.delete' and subject_type='withdrawal' and subject_id=$1`,
+        [completed.id],
+      ),
+    ).toMatchObject({
+      rows: [{ state: "completed", amount_minor: "1000", mode: "physical" }],
+    });
   });
   it("reflects reserved, released, and completed amounts in withdrawable earnings", async () => {
     const { seller, destinationId } = await setup();

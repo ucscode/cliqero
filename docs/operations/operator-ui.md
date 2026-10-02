@@ -29,17 +29,27 @@ does not fetch a CRUD-configuration endpoint or expose a rows-per-page control.
 Filtered tables provide a shared Clear action and selection is confined to the
 visible page, then cleared on filter/page changes. Blog articles support bulk
 deletion, catalogue listings support lifecycle actions, and reviews support
-moderation. Users and sensitive financial tables remain without bulk selection.
+moderation. `system.root` can select and delete records in each of the 14
+Operator collections; ordinary roles see only actions permitted by their
+capabilities.
 
 Blog categories are managed under Operator → Blog → Categories and posts may
-select multiple existing categories; categories assigned to posts cannot be
-deleted. Tags remain a normalized relationship but continue to use
+select multiple existing categories. A `system.root` deletion removes the
+category assignments while preserving the posts. Tags remain a normalized relationship but continue to use
 comma-separated post editor input, which resolves/creates tag records on save.
 The Status field controls the canonical article state when the form is saved.
 Preview stores the current editor form in a separate expiring snapshot and
 opens a new tab using the public article renderer; it does not save or publish
 the canonical article. Preview reads require the owning content-management
 session. Preview pages are dynamic, private/no-store, and marked noindex.
+
+Account deletion intentionally preserves the canonical identity row as a
+redacted tombstone. Historical purchases, funding, ledger movements, and other
+records use restrictive, non-null account references; deleting that identity
+would erase or detach their accountable ownership. The deletion workflow removes
+credentials/capabilities, revokes active referrals and sessions, redacts the
+profile, and detaches the hierarchy edge in one transaction. This is the
+account domain's explicit tombstone model, not a general root-delete restriction.
 
 In local Compose development, Node dependencies live in the named
 `cliqero-node-modules` and `cliqero-web-node-modules` volumes, not host

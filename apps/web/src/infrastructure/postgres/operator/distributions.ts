@@ -70,7 +70,19 @@ export class OperatorDistributionService {
 
   async deleteForRoot(actorId: string, id: string) {
     const operation = async () => {
-      const previous = await this.get(id);
+      const previous = (
+        await this.sql.query<any>(
+          `select d.uuid id,d.gross_minor gross_amount_minor,d.currency,
+                  d.platform_amount_minor,d.completed_at,d.policy_snapshot,d.correlation_id,
+                  p.uuid purchase_id,p.listing_title_snapshot,
+                  buyer.uuid buyer_id,buyer.username buyer_username
+             from ledger_capability.purchase_distributions d
+             join purchase_capability.purchases p on p.id=d.purchase_id
+             join identity_capability.accounts buyer on buyer.id=p.buyer_id
+            where d.uuid=$1 for update of d,p`,
+          [id],
+        )
+      ).rows[0];
       const distribution = (
         await this.sql.query<{ id: string }>(
           `select id from ledger_capability.purchase_distributions where uuid=$1`,
@@ -79,6 +91,25 @@ export class OperatorDistributionService {
       ).rows[0];
       if (!previous || !distribution) throw new Error("Distribution not found");
       await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+      const treasuryEntries = (
+        await this.sql.query<any>(
+          `select uuid id,direction,amount_minor,title,note,source_kind,source_id,correlation_id
+             from treasury_capability.entries where source_kind='distribution' and source_id=$1`,
+          [id],
+        )
+      ).rows;
+      await this.sql.query(
+        `delete from treasury_capability.entries where source_kind='distribution' and source_id=$1`,
+        [id],
+      );
+      for (const entry of treasuryEntries) {
+        await this.sql.query(
+          `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
+           values('root.delete','treasury_entry',$1,$2::jsonb,null,$3::uuid,
+                  (select id from identity_capability.accounts where uuid=$4))`,
+          [entry.id, JSON.stringify(entry), newId(), actorId],
+        );
+      }
       await this.sql.query(
         `delete from ledger_capability.entry_settlements
           where original_entry_id in (select id from ledger_capability.entries where distribution_id=$1)`,

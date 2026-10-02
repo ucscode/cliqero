@@ -35,6 +35,7 @@ export interface ListingMediaRepository {
   listByListing(listingId: Id, includeDeleted?: boolean): Promise<readonly ListingMedia[]>;
   listByListings(listingIds: readonly Id[]): Promise<ReadonlyMap<Id, readonly ListingMedia[]>>;
   save(media: ListingMedia): Promise<void>;
+  deleteForRoot(listingId: Id): Promise<void>;
   lockListing(listingId: Id): Promise<void>;
   reorderActive(listingId: Id, orderedIds: readonly Id[]): Promise<void>;
   claimDeletionWork(limit?: number, leaseMs?: number): Promise<readonly ListingMedia[]>;

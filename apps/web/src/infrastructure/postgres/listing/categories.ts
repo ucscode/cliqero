@@ -79,6 +79,14 @@ export class PostgresListingCategoryRepository implements ListingCategoryReposit
     }
   }
 
+  async removeAssignmentsForRoot(id: string) {
+    await this.sql.query(
+      `delete from listing_capability.listing_categories
+        where category_id=(select id from listing_capability.categories where uuid=$1)`,
+      [id],
+    );
+  }
+
   async isUsed(id: string) {
     return (
       (

@@ -80,6 +80,12 @@ export class PostgresListingMediaRepository implements ListingMediaRepository {
       ],
     );
   }
+  async deleteForRoot(listingId: string) {
+    await this.sql.query(
+      "delete from listing_capability.media where listing_id=(select id from listing_capability.listings where uuid=$1)",
+      [listingId],
+    );
+  }
   async lockListing(listingId: string) {
     await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [listingId]);
   }

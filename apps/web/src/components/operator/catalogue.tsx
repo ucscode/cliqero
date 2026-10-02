@@ -141,13 +141,16 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
 
   async function deleteListing(listing: OperatorListing) {
     if (
-      !window.confirm(
-        `Delete “${listing.title}”? This removes the listing from catalogue management and customer discovery. Historical purchases and accounting records will be retained.`,
-      )
+      !window.confirm(`Permanently delete “${listing.title}” and its dependent purchase history?`)
     )
       return;
     try {
-      await apiFetch(`/api/listings/${listing.id}`, { method: "DELETE" });
+      const result = await runOperatorBulkAction({
+        resource: "listings",
+        action: "delete",
+        ids: [listing.id],
+      });
+      if (result.failed.length) throw new Error(result.failed[0]!.message);
       toast.success("Listing deleted.");
       await collection.retry();
     } catch (cause) {
@@ -199,7 +202,7 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
   async function bulkDelete(listings: readonly OperatorListing[]) {
     if (
       !window.confirm(
-        `Delete ${listings.length} selected listing${listings.length === 1 ? "" : "s"}? Historical purchases and accounting records will be retained.`,
+        `Permanently delete ${listings.length} selected listing${listings.length === 1 ? "" : "s"} and dependent purchase history?`,
       )
     )
       return false;
@@ -544,7 +547,7 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
           onNext: () => void collection.next(),
         }}
         sectionTitle="Catalogue"
-        sectionDescription="Delete removes a listing from catalogue management while preserving purchase and accounting history."
+        sectionDescription="Root deletion removes the listing and its dependent purchase history."
       />
       <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">

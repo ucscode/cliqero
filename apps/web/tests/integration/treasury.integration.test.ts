@@ -1,5 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createContainer } from "@/infrastructure/container";
+import { OperatorBulkWorkflow } from "@/application/operator/bulk-workflow";
+import { newId } from "@/kernel/ids";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -86,5 +88,48 @@ suite("treasury PostgreSQL idempotency", () => {
       (await app.database.query(`select count(*)::int as count from treasury_capability.entries`))
         .rows[0].count,
     ).toBe(1);
+  });
+
+  it("system.root bulk deletion removes a manual Treasury fact and audits its snapshot", async () => {
+    const root = await app.authentication.register({
+      email: `treasury-root-${newId()}@example.test`,
+      username: `tr${newId().replaceAll("-", "").slice(0, 12)}`,
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [root.id],
+    );
+    const entry = await app.treasury.createManual({
+      direction: "credit",
+      amountMinor: 750n,
+      title: "Root deletion test",
+      note: "Manual Treasury fixture",
+      actorId: root.id,
+      idempotencyKey: newId(),
+    });
+
+    const outcome = await new OperatorBulkWorkflow(app).execute(root, {
+      resource: "treasury",
+      action: "delete",
+      ids: [entry.id],
+    });
+
+    expect(outcome).toEqual({ succeeded: [entry.id], failed: [] });
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(0n);
+    expect(
+      await app.database.query("select 1 from treasury_capability.entries where uuid=$1", [
+        entry.id,
+      ]),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await app.database.query(
+        `select previous_state->>'title' title from kernel.audit_records
+          where action='root.delete' and subject_type='treasury_entry' and subject_id=$1`,
+        [entry.id],
+      ),
+    ).toMatchObject({ rows: [{ title: entry.title }] });
   });
 });

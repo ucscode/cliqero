@@ -130,7 +130,7 @@ export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolea
     <CrudIndex
       eyebrow="Ledger inspection"
       title="User earnings"
-      description="Append-only referral commission facts, separated from buyer wallet funds. Reads never settle or mutate entries."
+      description="Recorded referral commission facts, separated from buyer wallet funds. Reads never settle or mutate entries."
       headerActions={
         <Link className="text-sm underline" href="/operator/earnings-adjustments">
           Earning adjustments
@@ -245,9 +245,14 @@ export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolea
                 destructive: true,
                 onSelect: () => {
                   if (!window.confirm("Delete this earnings entry?")) return;
-                  void apiFetch(`/api/earnings/entries/${entry.id}`, { method: "DELETE" }).then(
-                    () => collection.retry(),
-                  );
+                  void runOperatorBulkAction({
+                    resource: "earnings",
+                    action: "delete",
+                    ids: [entry.id],
+                  }).then(async (result) => {
+                    if (result.failed.length) throw new Error(result.failed[0]!.message);
+                    await collection.retry();
+                  });
                 },
               },
             ]
@@ -266,7 +271,7 @@ export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolea
         onNext: () => void collection.next(),
       }}
       sectionTitle="Earnings ledger"
-      sectionDescription="Persisted financial facts are read-only here."
+      sectionDescription="Inspect and manage persisted earning records."
     />
   );
 }

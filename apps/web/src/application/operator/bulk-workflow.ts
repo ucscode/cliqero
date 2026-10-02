@@ -14,6 +14,7 @@ export interface OperatorBulkWorkflowDependencies {
   operatorTreasury: { deleteForRoot(actorId: string, entryId: string): Promise<unknown> };
   listingService: {
     deleteCatalogue(actor: Account, listingId: string): Promise<unknown>;
+    deleteCatalogueForRoot(actor: Account, listingId: string): Promise<unknown>;
     setCatalogueState(
       actor: Account,
       listingId: string,
@@ -31,9 +32,9 @@ export interface OperatorBulkWorkflowDependencies {
   };
   blog: {
     delete(postId: string): unknown;
-    deleteCategory(categoryId: string): unknown;
+    deleteCategoryForRoot(categoryId: string): unknown;
   };
-  listingCategories: { delete(categoryId: string): Promise<unknown> };
+  listingCategories: { deleteForRoot(categoryId: string, actorId: string): Promise<unknown> };
 }
 
 export type OperatorBulkCommand =
@@ -114,7 +115,7 @@ export class OperatorBulkWorkflow {
             break;
           case "listings":
             if (command.action === "delete") {
-              await this.container.listingService.deleteCatalogue(actor, id);
+              await this.container.listingService.deleteCatalogueForRoot(actor, id);
             } else {
               await this.container.listingService.setCatalogueState(actor, id, command.state);
             }
@@ -130,10 +131,10 @@ export class OperatorBulkWorkflow {
             this.container.blog.delete(id);
             break;
           case "blog-categories":
-            this.container.blog.deleteCategory(id);
+            this.container.blog.deleteCategoryForRoot(id);
             break;
           case "catalogue-categories":
-            await this.container.listingCategories.delete(id);
+            await this.container.listingCategories.deleteForRoot(id, actor.id);
             break;
         }
         outcome.succeeded.push(id);

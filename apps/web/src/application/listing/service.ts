@@ -25,6 +25,10 @@ export class ListingService {
     private readonly uow?: UnitOfWork,
     private readonly categoryService?: ListingCategoryService,
     private readonly integrationRevoker?: { revokeAllForListing(listingId: Id): Promise<void> },
+    private readonly rootPurchaseDeleter?: {
+      deleteForListing(actorId: string, listingId: Id): Promise<number>;
+    },
+    private readonly rootMediaDeleter?: { deleteAllForRoot(listingId: Id): Promise<number> },
   ) {}
   async create(
     seller: Account,
@@ -287,6 +291,30 @@ export class ListingService {
           currency: listing.price.currency,
         },
         { deleted: true },
+      );
+      return { id };
+    });
+  }
+  async deleteCatalogueForRoot(actor: Account, id: Id) {
+    const listing = await this.listings.findById(id);
+    if (!listing) throw new PublicApplicationError("Listing not found.", "not_found", 404);
+    await this.rootMediaDeleter?.deleteAllForRoot(id);
+    return this.catalogueMutation(async () => {
+      await this.rootPurchaseDeleter?.deleteForListing(actor.id, id);
+      await this.integrationRevoker?.revokeAllForListing(id);
+      const deleted = await this.listings.deleteForRoot(id);
+      if (!deleted) throw new PublicApplicationError("Listing not found.", "not_found", 404);
+      await this.audit(
+        actor.id,
+        "root.delete",
+        id,
+        {
+          state: listing.state,
+          title: listing.title,
+          price_minor: listing.price.minorAmount.toString(),
+          currency: listing.price.currency,
+        },
+        { deleted: true, mode: "physical" },
       );
       return { id };
     });

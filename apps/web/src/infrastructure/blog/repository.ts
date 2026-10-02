@@ -234,6 +234,13 @@ export class SqliteBlogRepository implements BlogRepository {
       throw error;
     }
   }
+  deleteCategoryForRoot(id: string) {
+    this.transaction(() => {
+      this.db.prepare("delete from blog_post_categories where category_id=?").run(id);
+      if (!this.db.prepare("delete from blog_categories where id=?").run(id).changes)
+        throw new Error("Blog category not found");
+    });
+  }
   categoryIsUsed(id: string) {
     return Boolean(
       this.db.prepare("select 1 from blog_post_categories where category_id=? limit 1").get(id),

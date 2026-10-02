@@ -33,13 +33,20 @@ export function OperatorListingCategories({ canDelete = false }: { canDelete?: b
 
   async function remove(category: ListingCategory) {
     if (
-      !window.confirm(`Delete category “${category.name}”? Assigned categories cannot be deleted.`)
+      !window.confirm(
+        `Delete category “${category.name}”? Its listing assignments will be removed.`,
+      )
     )
       return;
     setActionError(null);
     setBulkOutcome(null);
     try {
-      await apiFetch(`/api/catalogue/categories/${category.id}`, { method: "DELETE" });
+      const result = await runOperatorBulkAction({
+        resource: "catalogue-categories",
+        action: "delete",
+        ids: [category.id],
+      });
+      if (result.failed.length) throw new Error(result.failed[0]!.message);
       await collection.retry();
       toast.success("Category deleted.");
     } catch (cause) {
@@ -96,7 +103,7 @@ export function OperatorListingCategories({ canDelete = false }: { canDelete?: b
     <CrudIndex
       eyebrow="Catalogue operations"
       title="Catalogue categories"
-      description="Manage categories assigned to catalogue listings. Categories in use cannot be removed."
+      description="Manage categories assigned to catalogue listings."
       createAction={{ label: "New category", href: "/operator/catalogue/categories/new" }}
       items={collection.items}
       columns={columns}

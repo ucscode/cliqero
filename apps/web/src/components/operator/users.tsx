@@ -193,7 +193,12 @@ export function OperatorUsersList({
         )
           return;
         try {
-          await apiFetch(`/api/accounts/${account.id}`, { method: "DELETE" });
+          const results = await runOperatorBulkAction({
+            resource: "accounts",
+            action: "delete",
+            ids: [account.id],
+          });
+          if (results.failed.length) throw new Error(results.failed[0]!.message);
           setActionError(null);
           await collection.refresh();
           toast.success(`@${account.username} was deleted. Historical platform records remain.`);

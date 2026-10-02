@@ -84,7 +84,7 @@ describe("OperatorBulkWorkflow", () => {
     const requireCapability = vi.fn(async () => undefined);
     const workflow = new OperatorBulkWorkflow({
       operators: { requireCapability },
-      listingService: { deleteCatalogue: remove },
+      listingService: { deleteCatalogueForRoot: remove },
     } as never);
 
     await expect(

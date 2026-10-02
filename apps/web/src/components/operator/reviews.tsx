@@ -517,8 +517,13 @@ export function OperatorReviews({
                 destructive: true,
                 onSelect: () => {
                   if (!window.confirm("Permanently delete this review?")) return;
-                  void apiFetch(`/api/reviews/${review.id}`, { method: "DELETE" })
-                    .then(async () => {
+                  void runOperatorBulkAction({
+                    resource: "reviews",
+                    action: "delete",
+                    ids: [review.id],
+                  })
+                    .then(async (result) => {
+                      if (result.failed.length) throw new Error(result.failed[0]!.message);
                       toast.success("Review deleted.");
                       await collection.retry();
                     })

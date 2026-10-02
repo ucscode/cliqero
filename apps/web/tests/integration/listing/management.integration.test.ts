@@ -3,6 +3,12 @@ import { createContainer } from "@/infrastructure/container";
 import type { ObjectStorageProvider } from "@/modules/storage/object-storage";
 import type { Listing } from "@/modules/listing";
 import { ListingTransferService, serializeTransfer } from "@/application/listing/transfer";
+import { OperatorBulkWorkflow } from "@/application/operator/bulk-workflow";
+import Database from "better-sqlite3";
+import { BlogService } from "@/application/blog/service";
+import { SqliteBlogRepository } from "@/infrastructure/blog/repository";
+import { applyBlogMigrations } from "@/infrastructure/blog/migration-runner";
+import { newId } from "@/kernel/ids";
 const url = process.env.TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
 const png = new Uint8Array(
@@ -87,6 +93,185 @@ suite("listing management and media", () => {
     expect((await app.listingService.getOwner(owner, archived.id)).state).toBe("archived");
     await expect(app.listingService.getOwner(other, draft.id)).rejects.toThrow("Forbidden");
     expect((await app.listingService.restore(owner, archived.id)).state).toBe("draft");
+  });
+
+  it("root bulk deletion physically removes an assigned listing and its purchase history", async () => {
+    const { owner, other: buyer } = await accounts("root-delete");
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [owner.id],
+    );
+    const category = await app.listingCategories.create("Root deletion category");
+    const simpleListing = await app.listingService.create(owner, {
+      title: "Root deletion listing without history",
+      shortDescription: "No dependent purchase records",
+      longDescription: "Mixed root deletion batch fixture.",
+      priceMinor: "500",
+      currency: "USD",
+      destination: "https://example.test/root-delete-simple",
+    });
+    const listing = await app.listingService.createPublished(owner, {
+      title: "Root deletion listing",
+      shortDescription: "Dependency cleanup test",
+      longDescription: "This listing has a category and completed purchase history.",
+      priceMinor: "1000",
+      currency: "USD",
+      destination: "https://example.test/root-delete",
+      categoryIds: [category.id],
+    });
+    const checkout = await app.legacyProviderCheckout.initiate({
+      buyerId: buyer.id,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
+      listingId: listing.id,
+      providerName: "development",
+      idempotencyKey: `root-listing-purchase-${Date.now()}`,
+    });
+    await app.legacyPaymentCompletion.complete({
+      paymentId: checkout.paymentId,
+      correlationId: newId(),
+    });
+    const distribution = await app.purchaseDistribution.process({
+      purchaseId: checkout.purchaseId!,
+      correlationId: newId(),
+    });
+    await app.treasuryProcessor.process(distribution.id);
+
+    const outcome = await new OperatorBulkWorkflow(app).execute(owner, {
+      resource: "listings",
+      action: "delete",
+      ids: [listing.id, simpleListing.id],
+    });
+
+    expect(outcome).toEqual({ succeeded: [listing.id, simpleListing.id], failed: [] });
+    expect(
+      await app.database.query("select 1 from listing_capability.listings where uuid=$1", [
+        listing.id,
+      ]),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await app.database.query("select 1 from listing_capability.listings where uuid=$1", [
+        simpleListing.id,
+      ]),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await app.database.query("select 1 from purchase_capability.purchases where uuid=$1", [
+        checkout.purchaseId,
+      ]),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await app.database.query(
+        `select 1 from checkout_capability.checkouts where listing_id=(select id from listing_capability.listings where uuid=$1)
+         union all select 1 from payment_capability.payments where id=(select id from payment_capability.payments where uuid=$2)
+         union all select 1 from ledger_capability.purchase_distributions where uuid=$3
+         union all select 1 from treasury_capability.entries where source_id=$3`,
+        [listing.id, checkout.paymentId, distribution.id],
+      ),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await app.database.query(
+        "select 1 from listing_capability.listing_categories where listing_id=(select id from listing_capability.listings where uuid=$1)",
+        [listing.id],
+      ),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await app.database.query(
+        "select 1 from kernel.audit_records where action='root.delete' and subject_type='listing' and subject_id=$1",
+        [listing.id],
+      ),
+    ).toMatchObject({ rows: [{ "?column?": 1 }] });
+  });
+
+  it("root deletion removes category assignments without deleting the listing", async () => {
+    const { owner } = await accounts("root-category");
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [owner.id],
+    );
+    const category = await app.listingCategories.create("Assigned root category");
+    const unusedCategory = await app.listingCategories.create("Unused root category");
+    const listing = await app.listingService.create(owner, {
+      title: "Category dependent listing",
+      shortDescription: "Still exists after category deletion",
+      longDescription: "Category deletion only removes the relationship.",
+      priceMinor: "1000",
+      currency: "USD",
+      destination: "https://example.test/category-dependent",
+      categoryIds: [category.id],
+    });
+
+    const outcome = await new OperatorBulkWorkflow(app).execute(owner, {
+      resource: "catalogue-categories",
+      action: "delete",
+      ids: [category.id, unusedCategory.id],
+    });
+
+    expect(outcome).toEqual({ succeeded: [category.id, unusedCategory.id], failed: [] });
+    await expect(app.listingCategories.get(category.id)).rejects.toThrow("not found");
+    await expect(app.listingCategories.get(unusedCategory.id)).rejects.toThrow("not found");
+    expect((await app.listingService.getOwner(owner, listing.id)).categories).toEqual([]);
+    expect(
+      await app.database.query(
+        "select 1 from kernel.audit_records where action='root.delete' and subject_type='catalogue_category' and subject_id=$1",
+        [category.id],
+      ),
+    ).toMatchObject({ rowCount: 1 });
+  });
+
+  it("root blog deletion removes posts and assigned categories through the same server workflow", async () => {
+    const { owner } = await accounts("root-blog");
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [owner.id],
+    );
+    const sqlite = new Database(":memory:");
+    applyBlogMigrations(sqlite);
+    const blog = new BlogService(new SqliteBlogRepository(sqlite));
+    const dependencies = Object.create(app) as typeof app;
+    Object.defineProperty(dependencies, "blog", { value: blog });
+    try {
+      const category = blog.createCategory("Root-managed category");
+      const retainedPost = blog.create(
+        {
+          title: "Retained article",
+          excerpt: "Assigned category",
+          content: "Content remains when its category is deleted.",
+          category_ids: [category.id],
+        },
+        owner.id,
+      );
+      const removedPost = blog.create(
+        {
+          title: "Removed article",
+          content: "The post itself is deleted by root.",
+          category_ids: [category.id],
+        },
+        owner.id,
+      );
+      const workflow = new OperatorBulkWorkflow(dependencies);
+
+      expect(
+        await workflow.execute(owner, {
+          resource: "blog-posts",
+          action: "delete",
+          ids: [removedPost.id],
+        }),
+      ).toEqual({ succeeded: [removedPost.id], failed: [] });
+      expect(blog.get(removedPost.id)).toBeNull();
+
+      expect(
+        await workflow.execute(owner, {
+          resource: "blog-categories",
+          action: "delete",
+          ids: [category.id],
+        }),
+      ).toEqual({ succeeded: [category.id], failed: [] });
+      expect(blog.get(retainedPost.id)).toMatchObject({ id: retainedPost.id, categories: [] });
+    } finally {
+      sqlite.close();
+    }
   });
 
   it("allows a free listing to be edited and published with a compare-at price", async () => {

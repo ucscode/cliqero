@@ -147,6 +147,17 @@ export class PostgresOperatorPurchaseReader implements OperatorPurchaseReader {
     };
   }
 
+  async listIdsForListing(listingId: string) {
+    return (
+      await this.sql.query<{ uuid: string }>(
+        `select uuid from purchase_capability.purchases
+          where listing_id=(select id from listing_capability.listings where uuid=$1)
+          order by id`,
+        [listingId],
+      )
+    ).rows.map((row) => row.uuid);
+  }
+
   async deleteForRoot(purchaseId: string, actorId: string) {
     const purchase = await this.get(purchaseId);
     if (!purchase) return false;
@@ -163,6 +174,33 @@ export class PostgresOperatorPurchaseReader implements OperatorPurchaseReader {
     ).rows[0];
     if (!ids) return false;
     await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+    const treasuryEntries = (
+      await this.sql.query<any>(
+        `select uuid id,direction,amount_minor,title,note,source_kind,source_id,correlation_id
+           from treasury_capability.entries
+          where source_kind='distribution'
+            and source_id in (
+              select uuid from ledger_capability.purchase_distributions where purchase_id=$1
+            )`,
+        [ids.purchase_id],
+      )
+    ).rows;
+    await this.sql.query(
+      `delete from treasury_capability.entries
+        where source_kind='distribution'
+          and source_id in (
+            select uuid from ledger_capability.purchase_distributions where purchase_id=$1
+          )`,
+      [ids.purchase_id],
+    );
+    for (const entry of treasuryEntries) {
+      await this.sql.query(
+        `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
+         values('root.delete','treasury_entry',$1,$2::jsonb,null,$3::uuid,
+                (select id from identity_capability.accounts where uuid=$4))`,
+        [entry.id, JSON.stringify(entry), newId(), actorId],
+      );
+    }
     await this.sql.query(
       `delete from access_capability.access_grants
         where entitlement_id in (select id from entitlement_capability.entitlements where purchase_id=$1)`,

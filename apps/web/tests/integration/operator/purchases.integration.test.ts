@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { InternalPurchaseRoutes } from "@/api/internal/purchases/handler";
 import { createContainer } from "@/infrastructure/container";
+import { OperatorBulkWorkflow } from "@/application/operator/bulk-workflow";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -135,5 +136,42 @@ suite("operator purchase inspection", () => {
       },
       payment: null,
     });
+  });
+
+  it("system.root bulk deletion physically removes a purchase and records the root audit", async () => {
+    const id = (
+      await container.database.query<{ uuid: string }>(
+        "select uuid from purchase_capability.purchases order by created_at limit 1",
+      )
+    ).rows[0]!.uuid;
+    const root = await container.authentication.register({
+      email: `purchase-delete-root-${Date.now()}@example.test`,
+      username: `purchaseroot${Date.now()}`,
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await container.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [root.id],
+    );
+    const outcome = await new OperatorBulkWorkflow(container).execute(root, {
+      resource: "purchases",
+      action: "delete",
+      ids: [id],
+    });
+
+    expect(outcome).toEqual({ succeeded: [id], failed: [] });
+    expect(
+      await container.database.query("select 1 from purchase_capability.purchases where uuid=$1", [
+        id,
+      ]),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await container.database.query(
+        "select 1 from kernel.audit_records where action='root.delete' and subject_type='purchase' and subject_id=$1",
+        [id],
+      ),
+    ).toMatchObject({ rowCount: 1 });
   });
 });

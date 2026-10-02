@@ -54,6 +54,7 @@ export interface BlogRepository {
   createCategory(input: { name: string; slug: string }): BlogCategory;
   updateCategory(id: string, input: BlogCategoryInput): BlogCategory | null;
   deleteCategory(id: string): void;
+  deleteCategoryForRoot(id: string): void;
   categoryIsUsed(id: string): boolean;
   tags(): unknown[];
   savePreview(

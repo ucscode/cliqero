@@ -210,9 +210,14 @@ export function OperatorPurchaseList({
                 onSelect: () => {
                   if (!window.confirm("Delete this purchase and its dependent commerce facts?"))
                     return;
-                  void apiFetch(`/internal/purchases/${item.id}`, { method: "DELETE" }).then(() =>
-                    collection.retry(),
-                  );
+                  void runOperatorBulkAction({
+                    resource: "purchases",
+                    action: "delete",
+                    ids: [item.id],
+                  }).then(async (result) => {
+                    if (result.failed.length) throw new Error(result.failed[0]!.message);
+                    await collection.retry();
+                  });
                 },
               },
             ]

@@ -92,9 +92,14 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
             onSelect: () => {
               if (!window.confirm("Delete this distribution and its generated ledger facts?"))
                 return;
-              void apiFetch(`/api/distributions/${item.id}`, { method: "DELETE" }).then(() =>
-                collection.retry(),
-              );
+              void runOperatorBulkAction({
+                resource: "distributions",
+                action: "delete",
+                ids: [item.id],
+              }).then(async (result) => {
+                if (result.failed.length) throw new Error(result.failed[0]!.message);
+                await collection.retry();
+              });
             },
           },
         ]
@@ -133,7 +138,7 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
     <CrudIndex
       eyebrow="Accounting inspection"
       title="Distributions"
-      description="Read-only purchase distribution facts: actual referral commissions and the platform remainder. Historical records are never recalculated here."
+      description="Purchase distribution records show referral commissions and the platform remainder as originally recorded."
       filters={
         <OperatorFilterField label="Search distributions" htmlFor="distribution-search">
           <Input
@@ -194,7 +199,7 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
         onNext: () => void collection.next(),
       }}
       sectionTitle="Distribution ledger"
-      sectionDescription="Financial history is immutable; use inspection to review its persisted facts."
+      sectionDescription="Review persisted purchase distribution records."
       beforeTable={bulkOutcome ? <OperatorBulkOutcome outcome={bulkOutcome} /> : undefined}
     />
   );

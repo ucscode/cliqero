@@ -7,6 +7,7 @@ import {
 } from "@/workers/outbox/handlers";
 import { PurchaseDistributionProcessor } from "@/processors/purchase/distribution";
 import { OutboxDispatcher, OutboxHandlerRegistry } from "@/workers/outbox/dispatcher";
+import { OperatorBulkWorkflow } from "@/application/operator/bulk-workflow";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -106,6 +107,147 @@ suite("purchase financial distribution", () => {
     ).rows;
     expect(rows).toHaveLength(platformAmountMinor > 0n ? 1 : 0);
     if (rows[0]) expect(BigInt(rows[0].amount_minor)).toBe(platformAmountMinor);
+  });
+
+  it("root bulk deletion removes a distribution, its generated ledger facts, and its Treasury projection", async () => {
+    const value = await completed();
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [value.seller.id],
+    );
+    const distribution = await app.purchaseDistribution.process({
+      purchaseId: value.purchaseId,
+      correlationId: newId(),
+    });
+    await app.treasuryProcessor.process(distribution.id);
+    const before = await app.treasuryRepository.summary();
+    expect(before.balanceMinor).toBeGreaterThan(0n);
+
+    const outcome = await new OperatorBulkWorkflow(app).execute(value.seller, {
+      resource: "distributions",
+      action: "delete",
+      ids: [distribution.id],
+    });
+
+    expect(outcome).toEqual({ succeeded: [distribution.id], failed: [] });
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(0n);
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.purchase_distributions where uuid=$1
+         union all select 1 from ledger_capability.entries where distribution_id=(select id from ledger_capability.purchase_distributions where uuid=$1)
+         union all select 1 from treasury_capability.entries where source_kind='distribution' and source_id=$1`,
+        [distribution.id],
+      ),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await app.database.query(
+        `select count(*)::int count from kernel.audit_records
+          where action='root.delete' and subject_type='distribution' and subject_id=$1`,
+        [distribution.id],
+      ),
+    ).toMatchObject({ rows: [{ count: 1 }] });
+  });
+
+  it("system.root bulk deletion removes an earnings adjustment and preserves its audit snapshot", async () => {
+    const value = await completed();
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [value.seller.id],
+    );
+    const adjustment = await app.earningsAdjustments.create(value.seller.id, {
+      accountId: value.seller.id,
+      amountMinor: "425",
+      reason: "Root-delete integration fixture",
+      reference: newId(),
+    });
+
+    const outcome = await new OperatorBulkWorkflow(app).execute(value.seller, {
+      resource: "earnings-adjustments",
+      action: "delete",
+      ids: [adjustment.id],
+    });
+
+    expect(outcome).toEqual({ succeeded: [adjustment.id], failed: [] });
+    expect(
+      await app.database.query(
+        "select 1 from ledger_capability.earnings_adjustments where uuid=$1",
+        [adjustment.id],
+      ),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await app.database.query(
+        `select previous_state->>'reason' reason from kernel.audit_records
+          where action='root.delete' and subject_type='earnings_adjustment' and subject_id=$1`,
+        [adjustment.id],
+      ),
+    ).toMatchObject({ rows: [{ reason: adjustment.reason }] });
+  });
+
+  it("system.root bulk deletion removes a generated earning and updates the ledger projection", async () => {
+    const seller = await account(`esell${newId().slice(0, 5)}`);
+    const buyer = await account(`ebuy${newId().slice(0, 5)}`);
+    const referrer = await account(`eref${newId().slice(0, 5)}`);
+    await app.referralGraphService.establish(buyer.id, referrer.id);
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [seller.id],
+    );
+    const listing = await app.listingService.createPublished(seller, {
+      title: "Earning delete fixture",
+      shortDescription: "Referral earning",
+      longDescription: "A real completed referral-backed purchase.",
+      priceMinor: "10000",
+      currency: "USD",
+      destination: "https://example.test/earning-delete",
+    });
+    const visit = await app.referralAttribution.visit(referrer.id, listing.id);
+    const checkout = await app.legacyProviderCheckout.initiate({
+      buyerId: buyer.id,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
+      listingId: listing.id,
+      providerName: "development",
+      idempotencyKey: newId(),
+      attributionSource: visit!.source,
+    });
+    await app.legacyPaymentCompletion.complete({
+      paymentId: checkout.paymentId,
+      correlationId: newId(),
+    });
+    const distribution = await app.purchaseDistribution.process({
+      purchaseId: checkout.purchaseId!,
+      correlationId: newId(),
+    });
+    const earning = (
+      await app.database.query<{ uuid: string }>(
+        `select uuid from ledger_capability.entries
+          where distribution_id=(select id from ledger_capability.purchase_distributions where uuid=$1)
+            and recipient_role='referral' and direction='credit' limit 1`,
+        [distribution.id],
+      )
+    ).rows[0]!;
+
+    const outcome = await new OperatorBulkWorkflow(app).execute(seller, {
+      resource: "earnings",
+      action: "delete",
+      ids: [earning.uuid],
+    });
+
+    expect(outcome).toEqual({ succeeded: [earning.uuid], failed: [] });
+    expect(
+      await app.database.query("select 1 from ledger_capability.entries where uuid=$1", [
+        earning.uuid,
+      ]),
+    ).toMatchObject({ rows: [] });
+    expect(
+      await app.database.query(
+        `select 1 from kernel.audit_records
+          where action='root.delete' and subject_type='earning' and subject_id=$1`,
+        [earning.uuid],
+      ),
+    ).toMatchObject({ rowCount: 1 });
   });
 
   it("uses trusted attribution and bounded exact referral commission facts", async () => {

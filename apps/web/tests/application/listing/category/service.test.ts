@@ -31,6 +31,7 @@ function setup() {
     delete: vi.fn(async (id: string) => {
       categories.delete(id);
     }),
+    removeAssignmentsForRoot: vi.fn(async () => undefined),
     isUsed: vi.fn(async () => false),
   };
   const uow = {
@@ -79,6 +80,30 @@ describe("ListingCategoryService", () => {
     await service.delete(category.id);
     expect(repository.delete).toHaveBeenCalledWith(category.id);
     await expect(service.get(category.id)).rejects.toThrow("not found");
+  });
+
+  it("root deletion clears assignments, physically deletes, and audits atomically", async () => {
+    const { service, repository, categories } = setup();
+    const category = await service.create("Assigned category");
+    const audit = { record: vi.fn(async () => undefined) };
+    const rootService = new ListingCategoryService(
+      repository,
+      { transaction: async (operation) => operation() },
+      audit,
+    );
+
+    await rootService.deleteForRoot(category.id, "root-id");
+
+    expect(repository.removeAssignmentsForRoot).toHaveBeenCalledWith(category.id);
+    expect(repository.delete).toHaveBeenCalledWith(category.id);
+    expect(categories.has(category.id)).toBe(false);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: "root-id",
+        action: "root.delete",
+        subjectType: "catalogue_category",
+      }),
+    );
   });
 
   it("validates all category IDs and rejects duplicates", async () => {

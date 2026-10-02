@@ -160,6 +160,11 @@ export class BlogService {
     if (this.repository.categoryIsUsed(id)) throw new BlogCategoryInUseError();
     this.repository.deleteCategory(id);
   }
+  deleteCategoryForRoot(id: string): void {
+    if (!this.repository.categories().some((category) => category.id === id))
+      throw new BlogCategoryNotFoundError();
+    this.repository.deleteCategoryForRoot(id);
+  }
 
   private prepare(input: BlogPostInput): BlogSaveInput {
     return {

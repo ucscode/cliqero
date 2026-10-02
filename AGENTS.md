@@ -780,6 +780,15 @@ prevents it. Bulk mutations must use one browser request/server-side workflow
 and report per-record outcomes; do not implement bulk actions as one browser
 request per selected row.
 
+Delete controls and root-delete semantics are separate requirements. Every
+Operator table exposes row Delete and bulk Delete to `system.root`; root
+deletion resolves dependencies and performs the resource's destructive
+operation, so ordinary in-use or append-oriented restrictions do not block it.
+Ordinary roles may retain safer soft-delete, tombstone, or rejection behavior.
+An identity may remain as a deliberate tombstone only where required to retain
+historical financial/account references, and that canonical model must be
+explicitly documented rather than used as a generic deletion restriction.
+
 Keep Operator action labels concise when the surrounding interface already
 identifies the resource or selection: Edit, Delete, Publish, Archive, Restore,
 Approve, and Reject. Avoid redundant labels such as "Edit listing", "Delete
@@ -877,6 +886,10 @@ Treat mutable operational resources and historical financial facts differently:
   protections apply to ordinary domain operations, not to explicit root
   administrative deletion workflows, which must retain a safe audit snapshot
   where technically possible.
+- The canonical account identity is a deliberate exception: Operator account
+  deletion redacts and tombstones the identity row because historical records
+  retain restrictive, non-null account references. This resource-specific
+  tombstone preserves attribution; it is not a general root-delete restriction.
 - A wallet transfer posts the source debit, destination credit/earnings
   adjustment, and any Treasury fee in one PostgreSQL transaction. Retries must
   be idempotent and all legs share a stable correlation identity.

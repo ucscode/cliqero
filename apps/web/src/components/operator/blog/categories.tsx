@@ -32,7 +32,12 @@ export function OperatorBlogCategories({ canDelete = false }: { canDelete?: bool
     setActionError(null);
     setBulkOutcome(null);
     try {
-      await apiFetch(`/api/blog/categories/${category.id}`, { method: "DELETE" });
+      const result = await runOperatorBulkAction({
+        resource: "blog-categories",
+        action: "delete",
+        ids: [category.id],
+      });
+      if (result.failed.length) throw new Error(result.failed[0]!.message);
       await collection.retry();
       toast.success("Category deleted.");
     } catch (cause) {
@@ -87,7 +92,7 @@ export function OperatorBlogCategories({ canDelete = false }: { canDelete?: bool
     <CrudIndex
       eyebrow="Content operations"
       title="Blog categories"
-      description="Manage categories assigned to public articles. Categories in use cannot be removed."
+      description="Manage categories assigned to public articles."
       createAction={{ label: "New category", href: "/operator/blog/categories/new" }}
       items={collection.items}
       columns={columns}

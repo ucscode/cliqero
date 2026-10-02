@@ -160,7 +160,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const listings = lazy(() => new PostgresListingRepository(database, database));
   const listingCategories = lazy(() => new PostgresListingCategoryRepository(database));
   const listingCategoryService = lazy(
-    () => new ListingCategoryService(listingCategories(), database),
+    () => new ListingCategoryService(listingCategories(), database, auditRecorder()),
   );
   const reviews = lazy(() => new PostgresListingReviewRepository(database));
   const listingMediaRepository = lazy(() => new PostgresListingMediaRepository(database));
@@ -195,6 +195,11 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         database,
         listingCategoryService(),
         integrations(),
+        {
+          deleteForListing: (actorId: string, listingId: string) =>
+            operatorPurchases().deleteForListing(actorId, listingId),
+        },
+        { deleteAllForRoot: (listingId: string) => listingMedia().deleteAllForRoot(listingId) },
       ),
   );
   const operators = lazy(() => new PostgresOperatorAuthorizationService(database));
@@ -294,6 +299,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         withdrawalDestinations(),
         feePolicy(),
         treasuryRepository(),
+        auditRecorder(),
       ),
   );
 

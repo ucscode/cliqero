@@ -20,6 +20,7 @@ export interface ListingCategoryRepository {
   create(input: { name: string; slug: string }): Promise<ListingCategory>;
   update(id: string, input: ListingCategoryInput): Promise<ListingCategory | null>;
   delete(id: string): Promise<void>;
+  removeAssignmentsForRoot(id: string): Promise<void>;
   isUsed(id: string): Promise<boolean>;
 }
 

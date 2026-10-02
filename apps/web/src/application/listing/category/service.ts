@@ -1,5 +1,6 @@
 import slugify from "slugify";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
+import type { AuditRecorder } from "@/application/shared/audit";
 import {
   ListingCategoryConflictError,
   ListingCategoryInUseError,
@@ -16,6 +17,7 @@ export class ListingCategoryService {
   constructor(
     private readonly repository: ListingCategoryRepository,
     private readonly uow: UnitOfWork,
+    private readonly audit?: AuditRecorder,
   ) {}
 
   list() {
@@ -71,6 +73,23 @@ export class ListingCategoryService {
       if (!category) throw new ListingCategoryNotFoundError();
       if (await this.repository.isUsed(id)) throw new ListingCategoryInUseError();
       await this.repository.delete(id);
+    });
+  }
+
+  async deleteForRoot(id: string, actorId: string) {
+    return this.uow.transaction(async () => {
+      const category = await this.repository.findById(id);
+      if (!category) throw new ListingCategoryNotFoundError();
+      await this.repository.removeAssignmentsForRoot(id);
+      await this.repository.delete(id);
+      await this.audit?.record({
+        actorId,
+        action: "root.delete",
+        subjectType: "catalogue_category",
+        subjectId: id,
+        previousState: category,
+        newState: { deleted: true, listingAssignmentsRemoved: true },
+      });
     });
   }
 

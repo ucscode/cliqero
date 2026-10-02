@@ -11,6 +11,7 @@ import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import { Money } from "@/modules/money/money";
 import type { WithdrawalPersistence } from "@/application/withdrawal/contracts";
 import type { WithdrawalDestinationService } from "@/application/withdrawal/destinations";
+import type { AuditRecorder } from "@/application/shared/audit";
 import { calculateFee, type FeePolicySource } from "@/modules/fee/policy";
 import type { TreasuryRepository } from "@/modules/treasury/treasury";
 import { PublicApplicationError } from "@/kernel/errors";
@@ -26,6 +27,7 @@ export class WithdrawalService {
     private readonly destinations: WithdrawalDestinationService,
     private readonly feePolicy: FeePolicySource,
     private readonly treasury: TreasuryRepository,
+    private readonly audit: AuditRecorder,
   ) {}
   async requestByOperator(
     actorId: string,
@@ -482,6 +484,27 @@ export class WithdrawalService {
       if (root) {
         await this.funds.removeForRoot(id, current.accountId);
         await this.withdrawals.deleteForRoot(id);
+        await this.audit.record({
+          actorId,
+          action: "root.delete",
+          subjectType: "withdrawal",
+          subjectId: id,
+          previousState: {
+            accountId: current.accountId,
+            amountMinor: current.amount.minorAmount.toString(),
+            currency: current.amount.currency,
+            feeMinor: current.fee?.minorAmount.toString() ?? "0",
+            netAmountMinor:
+              current.netAmount?.minorAmount.toString() ?? current.amount.minorAmount.toString(),
+            state: current.state,
+            correlationId: current.correlationId,
+            reason: current.reason,
+            externalReference: current.externalReference,
+            completionNote: current.completionNote,
+            completedAt: current.completedAt?.toISOString() ?? null,
+          },
+          newState: { deleted: true, mode: "physical", reservationReconciled: true },
+        });
       } else {
         await this.funds.remove(id, current.accountId);
         await this.withdrawals.deleteMutable(id);

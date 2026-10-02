@@ -91,7 +91,7 @@ export function OperatorEarningsAdjustmentForm({
     <form onSubmit={create} className="grid gap-4 rounded-xl border bg-white p-5 md:grid-cols-2">
       <h2 className="text-lg font-semibold md:col-span-2">New adjustment</h2>
       <p className="text-sm text-slate-600 md:col-span-2">
-        This posts an immutable ledger fact. Positive increases the account balance; negative
+        This posts a signed ledger adjustment. Positive increases the account balance; negative
         decreases it.
       </p>
       <div className="grid gap-2">
@@ -260,9 +260,9 @@ export function OperatorEarningsAdjustments({
 
   return (
     <CrudIndex
-      eyebrow="Append-only earnings ledger"
+      eyebrow="Earnings adjustments"
       title="Earning adjustments"
-      description="Signed USD adjustments are immutable. Positive amounts increase earnings; negative amounts reduce them. Correct mistakes with an equal and opposite adjustment."
+      description="Signed USD adjustments record increases and decreases to account earnings."
       headerActions={
         <Link className="text-sm underline" href="/operator/earnings">
           Generated earnings
@@ -290,9 +290,12 @@ export function OperatorEarningsAdjustments({
                 destructive: true,
                 onSelect: async () => {
                   if (!window.confirm("Delete this earnings adjustment?")) return;
-                  await apiFetch(`/internal/earnings-adjustments/${item.id}`, {
-                    method: "DELETE",
+                  const result = await runOperatorBulkAction({
+                    resource: "earnings-adjustments",
+                    action: "delete",
+                    ids: [item.id],
                   });
+                  if (result.failed.length) throw new Error(result.failed[0]!.message);
                   await load();
                 },
               },
@@ -343,7 +346,7 @@ export function OperatorEarningsAdjustmentDetail({ id }: { id: string }) {
     );
   return (
     <CrudDetail
-      eyebrow="Append-only ledger fact"
+      eyebrow="Earning adjustment"
       title={item.reason}
       description={item.id}
       sections={

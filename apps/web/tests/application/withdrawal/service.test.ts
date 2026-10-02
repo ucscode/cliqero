@@ -38,6 +38,7 @@ function fixture(
     amount: withdrawal.amount,
   }));
   const treasuryCreate = vi.fn(async () => undefined);
+  const auditRecord = vi.fn(async () => undefined);
   const releaseOrComplete = vi.fn(async () => undefined);
   const append = vi.fn(async () => undefined);
   const requireCapability = vi.fn(async () => undefined);
@@ -90,6 +91,7 @@ function fixture(
       }),
     },
     { create: treasuryCreate, findByIdempotencyKey: async () => null } as any,
+    { record: auditRecord },
   );
   return {
     service,
@@ -101,6 +103,7 @@ function fixture(
     create,
     reserve,
     treasuryCreate,
+    auditRecord,
   };
 }
 

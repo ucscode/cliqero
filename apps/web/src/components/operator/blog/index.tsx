@@ -58,7 +58,12 @@ export function OperatorBlogList({ canDelete = false }: { canDelete?: boolean })
     setActionError(null);
     setBulkOutcome(null);
     try {
-      await apiFetch(`/api/blog/posts/${post.id}`, { method: "DELETE" });
+      const result = await runOperatorBulkAction({
+        resource: "blog-posts",
+        action: "delete",
+        ids: [post.id],
+      });
+      if (result.failed.length) throw new Error(result.failed[0]!.message);
       await collection.retry();
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "Unable to delete post.");

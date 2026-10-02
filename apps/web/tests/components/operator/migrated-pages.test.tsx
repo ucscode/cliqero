@@ -126,7 +126,7 @@ describe("operator console shared page migration", () => {
     const html = renderPage(<OperatorCatalogueList />);
     expect(html).toContain(">Transfer</button>");
     expect(html).toContain("New listing");
-    expect(html).toContain("Delete");
+    expect(html).toContain("Root deletion removes the listing");
     expect(html).not.toContain("Manage categories");
     expect(html).not.toContain("Import listings");
   });
