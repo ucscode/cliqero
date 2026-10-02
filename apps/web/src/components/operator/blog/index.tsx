@@ -27,7 +27,7 @@ import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "../ui/bulk-ou
 import { useToast } from "@/components/toast/provider";
 import { CrudSortSelect } from "@/components/crud/sort-select";
 
-export function OperatorBlogList() {
+export function OperatorBlogList({ canDelete = false }: { canDelete?: boolean }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [sortChoice, setSortChoice] = useState("created:desc");
@@ -94,9 +94,9 @@ export function OperatorBlogList() {
       return false;
     }
   }
-  const bulkActions: readonly CrudBulkAction<BlogPost>[] = [
-    { value: "delete", label: "Delete", destructive: true, onSelect: bulk },
-  ];
+  const bulkActions: readonly CrudBulkAction<BlogPost>[] = canDelete
+    ? [{ value: "delete", label: "Delete", destructive: true, onSelect: bulk }]
+    : [];
   const columns: readonly CrudColumn<BlogPost>[] = [
     {
       key: "article",
@@ -197,11 +197,20 @@ export function OperatorBlogList() {
       items={collection.items}
       columns={columns}
       getRowKey={(post) => post.id}
-      selection={{ labelForItem: (post) => `article ${post.title}` }}
+      selection={canDelete ? { labelForItem: (post) => `article ${post.title}` } : undefined}
       bulkActions={bulkActions}
       actions={(post) => [
         { type: "link", label: "View", href: `/operator/blog/${post.id}` },
-        { type: "action", label: "Delete", destructive: true, onSelect: () => void remove(post) },
+        ...(canDelete
+          ? [
+              {
+                type: "action" as const,
+                label: "Delete",
+                destructive: true,
+                onSelect: () => void remove(post),
+              },
+            ]
+          : []),
       ]}
       actionLabel={(post) => `Actions for article ${post.title}`}
       loading={collection.loading}

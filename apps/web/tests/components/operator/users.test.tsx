@@ -89,7 +89,7 @@ describe("operator users list", () => {
   });
 
   it("renders account fields as separate semantic table columns", () => {
-    const html = renderUsers();
+    const html = renderUsers({ canManage: true, canDelete: true });
     const headers = Array.from(html.matchAll(/<th\b[^>]*>(.*?)<\/th>/g), (match) => match[1]);
 
     expect(html).toContain("<table");
@@ -106,6 +106,13 @@ describe("operator users list", () => {
     expect(html).toContain('aria-label="Actions for @gamma_one"');
     expect(html).not.toContain("Country not set");
     expect(html).not.toContain("reviewer_threereviewer.three@example.test");
+  });
+
+  it("does not expose root-only account selection to read-only operators", () => {
+    const html = renderUsers();
+
+    expect(html).not.toContain('aria-label="Select all visible records"');
+    expect(html).not.toContain('aria-label="Select account reviewer_three"');
   });
 
   it("keeps forward cursor pagination and does not imply numbered pages", () => {

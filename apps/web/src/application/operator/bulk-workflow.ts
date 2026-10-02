@@ -4,6 +4,14 @@ import type { Capability } from "@/modules/identity/capabilities";
 export interface OperatorBulkWorkflowDependencies {
   operators: { requireCapability(accountId: string, capability: Capability): Promise<unknown> };
   operatorAccountManagement: { delete(actorId: string, accountId: string): Promise<unknown> };
+  operatorPurchases: { deleteForRoot(actorId: string, purchaseId: string): Promise<unknown> };
+  operatorDistributions: {
+    deleteForRoot(actorId: string, distributionId: string): Promise<unknown>;
+  };
+  operatorEarnings: { deleteForRoot(actorId: string, entryId: string): Promise<unknown> };
+  earningsAdjustments: { deleteForRoot(actorId: string, adjustmentId: string): Promise<unknown> };
+  withdrawals: { deleteByOperator(actorId: string, withdrawalId: string): Promise<unknown> };
+  operatorTreasury: { deleteForRoot(actorId: string, entryId: string): Promise<unknown> };
   listingService: {
     deleteCatalogue(actor: Account, listingId: string): Promise<unknown>;
     setCatalogueState(
@@ -30,6 +38,17 @@ export interface OperatorBulkWorkflowDependencies {
 
 export type OperatorBulkCommand =
   | { resource: "accounts"; action: "delete"; ids: string[] }
+  | {
+      resource:
+        | "purchases"
+        | "distributions"
+        | "earnings"
+        | "earnings-adjustments"
+        | "withdrawals"
+        | "treasury";
+      action: "delete";
+      ids: string[];
+    }
   | {
       resource: "listings";
       action: "set-state";
@@ -60,18 +79,13 @@ export class OperatorBulkWorkflow {
   constructor(private readonly container: OperatorBulkWorkflowDependencies) {}
 
   async execute(actor: Account, command: OperatorBulkCommand): Promise<OperatorBulkOutcome> {
-    const requiredCapability: Record<OperatorBulkCommand["resource"], Capability> = {
-      accounts: "accounts.manage",
-      listings: "catalogue.manage",
-      reviews: "reviews.moderate",
-      "blog-posts": "content.manage",
-      "blog-categories": "content.manage",
-      "catalogue-categories": "catalogue.manage",
-    };
-    await this.container.operators.requireCapability(
-      actor.id,
-      requiredCapability[command.resource],
-    );
+    const requiredCapability: Capability =
+      command.action === "delete"
+        ? "system.root"
+        : command.resource === "listings"
+          ? "catalogue.manage"
+          : "reviews.moderate";
+    await this.container.operators.requireCapability(actor.id, requiredCapability);
 
     const outcome: OperatorBulkOutcome = { succeeded: [], failed: [] };
     for (const id of [...new Set(command.ids)]) {
@@ -79,6 +93,24 @@ export class OperatorBulkWorkflow {
         switch (command.resource) {
           case "accounts":
             await this.container.operatorAccountManagement.delete(actor.id, id);
+            break;
+          case "purchases":
+            await this.container.operatorPurchases.deleteForRoot(actor.id, id);
+            break;
+          case "distributions":
+            await this.container.operatorDistributions.deleteForRoot(actor.id, id);
+            break;
+          case "earnings":
+            await this.container.operatorEarnings.deleteForRoot(actor.id, id);
+            break;
+          case "earnings-adjustments":
+            await this.container.earningsAdjustments.deleteForRoot(actor.id, id);
+            break;
+          case "withdrawals":
+            await this.container.withdrawals.deleteByOperator(actor.id, id);
+            break;
+          case "treasury":
+            await this.container.operatorTreasury.deleteForRoot(actor.id, id);
             break;
           case "listings":
             if (command.action === "delete") {

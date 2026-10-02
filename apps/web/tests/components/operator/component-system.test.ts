@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   operatorListingDescriptionForm,
@@ -22,6 +22,13 @@ const operatorFiles = [
 
 const operatorRoot = resolve(__dirname, "../../../src/components/operator");
 
+function filesUnder(directory: string): string[] {
+  return readdirSync(directory).flatMap((name) => {
+    const path = resolve(directory, name);
+    return statSync(path).isDirectory() ? filesUnder(path) : [path];
+  });
+}
+
 describe("operator component-system migration", () => {
   it("imports generic primitives directly from components/ui", () => {
     for (const file of operatorFiles) {
@@ -38,19 +45,47 @@ describe("operator component-system migration", () => {
     expect(source, file).toContain("/internal/withdrawals/bulk-delete");
   });
 
-  it.each(["treasury.tsx", "distributions.tsx", "earnings.tsx"])(
-    "keeps historical %s facts inspection-only",
-    (file) => {
-      const source = readFileSync(resolve(operatorRoot, file), "utf8");
-      expect(source, file).not.toContain("selection={{");
-      expect(source, file).not.toContain("bulkActions");
-      expect(source, file).not.toContain("selectedCount");
-    },
-  );
+  it("keeps every Operator record table root-deletable through shared selection", () => {
+    const tables = [
+      ["catalogue.tsx", "runOperatorBulkAction", "catalogue/page.tsx"],
+      ["catalogue/categories.tsx", "runOperatorBulkAction", "catalogue/categories/page.tsx"],
+      ["reviews.tsx", "runOperatorBulkAction", "reviews/page.tsx"],
+      ["users.tsx", "runOperatorBulkAction", "users/page.tsx"],
+      ["api-keys/collection.tsx", "/internal/api-keys/actions/delete", "api-keys/page.tsx"],
+      ["purchases.tsx", "runOperatorBulkAction", "purchases/page.tsx"],
+      ["funding.tsx", "/internal/funding/bulk-delete", "funding/page.tsx"],
+      ["distributions.tsx", "runOperatorBulkAction", "distributions/page.tsx"],
+      ["earnings.tsx", "runOperatorBulkAction", "earnings/page.tsx"],
+      ["earnings-adjustments.tsx", "runOperatorBulkAction", "earnings-adjustments/page.tsx"],
+      ["withdrawals.tsx", "/internal/withdrawals/bulk-delete", "withdrawals/page.tsx"],
+      ["treasury.tsx", "runOperatorBulkAction", "treasury/page.tsx"],
+      ["blog/index.tsx", "runOperatorBulkAction", "blog/page.tsx"],
+      ["blog/categories.tsx", "runOperatorBulkAction", "blog/categories/page.tsx"],
+    ] as const;
+    const inventoryFiles = new Set(tables.map(([file]) => resolve(operatorRoot, file)));
+    const renderedTableFiles = filesUnder(operatorRoot).filter((file) =>
+      readFileSync(file, "utf8").includes("<CrudIndex"),
+    );
 
-  it("limits account bulk deletion to account managers", () => {
+    expect(renderedTableFiles.sort()).toEqual([...inventoryFiles].sort());
+
+    for (const [file, bulkPath, page] of tables) {
+      const source = readFileSync(resolve(operatorRoot, file), "utf8");
+      expect(source, file).toContain("selection=");
+      expect(source, file).toContain('label: "Delete"');
+      expect(source, file).toContain(bulkPath);
+      expect(source, file).toContain("canDelete");
+      const pageSource = readFileSync(
+        resolve(__dirname, `../../../src/app/operator/${page}`),
+        "utf8",
+      );
+      expect(pageSource, page).toContain('hasCapability(access.capabilities, "system.root")');
+    }
+  });
+
+  it("limits destructive account controls and bulk deletion to system.root", () => {
     const source = readFileSync(resolve(operatorRoot, "users.tsx"), "utf8");
-    expect(source).toContain("canManage && onBulkDelete");
+    expect(source).toContain("canDelete && onBulkDelete");
     expect(source).toContain('value: "delete"');
     expect(source).toContain("/api/accounts/${account.id}");
     expect(source).not.toContain("/api/accounts/bulk");

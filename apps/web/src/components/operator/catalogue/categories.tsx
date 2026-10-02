@@ -22,7 +22,7 @@ import {
 } from "@/components/operator/ui/bulk-outcome";
 import { useToast } from "@/components/toast/provider";
 
-export function OperatorListingCategories() {
+export function OperatorListingCategories({ canDelete = false }: { canDelete?: boolean }) {
   const toast = useToast();
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
@@ -77,9 +77,9 @@ export function OperatorListingCategories() {
       return false;
     }
   }
-  const bulkActions: readonly CrudBulkAction<ListingCategory>[] = [
-    { value: "delete", label: "Delete", destructive: true, onSelect: removeMany },
-  ];
+  const bulkActions: readonly CrudBulkAction<ListingCategory>[] = canDelete
+    ? [{ value: "delete", label: "Delete", destructive: true, onSelect: removeMany }]
+    : [];
 
   const columns: readonly CrudColumn<ListingCategory>[] = [
     {
@@ -101,7 +101,11 @@ export function OperatorListingCategories() {
       items={collection.items}
       columns={columns}
       getRowKey={(category) => category.id}
-      selection={{ labelForItem: (category) => `catalogue category ${category.name}` }}
+      selection={
+        canDelete
+          ? { labelForItem: (category) => `catalogue category ${category.name}` }
+          : undefined
+      }
       bulkActions={bulkActions}
       beforeTable={
         <div className="grid gap-3">
@@ -111,12 +115,16 @@ export function OperatorListingCategories() {
       }
       actions={(category) => [
         { type: "link", label: "Edit", href: `/operator/catalogue/categories/${category.id}` },
-        {
-          type: "action",
-          label: "Delete",
-          destructive: true,
-          onSelect: () => void remove(category),
-        },
+        ...(canDelete
+          ? [
+              {
+                type: "action" as const,
+                label: "Delete",
+                destructive: true,
+                onSelect: () => void remove(category),
+              },
+            ]
+          : []),
       ]}
       actionLabel={(category) => `Actions for category ${category.name}`}
       loading={collection.loading}

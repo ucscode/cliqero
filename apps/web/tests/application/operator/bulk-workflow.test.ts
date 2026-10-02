@@ -97,9 +97,38 @@ describe("OperatorBulkWorkflow", () => {
       succeeded: ["listing-a"],
       failed: [{ id: "listing-b", message: "Listing has dependent history." }],
     });
-    expect(requireCapability).toHaveBeenCalledWith(actor.id, "catalogue.manage");
+    expect(requireCapability).toHaveBeenCalledWith(actor.id, "system.root");
     expect(remove).toHaveBeenCalledTimes(2);
     expect(remove).toHaveBeenNthCalledWith(1, actor, "listing-a");
     expect(remove).toHaveBeenNthCalledWith(2, actor, "listing-b");
+  });
+
+  it("deletes root-owned financial and commerce records independently", async () => {
+    const remove = vi.fn(async (_actorId: string, id: string) => {
+      if (id === "bad") throw new Error("Record not found.");
+    });
+    const workflow = new OperatorBulkWorkflow({
+      operators: { requireCapability: vi.fn(async () => undefined) },
+      operatorPurchases: { deleteForRoot: remove },
+      operatorDistributions: { deleteForRoot: remove },
+      operatorEarnings: { deleteForRoot: remove },
+      earningsAdjustments: { deleteForRoot: remove },
+      withdrawals: { deleteByOperator: remove },
+      operatorTreasury: { deleteForRoot: remove },
+    } as never);
+
+    await expect(
+      workflow.execute(actor, {
+        resource: "earnings",
+        action: "delete",
+        ids: ["good", "bad", "good"],
+      }),
+    ).resolves.toEqual({
+      succeeded: ["good"],
+      failed: [{ id: "bad", message: "Record not found." }],
+    });
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(remove).toHaveBeenNthCalledWith(1, actor.id, "good");
+    expect(remove).toHaveBeenNthCalledWith(2, actor.id, "bad");
   });
 });

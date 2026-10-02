@@ -53,7 +53,7 @@ async function searchAccounts(query: string): Promise<AccountOption[]> {
   }));
 }
 
-export function OperatorApiKeys() {
+export function OperatorApiKeys({ canDelete = false }: { canDelete?: boolean }) {
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [state, setState] = useState<ApiKeyCollectionFilters["state"]>("all");
@@ -296,23 +296,30 @@ export function OperatorApiKeys() {
       items={collection.items}
       columns={columns}
       getRowKey={(key) => key.id}
-      actions={(key) => operatorApiKeyRowActions(key, remove)}
+      actions={(key) => operatorApiKeyRowActions(key, canDelete ? remove : undefined)}
       actionLabel={(key) => `Actions for ${key.name}`}
-      selection={{
-        labelForItem: (key) => `API key ${key.name}`,
-        canSelectItem: () => true,
-      }}
-      bulkActions={(selected) =>
-        selected.length
-          ? [
-              {
-                value: "delete",
-                label: "Delete",
-                destructive: true,
-                onSelect: deleteSelected,
-              },
-            ]
-          : []
+      selection={
+        canDelete
+          ? {
+              labelForItem: (key) => `API key ${key.name}`,
+              canSelectItem: () => true,
+            }
+          : undefined
+      }
+      bulkActions={
+        canDelete
+          ? (selected) =>
+              selected.length
+                ? [
+                    {
+                      value: "delete",
+                      label: "Delete",
+                      destructive: true,
+                      onSelect: deleteSelected,
+                    },
+                  ]
+                : []
+          : undefined
       }
       pagination={{
         hasPrevious: collection.hasPrevious,

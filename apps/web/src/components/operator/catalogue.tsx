@@ -79,7 +79,7 @@ export function createCatalogueImagePreview(file: File) {
   };
 }
 
-export function OperatorCatalogueList() {
+export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boolean }) {
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
   const [visibility, setVisibility] = useState("");
@@ -240,12 +240,16 @@ export function OperatorCatalogueList() {
       onSelect: (items) => bulkState(items, "archive"),
     },
     { value: "restore", label: "Restore", onSelect: (items) => bulkState(items, "restore") },
-    {
-      value: "delete",
-      label: "Delete",
-      destructive: true,
-      onSelect: (items) => bulkDelete(items),
-    },
+    ...(canDelete
+      ? [
+          {
+            value: "delete",
+            label: "Delete",
+            destructive: true,
+            onSelect: (items: readonly OperatorListing[]) => bulkDelete(items),
+          },
+        ]
+      : []),
   ];
 
   async function importFile(event: FormEvent<HTMLFormElement>) {
@@ -401,12 +405,16 @@ export function OperatorCatalogueList() {
           },
         ]
       : []),
-    {
-      type: "action",
-      label: "Delete",
-      destructive: true,
-      onSelect: () => void deleteListing(listing),
-    },
+    ...(canDelete
+      ? [
+          {
+            type: "action" as const,
+            label: "Delete",
+            destructive: true,
+            onSelect: () => void deleteListing(listing),
+          },
+        ]
+      : []),
   ];
 
   return (

@@ -15,6 +15,9 @@ import { Button } from "../ui/button";
 import { OperatorPrimaryCell, OperatorStatusCell } from "./ui/data-cells";
 import { OperatorSection } from "./ui/section";
 import { OperatorErrorState } from "./ui/error-state";
+import type { CrudBulkAction } from "@/components/crud/bulk-actions";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 
 type Purchase = {
   id: string;
@@ -52,6 +55,7 @@ export function OperatorPurchaseList({
   const [listing, setListing] = useState(initialListing);
   const [state, setState] = useState("");
   const [sort, setSort] = useState("created:desc");
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(
     async (filters: Filters, cursor, limit) => {
       const [sortBy, direction] = filters.sort.split(":") as ["created", "asc" | "desc"];
@@ -97,6 +101,34 @@ export function OperatorPurchaseList({
       render: (item) => new Date(item.created_at).toLocaleString(),
     },
   ];
+  const bulkActions: readonly CrudBulkAction<Purchase>[] = canDelete
+    ? [
+        {
+          value: "delete",
+          label: "Delete",
+          destructive: true,
+          onSelect: async (items) => {
+            if (!window.confirm(`Delete ${items.length} selected purchases?`)) return false;
+            const outcome = await runOperatorBulkAction({
+              resource: "purchases",
+              action: "delete",
+              ids: items.map((item) => item.id),
+            });
+            await collection.retry();
+            if (outcome.failed.length) {
+              setBulkOutcome({
+                resource: "purchases",
+                selectedCount: items.length,
+                failures: outcome.failed.map(({ id, message }) => ({ id, message })),
+              });
+              return false;
+            }
+            setBulkOutcome(null);
+            return true;
+          },
+        },
+      ]
+    : [];
   return (
     <CrudIndex
       eyebrow="Commerce history"
@@ -165,6 +197,8 @@ export function OperatorPurchaseList({
       items={collection.items}
       columns={columns}
       getRowKey={(item) => item.id}
+      selection={canDelete ? { labelForItem: (item) => `purchase ${item.id}` } : undefined}
+      bulkActions={bulkActions}
       actions={(item) => [
         { type: "link", label: "View", href: `/operator/purchases/${item.id}` },
         ...(canDelete
@@ -199,6 +233,7 @@ export function OperatorPurchaseList({
       }}
       sectionTitle="Purchase records"
       sectionDescription="All authorized purchase history, newest first by default."
+      beforeTable={bulkOutcome ? <OperatorBulkOutcome outcome={bulkOutcome} /> : undefined}
     />
   );
 }

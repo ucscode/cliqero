@@ -14,6 +14,9 @@ import { CrudIndex } from "@/components/crud/index-page";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
 import { CrudSortSelect } from "@/components/crud/sort-select";
+import type { CrudBulkAction } from "@/components/crud/bulk-actions";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 
 const formatDate = (value: string) => new Date(value).toLocaleString();
 const label = (value: string) =>
@@ -25,6 +28,7 @@ export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolea
   const [sortChoice, setSortChoice] = useState("created:desc");
   const [sort, direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
   const [totals, setTotals] = useState<OperatorEarningsPage["totals"] | null>(null);
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(
     async (
       filters: { search: string; state: string; sort: string; direction: string },
@@ -93,6 +97,34 @@ export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolea
       ),
     },
   ];
+  const bulkActions: readonly CrudBulkAction<Entry>[] = canDelete
+    ? [
+        {
+          value: "delete",
+          label: "Delete",
+          destructive: true,
+          onSelect: async (items) => {
+            if (!window.confirm(`Delete ${items.length} selected earnings entries?`)) return false;
+            const outcome = await runOperatorBulkAction({
+              resource: "earnings",
+              action: "delete",
+              ids: items.map((item) => item.id),
+            });
+            await collection.retry();
+            if (outcome.failed.length) {
+              setBulkOutcome({
+                resource: "earnings entries",
+                selectedCount: items.length,
+                failures: outcome.failed.map(({ id, message }) => ({ id, message })),
+              });
+              return false;
+            }
+            setBulkOutcome(null);
+            return true;
+          },
+        },
+      ]
+    : [];
 
   return (
     <CrudIndex
@@ -105,25 +137,28 @@ export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolea
         </Link>
       }
       beforeTable={
-        totals && (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <OperatorMetricCard
-              label="Pending earnings"
-              value={<Money minor={totals.pendingMinor} />}
-              detail="Awaiting settlement or maturation."
-            />
-            <OperatorMetricCard
-              label="Available earnings"
-              value={<Money minor={totals.availableMinor} />}
-              detail="Ledger projection available for withdrawal."
-            />
-            <OperatorMetricCard
-              label="Withdrawal reservations"
-              value={<Money minor={totals.reservedMinor} />}
-              detail="Active reservations; completed withdrawals are not active."
-            />
-          </div>
-        )
+        <>
+          {totals && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <OperatorMetricCard
+                label="Pending earnings"
+                value={<Money minor={totals.pendingMinor} />}
+                detail="Awaiting settlement or maturation."
+              />
+              <OperatorMetricCard
+                label="Available earnings"
+                value={<Money minor={totals.availableMinor} />}
+                detail="Ledger projection available for withdrawal."
+              />
+              <OperatorMetricCard
+                label="Withdrawal reservations"
+                value={<Money minor={totals.reservedMinor} />}
+                detail="Active reservations; completed withdrawals are not active."
+              />
+            </div>
+          )}
+          {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
+        </>
       }
       filters={
         <>
@@ -189,6 +224,8 @@ export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolea
       items={collection.items}
       columns={columns}
       getRowKey={(entry) => entry.id}
+      selection={canDelete ? { labelForItem: (entry) => `earning ${entry.id}` } : undefined}
+      bulkActions={bulkActions}
       actions={(entry) => [
         { type: "link", label: "View account", href: `/operator/users/${entry.account.id}` },
         ...(entry.distributionId

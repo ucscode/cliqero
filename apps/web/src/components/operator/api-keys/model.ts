@@ -61,16 +61,20 @@ export function toggleApiKeyScope(scopes: readonly string[], scope: string, chec
 
 export function operatorApiKeyRowActions(
   key: OperatorApiKeyRow,
-  onDelete: (key: OperatorApiKeyRow) => void,
+  onDelete?: (key: OperatorApiKeyRow) => void,
 ): readonly OperatorAction[] {
   return [
     { type: "link", label: "View", href: `/operator/api-keys/${key.id}` },
     { type: "link", label: "Edit", href: `/operator/api-keys/${key.id}` },
-    {
-      type: "action",
-      label: "Delete",
-      destructive: true,
-      onSelect: () => onDelete(key),
-    },
+    ...(onDelete
+      ? [
+          {
+            type: "action" as const,
+            label: "Delete",
+            destructive: true,
+            onSelect: () => onDelete(key),
+          },
+        ]
+      : []),
   ];
 }

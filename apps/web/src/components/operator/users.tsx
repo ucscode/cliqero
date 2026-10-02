@@ -70,6 +70,7 @@ export function operatorUserRowActions(
   account: OperatorAccountSummary,
   canManage: boolean,
   onDelete?: (account: OperatorAccountSummary) => void,
+  canDelete = canManage,
 ) {
   return [
     { type: "link" as const, label: "View", href: `/operator/users/${account.id}` },
@@ -80,7 +81,7 @@ export function operatorUserRowActions(
             label: "Edit",
             href: `/operator/users/${account.id}/edit`,
           },
-          ...(onDelete
+          ...(onDelete && canDelete
             ? [
                 {
                   type: "action" as const,
@@ -118,9 +119,11 @@ export async function applyOperatorUserSearch(
 
 export function OperatorUsersList({
   canManage = false,
+  canDelete = false,
   deletedNotice = false,
 }: {
   canManage?: boolean;
+  canDelete?: boolean;
   deletedNotice?: boolean;
 }) {
   const toast = useToast();
@@ -169,6 +172,7 @@ export function OperatorUsersList({
       loading={collection.loading}
       error={collection.error}
       canManage={canManage}
+      canDelete={canDelete}
       onSearchChange={setSearch}
       onSearch={async (event) => {
         event.preventDefault();
@@ -255,6 +259,7 @@ export function OperatorUsersListView({
   loading,
   error,
   canManage,
+  canDelete,
   onSearchChange,
   onSearch,
   onRetry,
@@ -275,6 +280,7 @@ export function OperatorUsersListView({
   loading: boolean;
   error: string | null;
   canManage?: boolean;
+  canDelete?: boolean;
   onSearchChange: (value: string) => void;
   onSearch: (event: FormEvent<HTMLFormElement>) => boolean | Promise<boolean>;
   onRetry: () => void;
@@ -372,9 +378,11 @@ export function OperatorUsersListView({
       items={page?.items ?? []}
       columns={columns}
       getRowKey={(account) => account.id}
-      selection={{ labelForItem: (account) => `account ${account.username}` }}
+      selection={
+        canDelete ? { labelForItem: (account) => `account ${account.username}` } : undefined
+      }
       bulkActions={
-        canManage && onBulkDelete
+        canDelete && onBulkDelete
           ? [
               {
                 value: "delete",
@@ -391,7 +399,9 @@ export function OperatorUsersListView({
           {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
         </>
       }
-      actions={(account) => operatorUserRowActions(account, Boolean(canManage), onDelete)}
+      actions={(account) =>
+        operatorUserRowActions(account, Boolean(canManage), onDelete, Boolean(canDelete))
+      }
       actionLabel={(account) => `Actions for @${account.username}`}
       loading={loading}
       initialized={page !== null}

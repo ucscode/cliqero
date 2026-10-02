@@ -1,6 +1,7 @@
 import { OperatorReviews } from "@/components/operator/reviews";
 import { OperatorShell } from "@/components/operator/shell";
 import { requireOperatorPage } from "../operator-access";
+import { hasCapability } from "@/modules/identity/capabilities";
 
 export default async function OperatorReviewsPage({
   searchParams,
@@ -11,7 +12,10 @@ export default async function OperatorReviewsPage({
   const access = await requireOperatorPage("/operator/reviews");
   return (
     <OperatorShell {...access} activeSection="reviews">
-      <OperatorReviews initialListingId={params.listing ?? ""} />
+      <OperatorReviews
+        initialListingId={params.listing ?? ""}
+        canDelete={hasCapability(access.capabilities, "system.root")}
+      />
     </OperatorShell>
   );
 }

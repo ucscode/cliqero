@@ -11,7 +11,10 @@ import { Money } from "../money";
 import { CrudIndex } from "@/components/crud/index-page";
 import { CrudDetail } from "@/components/crud/detail";
 import type { CrudColumn } from "@/components/crud/table";
+import type { CrudBulkAction } from "@/components/crud/bulk-actions";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorPrimaryCell } from "./ui/data-cells";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import AsyncSelect from "react-select/async";
 import type { OperatorAccountPage } from "@/lib/api-client";
 
@@ -158,6 +161,7 @@ export function OperatorEarningsAdjustments({
   const [items, setItems] = useState<Adjustment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,6 +228,35 @@ export function OperatorEarningsAdjustments({
       render: (item) => new Date(item.createdAt).toLocaleString(),
     },
   ];
+  const bulkActions: readonly CrudBulkAction<Adjustment>[] = canDelete
+    ? [
+        {
+          value: "delete",
+          label: "Delete",
+          destructive: true,
+          onSelect: async (selected) => {
+            if (!window.confirm(`Delete ${selected.length} selected earning adjustments?`))
+              return false;
+            const outcome = await runOperatorBulkAction({
+              resource: "earnings-adjustments",
+              action: "delete",
+              ids: selected.map((item) => item.id),
+            });
+            await load();
+            if (outcome.failed.length) {
+              setBulkOutcome({
+                resource: "earning adjustments",
+                selectedCount: selected.length,
+                failures: outcome.failed.map(({ id, message }) => ({ id, message })),
+              });
+              return false;
+            }
+            setBulkOutcome(null);
+            return true;
+          },
+        },
+      ]
+    : [];
 
   return (
     <CrudIndex
@@ -243,6 +276,10 @@ export function OperatorEarningsAdjustments({
       items={items}
       columns={columns}
       getRowKey={(item) => item.id}
+      selection={
+        canDelete ? { labelForItem: (item) => `earning adjustment ${item.id}` } : undefined
+      }
+      bulkActions={bulkActions}
       actions={(item) => [
         { type: "link", label: "View", href: `/operator/earnings-adjustments/${item.id}` },
         ...(canDelete
@@ -266,6 +303,16 @@ export function OperatorEarningsAdjustments({
       loading={loading}
       error={null}
       onRetry={() => void load()}
+      beforeTable={
+        <>
+          {error && (
+            <p className="text-sm text-red-700" role="alert">
+              {error}
+            </p>
+          )}
+          {bulkOutcome && <OperatorBulkOutcome outcome={bulkOutcome} />}
+        </>
+      }
       emptyTitle="No earnings adjustments"
       emptyDescription="Posted manual corrections and bonuses appear here."
       sectionTitle="Adjustment ledger"

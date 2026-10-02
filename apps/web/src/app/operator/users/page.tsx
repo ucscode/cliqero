@@ -16,6 +16,7 @@ export default async function OperatorUsersPage({
     <OperatorShell {...access} activeSection="users">
       <OperatorUsersList
         canManage={hasCapability(access.capabilities, "accounts.manage")}
+        canDelete={hasCapability(access.capabilities, "system.root")}
         deletedNotice={query.notice === "account-deleted"}
       />
     </OperatorShell>

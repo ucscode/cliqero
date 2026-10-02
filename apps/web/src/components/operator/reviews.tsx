@@ -202,7 +202,13 @@ export function reviewQueueQuery(
   return params;
 }
 
-export function OperatorReviews({ initialListingId = "" }: { initialListingId?: string }) {
+export function OperatorReviews({
+  initialListingId = "",
+  canDelete = false,
+}: {
+  initialListingId?: string;
+  canDelete?: boolean;
+}) {
   const toast = useToast();
   const [viewingReview, setViewingReview] = useState<Review | null>(null);
   const [status, setStatus] = useState("all");
@@ -318,12 +324,16 @@ export function OperatorReviews({ initialListingId = "" }: { initialListingId?: 
       destructive: true,
       onSelect: (items) => moderateMany(items, "reject"),
     },
-    {
-      value: "delete",
-      label: "Delete",
-      destructive: true,
-      onSelect: deleteMany,
-    },
+    ...(canDelete
+      ? [
+          {
+            value: "delete",
+            label: "Delete",
+            destructive: true,
+            onSelect: deleteMany,
+          },
+        ]
+      : []),
   ];
   const columns: readonly CrudColumn<Review>[] = [
     {
@@ -499,20 +509,24 @@ export function OperatorReviews({ initialListingId = "" }: { initialListingId?: 
           onSelect: () => setViewingReview(review),
         },
         { type: "link" as const, label: "Edit", href: `/operator/reviews/${review.id}` },
-        {
-          type: "action" as const,
-          label: "Delete",
-          destructive: true,
-          onSelect: () => {
-            if (!window.confirm("Permanently delete this review?")) return;
-            void apiFetch(`/api/reviews/${review.id}`, { method: "DELETE" })
-              .then(async () => {
-                toast.success("Review deleted.");
-                await collection.retry();
-              })
-              .catch((cause) => setActionError(errorMessage(cause)));
-          },
-        },
+        ...(canDelete
+          ? [
+              {
+                type: "action" as const,
+                label: "Delete",
+                destructive: true,
+                onSelect: () => {
+                  if (!window.confirm("Permanently delete this review?")) return;
+                  void apiFetch(`/api/reviews/${review.id}`, { method: "DELETE" })
+                    .then(async () => {
+                      toast.success("Review deleted.");
+                      await collection.retry();
+                    })
+                    .catch((cause) => setActionError(errorMessage(cause)));
+                },
+              },
+            ]
+          : []),
         ...(review.status === "pending"
           ? [
               {

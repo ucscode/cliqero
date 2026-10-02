@@ -26,6 +26,9 @@ import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
 import type { OperatorAction } from "./ui/actions-menu";
 import { CrudSortSelect } from "@/components/crud/sort-select";
+import type { CrudBulkAction } from "@/components/crud/bulk-actions";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Treasury data is temporarily unavailable.";
@@ -142,6 +145,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
   const [source, setSource] = useState<"" | "automatic" | "manual">("");
   const [sortChoice, setSortChoice] = useState("created:desc");
   const [sort, sort_direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(
     async (
       filters: {
@@ -251,6 +255,34 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
         ]
       : []),
   ];
+  const bulkActions: readonly CrudBulkAction<Entry>[] = canDelete
+    ? [
+        {
+          value: "delete",
+          label: "Delete",
+          destructive: true,
+          onSelect: async (items) => {
+            if (!window.confirm(`Delete ${items.length} selected treasury entries?`)) return false;
+            const outcome = await runOperatorBulkAction({
+              resource: "treasury",
+              action: "delete",
+              ids: items.map((item) => item.id),
+            });
+            await collection.retry();
+            if (outcome.failed.length) {
+              setBulkOutcome({
+                resource: "treasury entries",
+                selectedCount: items.length,
+                failures: outcome.failed.map(({ id, message }) => ({ id, message })),
+              });
+              return false;
+            }
+            setBulkOutcome(null);
+            return true;
+          },
+        },
+      ]
+    : [];
   return (
     <CrudIndex
       eyebrow="Company accounting"
@@ -361,6 +393,8 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
       items={collection.items}
       columns={columns}
       getRowKey={(entry) => entry.id}
+      selection={canDelete ? { labelForItem: (entry) => `treasury entry ${entry.id}` } : undefined}
+      bulkActions={bulkActions}
       actions={actions}
       actionLabel={(entry) => `Actions for treasury entry ${entry.id}`}
       loading={collection.loading}
@@ -376,6 +410,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
       }}
       sectionTitle="Treasury entries"
       sectionDescription="Immutable ledger history."
+      afterTable={bulkOutcome ? <OperatorBulkOutcome outcome={bulkOutcome} /> : undefined}
     />
   );
 }

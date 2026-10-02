@@ -21,6 +21,9 @@ import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
 import { OperatorEmptyState } from "./ui/empty-state";
 import { CrudSortSelect } from "@/components/crud/sort-select";
+import type { CrudBulkAction } from "@/components/crud/bulk-actions";
+import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 
 function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
@@ -35,6 +38,7 @@ function stateLabel(value: string) {
 export function OperatorDistributionList({ canDelete = false }: { canDelete?: boolean }) {
   const [search, setSearch] = useState("");
   const [sortChoice, setSortChoice] = useState("created:desc");
+  const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const [sort, direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
   const collection = useCrudCollection(
     async (filters: { search: string; sort: string; direction: string }, cursor, pageSize) => {
@@ -96,6 +100,35 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
         ]
       : []),
   ];
+  const bulkActions: readonly CrudBulkAction<OperatorDistributionPage["items"][number]>[] =
+    canDelete
+      ? [
+          {
+            value: "delete",
+            label: "Delete",
+            destructive: true,
+            onSelect: async (items) => {
+              if (!window.confirm(`Delete ${items.length} selected distributions?`)) return false;
+              const outcome = await runOperatorBulkAction({
+                resource: "distributions",
+                action: "delete",
+                ids: items.map((item) => item.id),
+              });
+              await collection.retry();
+              if (outcome.failed.length) {
+                setBulkOutcome({
+                  resource: "distributions",
+                  selectedCount: items.length,
+                  failures: outcome.failed.map(({ id, message }) => ({ id, message })),
+                });
+                return false;
+              }
+              setBulkOutcome(null);
+              return true;
+            },
+          },
+        ]
+      : [];
   return (
     <CrudIndex
       eyebrow="Accounting inspection"
@@ -145,6 +178,8 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
       items={collection.items}
       columns={columns}
       getRowKey={(item) => item.id}
+      selection={canDelete ? { labelForItem: (item) => `distribution ${item.id}` } : undefined}
+      bulkActions={bulkActions}
       actions={actions}
       actionLabel={(item) => `Actions for distribution ${item.id}`}
       loading={collection.loading}
@@ -160,6 +195,7 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
       }}
       sectionTitle="Distribution ledger"
       sectionDescription="Financial history is immutable; use inspection to review its persisted facts."
+      beforeTable={bulkOutcome ? <OperatorBulkOutcome outcome={bulkOutcome} /> : undefined}
     />
   );
 }
