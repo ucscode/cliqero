@@ -6,6 +6,7 @@ import type { Withdrawal } from "@/modules/withdrawal/withdrawal";
 function fixture(
   state: Withdrawal["state"] = "approved",
   limits: { minimum: bigint; maximum: bigint | null } = { minimum: 1n, maximum: null },
+  withdrawalForUpdate: Withdrawal | null | undefined = undefined,
 ) {
   const withdrawal: Withdrawal = {
     id: "withdrawal-1",
@@ -43,7 +44,8 @@ function fixture(
   const service = new WithdrawalService(
     {
       findById: async () => withdrawal,
-      findByIdForUpdate: async () => withdrawal,
+      findByIdForUpdate: async () =>
+        withdrawalForUpdate === undefined ? withdrawal : withdrawalForUpdate,
       findByIdempotencyKey: async () => null,
       listForAccount: async () => ({ items: [], nextCursor: null }),
       listForOperator: async () => [],
@@ -240,5 +242,14 @@ describe("WithdrawalService policy enforcement", () => {
         correlationId: "correlation",
       }),
     ).rejects.toThrow("exceeds the maximum");
+  });
+
+  it("returns a public not-found error when cancellation targets a missing withdrawal", async () => {
+    const { service } = fixture("requested", { minimum: 1n, maximum: null }, null);
+
+    await expect(service.cancel("account-1", "missing-withdrawal")).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+    });
   });
 });

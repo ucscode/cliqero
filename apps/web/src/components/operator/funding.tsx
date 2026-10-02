@@ -386,7 +386,7 @@ export function OperatorFundingList({
     },
   ];
   const actions = (funding: OperatorFundingPage["items"][number]): readonly OperatorAction[] => [
-    { type: "link", label: "Inspect funding", href: `/operator/funding/${funding.id}` },
+    { type: "link", label: "View", href: `/operator/funding/${funding.id}` },
     ...(canManage && funding.origin === "administrative"
       ? [{ type: "link" as const, label: "Edit", href: `/operator/funding/${funding.id}/edit` }]
       : []),

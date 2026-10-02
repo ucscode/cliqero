@@ -200,7 +200,7 @@ export class WithdrawalService {
     return this.uow.transaction(async () => {
       const withdrawal = await this.withdrawals.findByIdForUpdate(id);
       if (!withdrawal || withdrawal.accountId !== accountId)
-        throw new Error("Withdrawal not found");
+        throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
       if (withdrawal.state !== "requested")
         throw new Error("Withdrawal cannot be cancelled in its current state");
       await this.withdrawals.transition(id, "requested", "cancelled", "Cancelled by account");

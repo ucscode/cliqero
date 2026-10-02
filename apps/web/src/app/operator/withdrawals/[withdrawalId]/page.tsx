@@ -19,6 +19,7 @@ export default async function OperatorWithdrawalDetailPage({
       <OperatorWithdrawalDetail
         withdrawalId={withdrawalId}
         canManage={hasCapability(access.capabilities, "withdrawals.manage")}
+        canDelete={hasCapability(access.capabilities, "system.root")}
       />
     </OperatorShell>
   );

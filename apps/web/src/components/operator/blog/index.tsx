@@ -200,7 +200,7 @@ export function OperatorBlogList() {
       selection={{ labelForItem: (post) => `article ${post.title}` }}
       bulkActions={bulkActions}
       actions={(post) => [
-        { type: "link", label: "View / edit", href: `/operator/blog/${post.id}` },
+        { type: "link", label: "View", href: `/operator/blog/${post.id}` },
         { type: "action", label: "Delete", destructive: true, onSelect: () => void remove(post) },
       ]}
       actionLabel={(post) => `Actions for article ${post.title}`}

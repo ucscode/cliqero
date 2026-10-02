@@ -50,6 +50,16 @@ export function operatorWithdrawalEditPolicy(state: OperatorWithdrawalState) {
   return { editable: false, amountAndDestinationLocked: true, stateOptions: [] as const };
 }
 
+export function operatorWithdrawalDeleteAllowed(
+  state: OperatorWithdrawalState,
+  canManage: boolean,
+  canDelete: boolean,
+) {
+  return (
+    canDelete || (canManage && ["requested", "rejected", "cancelled", "failed"].includes(state))
+  );
+}
+
 export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string }) {
   const router = useRouter();
   const [item, setItem] = useState<Detail | null>(null);
@@ -320,7 +330,13 @@ const states: Array<[OperatorWithdrawalState, string]> = [
 ];
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Withdrawal data is temporarily unavailable.";
-export function OperatorWithdrawalList({ canManage = false }: { canManage?: boolean }) {
+export function OperatorWithdrawalList({
+  canManage = false,
+  canDelete = false,
+}: {
+  canManage?: boolean;
+  canDelete?: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorWithdrawalState | "">("");
   const [attention, setAttention] = useState("");
@@ -496,7 +512,9 @@ export function OperatorWithdrawalList({ canManage = false }: { canManage?: bool
                 onSelect: async (items) => {
                   if (
                     !window.confirm(
-                      `Delete ${items.length} mutable withdrawal request(s)? Completed payouts cannot be deleted.`,
+                      canDelete
+                        ? `Delete ${items.length} selected withdrawal record(s)?`
+                        : `Delete ${items.length} mutable withdrawal request(s)? Completed payouts cannot be deleted.`,
                     )
                   )
                     return false;
@@ -519,7 +537,21 @@ export function OperatorWithdrawalList({ canManage = false }: { canManage?: bool
           : []
       }
       actions={(item) => [
-        { type: "link", label: "Inspect withdrawal", href: `/operator/withdrawals/${item.id}` },
+        { type: "link", label: "View", href: `/operator/withdrawals/${item.id}` },
+        ...(canDelete
+          ? [
+              {
+                type: "action" as const,
+                label: "Delete",
+                destructive: true,
+                onSelect: async () => {
+                  if (!window.confirm("Delete this withdrawal record?")) return;
+                  await apiFetch(`/internal/withdrawals/${item.id}`, { method: "DELETE" });
+                  await collection.retry();
+                },
+              },
+            ]
+          : []),
         ...(canManage && operatorWithdrawalEditPolicy(item.state).editable
           ? [
               {
@@ -552,9 +584,11 @@ export function OperatorWithdrawalList({ canManage = false }: { canManage?: bool
 export function OperatorWithdrawalDetail({
   withdrawalId,
   canManage = false,
+  canDelete = false,
 }: {
   withdrawalId: string;
   canManage?: boolean;
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [item, setItem] = useState<Detail | null>(null);
@@ -601,7 +635,9 @@ export function OperatorWithdrawalDetail({
   async function remove() {
     if (
       !window.confirm(
-        "Delete this mutable withdrawal request? Completed payout history cannot be deleted.",
+        canDelete
+          ? "Delete this withdrawal record?"
+          : "Delete this mutable withdrawal request? Completed payout history cannot be deleted.",
       )
     )
       return;
@@ -699,12 +735,11 @@ export function OperatorWithdrawalDetail({
           )}
           <OperatorSection title="Available actions" surface>
             <div className="operator-action-row">
-              {canManage &&
-                ["requested", "rejected", "cancelled", "failed"].includes(item.state) && (
-                  <Button variant="destructive" disabled={busy} onClick={() => void remove()}>
-                    Delete
-                  </Button>
-                )}
+              {operatorWithdrawalDeleteAllowed(item.state, canManage, canDelete) && (
+                <Button variant="destructive" disabled={busy} onClick={() => void remove()}>
+                  Delete
+                </Button>
+              )}
               {canManage && item.state === "requested" && (
                 <Button disabled={busy} onClick={() => void act("approve")}>
                   Approve

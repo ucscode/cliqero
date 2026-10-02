@@ -11,6 +11,7 @@ export default async function OperatorWithdrawalsPage() {
     <OperatorShell {...access} activeSection="withdrawals">
       <OperatorWithdrawalList
         canManage={hasCapability(access.capabilities, "withdrawals.manage")}
+        canDelete={hasCapability(access.capabilities, "system.root")}
       />
     </OperatorShell>
   );

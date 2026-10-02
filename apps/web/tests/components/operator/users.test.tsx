@@ -180,12 +180,12 @@ describe("operator users list", () => {
     expect(
       operatorUserRowActions(account, false).map((action) => [action.label, action.href]),
     ).toEqual([
-      ["View account", "/operator/users/account-reviewer-three"],
+      ["View", "/operator/users/account-reviewer-three"],
       ["View network", "/operator/network?root=account-reviewer-three"],
     ]);
     expect(operatorUserRowActions(account, true).map((action) => action.label)).toEqual([
-      "View account",
-      "Edit account",
+      "View",
+      "Edit",
       "View network",
     ]);
   });

@@ -72,12 +72,12 @@ export function operatorUserRowActions(
   onDelete?: (account: OperatorAccountSummary) => void,
 ) {
   return [
-    { type: "link" as const, label: "View account", href: `/operator/users/${account.id}` },
+    { type: "link" as const, label: "View", href: `/operator/users/${account.id}` },
     ...(canManage
       ? [
           {
             type: "link" as const,
-            label: "Edit account",
+            label: "Edit",
             href: `/operator/users/${account.id}/edit`,
           },
           ...(onDelete
