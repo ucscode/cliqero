@@ -35,9 +35,11 @@ its plan satisfies all of the following:
    dedicated internal Cliqero library/workspace package over dumping that
    complexity into application or provider code. Reimplementation requires a
    concrete documented reason.
-3. **OOP for business workflows.** Prefer cohesive classes, interfaces,
-   abstract bases, repositories, and services over scattered exported
-   functions when behavior has one business owner.
+3. **OOP for business workflows and CRUD resources.** Prefer cohesive
+   classes, interfaces, abstract bases, repositories, and services over
+   scattered exported functions when behavior has one business owner. Ordinary
+   CRUD resources must conform to the shared CRUD service/repository
+   abstractions before adding resource-specific methods.
 4. **Separate production and tests.** Production source directories must not
    become interleaved forests of `*.test.*` files.
 5. **Reference data is data, not config.** Static lookup/reference datasets
@@ -536,6 +538,77 @@ utilities. They are not the default architecture for domain workflows.
 When several implementations share a contract, prefer an interface and, when
 shared implementation exists, an abstract base class or clear composition
 boundary.
+### CRUD services and repositories use shared abstract bases
+
+Ordinary CRUD resources must conform to a common object-oriented contract. Use
+shared abstract base classes for the service and persistence layers, conceptually
+`CrudService` and `CrudRepository`, rather than allowing every resource to invent
+its own CRUD vocabulary.
+
+The canonical service vocabulary is:
+
+```text
+create
+get
+update
+delete
+```
+
+The canonical repository vocabulary should represent the same persistence
+lifecycle, using the project's chosen read naming consistently (for example
+`find`/`findById`) while preserving create, update, and delete semantics.
+
+Concrete services and repositories may add custom methods when the resource
+genuinely needs behavior or queries beyond the base CRUD contract. Custom
+methods extend the abstraction; they do not replace, bypass, rename, or distort
+the ordinary CRUD operations.
+
+Do not create action methods for changes that are fully represented by ordinary
+resource fields. A status/state transition such as published, unpublished,
+archived, restored, enabled, disabled, approved, or rejected is an update when
+its meaning is simply the persisted state change.
+
+Prefer:
+
+```ts
+resource.update(id, { status: "archived" });
+```
+
+over:
+
+```ts
+resource.archive(id);
+```
+
+Likewise, the canonical HTTP representation of an ordinary field/state change
+is the resource update endpoint, normally `PATCH /resource/{id}`, not a
+dedicated action endpoint such as `POST /resource/{id}/archive`.
+
+A UI may expose concise convenience controls such as Publish, Archive, Restore,
+Approve, or Reject. Those controls must submit through the same canonical update
+path; they are presentation shortcuts, not separate domain commands.
+
+Reserve additional command-style methods/endpoints for operations whose
+semantics or side effects go beyond ordinary resource mutation, such as payment
+completion, secret rotation, money movement, ledger generation, entitlement
+creation, coordinated multi-resource workflows, or external-provider
+interaction.
+
+Do not force genuinely non-CRUD workflows into the CRUD base merely for
+uniformity. The purpose of the abstraction is to make ordinary resources
+predictable and make true domain commands obvious exceptions.
+
+This shared service/repository contract is also the default API-alignment model:
+
+```text
+POST   /resources       -> create
+GET    /resources/{id}  -> get
+PATCH  /resources/{id}  -> update
+DELETE /resources/{id}  -> delete
+```
+
+Resource-specific reads, queries, and genuine commands may extend this surface
+where required.
 
 ## 5. Production and test code must be separated
 
@@ -770,9 +843,12 @@ or audit storage rather than representing the mutable record as deleted.
 Status/state is not special in Operator CRUD. When a mutable resource has a
 status/state field, expose the supported states in its canonical Create/Edit
 form, subject to the operator's authority. System-root operators can select all
-legitimate domain states. Row actions such as Publish, Archive, Restore,
-Approve, Reject, or Revoke may remain as convenient shortcuts, but do not
-replace the editable field in the form.
+legitimate domain states. Row controls such as Publish, Archive, Restore,
+Approve, Reject, or Revoke may remain as UI conveniences only when they submit
+through the canonical resource update operation. Do not create parallel
+`publish()`, `archive()`, `restore()`, or similar service/repository methods
+or action endpoints when the operation merely changes the persisted
+status/state field.
 
 Every mutable CRUD collection that supports row selection must provide a bulk
 Delete action unless code documents a concrete immutable-history reason that
