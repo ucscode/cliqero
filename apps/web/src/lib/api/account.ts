@@ -24,6 +24,9 @@ export type EarningsEntry = {
   currency: string;
   recipient_role: string | null;
   balance_state: string;
+  source?: "generated" | "adjustment";
+  reason?: string | null;
+  reference?: string | null;
   created_at: string;
 };
 

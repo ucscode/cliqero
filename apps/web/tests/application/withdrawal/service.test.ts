@@ -11,6 +11,8 @@ function fixture(
     id: "withdrawal-1",
     accountId: "account-1",
     amount: Money.of(2500n, "USD"),
+    fee: Money.of(125n, "USD"),
+    netAmount: Money.of(2375n, "USD"),
     destination: {
       savedDestinationId: "destination-1",
       method: "bank_ng",
@@ -98,7 +100,7 @@ function fixture(
 }
 
 describe("WithdrawalService request fees", () => {
-  it("snapshots gross, capped fee, and net and posts the fee to Treasury atomically", async () => {
+  it("snapshots gross, capped fee, and net without crediting Treasury before payout", async () => {
     const { service, create, reserve, treasuryCreate } = fixture();
     const withdrawal = await service.request({
       accountId: "account-1",
@@ -119,22 +121,21 @@ describe("WithdrawalService request fees", () => {
         correlationId: "withdrawal-correlation",
       }),
     );
-    expect(treasuryCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        direction: "credit",
-        amountMinor: 2_000n,
-        sourceKind: "withdrawal_fee",
-        sourceId: withdrawal.id,
-        idempotencyKey: `withdrawal:${withdrawal.id}:fee`,
-      }),
-    );
+    expect(treasuryCreate).not.toHaveBeenCalled();
   });
 });
 
 describe("WithdrawalService manual completion", () => {
   it("records completion facts and completes the reserved funds once", async () => {
-    const { service, withdrawal, complete, releaseOrComplete, append, requireCapability } =
-      fixture();
+    const {
+      service,
+      withdrawal,
+      complete,
+      releaseOrComplete,
+      append,
+      requireCapability,
+      treasuryCreate,
+    } = fixture();
 
     const result = await service.complete("operator-1", withdrawal.id, {
       externalReference: "transfer-abc",
@@ -149,6 +150,15 @@ describe("WithdrawalService manual completion", () => {
       "Sent from the bank portal",
     );
     expect(releaseOrComplete).toHaveBeenCalledTimes(1);
+    expect(treasuryCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direction: "credit",
+        amountMinor: 125n,
+        sourceKind: "withdrawal_fee",
+        sourceId: withdrawal.id,
+        idempotencyKey: `withdrawal:${withdrawal.id}:fee`,
+      }),
+    );
     expect(releaseOrComplete).toHaveBeenCalledWith({
       withdrawalId: withdrawal.id,
       accountId: withdrawal.accountId,

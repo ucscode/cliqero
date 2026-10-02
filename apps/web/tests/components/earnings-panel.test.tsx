@@ -268,7 +268,7 @@ describe("earnings panel presentation", () => {
     );
 
     expect(output).toContain("No earnings yet");
-    expect(output).toContain("Earnings from qualifying sales and referrals will appear here.");
+    expect(output).toContain("Sales, referrals, adjustments, and transfers will appear here.");
     expect(output).not.toContain("referral commissions");
     expect(output).not.toContain("referral levels");
   });

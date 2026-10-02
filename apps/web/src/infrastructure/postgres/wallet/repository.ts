@@ -5,6 +5,7 @@ import type {
   WalletDebit,
   WalletRepository,
   WalletTransaction,
+  WalletTransactionPage,
 } from "@/modules/wallet/wallet";
 
 export class PostgresWalletRepository implements WalletRepository {
@@ -91,36 +92,79 @@ export class PostgresWalletRepository implements WalletRepository {
       [v.id, v.accountId, v.checkoutId, v.amount.minorAmount.toString(), v.amount.currency],
     );
   }
-  async history(accountId: string, limit = 10) {
+  async history(
+    accountId: string,
+    page: { cursor?: string; limit?: number } = {},
+  ): Promise<WalletTransactionPage> {
+    const limit = Math.max(1, Math.min(page.limit ?? 10, 50));
+    let cursor: { createdAt: string; historyId: string } | null = null;
+    if (page.cursor) {
+      try {
+        const decoded = JSON.parse(Buffer.from(page.cursor, "base64url").toString("utf8"));
+        if (typeof decoded.created_at !== "string" || typeof decoded.history_id !== "string")
+          throw new Error();
+        cursor = {
+          createdAt: new Date(decoded.created_at).toISOString(),
+          historyId: decoded.history_id,
+        };
+      } catch {
+        throw new Error("Invalid wallet history cursor");
+      }
+    }
     const rows = (
       await this.sql.query<any>(
-        `select 'funding_credit' kind,c.uuid as id,f.uuid as source_id,c.amount_minor,c.currency,c.state,c.created_at,f.provider_initialization->>'providerDisplayName' as provider_display_name,f.provider_reference
+        `select * from (
+         select 'funding_credit' kind,'credit' direction,'credit:'||c.uuid::text history_id,c.uuid::text id,f.uuid::text source_id,c.amount_minor,c.currency,c.state,c.created_at,
+                coalesce(f.provider_initialization->>'providerDisplayName','Provider funding') label,f.provider_reference reference,
+                f.provider_initialization->>'providerDisplayName' provider_display_name,f.provider_reference
            from wallet_capability.credits c join funding_capability.funding_transactions f on f.id=c.funding_id
           where c.account_id=(select id from identity_capability.accounts where uuid=$1)
          union all
-         select 'purchase_debit',d.uuid,c.uuid,d.amount_minor,d.currency,'complete',d.created_at,null::text,null::text
+         select 'purchase_debit','debit','purchase:'||d.uuid::text,d.uuid::text,c.uuid::text,d.amount_minor,d.currency,'complete',d.created_at,'Listing purchase',null::text,null::text,null::text
            from wallet_capability.debits d join checkout_capability.checkouts c on c.id=d.checkout_id
           where d.account_id=(select id from identity_capability.accounts where uuid=$1)
          union all
-         select 'funding_credit',f.uuid,f.uuid,f.amount_minor,'USD',
-                case when f.state='confirmed' then 'available' else 'pending' end,f.created_at,
-                'Administrative funding',f.reference
-           from funding_capability.administrative_fundings f
-          where f.account_id=(select id from identity_capability.accounts where uuid=$1)
-          order by created_at desc limit $2`,
-        [accountId, Math.max(1, Math.min(limit, 50))],
+         select 'funding_adjustment',case when a.amount_minor >= 0 then 'credit' else 'debit' end,
+                'adjustment:'||a.uuid::text,a.uuid::text,a.funding_id::text,abs(a.amount_minor),'USD','available',a.created_at,a.reason,a.reference,null::text,null::text
+           from wallet_capability.funding_adjustments a where a.account_id=(select id from identity_capability.accounts where uuid=$1)
+         union all
+         select 'funding_transfer',case when e.direction='credit' then 'credit' else 'debit' end,
+                'transfer:'||e.uuid::text,e.uuid::text,t.correlation_id::text,e.amount_minor,'USD','complete',e.created_at,
+                case when e.direction='debit' then 'Funding to earnings' else 'Earnings to funding' end,t.correlation_id::text,null::text,t.correlation_id::text
+           from wallet_capability.transfer_entries e join wallet_capability.transfers t on t.id=e.transfer_id
+          where e.wallet='funding' and t.account_id=(select id from identity_capability.accounts where uuid=$1)
+         ) history
+         where ($2::timestamptz is null or (created_at,history_id)<($2::timestamptz,$3::text))
+         order by created_at desc,history_id desc limit $4`,
+        [accountId, cursor?.createdAt ?? null, cursor?.historyId ?? null, limit + 1],
       )
     ).rows;
-    return rows.map((r) => ({
-      kind: r.kind,
-      id: r.id,
-      sourceId: r.source_id,
-      amount: Money.of(BigInt(r.amount_minor), r.currency),
-      state: r.state,
-      createdAt: r.created_at,
-      ...(r.provider_display_name ? { providerDisplayName: r.provider_display_name } : {}),
-      ...(r.provider_reference ? { providerReference: r.provider_reference } : {}),
-    })) as WalletTransaction[];
+    const visible = rows.slice(0, limit);
+    return {
+      items: visible.map((r) => ({
+        kind: r.kind,
+        id: r.id,
+        sourceId: r.source_id,
+        historyId: r.history_id,
+        amount: Money.of(BigInt(r.amount_minor), r.currency),
+        direction: r.direction,
+        state: r.state,
+        createdAt: r.created_at,
+        label: r.label,
+        reference: r.reference,
+        ...(r.provider_display_name ? { providerDisplayName: r.provider_display_name } : {}),
+        ...(r.provider_reference ? { providerReference: r.provider_reference } : {}),
+      })) as WalletTransaction[],
+      nextCursor:
+        rows.length > limit
+          ? Buffer.from(
+              JSON.stringify({
+                created_at: new Date(visible.at(-1).created_at).toISOString(),
+                history_id: visible.at(-1).history_id,
+              }),
+            ).toString("base64url")
+          : null,
+    };
   }
   private credit(r: any) {
     return {

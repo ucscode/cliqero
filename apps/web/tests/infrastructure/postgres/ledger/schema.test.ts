@@ -33,4 +33,13 @@ describe("canonical finance ledger schema", () => {
     expect(schema).toContain("wallet_transfer_entries_append_only");
     expect(schema).toContain("wallet_transfer_entries_correlation_idx");
   });
+
+  it("keeps administrative Funding idempotency globally unique without rewriting historical rows", () => {
+    const table = schema.slice(
+      schema.indexOf("CREATE TABLE funding_capability.administrative_fundings"),
+    );
+    expect(table).toContain("idempotency_key text");
+    expect(table).toContain("administrative_fundings_idempotency_unique");
+    expect(table).toContain("WHERE idempotency_key IS NOT NULL");
+  });
 });

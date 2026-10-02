@@ -50,6 +50,7 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       state: "confirmed",
       reason: "Verified offline deposit",
       reference: "offline-100",
+      idempotencyKey: `admin-create-${newId()}`,
     });
     expect((await app.wallet.summary(customer.id)).available.minorAmount).toBe(10_000n);
     expect((await app.operatorFunding.get(created.id)).canonicalAmountMinor).toBe("10000");
@@ -87,6 +88,67 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       [created.id],
     );
     expect(finalLedger.rows[0]).toEqual({ movements: "4", net_minor: "0" });
+    const historical = await app.wallet.history(customer.id, { limit: 50 });
+    expect(historical.items.filter((item) => item.kind === "funding_adjustment")).toHaveLength(4);
+    expect(historical.items.map((item) => item.label)).toEqual(
+      expect.arrayContaining([
+        "Verified offline deposit",
+        "Corrected deposit amount",
+        "Funding correction: Second amount correction",
+        "Funding deleted: Second amount correction",
+      ]),
+    );
+    expect(
+      historical.items.reduce(
+        (sum, item) =>
+          sum + (item.direction === "credit" ? item.amount.minorAmount : -item.amount.minorAmount),
+        0n,
+      ),
+    ).toBe((await app.wallet.summary(customer.id)).available.minorAmount);
+  });
+
+  it("replays administrative Funding creation idempotently and conflicts on changed money", async () => {
+    const { actor, customer } = await actors();
+    const otherCustomer = await app.authentication.register({
+      email: `funding-other-${newId()}@example.test`,
+      username: `fo${newId().replaceAll("-", "").slice(0, 12)}`,
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const key = `admin-replay-${newId()}`;
+    const request = {
+      accountId: customer.id,
+      amountMinor: "4200" as const,
+      state: "confirmed" as const,
+      reason: "Verified cash",
+      reference: "CASH-42",
+      idempotencyKey: key,
+    };
+    const first = await app.operatorFunding.createAdministrative(actor.id, request);
+    const replays = await Promise.all([
+      app.operatorFunding.createAdministrative(actor.id, request),
+      app.operatorFunding.createAdministrative(actor.id, request),
+    ]);
+    expect(replays[0]).toMatchObject(first);
+    expect(replays[1]).toMatchObject(first);
+    await expect(
+      app.operatorFunding.createAdministrative(actor.id, {
+        ...request,
+        amountMinor: "4300",
+      }),
+    ).rejects.toMatchObject({ status: 409, code: "idempotency_conflict" });
+    await expect(
+      app.operatorFunding.createAdministrative(actor.id, {
+        ...request,
+        accountId: otherCustomer.id,
+      }),
+    ).rejects.toMatchObject({ status: 409, code: "idempotency_conflict" });
+    const counts = await app.database.query<{ fundings: string; movements: string }>(
+      `select (select count(*)::text from funding_capability.administrative_fundings where idempotency_key=$1) fundings,
+              (select count(*)::text from wallet_capability.funding_adjustments where funding_id=$2) movements`,
+      [key, first.id],
+    );
+    expect(counts.rows[0]).toEqual({ fundings: "1", movements: "1" });
   });
 
   it("rejects consumed value and returns independent bulk-delete outcomes", async () => {
@@ -96,12 +158,14 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       amountMinor: "10000",
       state: "confirmed",
       reason: "Funds later transferred",
+      idempotencyKey: `admin-create-${newId()}`,
     });
     const safe = await app.operatorFunding.createAdministrative(actor.id, {
       accountId: customer.id,
       amountMinor: "2500",
       state: "failed",
       reason: "Non-credit record",
+      idempotencyKey: `admin-create-${newId()}`,
     });
     await app.walletTransfers.transfer({
       accountId: customer.id,
@@ -151,6 +215,7 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
         amountMinor: "5000",
         state: "confirmed",
         reason: "Must roll back",
+        idempotencyKey: `admin-create-${newId()}`,
       }),
     ).rejects.toThrow("simulated ledger failure");
     const result = await app.database.query<{ records: string; movements: string }>(

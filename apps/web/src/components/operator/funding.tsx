@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   apiFetch,
   parseUsdMinor,
@@ -78,6 +78,7 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
   const [loading, setLoading] = useState(Boolean(fundingId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const createKey = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -134,11 +135,16 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
         reference: reference.trim() || null,
         ...(fundingId ? {} : { account_id: accountId }),
       };
+      if (!fundingId && !createKey.current) createKey.current = crypto.randomUUID();
       await apiFetch(fundingId ? `/internal/funding/${fundingId}` : "/internal/funding", {
         method: fundingId ? "PATCH" : "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(!fundingId ? { "Idempotency-Key": createKey.current! } : {}),
+        },
         body: JSON.stringify(payload),
       });
+      if (!fundingId) createKey.current = null;
       router.push("/operator/funding");
     } catch (cause) {
       setError(errorMessage(cause));

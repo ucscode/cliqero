@@ -50,7 +50,10 @@ export type FundingPreparation = {
 
 export type WalletTransaction = {
   id: string;
-  type: "funding_credit" | "purchase_debit";
+  type: "funding_credit" | "purchase_debit" | "funding_adjustment" | "funding_transfer";
+  direction: "credit" | "debit";
+  label: string;
+  reference: string | null;
   source_id: string;
   state: "pending" | "available" | "complete";
   amount_minor: string;
@@ -58,6 +61,11 @@ export type WalletTransaction = {
   created_at: string;
   provider_display_name?: string | null;
   provider_reference?: string | null;
+};
+
+export type WalletTransactionPage = {
+  transactions: WalletTransaction[];
+  next_cursor: string | null;
 };
 
 export type FundingStatus = {

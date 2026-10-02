@@ -90,17 +90,24 @@ export function validatedPreparationAmount(value: string | undefined): string | 
 }
 
 export function walletActivityLabel(
-  transaction: Pick<WalletTransaction, "type" | "provider_display_name">,
+  transaction: Pick<WalletTransaction, "type" | "provider_display_name" | "label">,
 ) {
-  return transaction.type === "funding_credit"
-    ? (transaction.provider_display_name ?? "Wallet")
-    : "Listing purchase";
+  return (
+    transaction.label ||
+    (transaction.type === "funding_credit"
+      ? (transaction.provider_display_name ?? "Provider funding")
+      : transaction.type === "purchase_debit"
+        ? "Listing purchase"
+        : "Wallet movement")
+  );
 }
 
 export function walletActivityReference(
-  transaction: Pick<WalletTransaction, "type" | "provider_reference">,
+  transaction: Pick<WalletTransaction, "type" | "provider_reference" | "reference">,
 ) {
-  return transaction.type === "funding_credit" ? (transaction.provider_reference ?? null) : null;
+  return transaction.type === "funding_credit"
+    ? (transaction.provider_reference ?? transaction.reference ?? null)
+    : (transaction.reference ?? null);
 }
 
 export function walletActivityState(state: WalletTransaction["state"]) {
@@ -123,6 +130,8 @@ export function WalletPanel({
   const router = useRouter();
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [activityCursor, setActivityCursor] = useState<string | null>(null);
+  const [loadingMoreActivity, setLoadingMoreActivity] = useState(false);
   const [funding, setFunding] = useState<FundingStatus | null>(null);
   const [fundOpen, setFundOpen] = useState(fundingPage);
   const [amount, setAmount] = useState(fundingAmount ?? "");
@@ -178,8 +187,10 @@ export function WalletPanel({
       }
       const walletRequest = apiFetch<WalletSummary>("/api/wallet");
       const activityRequest = showActivity
-        ? apiFetch<{ transactions: WalletTransaction[] }>("/api/wallet/transactions")
-        : Promise.resolve({ transactions: [] as WalletTransaction[] });
+        ? apiFetch<{ transactions: WalletTransaction[]; next_cursor: string | null }>(
+            "/api/wallet/transactions",
+          )
+        : Promise.resolve({ transactions: [] as WalletTransaction[], next_cursor: null });
       const [walletResult, activityResult] = await Promise.allSettled([
         walletRequest,
         activityRequest,
@@ -197,6 +208,7 @@ export function WalletPanel({
       if (showActivity) {
         if (activityResult.status === "fulfilled") {
           setTransactions(activityResult.value.transactions);
+          setActivityCursor(activityResult.value.next_cursor);
           setActivityError(null);
         } else {
           setActivityError(
@@ -213,6 +225,22 @@ export function WalletPanel({
     [showActivity],
   );
   const refreshWalletSummary = useCallback(() => loadWallet(true), [loadWallet]);
+  const loadMoreActivity = async () => {
+    if (!activityCursor || loadingMoreActivity) return;
+    setLoadingMoreActivity(true);
+    try {
+      const page = await apiFetch<{
+        transactions: WalletTransaction[];
+        next_cursor: string | null;
+      }>(`/api/wallet/transactions?limit=5&cursor=${encodeURIComponent(activityCursor)}`);
+      setTransactions((current) => [...current, ...page.transactions]);
+      setActivityCursor(page.next_cursor);
+    } catch {
+      setActivityError("We couldn't load more wallet activity right now.");
+    } finally {
+      setLoadingMoreActivity(false);
+    }
+  };
   const handleSettlementPollingError = useCallback(
     () => setProviderError("Your wallet balance is still updating. Retrying…"),
     [],
@@ -546,7 +574,7 @@ export function WalletPanel({
             </div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="ghost">
-                <Link href="/dashboard/wallet/funding">View all activity</Link>
+                <Link href="/dashboard/wallet/funding">View funding attempts</Link>
               </Button>
               <Button variant="ghost" onClick={() => void loadWallet(true)} disabled={refreshing}>
                 Refresh
@@ -565,38 +593,49 @@ export function WalletPanel({
               />
             )
           ) : (
-            <div className="grid gap-2">
-              {transactions.map((transaction) => (
-                <article
-                  className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-slate-200 bg-white p-4"
-                  key={transaction.id}
-                >
-                  <div
-                    className="grid h-8 w-8 place-items-center rounded-full bg-emerald-50 text-emerald-800"
-                    aria-hidden="true"
+            <>
+              <div className="grid gap-2">
+                {transactions.map((transaction) => (
+                  <article
+                    className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-slate-200 bg-white p-4"
+                    key={transaction.id}
                   >
-                    {transaction.type === "funding_credit" ? "+" : "−"}
-                  </div>
-                  <div className="grid gap-1">
-                    <strong>{walletActivityLabel(transaction)}</strong>
-                    {walletActivityReference(transaction) && (
-                      <code className="break-all text-xs text-slate-500">
-                        {walletActivityReference(transaction)}
-                      </code>
-                    )}
-                    <span className="text-xs text-slate-500">
-                      {new Date(transaction.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="grid justify-items-end gap-1">
-                    <Money minor={transaction.amount_minor} currency={transaction.currency} />
-                    <Badge variant={transaction.state === "available" ? "default" : "secondary"}>
-                      {walletActivityState(transaction.state)}
-                    </Badge>
-                  </div>
-                </article>
-              ))}
-            </div>
+                    <div
+                      className="grid h-8 w-8 place-items-center rounded-full bg-emerald-50 text-emerald-800"
+                      aria-hidden="true"
+                    >
+                      {transaction.direction === "credit" ? "+" : "−"}
+                    </div>
+                    <div className="grid gap-1">
+                      <strong>{walletActivityLabel(transaction)}</strong>
+                      {walletActivityReference(transaction) && (
+                        <code className="break-all text-xs text-slate-500">
+                          {walletActivityReference(transaction)}
+                        </code>
+                      )}
+                      <span className="text-xs text-slate-500">
+                        {new Date(transaction.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="grid justify-items-end gap-1">
+                      <Money minor={transaction.amount_minor} currency={transaction.currency} />
+                      <Badge variant={transaction.state === "available" ? "default" : "secondary"}>
+                        {walletActivityState(transaction.state)}
+                      </Badge>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              {activityCursor && (
+                <Button
+                  variant="outline"
+                  onClick={() => void loadMoreActivity()}
+                  disabled={loadingMoreActivity}
+                >
+                  {loadingMoreActivity ? "Loading…" : "Load more activity"}
+                </Button>
+              )}
+            </>
           )}
         </section>
       )}

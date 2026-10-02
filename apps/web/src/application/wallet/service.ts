@@ -5,7 +5,7 @@ export class WalletService {
   summary(accountId: string) {
     return this.wallets.summary(accountId);
   }
-  history(accountId: string, limit?: number) {
-    return this.wallets.history(accountId, limit);
+  history(accountId: string, page?: { cursor?: string; limit?: number }) {
+    return this.wallets.history(accountId, page);
   }
 }

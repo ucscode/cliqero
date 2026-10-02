@@ -125,7 +125,7 @@ export class PostgresWalletTransferService {
         await this.adjustment(
           input.accountId,
           amounts.netMinor,
-          `Transfer from funding to earnings (${id})`,
+          "Transfer from funding to earnings",
           id,
           input.accountId,
         );
@@ -133,7 +133,7 @@ export class PostgresWalletTransferService {
         await this.adjustment(
           input.accountId,
           -amounts.grossMinor,
-          `Transfer from earnings to funding (${id})`,
+          "Transfer from earnings to funding",
           id,
           input.accountId,
         );

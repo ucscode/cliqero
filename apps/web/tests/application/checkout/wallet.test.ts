@@ -152,7 +152,7 @@ describe("WalletCheckoutPaymentService", () => {
       createDebit: async (debit) => {
         debits.push(debit);
       },
-      history: async () => [],
+      history: async () => ({ items: [], nextCursor: null }),
       lockAccount: async () => undefined,
     };
     const service = new WalletCheckoutPaymentService(

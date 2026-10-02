@@ -140,9 +140,14 @@ describe("Postgres wallet and funding projections", () => {
     const query = vi.fn(async () => ({ rows: [] }));
     const repository = new PostgresWalletRepository({ query } as never);
 
-    await repository.history(accountId, 500);
+    await repository.history(accountId, { limit: 500 });
 
-    expect(query).toHaveBeenCalledWith(expect.stringContaining("limit $2"), [accountId, 50]);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("limit $4"), [
+      accountId,
+      null,
+      null,
+      51,
+    ]);
   });
 
   it("discovers only confirmed funding that has no wallet credit before applying the batch limit", async () => {
@@ -170,11 +175,15 @@ describe("Postgres wallet and funding projections", () => {
         rows: [
           {
             kind: "funding_credit",
+            direction: "credit",
+            history_id: "credit:00000000-0000-4000-8000-000000000020",
             id: "00000000-0000-4000-8000-000000000020",
             source_id: "00000000-0000-4000-8000-000000000021",
             amount_minor: "2500",
             currency: "USD",
             state: "available",
+            label: "NOWPayments",
+            reference: "np-00000000-0000-4000-8000-000000000021",
             created_at: new Date("2026-09-14T01:49:14.000Z"),
             provider_display_name: "NOWPayments",
             provider_reference: "np-00000000-0000-4000-8000-000000000021",
@@ -186,7 +195,7 @@ describe("Postgres wallet and funding projections", () => {
 
     const history = await repository.history(accountId);
 
-    expect(history[0]).toMatchObject({
+    expect(history.items[0]).toMatchObject({
       kind: "funding_credit",
       providerDisplayName: "NOWPayments",
       providerReference: "np-00000000-0000-4000-8000-000000000021",

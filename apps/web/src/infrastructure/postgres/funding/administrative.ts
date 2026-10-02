@@ -5,6 +5,12 @@ import type { AdministrativeFundingRepository } from "@/application/operator/fun
 export class PostgresAdministrativeFundingRepository implements AdministrativeFundingRepository {
   constructor(private readonly sql: QueryExecutor) {}
 
+  async lockIdempotencyKey(idempotencyKey: string) {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `admin-funding-idempotency:${idempotencyKey}`,
+    ]);
+  }
+
   async lockAccount(accountId: string) {
     await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
       `wallet-transfer:${accountId}`,
@@ -14,9 +20,9 @@ export class PostgresAdministrativeFundingRepository implements AdministrativeFu
   async create(input: Parameters<AdministrativeFundingRepository["create"]>[0]) {
     await this.sql.query(
       `insert into funding_capability.administrative_fundings
-        (uuid,account_id,amount_minor,state,reason,reference,created_by)
-       values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,
-         (select id from identity_capability.accounts where uuid=$7))`,
+        (uuid,account_id,amount_minor,state,reason,reference,idempotency_key,created_by)
+       values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,
+         (select id from identity_capability.accounts where uuid=$8))`,
       [
         input.id,
         input.accountId,
@@ -24,9 +30,35 @@ export class PostgresAdministrativeFundingRepository implements AdministrativeFu
         input.state,
         input.reason,
         input.reference,
+        input.idempotencyKey,
         input.actorId,
       ],
     );
+  }
+
+  async findByIdempotencyKey(idempotencyKey: string) {
+    const row = (
+      await this.sql.query<any>(
+        `select f.uuid id,a.uuid account_id,f.amount_minor,f.state,f.reason,f.reference,
+              actor.uuid created_by
+         from funding_capability.administrative_fundings f
+         join identity_capability.accounts a on a.id=f.account_id
+         left join identity_capability.accounts actor on actor.id=f.created_by
+        where f.idempotency_key=$1`,
+        [idempotencyKey],
+      )
+    ).rows[0];
+    return row
+      ? {
+          id: row.id,
+          accountId: row.account_id,
+          amountMinor: BigInt(row.amount_minor),
+          state: row.state,
+          reason: row.reason,
+          reference: row.reference,
+          createdBy: row.created_by,
+        }
+      : null;
   }
 
   async findForUpdate(id: string) {

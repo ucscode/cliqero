@@ -94,6 +94,7 @@ describe("account projection pagination", () => {
           (calls.length === 1
             ? [
                 {
+                  history_id: "generated:entry-1",
                   id: "entry-1",
                   purchase_id: "purchase-1",
                   entry_type: "purchase-earnings",
@@ -105,6 +106,7 @@ describe("account projection pagination", () => {
                   created_at: "2026-01-02T00:00:00.000Z",
                 },
                 {
+                  history_id: "generated:entry-2",
                   id: "entry-2",
                   purchase_id: "purchase-2",
                   entry_type: "purchase-earnings",
@@ -118,6 +120,7 @@ describe("account projection pagination", () => {
               ]
             : [
                 {
+                  history_id: "generated:entry-2",
                   id: "entry-2",
                   purchase_id: "purchase-2",
                   entry_type: "purchase-earnings",
@@ -144,7 +147,9 @@ describe("account projection pagination", () => {
     expect(second.items[0]).toMatchObject({ id: "entry-2", amount_minor: "620" });
     expect(second.nextCursor).toBeNull();
     expect(calls[1].values[1]).toBe("2026-01-02T00:00:00.000Z");
-    expect(calls[1].values[2]).toBe("entry-1");
+    expect(calls[1].values[2]).toBe("generated:entry-1");
+    expect(calls[0].sql).toContain("earnings_adjustments");
+    expect(calls[0].sql).toContain("history_id");
   });
 
   it("keeps referral level and commercial detail out of the customer earnings projection", async () => {
@@ -154,6 +159,7 @@ describe("account projection pagination", () => {
         query = sql;
         return result<T>([
           {
+            history_id: "generated:entry-privacy",
             id: "entry-privacy",
             purchase_id: "purchase-compatibility-id",
             entry_type: "purchase-earnings",
@@ -182,9 +188,48 @@ describe("account projection pagination", () => {
       currency: "USD",
       recipient_role: "referral",
       balance_state: "available",
+      source: "generated",
+      reason: null,
+      reference: null,
       created_at: "2026-01-02T00:00:00.000Z",
     });
     expect(projection.items[0]).not.toHaveProperty("referral_level");
     expect(projection.items[0]).not.toHaveProperty("listing_title_snapshot");
+  });
+
+  it("projects signed earning adjustments into the cursor-paginated customer stream", async () => {
+    const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+    const service = new AccountProjectionService({
+      query: async <T extends object>(sql: string, values: readonly unknown[] = []) => {
+        calls.push({ sql, values });
+        return result<T>([
+          {
+            history_id: "adjustment:adj-1",
+            id: "adj-1",
+            purchase_id: null,
+            entry_type: "earnings-adjustment",
+            direction: "credit",
+            amount_minor: "1000",
+            currency: "USD",
+            recipient_role: null,
+            balance_state: "available",
+            reason: "Gift cash",
+            reference: "TICKET-123",
+            created_at: "2026-01-03T00:00:00.000Z",
+          },
+        ] as T[]);
+      },
+    });
+    const page = await service.earningEntries("account", { limit: 1 });
+    expect(page.items[0]).toMatchObject({
+      purchase_id: null,
+      source: "adjustment",
+      entry_type: "earnings-adjustment",
+      reason: "Gift cash",
+      reference: "TICKET-123",
+      amount_minor: "1000",
+    });
+    expect(calls[0].sql).toContain("union all");
+    expect(calls[0].sql).toContain("order by created_at desc,history_id desc");
   });
 });

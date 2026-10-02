@@ -111,7 +111,23 @@ export class AccountProjectionService {
     const cursor = decodeCursor(input.cursor);
     const rows = (
         await this.sql.query<any>(
-          `select e.uuid as id,p.uuid as purchase_id,e.entry_type,e.direction,e.amount_minor,e.currency,e.recipient_role,e.balance_state,e.created_at from ledger_capability.entries e left join purchase_capability.purchases p on p.id=e.purchase_id where e.account_id=(select id from identity_capability.accounts where uuid=$1) and ($2::timestamptz is null or (e.created_at,e.id)<($2::timestamptz,(select id from ledger_capability.entries where uuid=$3))) order by e.created_at desc,e.id desc limit $4`,
+          `select * from (
+             select 'generated:'||e.uuid::text history_id,e.uuid::text id,p.uuid::text purchase_id,
+                    e.entry_type,e.direction,e.amount_minor,e.currency,e.recipient_role,e.balance_state,
+                    null::text reason,null::text reference,e.created_at
+               from ledger_capability.entries e left join purchase_capability.purchases p on p.id=e.purchase_id
+              where e.account_id=(select id from identity_capability.accounts where uuid=$1)
+             union all
+             select 'adjustment:'||a.uuid::text history_id,a.uuid::text id,null::text purchase_id,
+                    'earnings-adjustment'::text entry_type,
+                    case when a.amount_minor < 0 then 'debit' else 'credit' end direction,
+                    abs(a.amount_minor) amount_minor,'USD'::text currency,null::text recipient_role,
+                    'available'::text balance_state,a.reason,a.reference,a.created_at
+               from ledger_capability.earnings_adjustments a
+              where a.account_id=(select id from identity_capability.accounts where uuid=$1)
+           ) history
+          where ($2::timestamptz is null or (created_at,history_id)<($2::timestamptz,$3::text))
+          order by created_at desc,history_id desc limit $4`,
           [accountId, cursor?.createdAt ?? null, cursor?.id ?? null, input.limit + 1],
         )
       ).rows,
@@ -126,11 +142,14 @@ export class AccountProjectionService {
         currency: row.currency,
         recipient_role: row.recipient_role,
         balance_state: row.balance_state,
+        source: row.entry_type === "earnings-adjustment" ? "adjustment" : "generated",
+        reason: row.reason ?? null,
+        reference: row.reference ?? null,
         created_at: row.created_at,
       })),
       nextCursor:
         rows.length > input.limit
-          ? encodeCursor(visible.at(-1).created_at, visible.at(-1).id)
+          ? encodeCursor(visible.at(-1).created_at, visible.at(-1).history_id)
           : null,
     };
   }

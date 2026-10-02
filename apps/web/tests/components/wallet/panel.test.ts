@@ -277,20 +277,33 @@ describe("customer-facing funding presentation", () => {
   });
 
   it("uses provider display names and customer success states in activity", () => {
-    expect(walletActivityLabel({ type: "funding_credit", provider_display_name: "Paystack" })).toBe(
-      "Paystack",
-    );
+    expect(
+      walletActivityLabel({
+        type: "funding_credit",
+        label: "Paystack",
+        provider_display_name: "Paystack",
+      }),
+    ).toBe("Paystack");
     expect(
       walletActivityReference({
         type: "funding_credit",
+        reference: null,
         provider_reference: "pay-123",
       }),
     ).toBe("pay-123");
     expect(
-      walletActivityReference({ type: "purchase_debit", provider_reference: "pay-ignored" }),
+      walletActivityReference({
+        type: "purchase_debit",
+        provider_reference: "pay-ignored",
+        reference: null,
+      }),
     ).toBe(null);
     expect(
-      walletActivityLabel({ type: "funding_credit", provider_display_name: "NOWPayments" }),
+      walletActivityLabel({
+        type: "funding_credit",
+        label: "NOWPayments",
+        provider_display_name: "NOWPayments",
+      }),
     ).not.toContain(" funding");
     expect(walletActivityState("available")).toBe("Funded");
     expect(walletActivityState("pending")).toBe("Pending");

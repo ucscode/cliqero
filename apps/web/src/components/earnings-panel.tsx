@@ -25,8 +25,9 @@ function label(value: string) {
 }
 
 export function customerEarningLabel(
-  entry: Pick<EarningsEntry, "entry_type" | "direction" | "recipient_role">,
+  entry: Pick<EarningsEntry, "entry_type" | "direction" | "recipient_role" | "reason">,
 ) {
+  if (entry.entry_type === "earnings-adjustment") return entry.reason || "Earnings adjustment";
   if (entry.entry_type === "purchase-earnings" && entry.direction === "credit") {
     if (entry.recipient_role === "referral") return "Referral commission";
     if (entry.recipient_role === "seller") return "Sale proceeds";
@@ -116,8 +117,8 @@ export function EarningsPanel() {
             Earnings
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-            Seller and referral earnings from completed purchases. Pending earnings become available
-            only when the settlement process says they are ready.
+            Earnings, corrections, and transfers are listed here. Pending purchase earnings become
+            available only when the settlement process says they are ready.
           </p>
         </div>
         <Button type="button" variant="secondary" onClick={refresh} disabled={loading}>
@@ -224,7 +225,7 @@ export function EarningsActivity({
         <>
           <div className="grid">
             {entries.items.map((entry) => (
-              <EarningRow entry={entry} key={entry.id} />
+              <EarningRow entry={entry} key={`${entry.source ?? "generated"}:${entry.id}`} />
             ))}
           </div>
           {(page > 0 || entries.nextCursor) && (
@@ -254,7 +255,7 @@ export function EarningsActivity({
       ) : (
         <EmptyState
           title="No earnings yet"
-          description="Earnings from qualifying sales and referrals will appear here."
+          description="Sales, referrals, adjustments, and transfers will appear here."
         />
       )}
     </Card>
@@ -271,6 +272,9 @@ function EarningRow({ entry }: { entry: EarningsEntry }) {
         <span className="text-xs text-slate-500">
           {label(entry.balance_state)} · {new Date(entry.created_at).toLocaleDateString()}
         </span>
+        {entry.reference && (
+          <span className="break-all text-xs text-slate-500">Reference: {entry.reference}</span>
+        )}
       </div>
       <div className="grid justify-items-end gap-1 whitespace-nowrap">
         <Badge variant={variant}>{label(entry.balance_state)}</Badge>

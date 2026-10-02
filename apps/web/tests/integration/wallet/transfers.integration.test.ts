@@ -79,6 +79,73 @@ suite("atomic Funding and Earnings transfers", () => {
       (await app.treasuryRepository.summary()).balanceMinor - treasuryBefore.balanceMinor,
     ).toBe(250n);
 
+    const historyPages = [] as Awaited<ReturnType<typeof app.wallet.history>>[];
+    let cursor: string | undefined;
+    do {
+      const page = await app.wallet.history(user.id, { cursor, limit: 2 });
+      historyPages.push(page);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    const history = historyPages.flatMap((page) => page.items);
+    expect(history.map((entry) => entry.kind)).toContain("funding_transfer");
+    expect(
+      history.filter((entry) => entry.kind === "funding_transfer").map((entry) => entry.direction),
+    ).toEqual(expect.arrayContaining(["debit", "credit"]));
+    expect(new Set(history.map((entry) => entry.historyId)).size).toBe(history.length);
+    const signedHistory = history.reduce(
+      (sum, entry) =>
+        sum + (entry.direction === "credit" ? entry.amount.minorAmount : -entry.amount.minorAmount),
+      0n,
+    );
+    expect(signedHistory).toBe((await app.wallet.summary(user.id)).available.minorAmount);
+
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'finance.manage')`,
+      [user.id],
+    );
+    await app.earningsAdjustments.create(user.id, {
+      accountId: user.id,
+      amountMinor: "1000",
+      reason: "Gift cash",
+      reference: "TICKET-123",
+    });
+    await app.earningsAdjustments.create(user.id, {
+      accountId: user.id,
+      amountMinor: "-400",
+      reason: "Support correction",
+      reference: "TICKET-124",
+    });
+    const earningsItems = [] as Array<{
+      id: string;
+      reason: string | null;
+      reference: string | null;
+      purchase_id: string | null;
+    }>;
+    let earningsCursor: string | undefined;
+    do {
+      const page = await app.accountProjections.earningEntries(user.id, {
+        cursor: earningsCursor,
+        limit: 2,
+      });
+      earningsItems.push(...page.items);
+      earningsCursor = page.nextCursor ?? undefined;
+    } while (earningsCursor);
+    expect(earningsItems).toHaveLength(4);
+    expect(earningsItems.map((entry) => entry.reason)).toEqual(
+      expect.arrayContaining([
+        "Gift cash",
+        "Support correction",
+        "Transfer from funding to earnings",
+        "Transfer from earnings to funding",
+      ]),
+    );
+    expect(earningsItems.find((entry) => entry.reason === "Gift cash")).toMatchObject({
+      purchase_id: null,
+      reference: "TICKET-123",
+    });
+    expect(new Set(earningsItems.map((entry) => entry.id)).size).toBe(4);
+
     const correlationRows = await app.database.query<{
       uuid: string;
       correlation_id: string;

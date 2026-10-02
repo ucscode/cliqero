@@ -3812,9 +3812,9 @@ ALTER TABLE withdrawal_capability.withdrawals
   );
 UPDATE withdrawal_capability.withdrawals SET net_amount_minor=amount_minor;
 COMMENT ON COLUMN withdrawal_capability.withdrawals.fee_minor IS
-  'Immutable fee snapshot in canonical USD minor units, calculated at request time.';
+  'Fee snapshot in canonical USD minor units, calculated while the request is mutable; credited to Treasury only when payout completes.';
 COMMENT ON COLUMN withdrawal_capability.withdrawals.net_amount_minor IS
-  'Immutable payout amount after the fee snapshot; amount_minor remains the gross reservation.';
+  'Payout amount after the fee snapshot; amount_minor remains the gross reservation.';
 
 -- Administrative funding is distinct from provider transactions. Its balance
 -- effects are recorded as signed append-only movements so edits/deletes can be
@@ -3840,8 +3840,15 @@ ALTER TABLE funding_capability.administrative_fundings
     FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id),
   ADD CONSTRAINT administrative_fundings_actor_fk
     FOREIGN KEY (created_by) REFERENCES identity_capability.accounts(id);
+ALTER TABLE funding_capability.administrative_fundings
+  ADD COLUMN IF NOT EXISTS idempotency_key text;
 CREATE INDEX administrative_fundings_account_idx
   ON funding_capability.administrative_fundings (account_id, created_at DESC, id DESC);
+CREATE UNIQUE INDEX administrative_fundings_idempotency_unique
+  ON funding_capability.administrative_fundings (idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+COMMENT ON COLUMN funding_capability.administrative_fundings.idempotency_key IS
+  'Globally unique key for idempotent operator funding creation; nullable for historical pre-key records.';
 
 CREATE TABLE wallet_capability.funding_adjustments (
     uuid uuid NOT NULL,

@@ -8,6 +8,7 @@ import { PublicApplicationError } from "@/kernel/errors";
 export type AdministrativeFundingState = "confirmed" | "failed" | "blocked" | "cancelled";
 
 export interface AdministrativeFundingRepository {
+  lockIdempotencyKey(idempotencyKey: string): Promise<void>;
   lockAccount(accountId: string): Promise<void>;
   create(input: {
     id: string;
@@ -16,8 +17,18 @@ export interface AdministrativeFundingRepository {
     state: AdministrativeFundingState;
     reason: string;
     reference: string | null;
+    idempotencyKey: string;
     actorId: string;
   }): Promise<void>;
+  findByIdempotencyKey(idempotencyKey: string): Promise<{
+    id: string;
+    accountId: string;
+    amountMinor: bigint;
+    state: AdministrativeFundingState;
+    reason: string;
+    reference: string | null;
+    createdBy: string | null;
+  } | null>;
   findForUpdate(id: string): Promise<{
     id: string;
     accountId: string;
@@ -191,6 +202,7 @@ export class OperatorFundingService {
       state: AdministrativeFundingState;
       reason: string;
       reference?: string | null;
+      idempotencyKey: string;
     },
   ) {
     const { repository, operators, uow } = this.requireAdministration();
@@ -198,10 +210,42 @@ export class OperatorFundingService {
     const amountMinor = this.positiveMinor(input.amountMinor);
     const reason = this.requiredReason(input.reason);
     const reference = this.normalizeReference(input.reference);
-    const id = newId();
+    const idempotencyKey = input.idempotencyKey.trim();
+    if (!idempotencyKey || idempotencyKey.length > 200)
+      throw new PublicApplicationError(
+        "A valid Idempotency-Key is required.",
+        "invalid_idempotency_key",
+        400,
+      );
     return uow.transaction(async () => {
+      await repository.lockIdempotencyKey(idempotencyKey);
       await repository.lockAccount(input.accountId);
-      await repository.create({ ...input, id, amountMinor, reason, reference, actorId });
+      const existing = await repository.findByIdempotencyKey(idempotencyKey);
+      if (existing) {
+        if (
+          existing.accountId !== input.accountId ||
+          existing.amountMinor !== amountMinor ||
+          existing.state !== input.state ||
+          existing.reason !== reason ||
+          existing.reference !== reference
+        )
+          throw new PublicApplicationError(
+            "Idempotency-Key was already used for a different funding request.",
+            "idempotency_conflict",
+            409,
+          );
+        return { ...existing, amountMinor: existing.amountMinor.toString() };
+      }
+      const id = newId();
+      await repository.create({
+        ...input,
+        id,
+        amountMinor,
+        reason,
+        reference,
+        idempotencyKey,
+        actorId,
+      });
       if (input.state === "confirmed")
         await repository.recordMovement({
           fundingId: id,

@@ -18,9 +18,12 @@ describe("wallet transaction API projection", () => {
       kind: "funding_credit",
       id: "00000000-0000-4000-8000-000000000010",
       sourceId: "00000000-0000-4000-8000-000000000011",
+      historyId: "credit:00000000-0000-4000-8000-000000000010",
       amount: Money.of(2500n, "USD"),
+      direction: "credit",
       state: "available",
       createdAt: new Date("2026-09-14T01:49:14.000Z"),
+      label: "NOWPayments",
       providerDisplayName: "NOWPayments",
       providerReference: "np-00000000-0000-4000-8000-000000000011",
     };
@@ -28,13 +31,18 @@ describe("wallet transaction API projection", () => {
       kind: "purchase_debit",
       id: "00000000-0000-4000-8000-000000000020",
       sourceId: "00000000-0000-4000-8000-000000000021",
+      historyId: "purchase:00000000-0000-4000-8000-000000000020",
       amount: Money.of(100n, "USD"),
+      direction: "debit",
       state: "complete",
       createdAt: new Date("2026-09-14T01:48:14.000Z"),
+      label: "Listing purchase",
     };
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
-      wallet: { history: vi.fn(async () => [fundingCredit, purchaseDebit]) },
+      wallet: {
+        history: vi.fn(async () => ({ items: [fundingCredit, purchaseDebit], nextCursor: null })),
+      },
     };
 
     const response = await GET(new Request("http://localhost/api/wallet/transactions"));
@@ -51,7 +59,7 @@ describe("wallet transaction API projection", () => {
   });
 
   it("allows a wallet-scoped API key to read only its own wallet", async () => {
-    const history = vi.fn(async () => []);
+    const history = vi.fn(async () => ({ items: [], nextCursor: null }));
     fixtures.container = {
       principalResolver: {
         resolve: vi.fn(async () => ({
@@ -68,7 +76,10 @@ describe("wallet transaction API projection", () => {
     const response = await GET(new Request("http://localhost/api/wallet/transactions"));
 
     expect(response.status).toBe(200);
-    expect(history).toHaveBeenCalledWith(account.id, expect.any(Number));
+    expect(history).toHaveBeenCalledWith(
+      account.id,
+      expect.objectContaining({ limit: expect.any(Number) }),
+    );
   });
 
   it("rejects API keys without wallet:read and unauthenticated requests", async () => {
@@ -82,7 +93,7 @@ describe("wallet transaction API projection", () => {
           scopes: new Set<string>(),
         })),
       },
-      wallet: { history: vi.fn(async () => []) },
+      wallet: { history: vi.fn(async () => ({ items: [], nextCursor: null })) },
     };
     expect((await GET(new Request("http://localhost/api/wallet/transactions"))).status).toBe(403);
 

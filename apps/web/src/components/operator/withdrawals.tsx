@@ -34,6 +34,22 @@ function minorToMajor(value: string) {
   return `${amount / 100n}.${(amount % 100n).toString().padStart(2, "0")}`;
 }
 
+export function operatorWithdrawalEditPolicy(state: OperatorWithdrawalState) {
+  if (state === "requested")
+    return {
+      editable: true,
+      amountAndDestinationLocked: false,
+      stateOptions: ["requested", "approved", "rejected"] as const,
+    };
+  if (state === "approved")
+    return {
+      editable: true,
+      amountAndDestinationLocked: true,
+      stateOptions: ["approved", "rejected"] as const,
+    };
+  return { editable: false, amountAndDestinationLocked: true, stateOptions: [] as const };
+}
+
 export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string }) {
   const router = useRouter();
   const [item, setItem] = useState<Detail | null>(null);
@@ -82,8 +98,8 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
               },
               ...options,
             ];
-          if (detail.state !== "requested")
-            throw new Error("Only requested withdrawals can be edited.");
+          if (!operatorWithdrawalEditPolicy(detail.state).editable)
+            throw new Error("This withdrawal has no editable fields.");
         } else if (options[0]) setAccountId(options[0].id);
         setAccounts(options);
       } catch (cause) {
@@ -220,6 +236,9 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
                 required
+                disabled={
+                  item ? operatorWithdrawalEditPolicy(item.state).amountAndDestinationLocked : false
+                }
               />
             </label>
             <label className="grid gap-1 text-sm font-medium">
@@ -228,7 +247,11 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                 value={destinationId}
                 onChange={(event) => setDestinationId(event.target.value)}
                 required
-                disabled={!destinations.length}
+                disabled={
+                  (item
+                    ? operatorWithdrawalEditPolicy(item.state).amountAndDestinationLocked
+                    : false) || !destinations.length
+                }
               >
                 <option value="">
                   {destinations.length ? "Select destination" : "No available saved destination"}
@@ -247,9 +270,13 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                   value={state}
                   onChange={(event) => setState(event.target.value as typeof state)}
                 >
-                  <option value="requested">Requested</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
+                  {operatorWithdrawalEditPolicy(item?.state ?? "requested").stateOptions.map(
+                    (option) => (
+                      <option key={option} value={option}>
+                        {option[0].toUpperCase() + option.slice(1)}
+                      </option>
+                    ),
+                  )}
                 </Select>
               </label>
             )}
@@ -493,7 +520,7 @@ export function OperatorWithdrawalList({ canManage = false }: { canManage?: bool
       }
       actions={(item) => [
         { type: "link", label: "Inspect withdrawal", href: `/operator/withdrawals/${item.id}` },
-        ...(canManage && item.state === "requested"
+        ...(canManage && operatorWithdrawalEditPolicy(item.state).editable
           ? [
               {
                 type: "link" as const,
@@ -609,7 +636,7 @@ export function OperatorWithdrawalDetail({
       description={item.id}
       headerActions={
         <>
-          {canManage && item.state === "requested" && (
+          {canManage && operatorWithdrawalEditPolicy(item.state).editable && (
             <Button asChild>
               <Link href={`/operator/withdrawals/${item.id}/edit`}>Edit</Link>
             </Button>

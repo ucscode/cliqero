@@ -3,6 +3,7 @@ import { getContainer, type ApplicationContainer } from "@/infrastructure/contai
 import { isSameOriginRequest } from "@/api/internal/security/same-origin";
 import { z } from "zod";
 import { hasCapability } from "@/modules/identity/capabilities";
+import { PublicApplicationError } from "@/kernel/errors";
 
 type Container = Pick<
   ApplicationContainer,
@@ -34,6 +35,13 @@ export class InternalFundingRoutes {
     const principal = await this.session(request, true);
     if (principal instanceof Response) return principal;
     try {
+      const idempotencyKey = request.headers.get("Idempotency-Key")?.trim();
+      if (!idempotencyKey || idempotencyKey.length > 200)
+        throw new PublicApplicationError(
+          "A valid Idempotency-Key is required.",
+          "invalid_idempotency_key",
+          400,
+        );
       const body = createSchema.parse(await this.json(request));
       return this.respond(
         await this.container.operatorFunding.createAdministrative(principal.accountId, {
@@ -42,6 +50,7 @@ export class InternalFundingRoutes {
           state: body.state,
           reason: body.reason,
           reference: body.reference,
+          idempotencyKey,
         }),
         201,
       );

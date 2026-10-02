@@ -891,10 +891,18 @@ Treat mutable operational resources and historical financial facts differently:
   Delete physically removes the mutable record only after a compensating
   adjustment can be applied without making available funding negative.
 - Withdrawal requests in mutable pre-payout states support Operator CRUD.
-  Status edits must invoke the canonical withdrawal state machine. Amount edits
-  reconcile the fee snapshot, Treasury fee delta, and earnings reservation in
-  one transaction. Deleting a mutable request releases and removes operational
+  Status edits must invoke the canonical withdrawal state machine. The fee and
+  net amount are snapshotted while a request is mutable; Treasury receives the
+  withdrawal fee only when payout completes, using that stored snapshot.
+  Rejected, cancelled, or failed unpaid withdrawals create no fee income.
+  Requested amount edits update the fee snapshot and earnings reservation but
+  do not post Treasury movements. Deleting a mutable request releases and removes operational
   reservation state atomically; completed payout evidence is immutable.
+- Every authoritative balance effect must have a visible/accountable history
+  entry. Mutable administrative records are metadata, not substitutes for
+  append-only financial movements.
+- Money-creating financial POST operations require idempotency protection so
+  retries cannot duplicate financial effects.
 - Append-only accounting history must correlate to a stable operation identity
   and must not require a mutable administrative Funding or Withdrawal row to
   remain forever.
