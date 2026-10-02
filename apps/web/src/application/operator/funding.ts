@@ -174,6 +174,7 @@ export interface OperatorFundingReader {
     nextCursor: string | null;
   }>;
   get(id: string): Promise<OperatorFundingDetail>;
+  deleteForRoot(id: string, actorId: string): Promise<{ id: string; deleted: true }>;
 }
 
 export class OperatorFundingService {
@@ -351,12 +352,44 @@ export class OperatorFundingService {
     });
   }
 
+  async deleteByOperator(actorId: string, id: string) {
+    const { operators, uow } = this.requireAdministration();
+    if (!(await operators.hasCapability(actorId, "system.root")))
+      return this.deleteAdministrative(actorId, id);
+
+    const current = await this.reader.get(id);
+    if (current.origin === "administrative") return this.deleteAdministrative(actorId, id);
+    await operators.requireCapability(actorId, "system.root");
+    return uow.transaction(() => this.reader.deleteForRoot(id, actorId));
+  }
+
   async bulkDeleteAdministrative(actorId: string, ids: readonly string[]) {
     await this.requireAdministration().operators.requireCapability(actorId, "finance.manage");
     const results = [];
     for (const id of [...new Set(ids)]) {
       try {
         await this.deleteAdministrative(actorId, id);
+        results.push({ id, deleted: true, error: null });
+      } catch (error) {
+        results.push({
+          id,
+          deleted: false,
+          error: error instanceof Error ? error.message : "Funding could not be deleted.",
+        });
+      }
+    }
+    return { results };
+  }
+
+  async bulkDeleteByOperator(actorId: string, ids: readonly string[]) {
+    const { operators } = this.requireAdministration();
+    if (!(await operators.hasCapability(actorId, "system.root")))
+      return this.bulkDeleteAdministrative(actorId, ids);
+
+    const results = [];
+    for (const id of [...new Set(ids)]) {
+      try {
+        await this.deleteByOperator(actorId, id);
         results.push({ id, deleted: true, error: null });
       } catch (error) {
         results.push({

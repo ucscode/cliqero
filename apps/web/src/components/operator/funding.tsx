@@ -286,7 +286,13 @@ export function operatorBankTransferEvidenceRows(
   ];
 }
 
-export function OperatorFundingList({ canManage = false }: { canManage?: boolean }) {
+export function OperatorFundingList({
+  canManage = false,
+  canDelete = false,
+}: {
+  canManage?: boolean;
+  canDelete?: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorFundingState | "">("");
   const [provider, setProvider] = useState("");
@@ -384,6 +390,20 @@ export function OperatorFundingList({ canManage = false }: { canManage?: boolean
     ...(canManage && funding.origin === "administrative"
       ? [{ type: "link" as const, label: "Edit", href: `/operator/funding/${funding.id}/edit` }]
       : []),
+    ...(canDelete
+      ? [
+          {
+            type: "action" as const,
+            label: "Delete",
+            destructive: true,
+            onSelect: async () => {
+              if (!window.confirm("Delete this funding record?")) return;
+              await apiFetch(`/internal/funding/${funding.id}`, { method: "DELETE" });
+              await collection.retry();
+            },
+          },
+        ]
+      : []),
     { type: "link", label: "View account", href: `/operator/users/${funding.account.id}` },
   ];
 
@@ -479,11 +499,11 @@ export function OperatorFundingList({ canManage = false }: { canManage?: boolean
       getRowKey={(funding) => funding.id}
       selection={{
         labelForItem: (funding) => `funding ${funding.id}`,
-        canSelectItem: (funding) => funding.origin === "administrative",
+        canSelectItem: (funding) => canDelete || funding.origin === "administrative",
       }}
       createAction={canManage ? { label: "New funding", href: "/operator/funding/new" } : undefined}
       bulkActions={
-        canManage
+        canManage || canDelete
           ? [
               {
                 value: "delete",
@@ -491,12 +511,14 @@ export function OperatorFundingList({ canManage = false }: { canManage?: boolean
                 destructive: true,
                 onSelect: async (items) => {
                   const ids = items
-                    .filter((item) => item.origin === "administrative")
+                    .filter((item) => canDelete || item.origin === "administrative")
                     .map((item) => item.id);
                   if (!ids.length) return false;
                   if (
                     !window.confirm(
-                      `Delete ${ids.length} administrative funding record(s)? Provider records will be retained.`,
+                      canDelete
+                        ? `Delete ${ids.length} funding record(s)? Linked provider evidence and wallet credits will be removed.`
+                        : `Delete ${ids.length} administrative funding record(s)? Provider records will be retained.`,
                     )
                   )
                     return false;
@@ -530,7 +552,7 @@ export function OperatorFundingList({ canManage = false }: { canManage?: boolean
         onNext: () => void collection.next(),
       }}
       sectionTitle="Funding records"
-      sectionDescription="Provider facts, evidence, and wallet-credit state are inspected without deleting financial history."
+      sectionDescription="Provider facts, evidence, and wallet-credit state are inspected. System-root operators can delete a funding record with its linked records."
     />
   );
 }
@@ -538,10 +560,13 @@ export function OperatorFundingList({ canManage = false }: { canManage?: boolean
 export function OperatorFundingDetail({
   fundingId,
   canManage = false,
+  canDelete = false,
 }: {
   fundingId: string;
   canManage?: boolean;
+  canDelete?: boolean;
 }) {
+  const router = useRouter();
   const [funding, setFunding] = useState<FundingDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -597,6 +622,17 @@ export function OperatorFundingDetail({
     }
   }
 
+  async function deleteFunding() {
+    if (!funding || !canDelete || !window.confirm("Delete this funding record?")) return;
+    setError(null);
+    try {
+      await apiFetch(`/internal/funding/${funding.id}`, { method: "DELETE" });
+      router.push("/operator/funding");
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
+  }
+
   if (loading && !funding)
     return <CrudDetail eyebrow="Funding fact" title="Wallet funding inspection" loading />;
   if (!funding)
@@ -618,7 +654,14 @@ export function OperatorFundingDetail({
       title="Wallet funding inspection"
       description={funding.id}
       headerActions={
-        <OperatorStatusCell status={funding.state} label={stateLabel(funding.state)} />
+        <div className="flex items-center gap-2">
+          <OperatorStatusCell status={funding.state} label={stateLabel(funding.state)} />
+          {canDelete && (
+            <Button variant="destructive" onClick={() => void deleteFunding()}>
+              Delete
+            </Button>
+          )}
+        </div>
       }
       sections={
         <>

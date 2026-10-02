@@ -5,6 +5,7 @@ import type {
   OperatorFundingReader,
   OperatorFundingSummary,
 } from "@/application/operator/funding";
+import { newId } from "@/kernel/ids";
 import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "./cursor";
 
 function summary(row: any): OperatorFundingSummary {
@@ -286,5 +287,41 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
           }
         : null,
     };
+  }
+
+  async deleteForRoot(id: string, actorId: string) {
+    const previous = await this.get(id);
+    const funding = (
+      await this.sql.query<{ id: string }>(
+        `select id::text from funding_capability.funding_transactions where uuid=$1 for update`,
+        [id],
+      )
+    ).rows[0];
+    if (!funding) throw new Error("Funding not found");
+
+    await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+    await this.sql.query(
+      `delete from funding_capability.funding_evidence where funding_id=$1::bigint`,
+      [funding.id],
+    );
+    await this.sql.query(
+      `delete from payment_capability.provider_operations where funding_id=$1::bigint`,
+      [funding.id],
+    );
+    await this.sql.query(`delete from wallet_capability.credits where funding_id=$1::bigint`, [
+      funding.id,
+    ]);
+    const deleted = await this.sql.query(
+      `delete from funding_capability.funding_transactions where id=$1::bigint`,
+      [funding.id],
+    );
+    if ((deleted.rowCount ?? 0) !== 1) throw new Error("Funding not found");
+    await this.sql.query(
+      `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
+       values('root.delete','funding_transaction',$1,$2::jsonb,null,$3::uuid,
+              (select id from identity_capability.accounts where uuid=$4))`,
+      [id, JSON.stringify(previous), newId(), actorId],
+    );
+    return { id, deleted: true as const };
   }
 }

@@ -249,4 +249,79 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
     );
     expect(adminCount.rows[0]?.count).toBe("0");
   });
+
+  it("allows only system.root to delete provider funding and linked records", async () => {
+    const { actor, customer } = await actors();
+    const providerFunding = await app.fundingService.create({
+      accountId: customer.id,
+      amountMinor: 1200n,
+      providerName: "development",
+      idempotencyKey: `provider-root-delete-${newId()}`,
+    });
+    await app.database.query(
+      `insert into payment_capability.provider_operations(
+         uuid,funding_id,provider,operation,outcome
+       ) values(
+         gen_random_uuid(),
+         (select id from funding_capability.funding_transactions where uuid=$1),
+         'development','test','succeeded'
+       )`,
+      [providerFunding.id],
+    );
+    await app.database.query(
+      `insert into funding_capability.funding_evidence(
+         uuid,funding_id,account_id,transfer_reference
+       ) values(
+         gen_random_uuid(),
+         (select id from funding_capability.funding_transactions where uuid=$1),
+         (select id from identity_capability.accounts where uuid=$2),
+         'root-delete-test'
+       )`,
+      [providerFunding.id, customer.id],
+    );
+    await app.database.query(
+      `insert into wallet_capability.credits(
+         uuid,amount_minor,currency,state,available_at,account_id,funding_id
+       ) values(
+         gen_random_uuid(),1200,'USD','available',now(),
+         (select id from identity_capability.accounts where uuid=$2),
+         (select id from funding_capability.funding_transactions where uuid=$1)
+       )`,
+      [providerFunding.id, customer.id],
+    );
+
+    await expect(
+      app.operatorFunding.deleteByOperator(customer.id, providerFunding.id),
+    ).rejects.toThrow("Forbidden");
+    await expect(
+      app.operatorFunding.deleteByOperator(actor.id, providerFunding.id),
+    ).resolves.toEqual({
+      id: providerFunding.id,
+      deleted: true,
+    });
+
+    const remaining = await app.database.query<{
+      funding: string;
+      operations: string;
+      evidence: string;
+      credits: string;
+      audits: string;
+    }>(
+      `select
+         (select count(*)::text from funding_capability.funding_transactions where uuid=$1) funding,
+         (select count(*)::text from payment_capability.provider_operations where funding_id is not null and funding_id not in (select id from funding_capability.funding_transactions)) operations,
+         (select count(*)::text from funding_capability.funding_evidence where funding_id is not null and funding_id not in (select id from funding_capability.funding_transactions)) evidence,
+         (select count(*)::text from wallet_capability.credits where funding_id is not null and funding_id not in (select id from funding_capability.funding_transactions)) credits,
+         (select count(*)::text from kernel.audit_records where action='root.delete' and subject_type='funding_transaction' and subject_id=$1::text) audits`,
+      [providerFunding.id],
+    );
+    expect(remaining.rows[0]).toEqual({
+      funding: "0",
+      operations: "0",
+      evidence: "0",
+      credits: "0",
+      audits: "1",
+    });
+    await expect(app.operatorFunding.get(providerFunding.id)).rejects.toThrow("Funding not found");
+  });
 });

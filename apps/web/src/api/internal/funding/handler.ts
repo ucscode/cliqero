@@ -98,7 +98,7 @@ export class InternalFundingRoutes {
     if (principal instanceof Response) return principal;
     try {
       return this.respond(
-        await this.container.operatorFunding.deleteAdministrative(principal.accountId, id),
+        await this.container.operatorFunding.deleteByOperator(principal.accountId, id),
       );
     } catch (error) {
       return apiError(error, request);
@@ -114,10 +114,7 @@ export class InternalFundingRoutes {
         .strict()
         .parse(await this.json(request));
       return this.respond(
-        await this.container.operatorFunding.bulkDeleteAdministrative(
-          principal.accountId,
-          body.ids,
-        ),
+        await this.container.operatorFunding.bulkDeleteByOperator(principal.accountId, body.ids),
       );
     } catch (error) {
       return apiError(error, request);

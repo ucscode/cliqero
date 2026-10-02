@@ -17,6 +17,7 @@ export default async function OperatorFundingDetailPage({
       <OperatorFundingDetail
         fundingId={fundingId}
         canManage={hasCapability(access.capabilities, "finance.manage")}
+        canDelete={hasCapability(access.capabilities, "system.root")}
       />
     </OperatorShell>
   );
