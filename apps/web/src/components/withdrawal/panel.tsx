@@ -86,6 +86,7 @@ export function WithdrawalsPanel() {
     if (!policy || !amount) return null;
     try {
       const gross = BigInt(parseWithdrawalAmount(amount, currency));
+      if (!policy.fee_enabled) return 0n;
       const raw = (gross * BigInt(policy.fee_basis_points) + 5_000n) / 10_000n;
       const cap =
         policy.fee_maximum_amount_minor === null ? null : BigInt(policy.fee_maximum_amount_minor);

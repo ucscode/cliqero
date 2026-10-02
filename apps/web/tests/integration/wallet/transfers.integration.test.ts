@@ -1,14 +1,23 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import { newId } from "@/kernel/ids";
+import { feePolicyFromYaml } from "@/modules/fee/policy";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
+const enabledFees = feePolicyFromYaml({
+  enabled: true,
+  withdrawal: { enabled: true, percentage: 5, maximum_amount_minor: 2000 },
+  funding_to_earning: { enabled: true, percentage: 2, maximum_amount_minor: 1000 },
+  earning_to_funding: { enabled: true, percentage: 1, maximum_amount_minor: 500 },
+});
+let activeFees = enabledFees;
 
 suite("atomic Funding and Earnings transfers", () => {
-  const app = createContainer(databaseUrl!);
+  const app = createContainer(databaseUrl!, { feePolicySource: { getActive: () => activeFees } });
 
   beforeEach(async () => {
+    activeFees = enabledFees;
     await app.database.query(
       `truncate table wallet_capability.transfer_entries,wallet_capability.transfers,ledger_capability.earnings_adjustments,treasury_capability.entries,wallet_capability.debits,wallet_capability.credits,checkout_capability.checkouts,funding_capability.funding_transactions,ledger_capability.entries,ledger_capability.purchase_distributions,access_capability.access_grants,entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`,
     );
@@ -206,5 +215,73 @@ suite("atomic Funding and Earnings transfers", () => {
       [user.id],
     );
     expect(rolledBack.rows[0]?.count).toBe("0");
+  });
+
+  it("keeps both transfer directions fee-free when the global fee switch is off", async () => {
+    activeFees = feePolicyFromYaml({
+      enabled: false,
+      withdrawal: { enabled: true, percentage: 5, maximum_amount_minor: 2000 },
+      funding_to_earning: { enabled: true, percentage: 2, maximum_amount_minor: 1000 },
+      earning_to_funding: { enabled: true, percentage: 1, maximum_amount_minor: 500 },
+    });
+    const user = await account();
+    await fund(user.id, 20_000n);
+    const treasuryBefore = (await app.treasuryRepository.summary()).balanceMinor;
+    const toEarnings = await app.walletTransfers.transfer({
+      accountId: user.id,
+      from: "funding",
+      to: "earnings",
+      grossMinor: 10_000n,
+      idempotencyKey: "global-off-funding-to-earnings",
+    });
+    expect(toEarnings).toMatchObject({ grossMinor: "10000", feeMinor: "0", netMinor: "10000" });
+    const toFunding = await app.walletTransfers.transfer({
+      accountId: user.id,
+      from: "earnings",
+      to: "funding",
+      grossMinor: 5_000n,
+      idempotencyKey: "global-off-earnings-to-funding",
+    });
+    expect(toFunding).toMatchObject({ grossMinor: "5000", feeMinor: "0", netMinor: "5000" });
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(treasuryBefore);
+    const persisted = await app.database.query<{ fee_minor: string; net_minor: string }>(
+      `select fee_minor,net_minor from wallet_capability.transfers where idempotency_key in ($1,$2) order by id`,
+      ["global-off-funding-to-earnings", "global-off-earnings-to-funding"],
+    );
+    expect(persisted.rows).toEqual([
+      { fee_minor: "0", net_minor: "10000" },
+      { fee_minor: "0", net_minor: "5000" },
+    ]);
+  });
+
+  it("disables only the selected transfer direction while leaving the reverse fee active", async () => {
+    activeFees = feePolicyFromYaml({
+      enabled: true,
+      withdrawal: { enabled: true, percentage: 5, maximum_amount_minor: 2000 },
+      funding_to_earning: { enabled: false, percentage: 2, maximum_amount_minor: 1000 },
+      earning_to_funding: { enabled: true, percentage: 1, maximum_amount_minor: 500 },
+    });
+    const user = await account();
+    await fund(user.id, 20_000n);
+    expect(app.walletTransfers.quote("funding", 10_000n)).toMatchObject({
+      feeMinor: 0n,
+      netMinor: 10_000n,
+    });
+    const toEarnings = await app.walletTransfers.transfer({
+      accountId: user.id,
+      from: "funding",
+      to: "earnings",
+      grossMinor: 10_000n,
+      idempotencyKey: "direction-off-funding-to-earnings",
+    });
+    expect(toEarnings).toMatchObject({ grossMinor: "10000", feeMinor: "0", netMinor: "10000" });
+    const toFunding = await app.walletTransfers.transfer({
+      accountId: user.id,
+      from: "earnings",
+      to: "funding",
+      grossMinor: 5_000n,
+      idempotencyKey: "direction-on-earnings-to-funding",
+    });
+    expect(toFunding).toMatchObject({ grossMinor: "5000", feeMinor: "50", netMinor: "4950" });
   });
 });

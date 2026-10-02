@@ -20,7 +20,7 @@ export class PostgresWalletTransferService {
   quote(from: WalletName, grossMinor: bigint) {
     const operation: FeeOperation =
       from === "funding" ? "funding_to_earning" : "earning_to_funding";
-    return calculateFee(grossMinor, this.loadFees()[operation]);
+    return calculateFee(grossMinor, this.loadFees(), operation);
   }
 
   async transfer(input: {
@@ -93,7 +93,7 @@ export class PostgresWalletTransferService {
 
       const feeOperation: FeeOperation =
         input.from === "funding" ? "funding_to_earning" : "earning_to_funding";
-      const amounts = calculateFee(input.grossMinor, this.loadFees()[feeOperation]);
+      const amounts = calculateFee(input.grossMinor, this.loadFees(), feeOperation);
       const available = await this.available(input.accountId, input.from);
       if (available < amounts.grossMinor)
         throw new PublicApplicationError(

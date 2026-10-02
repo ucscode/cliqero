@@ -100,8 +100,8 @@ export class WithdrawalService {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      const feeAmounts = (await this.feePolicy.getActive()).withdrawal;
-      const { feeMinor, netMinor } = calculateFee(amount.minorAmount, feeAmounts);
+      const feePolicy = await this.feePolicy.getActive();
+      const { feeMinor, netMinor } = calculateFee(amount.minorAmount, feePolicy, "withdrawal");
       withdrawal.fee = Money.of(feeMinor, "USD");
       withdrawal.netAmount = Money.of(netMinor, "USD");
       await this.withdrawals.create(withdrawal);
@@ -347,7 +347,7 @@ export class WithdrawalService {
               feeMinor: current.fee?.minorAmount ?? 0n,
               netMinor: current.netAmount?.minorAmount ?? current.amount.minorAmount,
             }
-          : calculateFee(amountMinor, (await this.feePolicy.getActive()).withdrawal);
+          : calculateFee(amountMinor, await this.feePolicy.getActive(), "withdrawal");
       const updated: Withdrawal = {
         ...current,
         amount,

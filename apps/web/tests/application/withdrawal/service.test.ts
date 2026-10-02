@@ -79,9 +79,10 @@ function fixture(
     { resolveForWithdrawal: async () => withdrawal.destination } as any,
     {
       getActive: () => ({
-        withdrawal: { basisPoints: 500n, maximumMinor: 2_000n },
-        funding_to_earning: { basisPoints: 200n, maximumMinor: 1_000n },
-        earning_to_funding: { basisPoints: 100n, maximumMinor: 500n },
+        enabled: true,
+        withdrawal: { enabled: true, basisPoints: 500n, maximumMinor: 2_000n },
+        funding_to_earning: { enabled: true, basisPoints: 200n, maximumMinor: 1_000n },
+        earning_to_funding: { enabled: true, basisPoints: 100n, maximumMinor: 500n },
       }),
     },
     { create: treasuryCreate } as any,

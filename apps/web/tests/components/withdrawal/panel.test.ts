@@ -64,6 +64,7 @@ describe("withdrawal request UI contract", () => {
   it("previews the server-configured fee and net payout using minor-unit arithmetic", () => {
     expect(source).toContain("policy.fee_basis_points");
     expect(source).toContain("policy.fee_maximum_amount_minor");
+    expect(source).toContain("if (!policy.fee_enabled) return 0n;");
     expect(source).toContain("Withdrawal amount");
     expect(source).toContain("Platform fee");
     expect(source).toContain("You receive");

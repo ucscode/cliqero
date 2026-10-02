@@ -19,6 +19,7 @@ export type WithdrawalPolicy = {
   minimum_amount_minor: string;
   maximum_amount_minor: string | null;
   currency: string;
+  fee_enabled: boolean;
   fee_basis_points: string;
   fee_maximum_amount_minor: string | null;
 };

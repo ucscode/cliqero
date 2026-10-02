@@ -98,7 +98,7 @@ export async function policy(request: Request) {
     return Response.json(
       presentWithdrawalPolicy(
         await getContainer().withdrawalPolicy.getActive(),
-        (await getContainer().feePolicy.getActive()).withdrawal,
+        await getContainer().feePolicy.getActive(),
       ),
     );
   } catch (error) {

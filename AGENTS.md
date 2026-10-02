@@ -885,6 +885,12 @@ Treat mutable operational resources and historical financial facts differently:
 - Cliqero's canonical internal accounting currency is USD. Provider collection
   currency conversion is provider-owned and does not make internal ledger
   currency configurable.
+- The fee policy has one global `parameters.enabled` switch and one `enabled`
+  switch per operation (`withdrawal`, `funding_to_earning`, and
+  `earning_to_funding`). A fee is charged only when both switches are true.
+  Disabled fees retain the configured percentage/cap but persist an explicit
+  zero fee and gross-as-net snapshot; completion uses the historical withdrawal
+  fee snapshot, and zero fees do not create Treasury entries.
 - Administrative Funding is an internal source, never fabricated provider
   evidence. Its mutable record is separate from its accounting effect; amount,
   state, and deletion corrections append signed USD adjustments atomically.

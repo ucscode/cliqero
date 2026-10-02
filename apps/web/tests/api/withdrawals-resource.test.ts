@@ -92,7 +92,14 @@ describe("owner withdrawal resource mutation", () => {
         })),
       },
       withdrawalPolicy: { getActive },
-      feePolicy: { getActive: () => ({ withdrawal: { basisPoints: 500n, maximumMinor: 2000n } }) },
+      feePolicy: {
+        getActive: () => ({
+          enabled: true,
+          withdrawal: { enabled: true, basisPoints: 500n, maximumMinor: 2000n },
+          funding_to_earning: { enabled: true, basisPoints: 200n, maximumMinor: 1000n },
+          earning_to_funding: { enabled: true, basisPoints: 100n, maximumMinor: 500n },
+        }),
+      },
     };
     const response = await withdrawalPolicyRoute.GET(
       new Request("http://localhost/api/me/withdrawals/policy"),
@@ -104,6 +111,7 @@ describe("owner withdrawal resource mutation", () => {
       minimum_amount_minor: "750",
       maximum_amount_minor: "50000",
       currency: "USD",
+      fee_enabled: true,
       fee_basis_points: "500",
       fee_maximum_amount_minor: "2000",
     });

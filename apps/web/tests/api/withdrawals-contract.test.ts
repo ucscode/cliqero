@@ -88,13 +88,19 @@ describe("withdrawal API contract", () => {
           minimumAmount: Money.of(1000n, "USD"),
           maximumAmount: null,
         },
-        { basisPoints: 500n, maximumMinor: 2000n },
+        {
+          enabled: true,
+          withdrawal: { enabled: true, basisPoints: 500n, maximumMinor: 2000n },
+          funding_to_earning: { enabled: true, basisPoints: 200n, maximumMinor: 1000n },
+          earning_to_funding: { enabled: true, basisPoints: 100n, maximumMinor: 500n },
+        },
       ),
     ).toEqual({
       enabled: true,
       minimum_amount_minor: "1000",
       maximum_amount_minor: null,
       currency: "USD",
+      fee_enabled: true,
       fee_basis_points: "500",
       fee_maximum_amount_minor: "2000",
     });
@@ -102,6 +108,29 @@ describe("withdrawal API contract", () => {
       mode: "account",
       scope: "withdrawals:read",
     });
+  });
+
+  it("reports fees disabled when either the global or withdrawal switch is off", () => {
+    const withdrawalPolicy = {
+      enabled: true,
+      minimumAmount: Money.of(1000n, "USD"),
+      maximumAmount: null,
+    };
+    const common = {
+      withdrawal: { enabled: true, basisPoints: 500n, maximumMinor: 2000n },
+      funding_to_earning: { enabled: true, basisPoints: 200n, maximumMinor: 1000n },
+      earning_to_funding: { enabled: true, basisPoints: 100n, maximumMinor: 500n },
+    };
+    expect(
+      presentWithdrawalPolicy(withdrawalPolicy, { enabled: false, ...common }).fee_enabled,
+    ).toBe(false);
+    expect(
+      presentWithdrawalPolicy(withdrawalPolicy, {
+        enabled: true,
+        ...common,
+        withdrawal: { ...common.withdrawal, enabled: false },
+      }).fee_enabled,
+    ).toBe(false);
   });
 
   it("applies existing read/create scopes to methods, destinations, and withdrawals", () => {

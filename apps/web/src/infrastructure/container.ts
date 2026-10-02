@@ -76,7 +76,7 @@ import { PostgresFundingRepository } from "./postgres/funding/repository";
 import { PostgresAdministrativeFundingRepository } from "./postgres/funding/administrative";
 import { PostgresWalletRepository } from "./postgres/wallet/repository";
 import { PostgresWalletTransferService } from "@/infrastructure/postgres/wallet/transfers";
-import { FeePolicyLoader } from "@/modules/fee/policy";
+import { FeePolicyLoader, type FeePolicySource } from "@/modules/fee/policy";
 import { PostgresCheckoutRepository } from "./postgres/checkout/repository";
 import { FundingService } from "@/application/funding/service";
 import { FundingInitializationProcessor } from "@/application/funding/initialization";
@@ -146,6 +146,7 @@ const defaultLifecycleDiagnostics: LifecycleDiagnosticWriter = {
 export type ContainerOptions = {
   lifecycleDiagnostics?: LifecycleDiagnosticWriter;
   verificationPollMilliseconds?: number;
+  feePolicySource?: FeePolicySource;
 };
 
 export function createContainer(databaseUrl: string, options: ContainerOptions = {}) {
@@ -222,7 +223,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const providerEvents = lazy(() => new PostgresProviderEventRepository(database));
   const funding = lazy(() => new PostgresFundingRepository(database));
   const walletRepository = lazy(() => new PostgresWalletRepository(database));
-  const feePolicy = lazy(() => new FeePolicyLoader());
+  const feePolicy = lazy(() => options.feePolicySource ?? new FeePolicyLoader());
   const walletTransfers = lazy(
     () =>
       new PostgresWalletTransferService(

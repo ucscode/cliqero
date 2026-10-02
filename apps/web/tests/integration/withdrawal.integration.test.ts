@@ -1,11 +1,20 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import { newId } from "@/kernel/ids";
+import { feePolicyFromYaml } from "@/modules/fee/policy";
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
+const enabledFees = feePolicyFromYaml({
+  enabled: true,
+  withdrawal: { enabled: true, percentage: 5, maximum_amount_minor: 2000 },
+  funding_to_earning: { enabled: true, percentage: 2, maximum_amount_minor: 1000 },
+  earning_to_funding: { enabled: true, percentage: 1, maximum_amount_minor: 500 },
+});
+let activeFees = enabledFees;
 suite("withdrawal lifecycle", () => {
-  const app = createContainer(databaseUrl!);
+  const app = createContainer(databaseUrl!, { feePolicySource: { getActive: () => activeFees } });
   beforeEach(async () => {
+    activeFees = enabledFees;
     await app.database.query(
       `truncate table treasury_capability.entries,withdrawal_capability.withdrawals,withdrawal_capability.destinations,ledger_capability.withdrawal_reservation_events,ledger_capability.withdrawal_reservations,ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.purchase_distributions,payment_capability.reconciliation_attempts,payment_capability.provider_events,access_capability.access_grants,entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,identity_capability.account_capabilities,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`,
     );
@@ -95,6 +104,43 @@ suite("withdrawal lifecycle", () => {
       }),
     ).resolves.toMatchObject({ id: first.id });
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(8000n);
+  });
+
+  it("snapshots an explicit zero fee and posts no Treasury income when fees are globally disabled", async () => {
+    const { seller, destinationId } = await setup();
+    activeFees = feePolicyFromYaml({
+      enabled: false,
+      withdrawal: { enabled: true, percentage: 5, maximum_amount_minor: 2000 },
+      funding_to_earning: { enabled: true, percentage: 2, maximum_amount_minor: 1000 },
+      earning_to_funding: { enabled: true, percentage: 1, maximum_amount_minor: 500 },
+    });
+    const treasuryBefore = (await app.treasuryRepository.summary()).balanceMinor;
+    const withdrawal = await app.withdrawals.request({
+      accountId: seller.id,
+      amountMinor: 5_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: "global-fees-disabled",
+      correlationId: newId(),
+    });
+    expect(withdrawal).toMatchObject({
+      fee: { minorAmount: 0n },
+      netAmount: { minorAmount: 5_000n },
+    });
+    activeFees = enabledFees;
+    await app.withdrawals.approve(seller.id, withdrawal.id);
+    await app.withdrawals.complete(seller.id, withdrawal.id);
+    expect(await app.withdrawalRepository.findById(withdrawal.id)).toMatchObject({
+      fee: { minorAmount: 0n },
+      netAmount: { minorAmount: 5_000n },
+      state: "completed",
+    });
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(treasuryBefore);
+    const feeRows = await app.database.query<{ count: string }>(
+      `select count(*)::text count from treasury_capability.entries where idempotency_key=$1`,
+      [`withdrawal:${withdrawal.id}:fee`],
+    );
+    expect(feeRows.rows[0]?.count).toBe("0");
   });
   it("rejects forged over-balance amounts without partially committing withdrawal work", async () => {
     const { seller, destinationId } = await setup();

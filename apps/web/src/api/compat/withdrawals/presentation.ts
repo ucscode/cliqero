@@ -1,4 +1,5 @@
 import type { Withdrawal } from "@/modules/withdrawal/withdrawal";
+import type { FeePolicy } from "@/modules/fee/policy";
 
 export function presentWithdrawal(withdrawal: Withdrawal) {
   return {
@@ -26,13 +27,15 @@ export function presentWithdrawalPolicy(
     minimumAmount: { minorAmount: bigint; currency: string };
     maximumAmount: { minorAmount: bigint; currency: string } | null;
   },
-  fee: { basisPoints: bigint; maximumMinor: bigint | null },
+  fees: FeePolicy,
 ) {
+  const fee = fees.withdrawal;
   return {
     enabled: policy.enabled,
     minimum_amount_minor: policy.minimumAmount.minorAmount.toString(),
     maximum_amount_minor: policy.maximumAmount?.minorAmount.toString() ?? null,
     currency: policy.minimumAmount.currency,
+    fee_enabled: fees.enabled && fee.enabled,
     fee_basis_points: fee.basisPoints.toString(),
     fee_maximum_amount_minor: fee.maximumMinor?.toString() ?? null,
   };
