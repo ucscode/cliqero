@@ -1,6 +1,7 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import { newId } from "@/kernel/ids";
+import { FUNDING_PROOF_CLEANUP_EVENT } from "@/kernel/events";
 import type { ClaimedOutboxEvent } from "@/infrastructure/postgres/shared/outbox";
 import {
   OutboxDispatcher,
@@ -8,6 +9,7 @@ import {
   type OutboxEventHandler,
   type WorkerLogger,
 } from "@/workers/outbox/dispatcher";
+import { FundingProofCleanupHandler } from "@/workers/outbox/handlers";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -20,7 +22,7 @@ suite("PostgreSQL outbox dispatcher", () => {
     ),
   );
   afterAll(() => app.database.close());
-  async function append(name = "test.event") {
+  async function append(name = "test.event", payload: object = {}) {
     const id = newId();
     await app.outbox.append([
       {
@@ -29,7 +31,7 @@ suite("PostgreSQL outbox dispatcher", () => {
         aggregateId: newId(),
         correlationId: newId(),
         occurredAt: new Date(),
-        payload: {},
+        payload,
       },
     ]);
     return id;
@@ -90,6 +92,65 @@ suite("PostgreSQL outbox dispatcher", () => {
     ).rows[0] as { state: string; last_error: string };
     expect(row.state).toBe("published");
     expect(attempts).toBe(2);
+  });
+  it("retries durable funding proof cleanup through the outbox", async () => {
+    const id = await append(FUNDING_PROOF_CLEANUP_EVENT, {
+      fundingId: newId(),
+      storageProvider: "private-proof",
+      container: "evidence",
+      key: "funding/receipt.png",
+    });
+    let attempts = 0;
+    const remove = vi.fn(async () => {
+      if (++attempts === 1) throw new Error("storage unavailable");
+    });
+    const worker = dispatcher(
+      "worker-a",
+      new FundingProofCleanupHandler({
+        get: vi.fn((name: string) => ({
+          name,
+          put: async () => ({
+            provider: "private-proof",
+            container: "evidence",
+            key: "unused",
+            byteSize: 0,
+            mimeType: "application/octet-stream",
+          }),
+          delete: remove,
+        })),
+      }),
+    );
+
+    await worker.runOnce();
+    let row = (
+      await app.database.query<{ state: string; last_error: string; attempt_count: number }>(
+        `select state,last_error,attempt_count from kernel.outbox_events where id=$1`,
+        [id],
+      )
+    ).rows[0];
+    expect(row).toMatchObject({
+      state: "failed",
+      last_error: "storage unavailable",
+      attempt_count: 1,
+    });
+
+    await app.database.query(`update kernel.outbox_events set available_at=now() where id=$1`, [
+      id,
+    ]);
+    await worker.runOnce();
+    row = (
+      await app.database.query<{ state: string; last_error: string; attempt_count: number }>(
+        `select state,last_error,attempt_count from kernel.outbox_events where id=$1`,
+        [id],
+      )
+    ).rows[0];
+    expect(row).toMatchObject({ state: "published", attempt_count: 2 });
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(remove).toHaveBeenNthCalledWith(1, {
+      provider: "private-proof",
+      container: "evidence",
+      key: "funding/receipt.png",
+    });
   });
   it("prevents two workers from owning the same event simultaneously", async () => {
     await append();

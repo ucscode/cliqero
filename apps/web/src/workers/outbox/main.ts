@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getContainer } from "@/infrastructure/container";
 import {
   AuditedFactHandler,
+  FundingProofCleanupHandler,
   PurchaseCompletedDistributionHandler,
   PurchaseReversalEntitlementHandler,
 } from "./handlers";
@@ -22,6 +23,7 @@ const workerId = process.env.OUTBOX_WORKER_ID ?? `outbox-${randomUUID()}`;
 const logger = new JsonConsoleLogger();
 const handlers = new OutboxHandlerRegistry()
   .register(new AuditedFactHandler())
+  .register(new FundingProofCleanupHandler(container.objectStorage))
   .register(new PurchaseCompletedDistributionHandler(container.purchaseDistribution))
   .register(new PurchaseReversalEntitlementHandler(container.entitlements));
 if (container.paystack) {

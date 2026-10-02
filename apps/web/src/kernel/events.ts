@@ -1,5 +1,14 @@
 import type { Id } from "./ids";
 
+export const FUNDING_PROOF_CLEANUP_EVENT = "funding.proof-cleanup.requested" as const;
+
+export type FundingProofCleanupPayload = {
+  fundingId: Id;
+  storageProvider: string;
+  container: string;
+  key: string;
+};
+
 export interface DomainEvent<TPayload extends object = object> {
   readonly id: Id;
   readonly name: string;

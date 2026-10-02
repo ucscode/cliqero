@@ -1,4 +1,6 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
+import type { EventOutbox } from "@/kernel/events";
+import { FUNDING_PROOF_CLEANUP_EVENT } from "@/kernel/events";
 import type {
   OperatorFundingDetail,
   OperatorFundingListInput,
@@ -50,7 +52,10 @@ function summary(row: any): OperatorFundingSummary {
 }
 
 export class PostgresOperatorFundingReader implements OperatorFundingReader {
-  constructor(private readonly sql: QueryExecutor) {}
+  constructor(
+    private readonly sql: QueryExecutor,
+    private readonly outbox?: EventOutbox,
+  ) {}
 
   async list(input: OperatorFundingListInput) {
     const sort = input.sort ?? "created";
@@ -314,6 +319,9 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
       )
     ).rows;
 
+    if (proofObjects.length > 0 && !this.outbox)
+      throw new Error("Funding proof cleanup outbox is unavailable");
+
     await this.sql.query("select set_config('cliqero.root_delete','on',true)");
     await this.sql.query(
       `delete from funding_capability.funding_evidence where funding_id=$1::bigint`,
@@ -337,6 +345,21 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
               (select id from identity_capability.accounts where uuid=$4))`,
       [id, JSON.stringify(previous), newId(), actorId],
     );
-    return { id, deleted: true as const, proofObjects };
+    await this.outbox?.append(
+      proofObjects.map((proof) => ({
+        id: newId(),
+        name: FUNDING_PROOF_CLEANUP_EVENT,
+        aggregateId: id,
+        correlationId: newId(),
+        occurredAt: new Date(),
+        payload: {
+          fundingId: id,
+          storageProvider: proof.provider,
+          container: proof.container,
+          key: proof.key,
+        },
+      })),
+    );
+    return { id, deleted: true as const };
   }
 }

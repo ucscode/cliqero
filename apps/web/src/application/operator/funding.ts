@@ -2,8 +2,6 @@ import type { BankTransferConfirmationService } from "@/application/funding/bank
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import type { WalletService } from "@/application/wallet/service";
-import type { AuditRecorder } from "@/application/shared/audit";
-import type { ObjectStorageRegistry } from "@/modules/storage/object-storage";
 import { newId } from "@/kernel/ids";
 import { PublicApplicationError } from "@/kernel/errors";
 
@@ -182,14 +180,7 @@ export interface OperatorFundingReader {
     nextCursor: string | null;
   }>;
   get(id: string): Promise<OperatorFundingDetail>;
-  deleteForRoot(
-    id: string,
-    actorId: string,
-  ): Promise<{
-    id: string;
-    deleted: true;
-    proofObjects: readonly OperatorFundingProofObject[];
-  }>;
+  deleteForRoot(id: string, actorId: string): Promise<{ id: string; deleted: true }>;
 }
 
 export class OperatorFundingService {
@@ -201,8 +192,6 @@ export class OperatorFundingService {
       operators: OperatorAuthorizationService;
       wallet: Pick<WalletService, "summary">;
       uow: UnitOfWork;
-      storage?: Pick<ObjectStorageRegistry, "get">;
-      audit?: AuditRecorder;
     },
   ) {}
 
@@ -377,9 +366,7 @@ export class OperatorFundingService {
     const current = await this.reader.get(id);
     if (current.origin === "administrative") return this.deleteAdministrative(actorId, id);
     await operators.requireCapability(actorId, "system.root");
-    const deleted = await uow.transaction(() => this.reader.deleteForRoot(id, actorId));
-    await this.cleanupProofObjects(actorId, deleted.id, deleted.proofObjects);
-    return { id: deleted.id, deleted: true as const };
+    return uow.transaction(() => this.reader.deleteForRoot(id, actorId));
   }
 
   async bulkDeleteAdministrative(actorId: string, ids: readonly string[]) {
@@ -424,43 +411,6 @@ export class OperatorFundingService {
   private requireAdministration() {
     if (!this.administration) throw new Error("Funding administration is unavailable");
     return this.administration;
-  }
-
-  private async cleanupProofObjects(
-    actorId: string,
-    fundingId: string,
-    proofObjects: readonly OperatorFundingProofObject[],
-  ) {
-    const { storage, audit } = this.requireAdministration();
-    if (!storage) return;
-    for (const proof of proofObjects) {
-      try {
-        await storage.get(proof.provider).delete(proof);
-      } catch {
-        if (!audit) {
-          console.error("funding.root_delete.storage_cleanup_unrecorded", {
-            funding_id: fundingId,
-            storage_provider: proof.provider,
-          });
-          continue;
-        }
-        try {
-          await audit.record({
-            actorId,
-            action: "funding.root_delete.storage_cleanup_failed",
-            subjectType: "funding_transaction",
-            subjectId: fundingId,
-            previousState: { storage: proof },
-            newState: { cleanup: "pending_retry" },
-          });
-        } catch {
-          console.error("funding.root_delete.storage_cleanup_unrecorded", {
-            funding_id: fundingId,
-            storage_provider: proof.provider,
-          });
-        }
-      }
-    }
   }
 
   private positiveMinor(value: string) {

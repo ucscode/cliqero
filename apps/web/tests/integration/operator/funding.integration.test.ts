@@ -1,13 +1,21 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import { newId } from "@/kernel/ids";
+import { FUNDING_PROOF_CLEANUP_EVENT } from "@/kernel/events";
 import { OperatorFundingService } from "@/application/operator/funding";
 import { PostgresAdministrativeFundingRepository } from "@/infrastructure/postgres/funding/administrative";
 import { PostgresOperatorFundingReader } from "@/infrastructure/postgres/operator/funding";
 import { CommercialWorkflowDispatcher } from "@/workers/commercial/dispatcher";
+import { FundingProofCleanupHandler } from "@/workers/outbox/handlers";
+import {
+  OutboxDispatcher,
+  OutboxHandlerRegistry,
+  type WorkerLogger,
+} from "@/workers/outbox/dispatcher";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
+const silent: WorkerLogger = { info: () => undefined, error: () => undefined };
 
 suite("administrative Funding CRUD PostgreSQL accounting", () => {
   const app = createContainer(databaseUrl!);
@@ -40,6 +48,7 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
        values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [actor.id],
     );
+
     return { actor, customer };
   }
 
@@ -290,6 +299,14 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       [providerFunding.id, customer.id],
     );
 
+    const fundingPk = (
+      await app.database.query<{ id: string }>(
+        `select id::text from funding_capability.funding_transactions where uuid=$1`,
+        [providerFunding.id],
+      )
+    ).rows[0]?.id;
+    expect(fundingPk).toBeTruthy();
+
     expect(await app.walletRepository.findCreditByFunding(providerFunding.id)).toMatchObject({
       amount: { minorAmount: 1200n },
       state: "available",
@@ -313,12 +330,12 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       audits: string;
     }>(
       `select
-         (select count(*)::text from funding_capability.funding_transactions where uuid=$1) funding,
-         (select count(*)::text from payment_capability.provider_operations where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)) operations,
-         (select count(*)::text from funding_capability.funding_evidence where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)) evidence,
-         (select count(*)::text from wallet_capability.credits where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)) credits,
-         (select count(*)::text from kernel.audit_records where action='root.delete' and subject_type='funding_transaction' and subject_id=$1::text) audits`,
-      [providerFunding.id],
+         (select count(*)::text from funding_capability.funding_transactions where uuid=$2) funding,
+         (select count(*)::text from payment_capability.provider_operations where funding_id=$1::bigint) operations,
+         (select count(*)::text from funding_capability.funding_evidence where funding_id=$1::bigint) evidence,
+         (select count(*)::text from wallet_capability.credits where funding_id=$1::bigint) credits,
+         (select count(*)::text from kernel.audit_records where action='root.delete' and subject_type='funding_transaction' and subject_id=$2::text) audits`,
+      [fundingPk, providerFunding.id],
     );
     expect(remaining.rows[0]).toEqual({
       funding: "0",
@@ -327,6 +344,64 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       credits: "0",
       audits: "1",
     });
+
+    const job = await app.database.query<{
+      id: string;
+      state: string;
+      payload: {
+        fundingId: string;
+        storageProvider: string;
+        container: string;
+        key: string;
+      };
+    }>(
+      `select id,state,payload from kernel.outbox_events where event_name=$1 and aggregate_id=$2`,
+      [FUNDING_PROOF_CLEANUP_EVENT, providerFunding.id],
+    );
+    expect(job.rows).toHaveLength(1);
+    expect(job.rows[0]).toMatchObject({
+      state: "pending",
+      payload: {
+        fundingId: providerFunding.id,
+        storageProvider: "private-proof",
+        container: "evidence",
+        key: "funding/receipt.png",
+      },
+    });
+
+    const remove = vi.fn(async () => undefined);
+    await new OutboxDispatcher(
+      "funding-cleanup-test",
+      app.outbox,
+      new OutboxHandlerRegistry().register(
+        new FundingProofCleanupHandler({
+          get: vi.fn((name: string) => ({
+            name,
+            put: async () => ({
+              provider: "private-proof",
+              container: "evidence",
+              key: "unused",
+              byteSize: 0,
+              mimeType: "application/octet-stream",
+            }),
+            delete: remove,
+          })),
+        }),
+      ),
+      silent,
+      { pollMilliseconds: 1, staleAfterMilliseconds: 100 },
+    ).runOnce();
+    expect(remove).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledWith({
+      provider: "private-proof",
+      container: "evidence",
+      key: "funding/receipt.png",
+    });
+    const published = await app.database.query<{ state: string }>(
+      `select state from kernel.outbox_events where id=$1`,
+      [job.rows[0]!.id],
+    );
+    expect(published.rows[0]?.state).toBe("published");
   });
 
   it("allows root deletion after a provider credit is consumed and preserves the aggregate result", async () => {
@@ -355,6 +430,58 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       deleted: true,
     });
     expect((await app.wallet.summary(customer.id)).available.minorAmount).toBe(1000n);
+  });
+
+  it("rolls back provider deletion when cleanup enqueueing fails", async () => {
+    const { actor, customer } = await actors();
+    const providerFunding = await app.fundingService.create({
+      accountId: customer.id,
+      amountMinor: 1200n,
+      providerName: "development",
+      idempotencyKey: `provider-cleanup-rollback-${newId()}`,
+    });
+    await app.database.query(
+      `insert into funding_capability.funding_evidence(
+         uuid,funding_id,account_id,transfer_reference,
+         proof_storage_provider,proof_storage_container,proof_object_key,
+         proof_original_filename,proof_mime_type,proof_byte_size
+       ) values(
+         gen_random_uuid(),
+         (select id from funding_capability.funding_transactions where uuid=$1),
+         (select id from identity_capability.accounts where uuid=$2),
+         'cleanup-rollback', 'private-proof', 'evidence', 'funding/rollback.png',
+         'rollback.png', 'image/png', 128
+       )`,
+      [providerFunding.id, customer.id],
+    );
+
+    const reader = new PostgresOperatorFundingReader(app.database, {
+      append: async () => {
+        throw new Error("cleanup enqueue unavailable");
+      },
+    });
+    const service = new OperatorFundingService(reader, { confirm: async () => ({}) } as never, {
+      repository: {} as never,
+      operators: app.operators,
+      wallet: app.wallet,
+      uow: app.database,
+    });
+
+    await expect(service.deleteByOperator(actor.id, providerFunding.id)).rejects.toThrow(
+      "cleanup enqueue unavailable",
+    );
+    const remaining = await app.database.query<{
+      funding: string;
+      evidence: string;
+      audits: string;
+    }>(
+      `select
+         (select count(*)::text from funding_capability.funding_transactions where uuid=$1) funding,
+         (select count(*)::text from funding_capability.funding_evidence where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)) evidence,
+         (select count(*)::text from kernel.audit_records where action='root.delete' and subject_type='funding_transaction' and subject_id=$1::text) audits`,
+      [providerFunding.id],
+    );
+    expect(remaining.rows[0]).toEqual({ funding: "1", evidence: "1", audits: "0" });
   });
 
   it("allows only system.root to delete provider funding and linked records", async () => {
@@ -429,6 +556,12 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       credits: "0",
       audits: "1",
     });
+    const cleanupJobs = await app.database.query<{ count: string }>(
+      `select count(*)::text count from kernel.outbox_events
+       where event_name=$1 and aggregate_id=$2`,
+      [FUNDING_PROOF_CLEANUP_EVENT, providerFunding.id],
+    );
+    expect(cleanupJobs.rows[0]?.count).toBe("0");
     await expect(app.operatorFunding.get(providerFunding.id)).rejects.toThrow("Funding not found");
   });
 });

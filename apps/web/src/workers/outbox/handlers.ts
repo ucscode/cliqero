@@ -1,5 +1,7 @@
 import type { OutboxEventHandler } from "./dispatcher";
 import type { ClaimedOutboxEvent } from "@/infrastructure/postgres/shared/outbox";
+import { FUNDING_PROOF_CLEANUP_EVENT, type FundingProofCleanupPayload } from "@/kernel/events";
+import type { ObjectStorageRegistry } from "@/modules/storage/object-storage";
 
 export class AuditedFactHandler implements OutboxEventHandler {
   readonly eventNames = [
@@ -47,6 +49,37 @@ export class PurchaseReversalEntitlementHandler implements OutboxEventHandler {
     await this.entitlements.save(entitlement);
   }
 }
+
+export class FundingProofCleanupHandler implements OutboxEventHandler {
+  readonly eventNames = [FUNDING_PROOF_CLEANUP_EVENT];
+  constructor(private readonly storage: Pick<ObjectStorageRegistry, "get">) {}
+
+  async handle(event: ClaimedOutboxEvent): Promise<void> {
+    const payload = parseFundingProofCleanupPayload(event.payload);
+    await this.storage.get(payload.storageProvider).delete({
+      provider: payload.storageProvider,
+      container: payload.container,
+      key: payload.key,
+    });
+  }
+}
+
+function parseFundingProofCleanupPayload(value: object): FundingProofCleanupPayload {
+  if (
+    !isObject(value) ||
+    typeof value.fundingId !== "string" ||
+    typeof value.storageProvider !== "string" ||
+    typeof value.container !== "string" ||
+    typeof value.key !== "string" ||
+    !value.fundingId ||
+    !value.storageProvider ||
+    !value.container ||
+    !value.key
+  )
+    throw new Error("Funding proof cleanup payload is invalid");
+  return value as FundingProofCleanupPayload;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

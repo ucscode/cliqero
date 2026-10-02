@@ -523,15 +523,13 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const operatorFunding = lazy(
     () =>
       new OperatorFundingService(
-        new PostgresOperatorFundingReader(database),
+        new PostgresOperatorFundingReader(database, outbox()),
         bankTransferConfirmation(),
         {
           repository: new PostgresAdministrativeFundingRepository(database),
           operators: operators(),
           wallet: wallet(),
           uow: database,
-          storage: objectStorage(),
-          audit: auditRecorder(),
         },
       ),
   );

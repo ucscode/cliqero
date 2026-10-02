@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { QueryResult } from "pg";
 import { PostgresOperatorFundingReader } from "@/infrastructure/postgres/operator/funding";
+import { FUNDING_PROOF_CLEANUP_EVENT } from "@/kernel/events";
 
 function result<T extends object>(rows: T[]): QueryResult<T> {
   return { command: "SELECT", rowCount: rows.length, oid: 0, fields: [], rows };
@@ -197,29 +198,60 @@ describe("PostgresOperatorFundingReader", () => {
 
   it("locks provider funding before reading its deletion snapshot and collects proof locators", async () => {
     const statements: string[] = [];
-    const reader = new PostgresOperatorFundingReader({
-      query: async <T extends object>(sql: string) => {
-        statements.push(sql);
-        if (sql.includes("where uuid=$1 for update")) return result<T>([{ id: "42" }] as T[]);
-        if (sql.includes("from funding_capability.funding_transactions f"))
-          return result<T>([baseRow] as T[]);
-        if (sql.includes("select proof_storage_provider as provider"))
-          return result<T>([
-            { provider: "private_media", container: "evidence", key: "private/receipt.png" },
-          ] as T[]);
-        if (sql.startsWith("delete from funding_capability.funding_transactions"))
-          return result<T>([{}] as T[]);
-        return result<T>([]) as QueryResult<T>;
+    const events: object[] = [];
+    const reader = new PostgresOperatorFundingReader(
+      {
+        query: async <T extends object>(sql: string) => {
+          statements.push(sql);
+          if (sql.includes("where uuid=$1 for update")) return result<T>([{ id: "42" }] as T[]);
+          if (sql.includes("from funding_capability.funding_transactions f"))
+            return result<T>([baseRow] as T[]);
+          if (sql.includes("select proof_storage_provider as provider"))
+            return result<T>([
+              { provider: "private_media", container: "evidence", key: "private/receipt.png" },
+              { provider: "private_media", container: "evidence", key: "private/other.png" },
+            ] as T[]);
+          if (sql.startsWith("delete from funding_capability.funding_transactions"))
+            return result<T>([{}] as T[]);
+          return result<T>([]) as QueryResult<T>;
+        },
       },
-    });
+      {
+        append: async (pending) => {
+          events.push(...pending);
+        },
+      },
+    );
 
-    await expect(reader.deleteForRoot(baseRow.id, "root-1")).resolves.toMatchObject({
+    await expect(reader.deleteForRoot(baseRow.id, "root-1")).resolves.toEqual({
       id: baseRow.id,
       deleted: true,
-      proofObjects: [
-        { provider: "private_media", container: "evidence", key: "private/receipt.png" },
-      ],
     });
+    expect(events).toHaveLength(2);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: FUNDING_PROOF_CLEANUP_EVENT,
+          aggregateId: baseRow.id,
+          payload: {
+            fundingId: baseRow.id,
+            storageProvider: "private_media",
+            container: "evidence",
+            key: "private/receipt.png",
+          },
+        }),
+        expect.objectContaining({
+          name: FUNDING_PROOF_CLEANUP_EVENT,
+          aggregateId: baseRow.id,
+          payload: {
+            fundingId: baseRow.id,
+            storageProvider: "private_media",
+            container: "evidence",
+            key: "private/other.png",
+          },
+        }),
+      ]),
+    );
     expect(statements[0]).toContain("where uuid=$1 for update");
     expect(statements[1]).toContain("from funding_capability.funding_transactions f");
   });
