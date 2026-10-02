@@ -195,6 +195,35 @@ describe("PostgresOperatorFundingReader", () => {
     expect(JSON.stringify(detail)).not.toContain("private_media");
   });
 
+  it("locks provider funding before reading its deletion snapshot and collects proof locators", async () => {
+    const statements: string[] = [];
+    const reader = new PostgresOperatorFundingReader({
+      query: async <T extends object>(sql: string) => {
+        statements.push(sql);
+        if (sql.includes("where uuid=$1 for update")) return result<T>([{ id: "42" }] as T[]);
+        if (sql.includes("from funding_capability.funding_transactions f"))
+          return result<T>([baseRow] as T[]);
+        if (sql.includes("select proof_storage_provider as provider"))
+          return result<T>([
+            { provider: "private_media", container: "evidence", key: "private/receipt.png" },
+          ] as T[]);
+        if (sql.startsWith("delete from funding_capability.funding_transactions"))
+          return result<T>([{}] as T[]);
+        return result<T>([]) as QueryResult<T>;
+      },
+    });
+
+    await expect(reader.deleteForRoot(baseRow.id, "root-1")).resolves.toMatchObject({
+      id: baseRow.id,
+      deleted: true,
+      proofObjects: [
+        { provider: "private_media", container: "evidence", key: "private/receipt.png" },
+      ],
+    });
+    expect(statements[0]).toContain("where uuid=$1 for update");
+    expect(statements[1]).toContain("from funding_capability.funding_transactions f");
+  });
+
   it("rejects malformed opaque cursors", async () => {
     const reader = new PostgresOperatorFundingReader({ query: async () => result([]) });
     await expect(reader.list({ limit: 25, cursor: "not-a-cursor" })).rejects.toThrow(

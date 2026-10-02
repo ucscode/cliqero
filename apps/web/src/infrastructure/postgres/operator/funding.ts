@@ -2,6 +2,7 @@ import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type {
   OperatorFundingDetail,
   OperatorFundingListInput,
+  OperatorFundingProofObject,
   OperatorFundingReader,
   OperatorFundingSummary,
 } from "@/application/operator/funding";
@@ -290,7 +291,6 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
   }
 
   async deleteForRoot(id: string, actorId: string) {
-    const previous = await this.get(id);
     const funding = (
       await this.sql.query<{ id: string }>(
         `select id::text from funding_capability.funding_transactions where uuid=$1 for update`,
@@ -298,6 +298,21 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
       )
     ).rows[0];
     if (!funding) throw new Error("Funding not found");
+
+    const previous = await this.get(id);
+    const proofObjects = (
+      await this.sql.query<OperatorFundingProofObject>(
+        `select proof_storage_provider as provider,
+                proof_storage_container as container,
+                proof_object_key as key
+           from funding_capability.funding_evidence
+          where funding_id=$1::bigint
+            and proof_storage_provider is not null
+            and proof_storage_container is not null
+            and proof_object_key is not null`,
+        [funding.id],
+      )
+    ).rows;
 
     await this.sql.query("select set_config('cliqero.root_delete','on',true)");
     await this.sql.query(
@@ -322,6 +337,6 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
               (select id from identity_capability.accounts where uuid=$4))`,
       [id, JSON.stringify(previous), newId(), actorId],
     );
-    return { id, deleted: true as const };
+    return { id, deleted: true as const, proofObjects };
   }
 }

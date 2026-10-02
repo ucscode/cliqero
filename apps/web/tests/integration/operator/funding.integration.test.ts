@@ -4,6 +4,7 @@ import { newId } from "@/kernel/ids";
 import { OperatorFundingService } from "@/application/operator/funding";
 import { PostgresAdministrativeFundingRepository } from "@/infrastructure/postgres/funding/administrative";
 import { PostgresOperatorFundingReader } from "@/infrastructure/postgres/operator/funding";
+import { CommercialWorkflowDispatcher } from "@/workers/commercial/dispatcher";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -40,6 +41,19 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       [actor.id],
     );
     return { actor, customer };
+  }
+
+  async function confirmDevelopmentFunding(accountId: string, amountMinor: bigint) {
+    const funding = await app.fundingService.create({
+      accountId,
+      amountMinor,
+      providerName: "development",
+      idempotencyKey: `provider-root-delete-${newId()}`,
+    });
+    await app.fundingInitialization.process(funding.id);
+    expect((await app.fundingVerification.process(funding.id))?.state).toBe("confirmed");
+    await new CommercialWorkflowDispatcher(app, { error: () => undefined }).runOnce();
+    return funding;
   }
 
   it("posts only adjustment deltas, deletes the mutable record, and never double-counts it", async () => {
@@ -248,6 +262,99 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       [providerFunding.id],
     );
     expect(adminCount.rows[0]?.count).toBe("0");
+  });
+
+  it("deletes a confirmed provider funding and reverses only its aggregate credit", async () => {
+    const { actor, customer } = await actors();
+    const administrative = await app.operatorFunding.createAdministrative(actor.id, {
+      accountId: customer.id,
+      amountMinor: "2000",
+      state: "confirmed",
+      reason: "Opening balance",
+      idempotencyKey: `admin-root-delete-${newId()}`,
+    });
+    const providerFunding = await confirmDevelopmentFunding(customer.id, 1200n);
+
+    await app.database.query(
+      `insert into funding_capability.funding_evidence(
+         uuid,funding_id,account_id,transfer_reference,
+         proof_storage_provider,proof_storage_container,proof_object_key,
+         proof_original_filename,proof_mime_type,proof_byte_size
+       ) values(
+         gen_random_uuid(),
+         (select id from funding_capability.funding_transactions where uuid=$1),
+         (select id from identity_capability.accounts where uuid=$2),
+         'confirmed-root-delete', 'private-proof', 'evidence', 'funding/receipt.png',
+         'receipt.png', 'image/png', 128
+       )`,
+      [providerFunding.id, customer.id],
+    );
+
+    expect(await app.walletRepository.findCreditByFunding(providerFunding.id)).toMatchObject({
+      amount: { minorAmount: 1200n },
+      state: "available",
+    });
+    expect((await app.wallet.summary(customer.id)).available.minorAmount).toBe(3200n);
+
+    await expect(
+      app.operatorFunding.deleteByOperator(actor.id, providerFunding.id),
+    ).resolves.toEqual({
+      id: providerFunding.id,
+      deleted: true,
+    });
+
+    expect((await app.wallet.summary(customer.id)).available.minorAmount).toBe(2000n);
+    expect((await app.operatorFunding.get(administrative.id)).canonicalAmountMinor).toBe("2000");
+    const remaining = await app.database.query<{
+      funding: string;
+      operations: string;
+      evidence: string;
+      credits: string;
+      audits: string;
+    }>(
+      `select
+         (select count(*)::text from funding_capability.funding_transactions where uuid=$1) funding,
+         (select count(*)::text from payment_capability.provider_operations where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)) operations,
+         (select count(*)::text from funding_capability.funding_evidence where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)) evidence,
+         (select count(*)::text from wallet_capability.credits where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)) credits,
+         (select count(*)::text from kernel.audit_records where action='root.delete' and subject_type='funding_transaction' and subject_id=$1::text) audits`,
+      [providerFunding.id],
+    );
+    expect(remaining.rows[0]).toEqual({
+      funding: "0",
+      operations: "0",
+      evidence: "0",
+      credits: "0",
+      audits: "1",
+    });
+  });
+
+  it("allows root deletion after a provider credit is consumed and preserves the aggregate result", async () => {
+    const { actor, customer } = await actors();
+    await app.operatorFunding.createAdministrative(actor.id, {
+      accountId: customer.id,
+      amountMinor: "2000",
+      state: "confirmed",
+      reason: "Opening balance",
+      idempotencyKey: `admin-consumed-delete-${newId()}`,
+    });
+    const providerFunding = await confirmDevelopmentFunding(customer.id, 1200n);
+    await app.walletTransfers.transfer({
+      accountId: customer.id,
+      from: "funding",
+      to: "earnings",
+      grossMinor: 1000n,
+      idempotencyKey: `consume-provider-funding-${newId()}`,
+    });
+
+    expect((await app.wallet.summary(customer.id)).available.minorAmount).toBe(2200n);
+    await expect(
+      app.operatorFunding.deleteByOperator(actor.id, providerFunding.id),
+    ).resolves.toEqual({
+      id: providerFunding.id,
+      deleted: true,
+    });
+    expect((await app.wallet.summary(customer.id)).available.minorAmount).toBe(1000n);
   });
 
   it("allows only system.root to delete provider funding and linked records", async () => {

@@ -530,6 +530,8 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
           operators: operators(),
           wallet: wallet(),
           uow: database,
+          storage: objectStorage(),
+          audit: auditRecorder(),
         },
       ),
   );
