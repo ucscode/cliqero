@@ -16,10 +16,24 @@ export const financeOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     scope: "payments:read",
   },
   {
+    path: "/api/distributions/{distributionId}",
+    method: "delete",
+    mode: "account",
+    capability: "system.root",
+    scope: "payments:manage",
+  },
+  {
     path: "/api/earnings/entries",
     method: "get",
     mode: "account",
     capability: "finance.read",
     scope: "payments:read",
+  },
+  {
+    path: "/api/earnings/entries/{entryId}",
+    method: "delete",
+    mode: "account",
+    capability: "system.root",
+    scope: "payments:manage",
   },
 ];

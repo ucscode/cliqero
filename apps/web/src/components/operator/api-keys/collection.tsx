@@ -107,11 +107,11 @@ export function OperatorApiKeys() {
   }
 
   async function remove(key: OperatorApiKeyRow) {
-    if (!window.confirm(`Permanently delete API key “${key.name}”? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete API key “${key.name}”? This cannot be undone.`)) return;
     try {
       await apiFetch(`/internal/api-keys/${key.id}`, { method: "DELETE" });
       await collection.refresh();
-      toast.success("API key permanently deleted.");
+      toast.success("API key deleted.");
     } catch (cause) {
       setActionError(message(cause));
     }
@@ -119,11 +119,7 @@ export function OperatorApiKeys() {
 
   async function deleteSelected(keys: readonly OperatorApiKeyRow[]) {
     if (!keys.length) return false;
-    if (
-      !window.confirm(
-        `Permanently delete ${keys.length} selected API key(s)? This cannot be undone.`,
-      )
-    )
+    if (!window.confirm(`Delete ${keys.length} selected API key(s)? This cannot be undone.`))
       return false;
     try {
       const outcome = await apiFetch<ApiKeyBulkOutcome>("/internal/api-keys/actions/delete", {
@@ -148,7 +144,7 @@ export function OperatorApiKeys() {
         return false;
       }
       setBulkOutcome(null);
-      toast.success(`${outcome.succeeded.length} API key(s) permanently deleted.`);
+      toast.success(`${outcome.succeeded.length} API key(s) deleted.`);
       return true;
     } catch (cause) {
       setActionError(message(cause));
@@ -311,7 +307,7 @@ export function OperatorApiKeys() {
           ? [
               {
                 value: "delete",
-                label: "Permanently delete selected",
+                label: "Delete",
                 destructive: true,
                 onSelect: deleteSelected,
               },

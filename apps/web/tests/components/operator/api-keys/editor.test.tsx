@@ -36,7 +36,7 @@ describe("Operator API-key create and edit pages", () => {
       "item.scopes.filter((scope) => scopeResult.manageable_scopes.includes(scope))",
     );
     expect(source).toContain('method: "PATCH"');
-    expect(source).toContain("Editing does not reveal or rotate the credential.");
+    expect(source).toContain("Editing does not change the credential.");
     expect(source).toContain("canReassignOwner");
     expect(source).toContain("value={status}");
     expect(source).toContain("/reassign");

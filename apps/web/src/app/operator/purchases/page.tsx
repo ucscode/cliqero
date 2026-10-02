@@ -1,6 +1,7 @@
 import { OperatorPurchaseList } from "@/components/operator/purchases";
 import { OperatorShell } from "@/components/operator/shell";
 import { requireOperatorPage } from "../operator-access";
+import { hasCapability } from "@/modules/identity/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,11 @@ export default async function OperatorPurchasesPage({
   const filters = await searchParams;
   return (
     <OperatorShell {...access} activeSection="purchases">
-      <OperatorPurchaseList initialBuyer={filters.buyer} initialListing={filters.listing} />
+      <OperatorPurchaseList
+        initialBuyer={filters.buyer}
+        initialListing={filters.listing}
+        canDelete={hasCapability(access.capabilities, "system.root")}
+      />
     </OperatorShell>
   );
 }

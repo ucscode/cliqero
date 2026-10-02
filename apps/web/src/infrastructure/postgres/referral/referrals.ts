@@ -25,6 +25,8 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
     }
   }
   async assignParent(childAccountId: string, parentAccountId: string): Promise<void> {
+    if (childAccountId === parentAccountId)
+      throw new PublicApplicationError("Self-referral is not allowed.", "self_referral", 400);
     await this.writeHierarchy(() =>
       this.sql
         .query(
@@ -57,6 +59,8 @@ export class PostgresReferralGraphRepository implements ReferralGraphRepository 
     childAccountId: string,
     parentAccountId: string | null,
   ): Promise<{ changed: boolean; previousParentId: string | null }> {
+    if (childAccountId === parentAccountId)
+      throw new PublicApplicationError("Self-referral is not allowed.", "self_referral", 400);
     // Serialize the read/no-op/update decision with the database hierarchy guard.
     await this.sql.query(
       `select pg_advisory_xact_lock(hashtext('cliqero:referral-graph-mutation'))`,

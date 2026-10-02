@@ -31,47 +31,13 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Treasury data is temporarily unavailable.";
 }
 
-export function OperatorTreasuryPage() {
-  const [summary, setSummary] = useState<OperatorTreasurySummary | null>(null);
-  const [search, setSearch] = useState("");
-  const [direction, setDirection] = useState<"" | "credit" | "debit">("");
-  const [source, setSource] = useState<"" | "automatic" | "manual">("");
-  const [sortChoice, setSortChoice] = useState("created:desc");
-  const [sort, sort_direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
+export function OperatorTreasuryForm({ onCreated }: { onCreated?: () => void | Promise<void> }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [amount, setAmount] = useState("");
   const [entryDirection, setEntryDirection] = useState<"credit" | "debit">("credit");
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
-  const collection = useCrudCollection(
-    async (
-      filters: {
-        search: string;
-        direction: "" | "credit" | "debit";
-        source: "" | "automatic" | "manual";
-        sort: string;
-        sort_direction: string;
-      },
-      cursor,
-      pageSize,
-    ) => {
-      const params = new URLSearchParams({ limit: String(pageSize) });
-      if (filters.search) params.set("search", filters.search);
-      if (filters.direction) params.set("direction", filters.direction);
-      if (filters.source) params.set("source", filters.source);
-      params.set("sort", filters.sort);
-      params.set("sort_direction", filters.sort_direction);
-      if (cursor) params.set("cursor", cursor);
-      const [nextSummary, nextPage] = await Promise.all([
-        apiFetch<OperatorTreasurySummary>("/api/treasury"),
-        apiFetch<OperatorTreasuryPage>(`/api/treasury/entries?${params}`),
-      ]);
-      setSummary(nextSummary);
-      return { items: nextPage.items, nextCursor: nextPage.nextCursor };
-    },
-    { search: "", direction: "", source: "", sort: "created", sort_direction: "desc" },
-  );
 
   async function createEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -107,13 +73,103 @@ export function OperatorTreasuryPage() {
       setAmount("");
       setTitle("");
       setNote("");
-      await collection.refresh();
+      await onCreated?.();
     } catch (cause) {
       setFormError(errorMessage(cause));
     } finally {
       setSaving(false);
     }
   }
+
+  return (
+    <OperatorSection
+      title="Record a company entry"
+      description="Append-only accounting. Corrections are made with a separate opposite entry."
+      surface
+    >
+      <form className="grid gap-5 sm:grid-cols-2" onSubmit={(event) => void createEntry(event)}>
+        <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
+          Direction
+          <Select
+            value={entryDirection}
+            onChange={(event) => setEntryDirection(event.target.value as "credit" | "debit")}
+          >
+            <option value="credit">Credit</option>
+            <option value="debit">Debit</option>
+          </Select>
+        </label>
+        <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
+          Amount (USD)
+          <Input
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            placeholder="0.00"
+            inputMode="decimal"
+            aria-describedby="treasury-amount-help"
+          />
+          <span id="treasury-amount-help" className="text-xs font-normal leading-5 text-slate-500">
+            Exact cents are recorded; enter dollars such as 10.00.
+          </span>
+        </label>
+        <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
+          Title
+          <Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} />
+        </label>
+        <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
+          Note (optional)
+          <Input value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} />
+        </label>
+        <div className="flex flex-wrap items-center gap-3 pt-1 sm:col-span-2">
+          {formError && (
+            <div className="basis-full">
+              <Alert>{formError}</Alert>
+            </div>
+          )}
+          <Button type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Add treasury entry"}
+          </Button>
+          <HoneypotField />
+        </div>
+      </form>
+    </OperatorSection>
+  );
+}
+
+export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolean }) {
+  const [summary, setSummary] = useState<OperatorTreasurySummary | null>(null);
+  const [search, setSearch] = useState("");
+  const [direction, setDirection] = useState<"" | "credit" | "debit">("");
+  const [source, setSource] = useState<"" | "automatic" | "manual">("");
+  const [sortChoice, setSortChoice] = useState("created:desc");
+  const [sort, sort_direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
+  const collection = useCrudCollection(
+    async (
+      filters: {
+        search: string;
+        direction: "" | "credit" | "debit";
+        source: "" | "automatic" | "manual";
+        sort: string;
+        sort_direction: string;
+      },
+      cursor,
+      pageSize,
+    ) => {
+      const params = new URLSearchParams({ limit: String(pageSize) });
+      if (filters.search) params.set("search", filters.search);
+      if (filters.direction) params.set("direction", filters.direction);
+      if (filters.source) params.set("source", filters.source);
+      params.set("sort", filters.sort);
+      params.set("sort_direction", filters.sort_direction);
+      if (cursor) params.set("cursor", cursor);
+      const [nextSummary, nextPage] = await Promise.all([
+        apiFetch<OperatorTreasurySummary>("/api/treasury"),
+        apiFetch<OperatorTreasuryPage>(`/api/treasury/entries?${params}`),
+      ]);
+      setSummary(nextSummary);
+      return { items: nextPage.items, nextCursor: nextPage.nextCursor };
+    },
+    { search: "", direction: "", source: "", sort: "created", sort_direction: "desc" },
+  );
 
   type Entry = OperatorTreasuryPage["items"][number];
   const columns: readonly CrudColumn<Entry>[] = [
@@ -151,6 +207,11 @@ export function OperatorTreasuryPage() {
         ),
     },
     {
+      key: "correlation",
+      label: "Correlation",
+      render: (entry) => <span className="break-all">{entry.correlationId ?? "—"}</span>,
+    },
+    {
       key: "created",
       label: "Created",
       render: (entry) => new Date(entry.createdAt).toLocaleString(),
@@ -165,120 +226,63 @@ export function OperatorTreasuryPage() {
       ),
     },
   ];
-  const actions = (entry: Entry): readonly OperatorAction[] =>
-    entry.source?.kind === "distribution"
+  const actions = (entry: Entry): readonly OperatorAction[] => [
+    ...(entry.source?.kind === "distribution"
       ? [
           {
-            type: "link",
+            type: "link" as const,
             label: "View distribution",
             href: `/operator/distributions/${entry.source.id}`,
           },
         ]
-      : [
+      : []),
+    ...(canDelete
+      ? [
           {
-            type: "action",
-            label: "Immutable ledger entry",
-            disabled: true,
-            onSelect: () => undefined,
+            type: "action" as const,
+            label: "Delete",
+            destructive: true,
+            onSelect: async () => {
+              if (!window.confirm("Delete this treasury entry?")) return;
+              await apiFetch(`/api/treasury/entries/${entry.id}`, { method: "DELETE" });
+              await collection.retry();
+            },
           },
-        ];
+        ]
+      : []),
+  ];
   return (
     <CrudIndex
       eyebrow="Company accounting"
       title="Treasury"
       description="Inspect Cliqero-owned allocations and append-only operator entries. Wallet deposits and user earnings remain separate."
+      createAction={{ label: "New entry", href: "/operator/treasury/new" }}
       beforeTable={
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {summary ? (
-              <>
-                <OperatorMetricCard
-                  label="Current treasury balance"
-                  category="USD"
-                  value={formatMinorUsd(summary.balanceMinor)}
-                />
-                <OperatorMetricCard
-                  label="Total credits"
-                  category="USD"
-                  value={formatMinorUsd(summary.creditsMinor)}
-                />
-                <OperatorMetricCard
-                  label="Total debits"
-                  category="USD"
-                  value={formatMinorUsd(summary.debitsMinor)}
-                />
-              </>
-            ) : (
-              <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-                Loading treasury summary…
-              </div>
-            )}
-          </div>
-          <OperatorSection
-            title="Record a company entry"
-            description="Append-only accounting. Corrections are made with a separate opposite entry."
-            surface
-          >
-            <form
-              className="grid gap-5 sm:grid-cols-2"
-              onSubmit={(event) => void createEntry(event)}
-            >
-              <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
-                Direction
-                <Select
-                  value={entryDirection}
-                  onChange={(event) => setEntryDirection(event.target.value as "credit" | "debit")}
-                >
-                  <option value="credit">Credit</option>
-                  <option value="debit">Debit</option>
-                </Select>
-              </label>
-              <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
-                Amount (USD)
-                <Input
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  placeholder="0.00"
-                  inputMode="decimal"
-                  aria-describedby="treasury-amount-help"
-                />
-                <span
-                  id="treasury-amount-help"
-                  className="text-xs font-normal leading-5 text-slate-500"
-                >
-                  Exact cents are recorded; enter dollars such as 10.00.
-                </span>
-              </label>
-              <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
-                Title
-                <Input
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  maxLength={200}
-                />
-              </label>
-              <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
-                Note (optional)
-                <Input
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  maxLength={1000}
-                />
-              </label>
-              <div className="flex flex-wrap items-center gap-3 pt-1 sm:col-span-2">
-                {formError && (
-                  <div className="basis-full">
-                    <Alert>{formError}</Alert>
-                  </div>
-                )}
-                <Button type="submit" disabled={saving}>
-                  {saving ? "Saving…" : "Add treasury entry"}
-                </Button>
-                <HoneypotField />
-              </div>
-            </form>
-          </OperatorSection>
-        </>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {summary ? (
+            <>
+              <OperatorMetricCard
+                label="Current treasury balance"
+                category="USD"
+                value={formatMinorUsd(summary.balanceMinor)}
+              />
+              <OperatorMetricCard
+                label="Total credits"
+                category="USD"
+                value={formatMinorUsd(summary.creditsMinor)}
+              />
+              <OperatorMetricCard
+                label="Total debits"
+                category="USD"
+                value={formatMinorUsd(summary.debitsMinor)}
+              />
+            </>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+              Loading treasury summary…
+            </div>
+          )}
+        </div>
       }
       filters={
         <>

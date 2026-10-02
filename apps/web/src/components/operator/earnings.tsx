@@ -19,7 +19,7 @@ const formatDate = (value: string) => new Date(value).toLocaleString();
 const label = (value: string) =>
   value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-export function OperatorEarningsList() {
+export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolean }) {
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
   const [sortChoice, setSortChoice] = useState("created:desc");
@@ -197,6 +197,21 @@ export function OperatorEarningsList() {
                 type: "link" as const,
                 label: "View distribution",
                 href: `/operator/distributions/${entry.distributionId}`,
+              },
+            ]
+          : []),
+        ...(canDelete
+          ? [
+              {
+                type: "action" as const,
+                label: "Delete",
+                destructive: true,
+                onSelect: () => {
+                  if (!window.confirm("Delete this earnings entry?")) return;
+                  void apiFetch(`/api/earnings/entries/${entry.id}`, { method: "DELETE" }).then(
+                    () => collection.retry(),
+                  );
+                },
               },
             ]
           : []),

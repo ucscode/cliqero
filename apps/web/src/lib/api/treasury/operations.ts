@@ -12,6 +12,7 @@ export type OperatorTreasuryEntry = {
   title: string;
   note: string | null;
   source: { kind: string; id: string } | null;
+  correlationId: string | null;
   actor: { id: string; username: string; email: string | null } | null;
   createdAt: string;
 };

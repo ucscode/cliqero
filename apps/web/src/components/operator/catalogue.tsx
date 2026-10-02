@@ -356,17 +356,23 @@ export function OperatorCatalogueList() {
     { type: "link", label: "Edit", href: `/operator/catalogue/${listing.id}` },
     { type: "link", label: "View reviews", href: `/operator/reviews?listing=${listing.id}` },
     { type: "link", label: "View purchases", href: `/operator/purchases?listing=${listing.id}` },
-    ...(listing.state === "published"
-      ? [
-          {
-            type: "link" as const,
-            label: "Open listing",
-            href: `/listings/${listing.id}`,
-            target: "_blank" as const,
-            rel: "noopener noreferrer" as const,
-          },
-        ]
-      : []),
+    {
+      type: "action" as const,
+      label: "Open listing",
+      onSelect: () => {
+        const tab = window.open("about:blank", "_blank", "noopener,noreferrer");
+        if (!tab) return;
+        if (listing.state === "published") {
+          tab.location.href = `/listings/${listing.id}`;
+          return;
+        }
+        void apiFetch<{ url: string }>(`/internal/listings/${listing.id}/preview-token`)
+          .then(({ url }) => {
+            tab.location.href = url;
+          })
+          .catch(() => tab.close());
+      },
+    },
     ...(listing.state === "draft"
       ? [
           {
@@ -730,17 +736,26 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       sectionTitle={editing ? "Listing details" : "New listing details"}
       sectionDescription="Save catalogue fields through the existing listing workflow."
       headerActions={
-        listing?.state === "published" ? (
+        listing ? (
           <Button asChild type="button" variant="secondary" size="xs">
-            <Link href={`/listings/${listing.id}`} target="_blank" rel="noopener noreferrer">
+            <Link
+              href={listing.state === "published" ? `/listings/${listing.id}` : "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => {
+                if (listing.state === "published") return;
+                event.preventDefault();
+                const tab = window.open("about:blank", "_blank", "noopener,noreferrer");
+                if (!tab) return;
+                void apiFetch<{ url: string }>(`/internal/listings/${listing.id}/preview-token`)
+                  .then(({ url }) => (tab.location.href = url))
+                  .catch(() => tab.close());
+              }}
+            >
               Open listing
             </Link>
           </Button>
-        ) : (
-          <Button type="button" variant="secondary" size="xs" disabled>
-            Open listing
-          </Button>
-        )
+        ) : null
       }
       onSubmit={save}
       afterFields={

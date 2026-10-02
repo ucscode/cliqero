@@ -105,6 +105,14 @@ export class WithdrawalService {
       withdrawal.fee = Money.of(feeMinor, "USD");
       withdrawal.netAmount = Money.of(netMinor, "USD");
       await this.withdrawals.create(withdrawal);
+      await this.reconcileTreasuryFee(
+        withdrawal,
+        0n,
+        feeMinor,
+        input.correlationId,
+        "request",
+        input.accountId,
+      );
       await this.funds.reserve({
         withdrawalId: id,
         accountId: input.accountId,
@@ -167,6 +175,14 @@ export class WithdrawalService {
         kind: "released",
         correlationId: withdrawal.correlationId,
       });
+      await this.reconcileTreasuryFee(
+        withdrawal,
+        withdrawal.fee?.minorAmount ?? 0n,
+        0n,
+        withdrawal.correlationId,
+        "reversal",
+        actorId,
+      );
       await this.outbox.append([
         {
           id: newId(),
@@ -194,6 +210,14 @@ export class WithdrawalService {
         kind: "released",
         correlationId: withdrawal.correlationId,
       });
+      await this.reconcileTreasuryFee(
+        withdrawal,
+        withdrawal.fee?.minorAmount ?? 0n,
+        0n,
+        withdrawal.correlationId,
+        "reversal",
+        accountId,
+      );
       await this.outbox.append([
         {
           id: newId(),
@@ -231,20 +255,6 @@ export class WithdrawalService {
         kind: "completed",
         correlationId: withdrawal.correlationId,
       });
-      const feeMinor = withdrawal.fee?.minorAmount ?? 0n;
-      if (feeMinor > 0n)
-        await this.treasury.create({
-          id: newId(),
-          direction: "credit",
-          amountMinor: feeMinor,
-          title: "Withdrawal fee",
-          note: `Withdrawal ${id}; gross ${withdrawal.amount.minorAmount}; net ${withdrawal.netAmount?.minorAmount ?? withdrawal.amount.minorAmount}`,
-          sourceKind: "withdrawal_fee",
-          sourceId: id,
-          idempotencyKey: `withdrawal:${id}:fee`,
-          actorId,
-          createdAt: completedAt,
-        });
       await this.outbox.append([
         {
           id: newId(),
@@ -364,6 +374,15 @@ export class WithdrawalService {
           amount,
           correlationId: current.correlationId,
         });
+      if (current.state === "requested")
+        await this.reconcileTreasuryFee(
+          updated,
+          current.fee?.minorAmount ?? 0n,
+          feeMinor,
+          current.correlationId,
+          "edit",
+          actorId,
+        );
       if (current.state === "requested") await this.withdrawals.updateMutable(updated);
 
       if (current.state === "requested" && input.state !== "requested") {
@@ -374,13 +393,22 @@ export class WithdrawalService {
           target,
           target === "rejected" ? reason : undefined,
         );
-        if (target === "rejected")
+        if (target === "rejected") {
+          await this.reconcileTreasuryFee(
+            updated,
+            feeMinor,
+            0n,
+            current.correlationId,
+            "reversal",
+            actorId,
+          );
           await this.funds.releaseOrComplete({
             withdrawalId: id,
             accountId: current.accountId,
             kind: "released",
             correlationId: current.correlationId,
           });
+        }
         await this.outbox.append([
           {
             id: newId(),
@@ -395,6 +423,14 @@ export class WithdrawalService {
       }
       if (current.state === "approved" && input.state === "rejected") {
         await this.withdrawals.transition(id, "approved", "rejected", reason);
+        await this.reconcileTreasuryFee(
+          current,
+          current.fee?.minorAmount ?? 0n,
+          0n,
+          current.correlationId,
+          "reversal",
+          actorId,
+        );
         await this.funds.releaseOrComplete({
           withdrawalId: id,
           accountId: current.accountId,
@@ -418,11 +454,12 @@ export class WithdrawalService {
   }
 
   async deleteByOperator(actorId: string, id: string) {
-    await this.operators.requireCapability(actorId, "withdrawals.manage");
+    const root = await this.operators.hasCapability(actorId, "system.root");
+    if (!root) await this.operators.requireCapability(actorId, "withdrawals.manage");
     return this.uow.transaction(async () => {
       const current = await this.withdrawals.findByIdForUpdate(id);
       if (!current) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
-      if (!["requested", "rejected", "cancelled", "failed"].includes(current.state))
+      if (!root && !["requested", "rejected", "cancelled", "failed"].includes(current.state))
         throw new PublicApplicationError(
           "This withdrawal contains immutable payout history and cannot be deleted.",
           "withdrawal_immutable",
@@ -434,9 +471,50 @@ export class WithdrawalService {
         kind: "released",
         correlationId: current.correlationId,
       });
-      await this.funds.remove(id, current.accountId);
-      await this.withdrawals.deleteMutable(id);
+      await this.reconcileTreasuryFee(
+        current,
+        current.fee?.minorAmount ?? 0n,
+        0n,
+        current.correlationId,
+        "reversal",
+        actorId,
+      );
+      if (root) {
+        await this.funds.removeForRoot(id, current.accountId);
+        await this.withdrawals.deleteForRoot(id);
+      } else {
+        await this.funds.remove(id, current.accountId);
+        await this.withdrawals.deleteMutable(id);
+      }
       return { id, deleted: true };
+    });
+  }
+
+  private async reconcileTreasuryFee(
+    withdrawal: Withdrawal,
+    previousFee: bigint,
+    nextFee: bigint,
+    correlationId: string,
+    operation: "request" | "edit" | "reversal",
+    actorId: string,
+  ) {
+    const delta = nextFee - previousFee;
+    if (delta === 0n) return;
+    const idempotencyKey = `withdrawal:${withdrawal.id}:fee:${operation}:${nextFee}`;
+    if (operation === "reversal" && (await this.treasury.findByIdempotencyKey(idempotencyKey)))
+      return;
+    await this.treasury.create({
+      id: newId(),
+      direction: delta > 0n ? "credit" : "debit",
+      amountMinor: delta > 0n ? delta : -delta,
+      title: delta > 0n ? "Withdrawal fee" : "Withdrawal fee reversal",
+      note: `Withdrawal ${withdrawal.id}; fee ${nextFee}`,
+      sourceKind: delta > 0n ? "withdrawal_fee" : "withdrawal_fee_reversal",
+      sourceId: withdrawal.id,
+      idempotencyKey,
+      actorId,
+      correlationId,
+      createdAt: new Date(),
     });
   }
   private async operatorTransition(

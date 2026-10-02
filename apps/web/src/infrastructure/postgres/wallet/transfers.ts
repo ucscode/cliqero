@@ -141,8 +141,8 @@ export class PostgresWalletTransferService {
       }
       if (amounts.feeMinor > 0n) {
         await this.sql.query(
-          `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id)
-           values($1,'credit',$2,$3,$4,'wallet_transfer',$5,$6,(select id from identity_capability.accounts where uuid=$7))`,
+          `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,correlation_id)
+           values($1,'credit',$2,$3,$4,'wallet_transfer',$5,$6,(select id from identity_capability.accounts where uuid=$7),$8)`,
           [
             newId(),
             amounts.feeMinor.toString(),
@@ -153,6 +153,7 @@ export class PostgresWalletTransferService {
             id,
             `wallet-transfer:${input.idempotencyKey}:fee`,
             input.accountId,
+            correlation,
           ],
         );
       }
@@ -198,9 +199,9 @@ export class PostgresWalletTransferService {
   ) {
     if (amount === 0n) return;
     await this.sql.query(
-      `insert into ledger_capability.earnings_adjustments(uuid,account_id,amount_minor,reason,reference,created_by)
-       values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,(select id from identity_capability.accounts where uuid=$6))`,
-      [newId(), accountId, amount.toString(), reason, transferId, actorId],
+      `insert into ledger_capability.earnings_adjustments(uuid,account_id,amount_minor,reason,reference,created_by,correlation_id)
+       values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,(select id from identity_capability.accounts where uuid=$6),$7)`,
+      [newId(), accountId, amount.toString(), reason, transferId, actorId, transferId],
     );
   }
 

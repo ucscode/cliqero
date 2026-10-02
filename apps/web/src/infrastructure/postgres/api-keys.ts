@@ -1,5 +1,11 @@
 import { Buffer } from "node:buffer";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import type { QueryExecutor } from "./shared/database";
 import { assertApiScopes } from "@/modules/identity/api/scopes";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
@@ -58,6 +64,10 @@ export class PostgresApiKeyRepository {
     createdBy: string;
     expiresAt: Date | null;
     status: "active" | "revoked";
+    secretCiphertext: Buffer;
+    secretNonce: Buffer;
+    secretAuthTag: Buffer;
+    secretKeyVersion: number;
   }) {
     const id = (
       await this.sql.query<{
@@ -66,12 +76,16 @@ export class PostgresApiKeyRepository {
         expires_at: Date | null;
         revoked_at: Date | null;
       }>(
-        `insert into identity_capability.api_keys(account_id,name,key_prefix,secret_hash,scopes,created_by,expires_at,revoked_at) values((select id from identity_capability.accounts where uuid=$1),$2,$3,$4,$5::jsonb,(select id from identity_capability.accounts where uuid=$6),$7,case when $8='revoked' then now() else null end) returning uuid as id,created_at,expires_at,revoked_at`,
+        `insert into identity_capability.api_keys(account_id,name,key_prefix,secret_hash,secret_ciphertext,secret_nonce,secret_auth_tag,secret_key_version,scopes,created_by,expires_at,revoked_at) values((select id from identity_capability.accounts where uuid=$1),$2,$3,$4,$5,$6,$7,$8,$9::jsonb,(select id from identity_capability.accounts where uuid=$10),$11,case when $12='revoked' then now() else null end) returning uuid as id,created_at,expires_at,revoked_at`,
         [
           input.accountId,
           input.name,
           input.keyPrefix,
           input.secretHash,
+          input.secretCiphertext,
+          input.secretNonce,
+          input.secretAuthTag,
+          input.secretKeyVersion,
           JSON.stringify(input.scopes),
           input.createdBy,
           input.expiresAt,
@@ -229,9 +243,13 @@ export class PostgresApiKeyRepository {
     scopes: string[];
     expiresAt: Date | null;
     status: "active" | "revoked";
+    secretCiphertext: Buffer;
+    secretNonce: Buffer;
+    secretAuthTag: Buffer;
+    secretKeyVersion: number;
   }) {
     const result = await this.sql.query(
-      `update identity_capability.api_keys set account_id=(select id from identity_capability.accounts where uuid=$2 and deleted_at is null),name=$3,key_prefix=$4,secret_hash=$5,scopes=$6::jsonb,expires_at=$7,revoked_at=case when $8='revoked' then coalesce(revoked_at,now()) else null end
+      `update identity_capability.api_keys set account_id=(select id from identity_capability.accounts where uuid=$2 and deleted_at is null),name=$3,key_prefix=$4,secret_hash=$5,secret_ciphertext=$6,secret_nonce=$7,secret_auth_tag=$8,secret_key_version=$9,scopes=$10::jsonb,expires_at=$11,revoked_at=case when $12='revoked' then coalesce(revoked_at,now()) else null end
        where uuid=$1 and exists(select 1 from identity_capability.accounts where uuid=$2 and deleted_at is null)`,
       [
         input.id,
@@ -239,6 +257,10 @@ export class PostgresApiKeyRepository {
         input.name,
         input.keyPrefix,
         input.secretHash,
+        input.secretCiphertext,
+        input.secretNonce,
+        input.secretAuthTag,
+        input.secretKeyVersion,
         JSON.stringify(input.scopes),
         input.expiresAt,
         input.status,
@@ -254,12 +276,26 @@ export class PostgresApiKeyRepository {
     );
     return (result.rowCount ?? 0) === 1;
   }
+
+  async encryptedSecret(id: string) {
+    const result = await this.sql.query<{
+      secret_ciphertext: Buffer | null;
+      secret_nonce: Buffer | null;
+      secret_auth_tag: Buffer | null;
+      secret_key_version: number | null;
+    }>(
+      `select secret_ciphertext,secret_nonce,secret_auth_tag,secret_key_version from identity_capability.api_keys where uuid=$1`,
+      [id],
+    );
+    return result.rows[0] ?? null;
+  }
 }
 export class ApiKeyService {
   constructor(
     private readonly repository: PostgresApiKeyRepository,
     private readonly sql: QueryExecutor,
     private readonly uow?: UnitOfWork,
+    private readonly configuredEncryptionKey = process.env.API_KEY_ENCRYPTION_KEY,
   ) {}
   async create(input: {
     accountId: string;
@@ -272,12 +308,14 @@ export class ApiKeyService {
     const operation = async () => {
       const scopes = [...assertApiScopes(input.scopes)];
       const secret = `cliq_live_${randomBytes(32).toString("base64url")}`;
+      const encrypted = encryptSecret(secret, this.encryptionKey());
       const prefix = secret.slice(0, 18);
       const inserted = await this.repository.insert({
         accountId: input.accountId,
         name: input.name.trim(),
         keyPrefix: prefix,
         secretHash: hash(secret),
+        ...encrypted,
         scopes,
         createdBy: input.createdBy,
         expiresAt: input.expiresAt ?? null,
@@ -342,6 +380,7 @@ export class ApiKeyService {
         ...input,
         keyPrefix,
         secretHash: hash(secret),
+        ...encryptSecret(secret, this.encryptionKey()),
       });
       return changed ? { secret, keyPrefix } : null;
     };
@@ -350,7 +389,69 @@ export class ApiKeyService {
   delete(id: string, accountId?: string) {
     return this.repository.delete(id, accountId);
   }
+
+  async reveal(id: string) {
+    const encrypted = await this.repository.encryptedSecret(id);
+    if (!encrypted?.secret_ciphertext || !encrypted.secret_nonce || !encrypted.secret_auth_tag)
+      return null;
+    return decryptSecret(
+      encrypted.secret_ciphertext,
+      encrypted.secret_nonce,
+      encrypted.secret_auth_tag,
+      this.encryptionKey(),
+    );
+  }
+
+  private encryptionKey() {
+    const configured = this.configuredEncryptionKey?.trim();
+    if (!configured) {
+      if (process.env.NODE_ENV === "test")
+        return createHash("sha256").update("cliqero-test-api-key-encryption").digest();
+      throw new PublicApplicationError(
+        "API-key recovery encryption is not configured.",
+        "configuration_error",
+        500,
+      );
+    }
+    try {
+      const key = Buffer.from(configured, "base64");
+      if (key.length !== 32) throw new Error();
+      return key;
+    } catch {
+      throw new PublicApplicationError(
+        "API-key recovery encryption is not configured correctly.",
+        "configuration_error",
+        500,
+      );
+    }
+  }
 }
 function hash(secret: string) {
   return createHash("sha256").update(secret).digest();
+}
+
+function encryptSecret(secret: string, key: Buffer) {
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
+  const ciphertext = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
+  return {
+    secretCiphertext: ciphertext,
+    secretNonce: nonce,
+    secretAuthTag: cipher.getAuthTag(),
+    secretKeyVersion: 1,
+  };
+}
+
+function decryptSecret(ciphertext: Buffer, nonce: Buffer, authTag: Buffer, key: Buffer) {
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", key, nonce);
+    decipher.setAuthTag(authTag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  } catch {
+    throw new PublicApplicationError(
+      "API-key secret could not be recovered.",
+      "secret_unavailable",
+      409,
+    );
+  }
 }

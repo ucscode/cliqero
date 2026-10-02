@@ -358,7 +358,13 @@ export function OperatorFundingList({ canManage = false }: { canManage?: boolean
       key: "credit",
       label: "Credit",
       render: (funding) =>
-        funding.walletCredit ? <OperatorStatusCell status={funding.walletCredit.state} /> : "—",
+        funding.walletCredit ? (
+          <OperatorStatusCell status={funding.walletCredit.state} />
+        ) : funding.walletEffect?.state === "available" ? (
+          <span className="text-emerald-700">Available</span>
+        ) : (
+          "—"
+        ),
     },
     {
       key: "amount",
@@ -725,6 +731,11 @@ export function OperatorFundingDetail({
                   <Money minor={funding.walletCredit.amountMinor} />
                   {funding.walletCredit.availableAt &&
                     ` · available ${formatDate(funding.walletCredit.availableAt)}`}
+                </p>
+              ) : funding.walletEffect?.state === "available" ? (
+                <p className="operator-funding-credit-status">
+                  <OperatorStatusCell status="available" /> credit ·{" "}
+                  <Money minor={funding.walletEffect.amountMinor} />
                 </p>
               ) : (
                 <p className="panel-intro">No wallet credit has been created.</p>

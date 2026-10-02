@@ -2,6 +2,7 @@ import { apiError } from "@/api/http";
 import { getContainer, type ApplicationContainer } from "@/infrastructure/container";
 import { crudMaxRows } from "@/config/crud";
 import { z } from "zod";
+import { hasCapability } from "@/modules/identity/capabilities";
 
 type PurchaseContainer = Pick<ApplicationContainer, "principalResolver" | "operatorPurchases">;
 
@@ -48,6 +49,27 @@ export class InternalPurchaseRoutes {
     }
   }
 
+  async delete(request: Request, purchaseId: string) {
+    const principal = await this.session(request);
+    if (principal instanceof Response) return principal;
+    try {
+      if (!hasCapability(principal.capabilities, "system.root"))
+        return Response.json({ error: "Forbidden", code: "forbidden" }, { status: 403 });
+      const deleted = await this.container.operatorPurchases.deleteForRoot(
+        principal.accountId,
+        purchaseId,
+      );
+      if (!deleted)
+        return Response.json({ error: "Purchase not found", code: "not_found" }, { status: 404 });
+      return Response.json(
+        { id: purchaseId, deleted: true },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    } catch (error) {
+      return apiError(error, request);
+    }
+  }
+
   private async session(request: Request) {
     if (request.headers.has("authorization"))
       return Response.json({ error: "Unauthorized", code: "unauthorized" }, { status: 401 });
@@ -68,4 +90,8 @@ export function internalPurchases(request: Request) {
 
 export function internalPurchase(request: Request, purchaseId: string) {
   return new InternalPurchaseRoutes(getContainer()).item(request, purchaseId);
+}
+
+export function internalPurchaseDelete(request: Request, purchaseId: string) {
+  return new InternalPurchaseRoutes(getContainer()).delete(request, purchaseId);
 }

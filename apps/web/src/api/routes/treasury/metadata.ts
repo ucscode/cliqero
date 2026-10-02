@@ -29,4 +29,11 @@ export const treasuryOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     capability: "treasury.manage",
     scope: "treasury:read",
   },
+  {
+    path: "/api/treasury/entries/{entryId}",
+    method: "delete",
+    mode: "account",
+    capability: "system.root",
+    scope: "treasury:manage",
+  },
 ];

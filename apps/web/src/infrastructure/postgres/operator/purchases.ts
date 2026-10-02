@@ -4,6 +4,7 @@ import type {
   OperatorPurchaseReader,
 } from "@/application/operator/purchases";
 import { PublicApplicationError } from "@/kernel/errors";
+import { newId } from "@/kernel/ids";
 
 type PurchaseRow = Record<string, any>;
 
@@ -144,6 +145,101 @@ export class PostgresOperatorPurchaseReader implements OperatorPurchaseReader {
           }
         : null,
     };
+  }
+
+  async deleteForRoot(purchaseId: string, actorId: string) {
+    const purchase = await this.get(purchaseId);
+    if (!purchase) return false;
+    const ids = (
+      await this.sql.query<{
+        purchase_id: string;
+        payment_id: string | null;
+        checkout_id: string | null;
+      }>(
+        `select p.id purchase_id,p.payment_id,p.checkout_id
+           from purchase_capability.purchases p where p.uuid=$1`,
+        [purchaseId],
+      )
+    ).rows[0];
+    if (!ids) return false;
+    await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+    await this.sql.query(
+      `delete from access_capability.access_grants
+        where entitlement_id in (select id from entitlement_capability.entitlements where purchase_id=$1)`,
+      [ids.purchase_id],
+    );
+    await this.sql.query(`delete from entitlement_capability.entitlements where purchase_id=$1`, [
+      ids.purchase_id,
+    ]);
+    await this.sql.query(
+      `delete from ledger_capability.entry_settlements
+        where original_entry_id in (
+          select e.id from ledger_capability.entries e
+           where e.purchase_id=$1 or e.distribution_id in (
+             select d.id from ledger_capability.purchase_distributions d where d.purchase_id=$1
+           )
+        )`,
+      [ids.purchase_id],
+    );
+    await this.sql.query(
+      `delete from ledger_capability.entries
+        where original_entry_id is not null and (purchase_id=$1 or distribution_id in (
+          select d.id from ledger_capability.purchase_distributions d where d.purchase_id=$1
+        ))`,
+      [ids.purchase_id],
+    );
+    await this.sql.query(
+      `delete from ledger_capability.entries
+        where purchase_id=$1 or distribution_id in (
+          select d.id from ledger_capability.purchase_distributions d where d.purchase_id=$1
+        )`,
+      [ids.purchase_id],
+    );
+    await this.sql.query(
+      `delete from ledger_capability.reversals
+        where purchase_id=$1 or distribution_id in (
+          select d.id from ledger_capability.purchase_distributions d where d.purchase_id=$1
+        )`,
+      [ids.purchase_id],
+    );
+    await this.sql.query(
+      `delete from ledger_capability.purchase_distributions where purchase_id=$1`,
+      [ids.purchase_id],
+    );
+    await this.sql.query(
+      `delete from wallet_capability.debits where checkout_id in (
+        select id from checkout_capability.checkouts where purchase_id=$1
+      )`,
+      [ids.purchase_id],
+    );
+    await this.sql.query(
+      `update purchase_capability.purchases set checkout_id=null,payment_id=null where id=$1`,
+      [ids.purchase_id],
+    );
+    await this.sql.query(`delete from checkout_capability.checkouts where purchase_id=$1`, [
+      ids.purchase_id,
+    ]);
+    if (ids.payment_id) {
+      await this.sql.query(
+        `delete from payment_capability.provider_operations where payment_id=$1`,
+        [ids.payment_id],
+      );
+      await this.sql.query(
+        `delete from payment_capability.reconciliation_attempts where payment_id=$1`,
+        [ids.payment_id],
+      );
+      await this.sql.query(`delete from payment_capability.payments where id=$1`, [ids.payment_id]);
+    }
+    await this.sql.query(`delete from purchase_capability.purchases where id=$1`, [
+      ids.purchase_id,
+    ]);
+    await this.sql.query(
+      `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
+       values('root.delete','purchase',$1,$2::jsonb,null,$3::uuid,
+              (select id from identity_capability.accounts where uuid=$4))`,
+      [purchaseId, JSON.stringify(purchase), newId(), actorId],
+    );
+    return true;
   }
 
   private project(row: PurchaseRow) {

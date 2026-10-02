@@ -10,6 +10,7 @@ export default async function OperatorEarningsAdjustmentsPage() {
     <OperatorShell {...access} activeSection="adjustments">
       <OperatorEarningsAdjustments
         canManage={hasCapability(access.capabilities, "finance.manage")}
+        canDelete={hasCapability(access.capabilities, "system.root")}
       />
     </OperatorShell>
   );

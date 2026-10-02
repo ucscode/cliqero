@@ -870,15 +870,13 @@ Treat mutable operational resources and historical financial facts differently:
 
 - Mutable operational resources support normal Operator CRUD only where posted
   accounting and external evidence remain intact.
-- Generated distributions and earnings, earning adjustments, Treasury entries,
-  and completed payout evidence are immutable historical facts. Correct them
-  with compensating entries or explicit reversal workflows, never ordinary
-  edit/delete.
-- Distributions and generated Earnings inspection pages have no row selection
-  or bulk actions. Earning adjustments are append-only. Treasury is an
-  append-only platform-owned ledger. Funding Operator CRUD must refuse changes
-  that would erase posted ledger effects; withdrawal CRUD must preserve
-  completed external payout facts.
+- `system.root` is the platform superuser. Every Operator-visible resource
+  exposes Delete to `system.root`; ordinary roles may remain restricted.
+  Root deletion is real deletion and uses resource-aware transactional cleanup
+  so balances, foreign keys, and dependent data remain consistent. Append-only
+  protections apply to ordinary domain operations, not to explicit root
+  administrative deletion workflows, which must retain a safe audit snapshot
+  where technically possible.
 - A wallet transfer posts the source debit, destination credit/earnings
   adjustment, and any Treasury fee in one PostgreSQL transaction. Retries must
   be idempotent and all legs share a stable correlation identity.
@@ -899,11 +897,10 @@ Treat mutable operational resources and historical financial facts differently:
 - Withdrawal requests in mutable pre-payout states support Operator CRUD.
   Status edits must invoke the canonical withdrawal state machine. The fee and
   net amount are snapshotted while a request is mutable; Treasury receives the
-  withdrawal fee only when payout completes, using that stored snapshot.
-  Rejected, cancelled, or failed unpaid withdrawals create no fee income.
-  Requested amount edits update the fee snapshot and earnings reservation but
-  do not post Treasury movements. Deleting a mutable request releases and removes operational
-  reservation state atomically; completed payout evidence is immutable.
+  withdrawal fee at request time using the same correlation ID as the
+  reservation and outbox operation. Rejected, cancelled, failed, edited, or
+  deleted requests create the corresponding correlated reversal/delta; payout
+  completion never credits the fee a second time.
 - Every authoritative balance effect must have a visible/accountable history
   entry. Mutable administrative records are metadata, not substitutes for
   append-only financial movements.
@@ -915,3 +912,8 @@ Treat mutable operational resources and historical financial facts differently:
 - Internal Operator HTTP calls use the session-only `/internal/*` surface.
   There is no `/api/operator/*` namespace; `/api/*` is the canonical external
   API surface.
+
+Operator Create forms live on dedicated `/new` pages rather than above
+collection tables. Financial multi-leg operations share a structured
+correlation ID across their persisted legs, including wallet transfers,
+earnings adjustments, Treasury entries, reservations, and outbox events.

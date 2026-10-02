@@ -1,4 +1,6 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
+import type { UnitOfWork } from "@/kernel/unit-of-work";
+import { newId } from "@/kernel/ids";
 import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "./cursor";
 
 function cleanSearch(value?: string) {
@@ -13,6 +15,7 @@ export type OperatorTreasuryEntry = {
   title: string;
   note: string | null;
   source: { kind: string; id: string } | null;
+  correlationId: string | null;
   actor: { id: string; username: string; email: string | null } | null;
   createdAt: string;
 };
@@ -25,7 +28,30 @@ export type OperatorTreasurySummary = {
 };
 
 export class OperatorTreasuryService {
-  constructor(private readonly sql: QueryExecutor) {}
+  constructor(
+    private readonly sql: QueryExecutor,
+    private readonly uow?: UnitOfWork,
+  ) {}
+
+  async deleteForRoot(actorId: string, id: string) {
+    const operation = async () => {
+      const row = await this.get(id);
+      await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+      const deleted = await this.sql.query(
+        `delete from treasury_capability.entries where uuid=$1`,
+        [id],
+      );
+      if ((deleted.rowCount ?? 0) !== 1) throw new Error("Treasury entry not found");
+      await this.sql.query(
+        `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
+         values('root.delete','treasury_entry',$1,$2::jsonb,null,$3::uuid,
+                (select id from identity_capability.accounts where uuid=$4))`,
+        [id, JSON.stringify(row), newId(), actorId],
+      );
+      return { id, deleted: true as const };
+    };
+    return this.uow ? this.uow.transaction(operation) : operation();
+  }
 
   async summary(): Promise<OperatorTreasurySummary> {
     const row = (
@@ -61,7 +87,7 @@ export class OperatorTreasuryService {
     const cursorType = sort === "amount" ? "bigint" : "timestamptz";
     const search = cleanSearch(input.search);
     const sourceKind =
-      input.source === "automatic" ? "distribution" : input.source === "manual" ? null : undefined;
+      input.source === "automatic" ? "automatic" : input.source === "manual" ? null : undefined;
     const values: unknown[] = [
       search,
       input.direction ?? null,
@@ -79,7 +105,7 @@ export class OperatorTreasuryService {
     values.push(input.limit + 1);
     const rows = (
       await this.sql.query<any>(
-        `select e.uuid as id,e.id::text cursor_id,${orderBy}::text cursor_sort_value,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
+        `select e.uuid as id,e.id::text cursor_id,${orderBy}::text cursor_sort_value,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.correlation_id,e.created_at,
                 a.uuid actor_id,a.username actor_username,a.email actor_email
            from treasury_capability.entries e
            left join identity_capability.account_profiles a on a.id=e.actor_id
@@ -107,7 +133,7 @@ export class OperatorTreasuryService {
   async get(id: string): Promise<OperatorTreasuryEntry> {
     const row = (
       await this.sql.query<any>(
-        `select e.uuid as id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.created_at,
+        `select e.uuid as id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.correlation_id,e.created_at,
                 a.uuid actor_id,a.username actor_username,a.email actor_email
            from treasury_capability.entries e
            left join identity_capability.account_profiles a on a.id=e.actor_id
@@ -131,6 +157,7 @@ export class OperatorTreasuryService {
       actor: row.actor_id
         ? { id: row.actor_id, username: row.actor_username, email: row.actor_email }
         : null,
+      correlationId: row.correlation_id ?? null,
       createdAt: new Date(row.created_at).toISOString(),
     };
   }

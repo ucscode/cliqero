@@ -32,7 +32,7 @@ function stateLabel(value: string) {
   return value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function OperatorDistributionList() {
+export function OperatorDistributionList({ canDelete = false }: { canDelete?: boolean }) {
   const [search, setSearch] = useState("");
   const [sortChoice, setSortChoice] = useState("created:desc");
   const [sort, direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
@@ -77,8 +77,24 @@ export function OperatorDistributionList() {
     },
   ];
   const actions = (item: OperatorDistributionPage["items"][number]): readonly OperatorAction[] => [
-    { type: "link", label: "Inspect distribution", href: `/operator/distributions/${item.id}` },
+    { type: "link", label: "View", href: `/operator/distributions/${item.id}` },
     { type: "link", label: "View buyer", href: `/operator/users/${item.buyer.id}` },
+    ...(canDelete
+      ? [
+          {
+            type: "action" as const,
+            label: "Delete",
+            destructive: true,
+            onSelect: () => {
+              if (!window.confirm("Delete this distribution and its generated ledger facts?"))
+                return;
+              void apiFetch(`/api/distributions/${item.id}`, { method: "DELETE" }).then(() =>
+                collection.retry(),
+              );
+            },
+          },
+        ]
+      : []),
   ];
   return (
     <CrudIndex

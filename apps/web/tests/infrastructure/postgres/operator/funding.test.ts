@@ -27,6 +27,8 @@ const baseRow = {
   credit_state: "available",
   credit_created_at: "2026-01-01T00:01:00.000Z",
   credit_available_at: "2026-01-01T00:02:00.000Z",
+  wallet_effect_minor: null,
+  wallet_effect_state: null,
 };
 
 describe("PostgresOperatorFundingReader", () => {
@@ -73,6 +75,38 @@ describe("PostgresOperatorFundingReader", () => {
     expect(statements[1]).toContain(
       "(q.canonical_amount_minor,q.cursor_id) > ($4::bigint,$5::bigint)",
     );
+  });
+
+  it("projects administrative funding movements as an available wallet effect", async () => {
+    const reader = new PostgresOperatorFundingReader({
+      query: async <T extends object>(sql: string) => {
+        if (sql.includes("administrative_fundings"))
+          return result<T>([
+            {
+              ...baseRow,
+              origin: "administrative",
+              provider_name: null,
+              provider_reference: null,
+              reason: "Support credit",
+              administrative_reference: "admin-1",
+              created_by: "00000000-0000-4000-8000-000000000009",
+              credit_id: null,
+              wallet_effect_minor: "2500",
+              wallet_effect_state: "available",
+            },
+          ] as T[]);
+        return result<T>([]) as QueryResult<T>;
+      },
+    });
+    await expect(reader.list({ limit: 25 })).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({
+          origin: "administrative",
+          walletCredit: null,
+          walletEffect: { amountMinor: "2500", currency: "USD", state: "available" },
+        }),
+      ],
+    });
   });
 
   it("does not expose access codes or provider payloads in detail", async () => {

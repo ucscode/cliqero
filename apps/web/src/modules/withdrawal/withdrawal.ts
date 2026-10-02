@@ -72,6 +72,7 @@ export interface WithdrawalRepository {
   create(withdrawal: Withdrawal): Promise<void>;
   updateMutable(withdrawal: Withdrawal): Promise<void>;
   deleteMutable(id: string): Promise<void>;
+  deleteForRoot(id: string): Promise<void>;
   transition(
     id: string,
     from: WithdrawalState,

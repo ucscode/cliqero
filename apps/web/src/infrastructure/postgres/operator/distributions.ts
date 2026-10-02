@@ -1,4 +1,6 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
+import type { UnitOfWork } from "@/kernel/unit-of-work";
+import { newId } from "@/kernel/ids";
 import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "./cursor";
 
 function cleanSearch(value?: string) {
@@ -61,7 +63,51 @@ export type OperatorDistributionDetail = OperatorDistributionSummary & {
 };
 
 export class OperatorDistributionService {
-  constructor(private readonly sql: QueryExecutor) {}
+  constructor(
+    private readonly sql: QueryExecutor,
+    private readonly uow?: UnitOfWork,
+  ) {}
+
+  async deleteForRoot(actorId: string, id: string) {
+    const operation = async () => {
+      const previous = await this.get(id);
+      const distribution = (
+        await this.sql.query<{ id: string }>(
+          `select id from ledger_capability.purchase_distributions where uuid=$1`,
+          [id],
+        )
+      ).rows[0];
+      if (!previous || !distribution) throw new Error("Distribution not found");
+      await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+      await this.sql.query(
+        `delete from ledger_capability.entry_settlements
+          where original_entry_id in (select id from ledger_capability.entries where distribution_id=$1)`,
+        [distribution.id],
+      );
+      await this.sql.query(
+        `delete from ledger_capability.entries
+          where distribution_id=$1 and original_entry_id is not null`,
+        [distribution.id],
+      );
+      await this.sql.query(`delete from ledger_capability.entries where distribution_id=$1`, [
+        distribution.id,
+      ]);
+      await this.sql.query(`delete from ledger_capability.reversals where distribution_id=$1`, [
+        distribution.id,
+      ]);
+      await this.sql.query(`delete from ledger_capability.purchase_distributions where id=$1`, [
+        distribution.id,
+      ]);
+      await this.sql.query(
+        `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
+         values('root.delete','distribution',$1,$2::jsonb,null,$3::uuid,
+                (select id from identity_capability.accounts where uuid=$4))`,
+        [id, JSON.stringify(previous), newId(), actorId],
+      );
+      return { id, deleted: true as const };
+    };
+    return this.uow ? this.uow.transaction(operation) : operation();
+  }
 
   async list(input: DistributionInput) {
     const sort = input.sort ?? "created";
@@ -231,7 +277,45 @@ export type OperatorEarningsEntry = {
 };
 
 export class OperatorEarningsService {
-  constructor(private readonly sql: QueryExecutor) {}
+  constructor(
+    private readonly sql: QueryExecutor,
+    private readonly uow?: UnitOfWork,
+  ) {}
+
+  async deleteForRoot(actorId: string, id: string) {
+    const operation = async () => {
+      const previous = (
+        await this.sql.query<any>(
+          `select e.uuid id,e.account_id,e.amount_minor,e.currency,e.entry_type,e.direction,e.correlation_id,e.created_at
+             from ledger_capability.entries e
+            where e.uuid=$1 and e.recipient_role='referral'`,
+          [id],
+        )
+      ).rows[0];
+      if (!previous) throw new Error("Earnings entry not found");
+      await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+      await this.sql.query(
+        `delete from ledger_capability.entry_settlements
+          where original_entry_id in (
+            select id from ledger_capability.entries where uuid=$1 or original_entry_id=(select id from ledger_capability.entries where uuid=$1)
+          )`,
+        [id],
+      );
+      await this.sql.query(
+        `delete from ledger_capability.entries
+          where uuid=$1 or original_entry_id=(select id from ledger_capability.entries where uuid=$1)`,
+        [id],
+      );
+      await this.sql.query(
+        `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
+         values('root.delete','earning',$1,$2::jsonb,null,$3::uuid,
+                (select id from identity_capability.accounts where uuid=$4))`,
+        [id, JSON.stringify(previous), previous.correlation_id ?? newId(), actorId],
+      );
+      return { id, deleted: true as const };
+    };
+    return this.uow ? this.uow.transaction(operation) : operation();
+  }
 
   async list(input: {
     search?: string;

@@ -70,7 +70,7 @@ describe("Operator API-key collection interactions", () => {
     expect(source).toContain("onChange={(event) => setState(event.target.value as typeof state)}");
     expect(source).toContain("onChange={setAccountFilter}");
     expect(source).not.toContain("useEffect(");
-    expect(source).toContain('label: "Permanently delete selected"');
+    expect(source).toContain('label: "Delete"');
     expect(source).toContain("/internal/api-keys/actions/delete");
   });
 });

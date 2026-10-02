@@ -134,7 +134,7 @@ export function OperatorShell({
       ],
     },
     {
-      label: "Finance",
+      label: "Orders",
       items: [
         {
           key: "purchases",
@@ -142,6 +142,11 @@ export function OperatorShell({
           label: "Purchases",
           visible: hasCapability(capabilities, "finance.read"),
         },
+      ],
+    },
+    {
+      label: "Finance",
+      items: [
         {
           key: "funding",
           href: "/operator/funding",

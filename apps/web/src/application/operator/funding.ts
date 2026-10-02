@@ -75,6 +75,11 @@ export type OperatorFundingWalletCredit = {
   createdAt: string;
   availableAt: string | null;
 };
+export type OperatorFundingWalletEffect = {
+  amountMinor: string;
+  currency: string;
+  state: "available" | "none";
+};
 
 export type OperatorFundingOperation = {
   id: string;
@@ -121,6 +126,7 @@ export type OperatorFundingSummary = {
   updatedAt: string;
   confirmedAt: string | null;
   walletCredit: OperatorFundingWalletCredit | null;
+  walletEffect: OperatorFundingWalletEffect | null;
 };
 
 export type OperatorFundingDetail = OperatorFundingSummary & {

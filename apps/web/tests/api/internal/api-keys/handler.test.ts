@@ -34,6 +34,8 @@ function routes(principal: any = sessionPrincipal) {
     deleteForSession: vi.fn(),
     bulkDeleteForSession: vi.fn(async () => ({ succeeded: [], failed: [] })),
     reassignForSession: vi.fn(),
+    revealForSession: vi.fn(async () => ({ secret: "cliq_live_recovered", legacy: false })),
+    rotateForSession: vi.fn(),
   };
   return {
     handler: new InternalApiKeyManagementRoutes(
@@ -157,6 +159,27 @@ describe("internal API-key management boundary", () => {
     expect(limiter.allow("account-b")).toBe(true);
     now += 1_000;
     expect(limiter.allow("account-a")).toBe(true);
+  });
+
+  it("reveals only through a same-origin user session and never a bearer credential", async () => {
+    const boundary = routes();
+    const crossOrigin = await boundary.handler.secret(
+      request("/internal/api-keys/key/secret", { headers: { origin: "https://attacker.test" } }),
+      "00000000-0000-4000-8000-000000000002",
+    );
+    expect(crossOrigin.status).toBe(403);
+    expect(boundary.operatorApiKeys.revealForSession).not.toHaveBeenCalled();
+
+    const recovered = await boundary.handler.secret(
+      request("/internal/api-keys/key/secret", { headers: { origin: "https://cliqero.test" } }),
+      "00000000-0000-4000-8000-000000000002",
+    );
+    expect(recovered.status).toBe(200);
+    expect(await recovered.json()).toEqual({ secret: "cliq_live_recovered", legacy: false });
+    expect(boundary.operatorApiKeys.revealForSession).toHaveBeenCalledWith(
+      sessionPrincipal.accountId,
+      "00000000-0000-4000-8000-000000000002",
+    );
   });
 
   it("accepts one same-origin bulk-delete request and delegates IDs once to the service", async () => {

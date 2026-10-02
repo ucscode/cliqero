@@ -64,10 +64,11 @@ export function operatorApiKeyRowActions(
   onDelete: (key: OperatorApiKeyRow) => void,
 ): readonly OperatorAction[] {
   return [
-    { type: "link", label: "Edit API key", href: `/operator/api-keys/${key.id}` },
+    { type: "link", label: "View", href: `/operator/api-keys/${key.id}` },
+    { type: "link", label: "Edit", href: `/operator/api-keys/${key.id}` },
     {
       type: "action",
-      label: "Permanently delete API key",
+      label: "Delete",
       destructive: true,
       onSelect: () => onDelete(key),
     },

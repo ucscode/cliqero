@@ -194,6 +194,36 @@ export function OperatorApiKeyEditor({
     }
   }
 
+  async function reveal() {
+    if (!apiKeyId) return;
+    setError(null);
+    try {
+      const result = await apiFetch<{ secret: string | null; legacy: boolean }>(
+        `/internal/api-keys/${apiKeyId}/secret`,
+      );
+      if (result.secret) setSecret(result.secret);
+      else
+        setError("This legacy key cannot be recovered. Rotate it once to create a revealable key.");
+    } catch (cause) {
+      setError(message(cause));
+    }
+  }
+
+  async function rotate() {
+    if (!apiKeyId) return;
+    setError(null);
+    try {
+      const result = await apiFetch<{ secret: string }>(`/internal/api-keys/${apiKeyId}/rotate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+      setCredentialAction("reassigned");
+      setSecret(result.secret);
+    } catch (cause) {
+      setError(message(cause));
+    }
+  }
+
   if (secret)
     return (
       <OperatorPage className="max-w-4xl">
@@ -326,7 +356,15 @@ export function OperatorApiKeyEditor({
         <p className="text-xs leading-5 text-slate-500">Leave blank for no expiry.</p>
       </div>
       {mode === "edit" && (
-        <p className="text-xs text-slate-500">Editing does not reveal or rotate the credential.</p>
+        <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+          <Button type="button" variant="secondary" size="xs" onClick={() => void reveal()}>
+            Reveal key
+          </Button>
+          <Button type="button" variant="secondary" size="xs" onClick={() => void rotate()}>
+            Rotate key
+          </Button>
+          <span className="self-center">Editing does not change the credential.</span>
+        </div>
       )}
     </CrudEdit>
   );

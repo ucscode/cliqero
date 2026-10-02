@@ -55,4 +55,16 @@ export class EarningsAdjustmentService {
     if (!item) throw new PublicApplicationError("Earnings adjustment not found.", "not_found", 404);
     return item;
   }
+
+  async deleteForRoot(actorId: string, id: string) {
+    await this.operators.requireCapability(actorId, "system.root");
+    return this.uow.transaction(async () => {
+      const item = await this.repository.get(id);
+      if (!item)
+        throw new PublicApplicationError("Earnings adjustment not found.", "not_found", 404);
+      if (!(await this.repository.deleteForRoot(id, actorId)))
+        throw new Error("Earnings adjustment not found");
+      return { id, deleted: true };
+    });
+  }
 }

@@ -4,10 +4,10 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
   constructor(private sql: QueryExecutor) {}
   async create(v: TreasuryEntry) {
     const result = await this.sql.query(
-      `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,created_at)
-       values($1,$2,$3,$4,$5,$6,$7,$8,(select id from identity_capability.accounts where uuid=$9),$10)
+      `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,correlation_id,created_at)
+       values($1,$2,$3,$4,$5,$6,$7,$8,(select id from identity_capability.accounts where uuid=$9),$10,$11)
        on conflict(idempotency_key) do nothing returning uuid as id,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,
-       (select uuid from identity_capability.accounts where id=actor_id) as actor_id,created_at`,
+       (select uuid from identity_capability.accounts where id=actor_id) as actor_id,correlation_id,created_at`,
       [
         v.id,
         v.direction,
@@ -18,6 +18,7 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
         v.sourceId,
         v.idempotencyKey,
         v.actorId,
+        v.correlationId,
         v.createdAt,
       ],
     );
@@ -91,6 +92,7 @@ function map(r: any): TreasuryEntry {
     sourceId: r.source_id,
     idempotencyKey: r.idempotency_key,
     actorId: r.actor_id,
+    correlationId: r.correlation_id ?? null,
     createdAt: r.created_at,
   };
 }

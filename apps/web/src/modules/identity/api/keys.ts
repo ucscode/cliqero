@@ -62,5 +62,6 @@ export interface ApiKeyManagementService {
     expiresAt: Date | null;
     status: "active" | "revoked";
   }): Promise<{ secret: string; keyPrefix: string } | null>;
+  reveal(id: string): Promise<string | null>;
   delete(id: string, accountId?: string): Promise<boolean>;
 }

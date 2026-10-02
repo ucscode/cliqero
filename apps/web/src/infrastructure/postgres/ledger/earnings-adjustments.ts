@@ -20,9 +20,9 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
     const row = (
       await this.sql.query<Row>(
         `with inserted as (
-         insert into ledger_capability.earnings_adjustments(uuid,account_id,amount_minor,reason,reference,created_by)
+         insert into ledger_capability.earnings_adjustments(uuid,account_id,amount_minor,reason,reference,created_by,correlation_id)
          values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,
-           (select id from identity_capability.accounts where uuid=$6))
+           (select id from identity_capability.accounts where uuid=$6),$7)
          returning uuid id,account_id,amount_minor,reason,reference,created_by,created_at
        ) select i.id,a.uuid account_id,a.username,i.amount_minor,i.reason,i.reference,
                 actor.uuid created_by,i.created_at
@@ -35,6 +35,7 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
           input.reason,
           input.reference,
           input.actorId,
+          input.correlationId ?? null,
         ],
       )
     ).rows[0];
@@ -87,6 +88,24 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
       )
     ).rows[0];
     return row ? this.project(row) : null;
+  }
+
+  async deleteForRoot(id: string, actorId: string) {
+    const previous = await this.get(id);
+    if (!previous) return false;
+    await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+    const result = await this.sql.query(
+      `delete from ledger_capability.earnings_adjustments where uuid=$1`,
+      [id],
+    );
+    if ((result.rowCount ?? 0) !== 1) return false;
+    await this.sql.query(
+      `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
+       values('root.delete','earnings_adjustment',$1,$2::jsonb,null,$3::uuid,
+              (select id from identity_capability.accounts where uuid=$4))`,
+      [id, JSON.stringify(previous), newId(), actorId],
+    );
+    return true;
   }
 
   private project(row: Row) {

@@ -20,6 +20,11 @@ export const operatorFundingWalletCreditSchema = z.object({
   createdAt: z.string(),
   availableAt: z.string().nullable(),
 });
+export const operatorFundingWalletEffectSchema = z.object({
+  amountMinor: z.string(),
+  currency: z.string(),
+  state: z.enum(["available", "none"]),
+});
 export const operatorFundingSummarySchema = z.object({
   id: z.string().uuid(),
   account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),
@@ -39,6 +44,7 @@ export const operatorFundingSummarySchema = z.object({
   updatedAt: z.string(),
   confirmedAt: z.string().nullable(),
   walletCredit: operatorFundingWalletCreditSchema.nullable(),
+  walletEffect: operatorFundingWalletEffectSchema.nullable(),
 });
 export const operatorFundingDetailSchema = operatorFundingSummarySchema.extend({
   conversionSnapshot: z

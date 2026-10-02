@@ -2268,9 +2268,13 @@ describe("Hono API foundation", () => {
       }),
     );
     expect(response.status).toBe(400);
+    const nonRoot = {
+      ...principal,
+      capabilities: [],
+    };
     expect(
       (
-        await appWith(principal).fetch(
+        await appWith(nonRoot).fetch(
           new Request(
             "http://localhost/api/treasury/entries/00000000-0000-4000-8000-000000000004",
             {
@@ -2279,7 +2283,7 @@ describe("Hono API foundation", () => {
           ),
         )
       ).status,
-    ).toBe(405);
+    ).toBe(403);
   });
   it("serializes expected request validation as a human-readable API error", async () => {
     const principal = {

@@ -3,6 +3,7 @@ import { apiError, authenticatedAccount, authenticatedPrincipal } from "../../ht
 import { getContainer } from "@/infrastructure/container";
 import { ownerListingView, listingWithMediaView } from "@/application/listing/service";
 import { apiAuthorizer } from "@/api/shared/authorization";
+import { verifyListingPreviewToken } from "@/security/listing-preview";
 
 const listingSchema = z
   .object({
@@ -32,6 +33,24 @@ export async function GET(
   if (!z.uuid().safeParse(listingId).success)
     return Response.json({ error: "Not found" }, { status: 404 });
   const c = getContainer();
+  const preview = new URL(request.url).searchParams.get("preview");
+  if (verifyListingPreviewToken(preview, listingId)) {
+    try {
+      const listing = await c.listingService.getCatalogue(listingId);
+      return Response.json(
+        listingWithMediaView(
+          listing,
+          await c.listingMediaRepository.listByListing(listingId),
+          c.listingMedia,
+          true,
+          (await c.listingReviews.summariesForListings([listing.id])).get(listing.id) ?? null,
+        ),
+        { headers: { "Cache-Control": "private, no-store, max-age=0" } },
+      );
+    } catch (error) {
+      return apiError(error, request);
+    }
+  }
   const principal = await authenticatedPrincipal(request);
   const managementFailure = apiAuthorizer.authorize(
     principal,

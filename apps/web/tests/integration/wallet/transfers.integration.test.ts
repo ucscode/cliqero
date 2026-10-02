@@ -193,6 +193,7 @@ suite("atomic Funding and Earnings transfers", () => {
       id: newId(),
       direction: "credit",
       amountMinor: 1n,
+      correlationId: null,
       title: "Rollback conflict seed",
       note: null,
       sourceKind: null,

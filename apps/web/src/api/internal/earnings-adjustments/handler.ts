@@ -85,6 +85,18 @@ export class InternalEarningsAdjustmentRoutes {
     }
   }
 
+  async delete(request: Request, id: string) {
+    const principal = await this.session(request, true);
+    if (principal instanceof Response) return principal;
+    try {
+      return noStore(
+        await this.container.earningsAdjustments.deleteForRoot(principal.accountId, id),
+      );
+    } catch (error) {
+      return apiError(error, request);
+    }
+  }
+
   private async session(request: Request, mutation = false) {
     if (request.headers.has("authorization")) return noStore({ error: "Unauthorized" }, 401);
     if (mutation && !isSameOriginRequest(request)) return noStore({ error: "Forbidden" }, 403);
@@ -104,3 +116,5 @@ export const internalEarningsAdjustmentCreate = (request: Request) =>
   new InternalEarningsAdjustmentRoutes(getContainer()).create(request);
 export const internalEarningsAdjustment = (request: Request, id: string) =>
   new InternalEarningsAdjustmentRoutes(getContainer()).item(request, id);
+export const internalEarningsAdjustmentDelete = (request: Request, id: string) =>
+  new InternalEarningsAdjustmentRoutes(getContainer()).delete(request, id);

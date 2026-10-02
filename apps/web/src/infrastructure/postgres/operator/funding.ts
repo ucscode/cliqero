@@ -36,6 +36,14 @@ function summary(row: any): OperatorFundingSummary {
           availableAt: row.credit_available_at ?? null,
         }
       : null,
+    walletEffect:
+      row.wallet_effect_minor !== null && row.wallet_effect_minor !== undefined
+        ? {
+            amountMinor: String(row.wallet_effect_minor),
+            currency: "USD",
+            state: row.wallet_effect_state ?? "none",
+          }
+        : null,
   };
 }
 
@@ -72,7 +80,8 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
                  f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
                  f.state,f.created_at,f.updated_at,f.confirmed_at,
                  c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
-                 c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at
+                 c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at,
+                 null::bigint wallet_effect_minor,null::text wallet_effect_state
             from funding_capability.funding_transactions f
             join identity_capability.account_profiles a on a.id=f.account_id
             left join wallet_capability.credits c on c.funding_id=f.id
@@ -84,10 +93,14 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
                  'USD'::text collection_currency,f.state,f.created_at,f.updated_at,
                  case when f.state='confirmed' then f.created_at else null end confirmed_at,
                  null::uuid credit_id,null::bigint credit_amount_minor,null::text credit_currency,
-                 null::text credit_state,null::timestamptz credit_created_at,null::timestamptz credit_available_at
+                 null::text credit_state,null::timestamptz credit_created_at,null::timestamptz credit_available_at,
+                 coalesce(sum(adj.amount_minor),0)::bigint wallet_effect_minor,
+                 case when coalesce(sum(adj.amount_minor),0) <> 0 then 'available' else 'none' end wallet_effect_state
             from funding_capability.administrative_fundings f
             join identity_capability.account_profiles a on a.id=f.account_id
             join identity_capability.accounts actor on actor.id=f.created_by
+            left join wallet_capability.funding_adjustments adj on adj.funding_id=f.uuid
+            group by f.uuid,f.id,a.uuid,a.username,a.email,actor.uuid
         ) select q.*,${orderBy}::text cursor_sort_value from q
           where ${conditions.join(" and ")}
           order by ${orderBy} ${direction},q.cursor_id ${direction} limit $${values.length}`,
@@ -122,7 +135,8 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
                                                           'providerAccountSnapshot', f.provider_initialization->'providerAccountSnapshot')
                                   else '{}'::jsonb end end provider_initialization,
                 c.uuid credit_id,c.amount_minor credit_amount_minor,c.currency credit_currency,
-                c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at
+                c.state credit_state,c.created_at credit_created_at,c.available_at credit_available_at,
+                null::bigint wallet_effect_minor,null::text wallet_effect_state
            from funding_capability.funding_transactions f
            join identity_capability.account_profiles a on a.id=f.account_id
            left join wallet_capability.credits c on c.funding_id=f.id
@@ -140,11 +154,15 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
                   'USD'::text collection_currency,f.state,f.created_at,f.updated_at,
                   case when f.state='confirmed' then f.created_at else null end confirmed_at,
                   null::uuid credit_id,null::bigint credit_amount_minor,null::text credit_currency,
-                  null::text credit_state,null::timestamptz credit_created_at,null::timestamptz credit_available_at
+                  null::text credit_state,null::timestamptz credit_created_at,null::timestamptz credit_available_at,
+                  coalesce(sum(adj.amount_minor),0)::bigint wallet_effect_minor,
+                  case when coalesce(sum(adj.amount_minor),0) <> 0 then 'available' else 'none' end wallet_effect_state
              from funding_capability.administrative_fundings f
              join identity_capability.account_profiles a on a.id=f.account_id
              join identity_capability.accounts actor on actor.id=f.created_by
-            where f.uuid=$1`,
+             left join wallet_capability.funding_adjustments adj on adj.funding_id=f.uuid
+            where f.uuid=$1
+            group by f.uuid,f.id,a.uuid,a.username,a.email,actor.uuid`,
           [id],
         )
       ).rows[0];

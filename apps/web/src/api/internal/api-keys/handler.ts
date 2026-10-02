@@ -207,6 +207,20 @@ export class InternalApiKeyManagementRoutes {
     }
   }
 
+  async secret(request: Request, keyId: string): Promise<Response> {
+    const principal = await this.session(request, true);
+    if (principal instanceof Response) return principal;
+    try {
+      const result = await this.container.operatorApiKeys.revealForSession(
+        principal.accountId,
+        keyId,
+      );
+      return response(result);
+    } catch (error) {
+      return apiError(error, request);
+    }
+  }
+
   private async session(request: Request, mutation = false) {
     if (request.headers.has("authorization")) return unauthorized();
     if (mutation && !isSameOriginRequest(request)) return forbidden();
@@ -261,6 +275,18 @@ export class InternalApiKeyManagementRoutes {
       return apiError(error, request);
     }
   }
+
+  async rotate(request: Request, keyId: string): Promise<Response> {
+    const principal = await this.session(request, true);
+    if (principal instanceof Response) return principal;
+    if (!this.rateLimiter.allow(principal.accountId)) return rateLimited();
+    try {
+      const key = await this.container.operatorApiKeys.rotateForSession(principal.accountId, keyId);
+      return response({ ...metadata(key), secret: key.secret });
+    } catch (error) {
+      return apiError(error, request);
+    }
+  }
 }
 
 export function internalApiKeyCollection(request: Request) {
@@ -275,8 +301,16 @@ export function internalApiKeyItem(request: Request, keyId: string) {
   return new InternalApiKeyManagementRoutes(getContainer()).item(request, keyId);
 }
 
+export function internalApiKeySecret(request: Request, keyId: string) {
+  return new InternalApiKeyManagementRoutes(getContainer()).secret(request, keyId);
+}
+
 export function internalApiKeyReassign(request: Request, keyId: string) {
   return new InternalApiKeyManagementRoutes(getContainer()).reassign(request, keyId);
+}
+
+export function internalApiKeyRotate(request: Request, keyId: string) {
+  return new InternalApiKeyManagementRoutes(getContainer()).rotate(request, keyId);
 }
 
 export function internalApiKeyBulkDelete(request: Request) {

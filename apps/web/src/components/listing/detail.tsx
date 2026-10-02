@@ -66,7 +66,15 @@ export function ListingReviewSection({
   );
 }
 
-export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisible: boolean }) {
+export function ListingDetail({
+  id,
+  previewToken,
+  reviewsVisible,
+}: {
+  id: string;
+  previewToken?: string;
+  reviewsVisible: boolean;
+}) {
   const router = useRouter();
   const session = authClient.useSession();
   const [listing, setListing] = useState<Listing | null>(null);
@@ -77,7 +85,8 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
   const [referralUrl, setReferralUrl] = useState<string | null>(null);
   const [promoting, setPromoting] = useState(false);
   useEffect(() => {
-    void apiFetch<Listing>(`/api/listings/${id}`)
+    const query = previewToken ? `?preview=${encodeURIComponent(previewToken)}` : "";
+    void apiFetch<Listing>(`/api/listings/${id}${query}`)
       .then((nextListing) => {
         setListing(nextListing);
         setSelectedMediaId(null);
@@ -90,7 +99,7 @@ export function ListingDetail({ id, reviewsVisible }: { id: string; reviewsVisib
         ),
       )
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, previewToken]);
   if (loading)
     return (
       <main className="mx-auto min-h-screen max-w-6xl px-4 py-10 sm:px-8">

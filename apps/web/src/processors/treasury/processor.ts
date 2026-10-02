@@ -25,6 +25,7 @@ export class TreasuryProcessor {
       sourceId: row.id,
       idempotencyKey: `treasury:distribution:${row.id}:platform`,
       actorId: null,
+      correlationId: row.id,
       createdAt: new Date(),
     });
   }

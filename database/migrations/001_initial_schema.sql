@@ -171,6 +171,10 @@ CREATE FUNCTION ledger_capability.prevent_entry_mutation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 begin
+  if current_setting('cliqero.root_delete', true) = 'on' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
   raise exception 'Ledger entries are append-only; use compensating entries' using errcode='55000';
 end $$;
 
@@ -228,6 +232,9 @@ CREATE FUNCTION referral_capability.prevent_account_referral_delete() RETURNS tr
     LANGUAGE plpgsql
     AS $$
 begin
+  if current_setting('cliqero.root_delete', true) = 'on' then
+    return old;
+  end if;
   if exists (
     select 1 from identity_capability.accounts
     where id in (old.child_account_id, old.parent_account_id) and deleted_at is not null
@@ -255,7 +262,13 @@ $$;
 
 CREATE FUNCTION treasury_capability.prevent_entry_mutation() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$ begin raise exception 'Treasury entries are append-only; use compensating entries' using errcode='55000'; end $$;
+    AS $$ begin
+  if current_setting('cliqero.root_delete', true) = 'on' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  raise exception 'Treasury entries are append-only; use compensating entries' using errcode='55000';
+end $$;
 
 
 --
@@ -264,7 +277,11 @@ CREATE FUNCTION treasury_capability.prevent_entry_mutation() RETURNS trigger
 
 CREATE FUNCTION wallet_capability.prevent_movement_mutation() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$ begin
+AS $$ begin
+  if current_setting('cliqero.root_delete', true) = 'on' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
   raise exception 'Wallet movements are append-only; use a compensating entry' using errcode='55000';
 end $$;
 
@@ -652,6 +669,10 @@ CREATE TABLE identity_capability.api_keys (
     name text NOT NULL,
     key_prefix text NOT NULL,
     secret_hash bytea NOT NULL,
+    secret_ciphertext bytea,
+    secret_nonce bytea,
+    secret_auth_tag bytea,
+    secret_key_version integer,
     scopes jsonb DEFAULT '[]'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     last_used_at timestamp with time zone,
@@ -1590,6 +1611,7 @@ CREATE TABLE treasury_capability.entries (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     id bigint NOT NULL,
     actor_id bigint,
+    correlation_id uuid,
     CONSTRAINT entries_amount_minor_check CHECK ((amount_minor > 0)),
     CONSTRAINT entries_direction_check CHECK ((direction = ANY (ARRAY['credit'::text, 'debit'::text]))),
     CONSTRAINT treasury_source_pair CHECK (((source_kind IS NULL) = (source_id IS NULL)))
@@ -2741,6 +2763,11 @@ CREATE INDEX api_keys_account_idx ON identity_capability.api_keys USING btree (a
 
 CREATE INDEX api_keys_active_prefix_idx ON identity_capability.api_keys USING btree (key_prefix) WHERE (revoked_at IS NULL);
 
+CREATE INDEX treasury_entries_correlation_idx ON treasury_capability.entries USING btree (correlation_id);
+
+-- Encrypted recovery material is optional only for legacy hash-only keys.
+CREATE INDEX api_keys_secret_recovery_idx ON identity_capability.api_keys USING btree (secret_key_version) WHERE (secret_ciphertext IS NOT NULL);
+
 
 --
 -- Name: sessions_account_idx; Type: INDEX; Schema: identity_capability; Owner: -
@@ -3732,12 +3759,15 @@ CREATE TABLE ledger_capability.earnings_adjustments (
     created_by bigint NOT NULL,
     created_at timestamptz DEFAULT now() NOT NULL,
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    correlation_id uuid,
     CONSTRAINT earnings_adjustments_nonzero CHECK (amount_minor <> 0),
     CONSTRAINT earnings_adjustments_reason_nonempty CHECK (length(btrim(reason)) > 0),
     CONSTRAINT earnings_adjustments_uuid_unique UNIQUE (uuid)
 );
 CREATE INDEX earnings_adjustments_account_idx
   ON ledger_capability.earnings_adjustments (account_id, created_at DESC, id DESC);
+CREATE INDEX earnings_adjustments_correlation_idx
+  ON ledger_capability.earnings_adjustments (correlation_id);
 ALTER TABLE ledger_capability.earnings_adjustments
   ADD CONSTRAINT earnings_adjustments_account_fk
     FOREIGN KEY (account_id) REFERENCES identity_capability.accounts(id),
@@ -3812,7 +3842,7 @@ ALTER TABLE withdrawal_capability.withdrawals
   );
 UPDATE withdrawal_capability.withdrawals SET net_amount_minor=amount_minor;
 COMMENT ON COLUMN withdrawal_capability.withdrawals.fee_minor IS
-  'Fee snapshot in canonical USD minor units, calculated while the request is mutable; credited to Treasury only when payout completes.';
+  'Fee snapshot in canonical USD minor units, calculated while the request is mutable; credited to Treasury when the request is created and reversed or delta-reconciled as needed.';
 COMMENT ON COLUMN withdrawal_capability.withdrawals.net_amount_minor IS
   'Payout amount after the fee snapshot; amount_minor remains the gross reservation.';
 
@@ -3880,5 +3910,18 @@ COMMENT ON TABLE funding_capability.administrative_fundings IS
   'Operator-created internal funding records; never represent external provider evidence.';
 COMMENT ON TABLE wallet_capability.funding_adjustments IS
   'Append-only signed USD funding-balance adjustments for administrative funding; corrections use compensating movements.';
+
+-- These idempotent additive declarations keep the development database sync
+-- tool able to converge older local databases without introducing a second
+-- migration. They are no-ops on a fresh database created from this baseline.
+ALTER TABLE identity_capability.api_keys
+  ADD COLUMN IF NOT EXISTS secret_ciphertext bytea,
+  ADD COLUMN IF NOT EXISTS secret_nonce bytea,
+  ADD COLUMN IF NOT EXISTS secret_auth_tag bytea,
+  ADD COLUMN IF NOT EXISTS secret_key_version integer;
+ALTER TABLE treasury_capability.entries
+  ADD COLUMN IF NOT EXISTS correlation_id uuid;
+ALTER TABLE ledger_capability.earnings_adjustments
+  ADD COLUMN IF NOT EXISTS correlation_id uuid;
 
 -- End of canonical PostgreSQL baseline.

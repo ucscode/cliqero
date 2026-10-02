@@ -122,6 +122,35 @@ export class OperatorApiKeyService {
     return key;
   }
 
+  async revealForSession(actorId: string, keyId: string) {
+    const key = await this.getForSession(actorId, keyId);
+    const secret = await this.apiKeys.reveal(key.id);
+    return { secret, legacy: secret === null };
+  }
+
+  async rotateForSession(actorId: string, keyId: string) {
+    const key = await this.getForSession(actorId, keyId);
+    const replacement = await this.apiKeys.reassign({
+      id: key.id,
+      accountId: key.accountId,
+      name: key.name,
+      scopes: this.validateScopes(key.scopes),
+      expiresAt: key.expiresAt && key.expiresAt > new Date() ? key.expiresAt : null,
+      status: key.revokedAt ? "revoked" : "active",
+    });
+    if (!replacement) return this.keyNotFound();
+    const updated = await this.apiKeys.find(key.id);
+    await this.audit.record({
+      actorId,
+      action: "api_key.rotated",
+      subjectType: "api_key",
+      subjectId: key.id,
+      previousState: { keyPrefix: key.keyPrefix, legacySecret: true },
+      newState: { keyPrefix: replacement.keyPrefix, credentialReplaced: true },
+    });
+    return { ...updated!, secret: replacement.secret };
+  }
+
   async reassignForSession(
     actorId: string,
     keyId: string,

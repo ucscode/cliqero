@@ -16,10 +16,12 @@ export interface EarningsAdjustmentRepository {
     reason: string;
     reference: string | null;
     actorId: string;
+    correlationId?: string | null;
   }): Promise<EarningsAdjustment>;
   list(input: { search?: string; cursor?: string; limit: number }): Promise<{
     items: EarningsAdjustment[];
     nextCursor: string | null;
   }>;
   get(id: string): Promise<EarningsAdjustment | null>;
+  deleteForRoot(id: string, actorId: string): Promise<boolean>;
 }

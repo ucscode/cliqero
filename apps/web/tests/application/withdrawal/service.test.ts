@@ -50,6 +50,7 @@ function fixture(
       create,
       updateMutable: async () => undefined,
       deleteMutable: async () => undefined,
+      deleteForRoot: async () => undefined,
       transition: async () => undefined,
       complete,
     },
@@ -66,6 +67,7 @@ function fixture(
       releaseOrComplete,
       resize: async () => undefined,
       remove: async () => undefined,
+      removeForRoot: async () => undefined,
       summarize: async () => [],
     },
     { append },
@@ -85,7 +87,7 @@ function fixture(
         earning_to_funding: { enabled: true, basisPoints: 100n, maximumMinor: 500n },
       }),
     },
-    { create: treasuryCreate } as any,
+    { create: treasuryCreate, findByIdempotencyKey: async () => null } as any,
   );
   return {
     service,
@@ -101,7 +103,7 @@ function fixture(
 }
 
 describe("WithdrawalService request fees", () => {
-  it("snapshots gross, capped fee, and net without crediting Treasury before payout", async () => {
+  it("snapshots gross, capped fee, and net and credits Treasury at request time", async () => {
     const { service, create, reserve, treasuryCreate } = fixture();
     const withdrawal = await service.request({
       accountId: "account-1",
@@ -122,7 +124,16 @@ describe("WithdrawalService request fees", () => {
         correlationId: "withdrawal-correlation",
       }),
     );
-    expect(treasuryCreate).not.toHaveBeenCalled();
+    expect(treasuryCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direction: "credit",
+        amountMinor: 2_000n,
+        sourceKind: "withdrawal_fee",
+        sourceId: withdrawal.id,
+        correlationId: "withdrawal-correlation",
+        idempotencyKey: `withdrawal:${withdrawal.id}:fee:request:2000`,
+      }),
+    );
   });
 });
 
@@ -151,15 +162,7 @@ describe("WithdrawalService manual completion", () => {
       "Sent from the bank portal",
     );
     expect(releaseOrComplete).toHaveBeenCalledTimes(1);
-    expect(treasuryCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        direction: "credit",
-        amountMinor: 125n,
-        sourceKind: "withdrawal_fee",
-        sourceId: withdrawal.id,
-        idempotencyKey: `withdrawal:${withdrawal.id}:fee`,
-      }),
-    );
+    expect(treasuryCreate).not.toHaveBeenCalled();
     expect(releaseOrComplete).toHaveBeenCalledWith({
       withdrawalId: withdrawal.id,
       accountId: withdrawal.accountId,

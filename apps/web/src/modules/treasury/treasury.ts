@@ -10,6 +10,7 @@ export interface TreasuryEntry {
   sourceId: string | null;
   idempotencyKey: string;
   actorId: string | null;
+  correlationId: string | null;
   createdAt: Date;
 }
 export interface TreasuryRepository {
@@ -32,6 +33,7 @@ export class TreasuryService {
     note?: string | null;
     actorId: string;
     idempotencyKey: string;
+    correlationId?: string | null;
   }) {
     if (input.amountMinor <= 0n) throw new Error("Treasury amount must be positive");
     const title = input.title.trim();
@@ -47,6 +49,7 @@ export class TreasuryService {
       sourceId: null,
       idempotencyKey: input.idempotencyKey,
       actorId: input.actorId,
+      correlationId: input.correlationId ?? null,
       createdAt: new Date(),
     };
     const entry = await this.repo.create(draft);
@@ -57,7 +60,8 @@ export class TreasuryService {
       entry.note !== draft.note ||
       entry.actorId !== draft.actorId ||
       entry.sourceKind !== null ||
-      entry.sourceId !== null
+      entry.sourceId !== null ||
+      entry.correlationId !== draft.correlationId
     )
       throw new Error("Treasury idempotency key already used for a different entry");
     return entry;

@@ -594,7 +594,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     () => new OperatorPaymentService(operatorPaymentReader(), operators()),
   );
   const operatorPurchases = lazy(
-    () => new OperatorPurchaseService(operatorPurchaseReader(), operators()),
+    () => new OperatorPurchaseService(operatorPurchaseReader(), operators(), database),
   );
   const purchaseReversal = lazy(
     () => new PurchaseReversalProcessor(purchases(), ledger(), reversals(), outbox(), database),
@@ -625,10 +625,10 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         operatorAccountDeletion(),
       ),
   );
-  const operatorDistributions = lazy(() => new OperatorDistributionService(database));
-  const operatorEarnings = lazy(() => new OperatorEarningsService(database));
+  const operatorDistributions = lazy(() => new OperatorDistributionService(database, database));
+  const operatorEarnings = lazy(() => new OperatorEarningsService(database, database));
   const operatorWithdrawals = lazy(() => new OperatorWithdrawalService(database));
-  const operatorTreasury = lazy(() => new OperatorTreasuryService(database));
+  const operatorTreasury = lazy(() => new OperatorTreasuryService(database, database));
   const earningsAdjustments = lazy(
     () =>
       new EarningsAdjustmentService(

@@ -42,9 +42,11 @@ function displayState(value: string) {
 export function OperatorPurchaseList({
   initialBuyer = "",
   initialListing = "",
+  canDelete = false,
 }: {
   initialBuyer?: string;
   initialListing?: string;
+  canDelete?: boolean;
 }) {
   const [buyer, setBuyer] = useState(initialBuyer);
   const [listing, setListing] = useState(initialListing);
@@ -99,7 +101,7 @@ export function OperatorPurchaseList({
     <CrudIndex
       eyebrow="Commerce history"
       title="Purchases"
-      description="Read-only historical purchase records. Financial evidence is retained and cannot be deleted here."
+      description="Purchase records and payment evidence."
       filters={
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <OperatorFilterField label="Buyer account ID" htmlFor="purchase-buyer">
@@ -163,7 +165,25 @@ export function OperatorPurchaseList({
       items={collection.items}
       columns={columns}
       getRowKey={(item) => item.id}
-      actions={(item) => [{ type: "link", label: "View", href: `/operator/purchases/${item.id}` }]}
+      actions={(item) => [
+        { type: "link", label: "View", href: `/operator/purchases/${item.id}` },
+        ...(canDelete
+          ? [
+              {
+                type: "action" as const,
+                label: "Delete",
+                destructive: true,
+                onSelect: () => {
+                  if (!window.confirm("Delete this purchase and its dependent commerce facts?"))
+                    return;
+                  void apiFetch(`/internal/purchases/${item.id}`, { method: "DELETE" }).then(() =>
+                    collection.retry(),
+                  );
+                },
+              },
+            ]
+          : []),
+      ]}
       actionLabel={(item) => `Actions for purchase ${item.id}`}
       loading={collection.loading}
       initialized={collection.initialized}
