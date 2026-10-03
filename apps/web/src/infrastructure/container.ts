@@ -200,6 +200,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
             operatorPurchases().deleteForListing(actorId, listingId),
         },
         { deleteAllForRoot: (listingId: string) => listingMedia().deleteAllForRoot(listingId) },
+        operators(),
       ),
   );
   const operators = lazy(() => new PostgresOperatorAuthorizationService(database));

@@ -15,7 +15,7 @@ export async function GET(request: Request, context: { params: Promise<{ listing
   if (!hasCapability(capabilities, "catalogue.manage"))
     return Response.json({ error: "Forbidden" }, { status: 403 });
   const { listingId } = await context.params;
-  const listing = await container.listingService.getCatalogue(listingId).catch(() => null);
+  const listing = await container.listingService.get(listingId).catch(() => null);
   if (!listing) return Response.json({ error: "Not found" }, { status: 404 });
   const token = createListingPreviewToken(listingId);
   const url = new URL(`/listings/${listingId}`, request.url);

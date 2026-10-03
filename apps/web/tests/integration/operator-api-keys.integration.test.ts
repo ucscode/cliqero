@@ -503,7 +503,12 @@ suite("operator API-key administration", () => {
       scopes: [],
       createdBy: actor.id,
     });
-    await app.apiKeys.revoke(previouslyRevoked.id, allowedTarget.id);
+    await app.apiKeys.update(previouslyRevoked.id, {
+      name: previouslyRevoked.name,
+      scopes: previouslyRevoked.scopes,
+      expiresAt: previouslyRevoked.expiresAt,
+      status: "revoked",
+    });
 
     const api = sessionApi(actor.id, ["api_keys.manage"]);
     const response = await api.fetch(

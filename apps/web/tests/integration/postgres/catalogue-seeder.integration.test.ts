@@ -26,7 +26,8 @@ suite("development free catalogue seeder", () => {
       password: "correct-horse-battery",
       country: "NG",
     });
-    const paid = await app.listingService.createPublished(seller, {
+    const paid = await app.listingService.create(seller, {
+      state: "published",
       title: "Paid catalogue fixture",
       shortDescription: "A paid listing remains supported.",
       longDescription: "A paid resource for the seed regression.",

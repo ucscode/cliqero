@@ -39,7 +39,8 @@ suite("withdrawal lifecycle", () => {
       password: "correct-horse-battery",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Withdrawable",
       shortDescription: "Fund a withdrawal flow",
       longDescription: "Detailed withdrawal listing.",
@@ -75,7 +76,7 @@ suite("withdrawal lifecycle", () => {
   }
   it("reserves available funds atomically and blocks pending funds", async () => {
     const { seller, destinationId } = await setup();
-    const first = await app.withdrawals.request({
+    const first = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 8000n,
       currency: "USD",
@@ -84,7 +85,7 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await expect(
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 3000n,
         currency: "USD",
@@ -94,7 +95,7 @@ suite("withdrawal lifecycle", () => {
       }),
     ).rejects.toThrow("Insufficient available funds");
     await expect(
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 8000n,
         currency: "USD",
@@ -115,7 +116,7 @@ suite("withdrawal lifecycle", () => {
       earning_to_funding: { enabled: true, percentage: 1, maximum_amount_minor: 500 },
     });
     const treasuryBefore = (await app.treasuryRepository.summary()).balanceMinor;
-    const withdrawal = await app.withdrawals.request({
+    const withdrawal = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 5_000n,
       currency: "USD",
@@ -128,7 +129,7 @@ suite("withdrawal lifecycle", () => {
       netAmount: { minorAmount: 5_000n },
     });
     activeFees = enabledFees;
-    await app.withdrawals.approve(seller.id, withdrawal.id);
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
     await app.withdrawals.complete(seller.id, withdrawal.id);
     expect(await app.withdrawalRepository.findById(withdrawal.id)).toMatchObject({
       fee: { minorAmount: 0n },
@@ -146,7 +147,7 @@ suite("withdrawal lifecycle", () => {
     const { seller, destinationId } = await setup();
 
     await expect(
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 10001n,
         currency: "USD",
@@ -177,7 +178,7 @@ suite("withdrawal lifecycle", () => {
     const second = await setup();
 
     await expect(
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: second.seller.id,
         amountMinor: 1000n,
         currency: "USD",
@@ -187,7 +188,7 @@ suite("withdrawal lifecycle", () => {
       }),
     ).rejects.toThrow("Withdrawal destination not found");
 
-    const firstWithdrawal = await app.withdrawals.request({
+    const firstWithdrawal = await app.withdrawals.create({
       accountId: first.seller.id,
       amountMinor: 1000n,
       currency: "USD",
@@ -195,7 +196,7 @@ suite("withdrawal lifecycle", () => {
       idempotencyKey: "same-key-different-accounts",
       correlationId: newId(),
     });
-    const secondWithdrawal = await app.withdrawals.request({
+    const secondWithdrawal = await app.withdrawals.create({
       accountId: second.seller.id,
       amountMinor: 1000n,
       currency: "USD",
@@ -211,7 +212,7 @@ suite("withdrawal lifecycle", () => {
   it("paginates account history by stable keyset without overlap and remains account-scoped", async () => {
     const { seller, buyer, destinationId } = await setup();
     for (let index = 0; index < 3; index += 1) {
-      await app.withdrawals.request({
+      await app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 100n,
         currency: "USD",
@@ -237,7 +238,7 @@ suite("withdrawal lifecycle", () => {
   });
   it("snapshots destination facts and leaves idempotent retries bound to the original destination ID", async () => {
     const { seller, destinationId } = await setup();
-    const first = await app.withdrawals.request({
+    const first = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
@@ -247,7 +248,7 @@ suite("withdrawal lifecycle", () => {
     });
     const firstAccount = first.destination.fields.find((field) => field.name === "account_number");
     expect(firstAccount?.value).toBe("0123456789");
-    await app.withdrawals.approve(seller.id, first.id);
+    await app.withdrawals.update(seller.id, first.id, { state: "approved" });
     await expect(
       app.database.query(
         `update withdrawal_capability.withdrawals set destination_name='mutated' where uuid=$1`,
@@ -258,7 +259,7 @@ suite("withdrawal lifecycle", () => {
     await app.withdrawalDestinations.update(seller.id, destinationId, {
       values: { bank_name: "Changed bank", account_number: "9999999999", account_name: "Changed" },
     });
-    const retry = await app.withdrawals.request({
+    const retry = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
@@ -270,7 +271,7 @@ suite("withdrawal lifecycle", () => {
       "0123456789",
     );
 
-    const second = await app.withdrawals.request({
+    const second = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
@@ -286,7 +287,7 @@ suite("withdrawal lifecycle", () => {
       app.withdrawalDestinations.resolveForWithdrawal(seller.id, destinationId),
     ).rejects.toThrow("archived");
     await expect(
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 1000n,
         currency: "USD",
@@ -296,7 +297,7 @@ suite("withdrawal lifecycle", () => {
       }),
     ).resolves.toMatchObject({ id: first.id });
     await expect(
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 1000n,
         currency: "USD",
@@ -313,7 +314,7 @@ suite("withdrawal lifecycle", () => {
   });
   it("rejects semantic idempotency-key reuse for a different withdrawal", async () => {
     const { seller, destinationId } = await setup();
-    const first = await app.withdrawals.request({
+    const first = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
@@ -322,7 +323,7 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await expect(
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 2000n,
         currency: "USD",
@@ -332,7 +333,7 @@ suite("withdrawal lifecycle", () => {
       }),
     ).rejects.toThrow("already used for another request");
     await expect(
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 1000n,
         currency: "USD",
@@ -351,7 +352,7 @@ suite("withdrawal lifecycle", () => {
     const { seller, destinationId } = await setup();
     const idempotencyKey = "concurrent-same-key";
     const results = await Promise.all([
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 4000n,
         currency: "USD",
@@ -359,7 +360,7 @@ suite("withdrawal lifecycle", () => {
         idempotencyKey,
         correlationId: newId(),
       }),
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 4000n,
         currency: "USD",
@@ -379,7 +380,7 @@ suite("withdrawal lifecycle", () => {
   it("prevents concurrent overspending and supports reject/release and manual completion", async () => {
     const { seller, destinationId } = await setup();
     const results = await Promise.allSettled([
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 8000n,
         currency: "USD",
@@ -387,7 +388,7 @@ suite("withdrawal lifecycle", () => {
         idempotencyKey: "wa",
         correlationId: newId(),
       }),
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 8000n,
         currency: "USD",
@@ -401,13 +402,18 @@ suite("withdrawal lifecycle", () => {
       results.find((r) => r.status === "fulfilled") as PromiseFulfilledResult<any>
     ).value;
     const treasuryBeforeUnpaidOutcomes = (await app.treasuryRepository.summary()).balanceMinor;
-    await app.withdrawals.reject(seller.id, withdrawal.id, "manual rejection");
-    await app.withdrawals.reject(seller.id, withdrawal.id, "duplicate").catch(() => undefined);
+    await app.withdrawals.update(seller.id, withdrawal.id, {
+      state: "rejected",
+      reason: "manual rejection",
+    });
+    await app.withdrawals
+      .update(seller.id, withdrawal.id, { state: "rejected", reason: "duplicate" })
+      .catch(() => undefined);
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(0n);
     expect((await app.treasuryRepository.summary()).balanceMinor).toBe(
       treasuryBeforeUnpaidOutcomes - (withdrawal.fee?.minorAmount ?? 0n),
     );
-    const completed = await app.withdrawals.request({
+    const completed = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 5000n,
       currency: "USD",
@@ -415,7 +421,7 @@ suite("withdrawal lifecycle", () => {
       idempotencyKey: "wc",
       correlationId: newId(),
     });
-    await app.withdrawals.approve(seller.id, completed.id);
+    await app.withdrawals.update(seller.id, completed.id, { state: "approved" });
     await app.withdrawals.complete(seller.id, completed.id, {
       externalReference: "manual-transfer-001",
       note: "Paid after manual bank review",
@@ -453,7 +459,7 @@ suite("withdrawal lifecycle", () => {
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(0n);
     expect((await app.fundsReservation.summarize(seller.id))[0].completedMinor).toBe(5000n);
     await expect(
-      app.withdrawals.request({
+      app.withdrawals.create({
         accountId: seller.id,
         amountMinor: 5001n,
         currency: "USD",
@@ -465,7 +471,7 @@ suite("withdrawal lifecycle", () => {
   });
   it("cancels a requested withdrawal and releases its reservation", async () => {
     const { seller, destinationId } = await setup();
-    const withdrawal = await app.withdrawals.request({
+    const withdrawal = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
@@ -517,7 +523,7 @@ suite("withdrawal lifecycle", () => {
     const initialFee = created.fee!.minorAmount;
     expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initialAvailable - 5000n);
 
-    const edited = await app.withdrawals.updateByOperator(seller.id, created.id, {
+    const edited = await app.withdrawals.update(seller.id, created.id, {
       amountMinor: "4000",
       destinationId: secondDestination.id,
       state: "requested",
@@ -533,7 +539,7 @@ suite("withdrawal lifecycle", () => {
     expect((await app.treasuryRepository.summary()).balanceMinor).toBe(edited.fee!.minorAmount);
     expect(edited.fee!.minorAmount).not.toBe(initialFee);
 
-    const approved = await app.withdrawals.updateByOperator(seller.id, created.id, {
+    const approved = await app.withdrawals.update(seller.id, created.id, {
       amountMinor: "4000",
       destinationId: secondDestination.id,
       state: "approved",
@@ -541,21 +547,21 @@ suite("withdrawal lifecycle", () => {
     });
     expect(approved.state).toBe("approved");
     await expect(
-      app.withdrawals.updateByOperator(seller.id, created.id, {
+      app.withdrawals.update(seller.id, created.id, {
         amountMinor: "3000",
         destinationId: secondDestination.id,
         state: "requested",
         reason: "",
       }),
     ).rejects.toThrow("Amount and destination are locked after approval");
-    await expect(app.withdrawals.deleteByOperator(seller.id, created.id)).resolves.toEqual({
+    await expect(app.withdrawals.delete(seller.id, created.id)).resolves.toEqual({
       id: created.id,
       deleted: true,
     });
     expect(await app.withdrawalRepository.findById(created.id)).toBeNull();
     expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initialAvailable);
 
-    const deletable = await app.withdrawals.request({
+    const deletable = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 2000n,
       currency: "USD",
@@ -564,7 +570,7 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     const treasuryBeforeDelete = (await app.treasuryRepository.summary()).balanceMinor;
-    await app.withdrawals.deleteByOperator(seller.id, deletable.id);
+    await app.withdrawals.delete(seller.id, deletable.id);
     expect(await app.withdrawalRepository.findById(deletable.id)).toBeNull();
     expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initialAvailable);
     const reservation = await app.database.query<{ count: string }>(
@@ -577,7 +583,7 @@ suite("withdrawal lifecycle", () => {
       treasuryBeforeDelete - (deletable.fee?.minorAmount ?? 0n),
     );
 
-    const completed = await app.withdrawals.request({
+    const completed = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
@@ -585,9 +591,9 @@ suite("withdrawal lifecycle", () => {
       idempotencyKey: newId(),
       correlationId: newId(),
     });
-    await app.withdrawals.approve(seller.id, completed.id);
+    await app.withdrawals.update(seller.id, completed.id, { state: "approved" });
     await app.withdrawals.complete(seller.id, completed.id, { externalReference: "payout-proof" });
-    await expect(app.withdrawals.deleteByOperator(seller.id, completed.id)).resolves.toEqual({
+    await expect(app.withdrawals.delete(seller.id, completed.id)).resolves.toEqual({
       id: completed.id,
       deleted: true,
     });
@@ -608,7 +614,7 @@ suite("withdrawal lifecycle", () => {
     const { seller, destinationId } = await setup();
     const initial = await app.fundsReservation.available(seller.id, "USD");
 
-    const released = await app.withdrawals.request({
+    const released = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 1100n,
       currency: "USD",
@@ -617,10 +623,13 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initial - 1100n);
-    await app.withdrawals.reject(seller.id, released.id, "release reservation");
+    await app.withdrawals.update(seller.id, released.id, {
+      state: "rejected",
+      reason: "release reservation",
+    });
     expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initial);
 
-    const completed = await app.withdrawals.request({
+    const completed = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 1100n,
       currency: "USD",
@@ -628,13 +637,13 @@ suite("withdrawal lifecycle", () => {
       idempotencyKey: "availability-complete",
       correlationId: newId(),
     });
-    await app.withdrawals.approve(seller.id, completed.id);
+    await app.withdrawals.update(seller.id, completed.id, { state: "approved" });
     await app.withdrawals.complete(seller.id, completed.id);
     expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initial - 1100n);
   });
   it("does not allow cancellation after approval and keeps ownership immutable", async () => {
     const { seller, destinationId } = await setup();
-    const withdrawal = await app.withdrawals.request({
+    const withdrawal = await app.withdrawals.create({
       accountId: seller.id,
       amountMinor: 1000n,
       currency: "USD",
@@ -642,7 +651,7 @@ suite("withdrawal lifecycle", () => {
       idempotencyKey: "wx",
       correlationId: newId(),
     });
-    await app.withdrawals.approve(seller.id, withdrawal.id);
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
     await expect(app.withdrawals.cancel(seller.id, withdrawal.id)).rejects.toThrow(
       "cannot be cancelled",
     );

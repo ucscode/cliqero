@@ -4,6 +4,7 @@ import type { AuditRecorder } from "@/application/shared/audit";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { siteConfig } from "@/config/site";
 import { PublicApplicationError } from "@/kernel/errors";
+import { CrudService } from "@/kernel/crud";
 
 export interface OperatorAccountReader {
   get(accountId: string): Promise<{
@@ -53,7 +54,31 @@ export type OperatorAccountProfileUpdate = {
 };
 
 /** Owns supported operator account creation and profile-update workflows. */
-export class OperatorAccountManagementService {
+type OperatorAccountCreateInput = {
+  email: string;
+  username: string;
+  country?: string | null;
+  credentialSetup: { mode: "email" } | { mode: "password"; password: string };
+  notifyUser: boolean;
+};
+
+type OperatorAccountCreateResult = {
+  account: Awaited<ReturnType<OperatorAccountReader["get"]>>;
+  credentialSetupMode: "email" | "password";
+  passwordSetupEmailRequested: boolean;
+  accountCreatedEmailRequested: boolean;
+};
+
+export class OperatorAccountManagementService extends CrudService<
+  [actorId: string, input: OperatorAccountCreateInput],
+  [accountId: string],
+  [actorId: string, accountId: string, input: OperatorAccountProfileUpdate],
+  [actorId: string, accountId: string],
+  Promise<OperatorAccountCreateResult>,
+  ReturnType<OperatorAccountReader["get"]>,
+  ReturnType<OperatorAccountReader["get"]>,
+  Promise<void>
+> {
   constructor(
     private readonly authentication: AuthenticationService,
     private readonly profiles: ProfileService,
@@ -61,18 +86,18 @@ export class OperatorAccountManagementService {
     private readonly audit: AuditRecorder,
     private readonly uow: UnitOfWork,
     private readonly deletion: OperatorAccountDeletionRepository,
-  ) {}
-
-  async create(
-    actorId: string,
-    input: {
-      email: string;
-      username: string;
-      country?: string | null;
-      credentialSetup: { mode: "email" } | { mode: "password"; password: string };
-      notifyUser: boolean;
-    },
   ) {
+    super();
+  }
+
+  override async get(accountId: string) {
+    return this.accounts.get(accountId);
+  }
+
+  override async create(
+    actorId: string,
+    input: OperatorAccountCreateInput,
+  ): Promise<OperatorAccountCreateResult> {
     const { credentialSetup, notifyUser, ...identity } = input;
     const account =
       credentialSetup.mode === "password"
@@ -117,7 +142,7 @@ export class OperatorAccountManagementService {
     };
   }
 
-  async update(actorId: string, accountId: string, input: OperatorAccountProfileUpdate) {
+  override async update(actorId: string, accountId: string, input: OperatorAccountProfileUpdate) {
     return this.uow.transaction(async () => {
       const previous = await this.accounts.get(accountId);
       await this.profiles.update(accountId, input);
@@ -134,7 +159,7 @@ export class OperatorAccountManagementService {
     });
   }
 
-  async delete(actorId: string, accountId: string): Promise<void> {
+  override async delete(actorId: string, accountId: string): Promise<void> {
     if (actorId === accountId)
       throw new PublicApplicationError(
         "You cannot delete the account used for this request.",

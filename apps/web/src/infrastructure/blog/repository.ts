@@ -3,19 +3,13 @@ import slugify from "slugify";
 import { newId } from "@/kernel/ids";
 import {
   blogRenderablePostSchema,
-  BlogCategoryConflictError,
-  BlogCategoryInUseError,
   type BlogCategory,
   type BlogPost,
   type BlogRenderablePost,
 } from "@/modules/blog/domain/blog";
-import type {
-  BlogCategoryInput,
-  BlogListOptions,
-  BlogPreview,
-  BlogRepository,
-  BlogSaveInput,
-} from "@/application/blog/contracts";
+import { BlogRepository } from "@/application/blog/contracts";
+import { SqliteBlogCategoryRepository } from "./category-repository";
+import type { BlogListOptions, BlogPreview, BlogSaveInput } from "@/application/blog/contracts";
 import { PublicApplicationError } from "@/kernel/errors";
 
 type Row = Record<string, any>;
@@ -41,8 +35,16 @@ function decodeSortCursor(token: string | undefined, sort: string, direction: st
 }
 const date = (value: number | null | undefined) => (value == null ? null : new Date(Number(value)));
 
-export class SqliteBlogRepository implements BlogRepository {
-  constructor(private readonly db: Database.Database) {}
+export class SqliteBlogRepository extends BlogRepository {
+  private readonly categoriesRepository: SqliteBlogCategoryRepository;
+
+  constructor(private readonly db: Database.Database) {
+    super();
+    this.categoriesRepository = new SqliteBlogCategoryRepository(db);
+  }
+  get categoryRepository() {
+    return this.categoriesRepository;
+  }
   transaction<T>(operation: () => T): T {
     return this.db.transaction(operation)();
   }
@@ -91,7 +93,7 @@ export class SqliteBlogRepository implements BlogRepository {
     this.replaceRelations(id, input);
     return this.get(id)!;
   }
-  save(id: string, input: BlogSaveInput, authorAccountId: string | null): BlogPost | null {
+  update(id: string, input: BlogSaveInput, authorAccountId: string | null): BlogPost | null {
     const current = this.get(id);
     if (!current) return null;
     const now = Date.now();
@@ -132,6 +134,9 @@ export class SqliteBlogRepository implements BlogRepository {
       )
       .get(idOrSlug, idOrSlug) as Row | undefined;
     return row ? this.mapPost(row) : null;
+  }
+  findById(id: string) {
+    return this.get(id);
   }
   list(options: BlogListOptions = {}) {
     const limit = Math.min(Math.max(options.limit ?? 12, 1), 50);
@@ -198,53 +203,6 @@ export class SqliteBlogRepository implements BlogRepository {
     return this.db
       .prepare("select id,slug,name from blog_categories order by name")
       .all() as BlogCategory[];
-  }
-  createCategory(input: { name: string; slug: string }): BlogCategory {
-    const id = newId();
-    try {
-      this.db
-        .prepare("insert into blog_categories(id,slug,name) values(?,?,?)")
-        .run(id, input.slug, input.name);
-    } catch (error) {
-      this.throwCategoryConflict(error);
-    }
-    return { id, ...input };
-  }
-  updateCategory(id: string, input: BlogCategoryInput): BlogCategory | null {
-    const current = this.db
-      .prepare("select id,slug,name from blog_categories where id=?")
-      .get(id) as BlogCategory | undefined;
-    if (!current) return null;
-    const next = { name: input.name ?? current.name, slug: input.slug ?? current.slug };
-    try {
-      this.db
-        .prepare("update blog_categories set name=?,slug=? where id=?")
-        .run(next.name, next.slug, id);
-    } catch (error) {
-      this.throwCategoryConflict(error);
-    }
-    return { id, ...next };
-  }
-  deleteCategory(id: string) {
-    try {
-      this.db.prepare("delete from blog_categories where id=?").run(id);
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("FOREIGN KEY constraint failed"))
-        throw new BlogCategoryInUseError();
-      throw error;
-    }
-  }
-  deleteCategoryForRoot(id: string) {
-    this.transaction(() => {
-      this.db.prepare("delete from blog_post_categories where category_id=?").run(id);
-      if (!this.db.prepare("delete from blog_categories where id=?").run(id).changes)
-        throw new Error("Blog category not found");
-    });
-  }
-  categoryIsUsed(id: string) {
-    return Boolean(
-      this.db.prepare("select 1 from blog_post_categories where category_id=? limit 1").get(id),
-    );
   }
   tags() {
     return this.db.prepare("select id,slug,name from blog_tags order by name").all();
@@ -351,11 +309,5 @@ export class SqliteBlogRepository implements BlogRepository {
       }
       this.db.prepare("insert into blog_post_tags(post_id,tag_id) values(?,?)").run(id, tag.id);
     }
-  }
-  private throwCategoryConflict(error: unknown): never {
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("blog_categories.name")) throw new BlogCategoryConflictError("name");
-    if (message.includes("blog_categories.slug")) throw new BlogCategoryConflictError("slug");
-    throw error;
   }
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PublicApplicationError } from "@/kernel/errors";
+import { CrudRepository } from "@/kernel/crud";
 
 export const listingCategoryNameSchema = z.string().trim().min(1).max(100);
 export const listingCategoryIdSchema = z.uuid();
@@ -13,15 +14,20 @@ export const listingCategorySlugSchema = z
 export type ListingCategory = Readonly<{ id: string; name: string; slug: string }>;
 export type ListingCategoryInput = { name?: string; slug?: string };
 
-export interface ListingCategoryRepository {
-  list(): Promise<readonly ListingCategory[]>;
-  findByIds(ids: readonly string[]): Promise<readonly ListingCategory[]>;
-  findById(id: string): Promise<ListingCategory | null>;
-  create(input: { name: string; slug: string }): Promise<ListingCategory>;
-  update(id: string, input: ListingCategoryInput): Promise<ListingCategory | null>;
-  delete(id: string): Promise<void>;
-  removeAssignmentsForRoot(id: string): Promise<void>;
-  isUsed(id: string): Promise<boolean>;
+export abstract class ListingCategoryRepository extends CrudRepository<
+  [input: { name: string; slug: string }],
+  [id: string],
+  [id: string, input: ListingCategoryInput],
+  [id: string],
+  Promise<ListingCategory>,
+  Promise<ListingCategory | null>,
+  Promise<ListingCategory | null>,
+  Promise<void>
+> {
+  abstract list(): Promise<readonly ListingCategory[]>;
+  abstract findByIds(ids: readonly string[]): Promise<readonly ListingCategory[]>;
+  abstract removeAssignmentsForRoot(id: string): Promise<void>;
+  abstract isUsed(id: string): Promise<boolean>;
 }
 
 export class ListingCategoryNotFoundError extends PublicApplicationError {

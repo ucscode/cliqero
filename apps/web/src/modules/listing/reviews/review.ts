@@ -1,5 +1,6 @@
 import { DomainInvariantError } from "@/kernel/errors";
 import type { Id } from "@/kernel/ids";
+import { CrudRepository } from "@/kernel/crud";
 
 export type ReviewStatus = "pending" | "approved" | "rejected";
 
@@ -16,35 +17,43 @@ export type ListingReview = Readonly<{
   moderatedBy: Id | null;
 }>;
 
-export interface ListingReviewRepository {
-  findById(id: Id): Promise<OperatorListingReview | null>;
-  findMine(listingId: Id, accountId: Id): Promise<ListingReview | null>;
-  savePending(input: {
-    id: Id;
-    listingId: Id;
-    accountId: Id;
-    rating: number;
-    body: string;
-  }): Promise<ListingReview>;
-  moderate(id: Id, status: "approved" | "rejected", moderatorId: Id): Promise<ListingReview | null>;
-  update(
+export abstract class ListingReviewRepository extends CrudRepository<
+  [
+    input: {
+      id: Id;
+      listingId: Id;
+      accountId: Id;
+      rating: number;
+      body: string;
+    },
+  ],
+  [id: Id],
+  [id: Id, input: { rating: number; body: string; status: ReviewStatus; moderatorId: Id }],
+  [id: Id],
+  Promise<ListingReview>,
+  Promise<OperatorListingReview | null>,
+  Promise<OperatorListingReview | null>,
+  Promise<boolean>
+> {
+  abstract findById(id: Id): Promise<OperatorListingReview | null>;
+  abstract findMine(listingId: Id, accountId: Id): Promise<ListingReview | null>;
+  abstract update(
     id: Id,
     input: { rating: number; body: string; status: ReviewStatus; moderatorId: Id },
   ): Promise<OperatorListingReview | null>;
-  delete(id: Id): Promise<boolean>;
-  queryVisible(input: {
+  abstract queryVisible(input: {
     listingId: Id;
     accountId?: Id;
     cursor?: string;
     limit: number;
   }): Promise<{ items: readonly PublicListingReview[]; nextCursor: string | null }>;
-  queryOperator(input: {
+  abstract queryOperator(input: {
     status?: ReviewStatus;
     listingId?: Id;
     cursor?: string;
     limit: number;
   }): Promise<{ items: readonly OperatorListingReview[]; nextCursor: string | null }>;
-  summariesForListings(listingIds: readonly Id[]): Promise<Map<Id, RatingSummary>>;
+  abstract summariesForListings(listingIds: readonly Id[]): Promise<Map<Id, RatingSummary>>;
 }
 
 export type RatingSummary = Readonly<{ average: number; count: number }>;

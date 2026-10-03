@@ -60,7 +60,12 @@ suite("headless API principal and hierarchy read model", () => {
         )
       )?.kind,
     ).toBe("api_key");
-    await app.apiKeys.revoke(created.id);
+    await app.apiKeys.update(created.id, {
+      name: created.name,
+      scopes: created.scopes,
+      expiresAt: created.expiresAt,
+      status: "revoked",
+    });
     expect(await app.apiKeys.authenticate(created.secret)).toBeNull();
     const expired = await app.apiKeys.create({
       accountId: owner.id,

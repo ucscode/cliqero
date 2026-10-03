@@ -538,6 +538,7 @@ utilities. They are not the default architecture for domain workflows.
 When several implementations share a contract, prefer an interface and, when
 shared implementation exists, an abstract base class or clear composition
 boundary.
+
 ### CRUD services and repositories use shared abstract bases
 
 Ordinary CRUD resources must conform to a common object-oriented contract. Use

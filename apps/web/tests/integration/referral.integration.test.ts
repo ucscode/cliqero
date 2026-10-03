@@ -88,7 +88,7 @@ suite("referral graph and trusted purchase attribution", () => {
       currency: "USD",
       destination: "https://example.com/promotable",
     });
-    await app.listingService.publish(promoter, listing.id);
+    await app.listingService.update(promoter, listing.id, { state: "published" });
     const otherListing = await app.listingService.create(other, {
       title: "Another catalogue item",
       shortDescription: "A separate catalogue item",
@@ -97,7 +97,7 @@ suite("referral graph and trusted purchase attribution", () => {
       currency: "USD",
       destination: "https://example.com/other",
     });
-    await app.listingService.publish(other, otherListing.id);
+    await app.listingService.update(other, otherListing.id, { state: "published" });
     const url = await app.referralAttribution.urlFor(other.id, listing.id);
     expect(url).toContain(`/r/${other.id}/${listing.id}`);
     await app.profiles.update(other.id, { username: "renamed_promoter" });
@@ -581,7 +581,8 @@ suite("referral graph and trusted purchase attribution", () => {
     const seller = await account("seller"),
       buyer = await account("buyer"),
       referrer = await account("promoter");
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Referral listing",
       shortDescription: "Shareable referral listing",
       longDescription: "Detailed referral listing.",

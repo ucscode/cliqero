@@ -174,7 +174,7 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
     try {
       const results = await runOperatorBulkAction({
         resource: "listings",
-        action: "set-state",
+        action: "update",
         state: action === "publish" ? "published" : action === "archive" ? "archived" : "draft",
         ids: listings.map((listing) => listing.id),
       });

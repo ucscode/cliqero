@@ -1,26 +1,18 @@
 import { createHash } from "node:crypto";
 import slugify from "slugify";
 import { newId } from "@/kernel/ids";
+import { CrudService } from "@/kernel/crud";
+import { BlogCategoryService } from "./categories";
 import {
-  blogCategoryNameSchema,
-  blogCategorySlugSchema,
   blogPostInputSchema,
-  BlogCategoryConflictError,
-  BlogCategoryInUseError,
   BlogCategoryNotFoundError,
   BlogPostNotFoundError,
   BlogSlugConflictError,
-  type BlogCategory,
   type BlogPost,
   type BlogPostInput,
   type BlogRenderablePost,
 } from "@/modules/blog/domain/blog";
-import type {
-  BlogCategoryInput,
-  BlogListOptions,
-  BlogRepository,
-  BlogSaveInput,
-} from "@/application/blog/contracts";
+import type { BlogListOptions, BlogRepository, BlogSaveInput } from "@/application/blog/contracts";
 
 const PREVIEW_LIFETIME_MS = 60 * 60 * 1000;
 const hashRequest = (value: unknown) =>
@@ -28,10 +20,28 @@ const hashRequest = (value: unknown) =>
 const slugBase = (value: string) => slugify(value, { lower: true, strict: true, trim: true });
 const normalize = (value: string) => value.trim().replace(/\s+/g, " ");
 
-export class BlogService {
-  constructor(private readonly repository: BlogRepository) {}
+export class BlogService extends CrudService<
+  [input: BlogPostInput, authorAccountId: string | null, idempotencyKey?: string],
+  [idOrSlug: string, publishedOnly?: boolean],
+  [id: string, input: Partial<BlogPostInput>, authorAccountId: string | null],
+  [id: string],
+  BlogPost,
+  BlogPost | null,
+  BlogPost,
+  void
+> {
+  readonly categoryService: BlogCategoryService;
 
-  create(input: BlogPostInput, authorAccountId: string | null, idempotencyKey?: string) {
+  constructor(private readonly repository: BlogRepository) {
+    super();
+    this.categoryService = new BlogCategoryService(repository.categoryRepository);
+  }
+
+  override create(
+    input: BlogPostInput,
+    authorAccountId: string | null,
+    idempotencyKey?: string,
+  ): BlogPost {
     const parsed = blogPostInputSchema.parse(input);
     const save = this.prepare(parsed);
     const requestHash = hashRequest({ ...parsed, author_account_id: authorAccountId });
@@ -57,7 +67,11 @@ export class BlogService {
     });
   }
 
-  save(id: string, input: Partial<BlogPostInput>, authorAccountId: string | null) {
+  override update(
+    id: string,
+    input: Partial<BlogPostInput>,
+    authorAccountId: string | null,
+  ): BlogPost {
     return this.repository.transaction(() => {
       const current = this.repository.get(id);
       if (!current) throw new BlogPostNotFoundError();
@@ -79,17 +93,17 @@ export class BlogService {
       const result = this.prepare(merged);
       result.slug = parsed.slug ? this.requireAvailableSlug(parsed.slug, id) : current.slug;
       this.requireCategories(result.categoryIds);
-      const post = this.repository.save(id, result, authorAccountId);
+      const post = this.repository.update(id, result, authorAccountId);
       if (!post) throw new BlogPostNotFoundError();
       return post;
     });
   }
 
-  delete(id: string) {
+  override delete(id: string) {
     if (!this.repository.get(id)) throw new BlogPostNotFoundError();
     this.repository.delete(id);
   }
-  get(idOrSlug: string, publishedOnly = false): BlogPost | null {
+  override get(idOrSlug: string, publishedOnly = false): BlogPost | null {
     return this.repository.get(idOrSlug, publishedOnly);
   }
   list(options: BlogListOptions = {}) {
@@ -131,41 +145,6 @@ export class BlogService {
     this.repository.deletePreview(id, accountId);
   }
 
-  createCategory(name: string, suppliedSlug?: string): BlogCategory {
-    return this.repository.transaction(() => {
-      const normalized = blogCategoryNameSchema.parse(name);
-      const slug =
-        suppliedSlug === undefined || suppliedSlug.trim() === ""
-          ? this.uniqueCategorySlug(slugBase(normalized) || "category")
-          : blogCategorySlugSchema.parse(suppliedSlug);
-      this.ensureCategoryValuesAvailable(normalized, slug);
-      return this.repository.createCategory({ name: normalized, slug });
-    });
-  }
-  updateCategory(id: string, input: BlogCategoryInput): BlogCategory {
-    return this.repository.transaction(() => {
-      const current = this.repository.categories().find((c) => c.id === id);
-      if (!current) throw new BlogCategoryNotFoundError();
-      const name = input.name === undefined ? undefined : blogCategoryNameSchema.parse(input.name);
-      const slug = input.slug === undefined ? undefined : blogCategorySlugSchema.parse(input.slug);
-      this.ensureCategoryValuesAvailable(name ?? current.name, slug ?? current.slug, id);
-      const category = this.repository.updateCategory(id, { name, slug });
-      if (!category) throw new BlogCategoryNotFoundError();
-      return category;
-    });
-  }
-  deleteCategory(id: string): void {
-    if (!this.repository.categories().some((c) => c.id === id))
-      throw new BlogCategoryNotFoundError();
-    if (this.repository.categoryIsUsed(id)) throw new BlogCategoryInUseError();
-    this.repository.deleteCategory(id);
-  }
-  deleteCategoryForRoot(id: string): void {
-    if (!this.repository.categories().some((category) => category.id === id))
-      throw new BlogCategoryNotFoundError();
-    this.repository.deleteCategoryForRoot(id);
-  }
-
   private prepare(input: BlogPostInput): BlogSaveInput {
     return {
       slug: input.slug ?? (slugBase(input.title) || "post"),
@@ -191,22 +170,9 @@ export class BlogService {
     while (this.repository.findSlugOwner(candidate)) candidate = `${base || "post"}-${++n}`;
     return candidate;
   }
-  private uniqueCategorySlug(base: string) {
-    let candidate = base,
-      n = 1;
-    while (this.repository.categories().some((c) => c.slug === candidate))
-      candidate = `${base}-${++n}`;
-    return candidate;
-  }
   private requireAvailableSlug(slug: string, exceptId?: string) {
     const owner = this.repository.findSlugOwner(slug);
     if (owner && owner !== exceptId) throw new BlogSlugConflictError();
     return slug;
-  }
-  private ensureCategoryValuesAvailable(name: string, slug: string, exceptId?: string) {
-    const existing = this.repository.categories().filter((c) => c.id !== exceptId);
-    if (existing.some((c) => c.name.toLowerCase() === name.toLowerCase()))
-      throw new BlogCategoryConflictError("name");
-    if (existing.some((c) => c.slug === slug)) throw new BlogCategoryConflictError("slug");
   }
 }

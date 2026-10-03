@@ -19,7 +19,7 @@ describe("OperatorBulkWorkflow", () => {
     await expect(
       workflow.execute(actor, {
         resource: "reviews",
-        action: "moderate",
+        action: "update",
         status: "approved",
         ids: ["review-1", "review-2", "review-1"],
       }),
@@ -47,7 +47,7 @@ describe("OperatorBulkWorkflow", () => {
     await expect(
       workflow.execute(actor, {
         resource: "reviews",
-        action: "moderate",
+        action: "update",
         status: "rejected",
         ids: ["review-1"],
       }),
@@ -113,7 +113,7 @@ describe("OperatorBulkWorkflow", () => {
       operatorDistributions: { deleteForRoot: remove },
       operatorEarnings: { deleteForRoot: remove },
       earningsAdjustments: { deleteForRoot: remove },
-      withdrawals: { deleteByOperator: remove },
+      withdrawals: { delete: remove },
       operatorTreasury: { deleteForRoot: remove },
     } as never);
 

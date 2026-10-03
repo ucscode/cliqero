@@ -242,7 +242,10 @@ export function registerAccountManagementRoutes(
       const denied = requireCapabilityScope(c, p, "accounts.read", "accounts:read");
       if (denied) return denied;
       try {
-        return c.json(await container.operatorAccounts.get(c.req.valid("param").accountId), 200);
+        return c.json(
+          await container.operatorAccountManagement.get(c.req.valid("param").accountId),
+          200,
+        );
       } catch (error) {
         return domainError(c, error);
       }

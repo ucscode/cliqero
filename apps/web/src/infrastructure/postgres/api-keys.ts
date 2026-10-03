@@ -9,7 +9,10 @@ import {
 import type { QueryExecutor } from "./shared/database";
 import { assertApiScopes } from "@/modules/identity/api/scopes";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
-import type { ApiKeyRecord as IdentityApiKeyRecord } from "@/modules/identity/api/keys";
+import {
+  ApiKeyManagementRepository,
+  type ApiKeyRecord as IdentityApiKeyRecord,
+} from "@/modules/identity/api/keys";
 import { PublicApplicationError } from "@/kernel/errors";
 
 type ApiKeyCursor = {
@@ -209,13 +212,6 @@ export class PostgresApiKeyRepository {
     );
     return result.rows[0] ?? null;
   }
-  async revoke(id: string, accountId?: string) {
-    const result = await this.sql.query(
-      `update identity_capability.api_keys set revoked_at=now() where uuid=$1 and revoked_at is null and ($2::uuid is null or account_id=(select id from identity_capability.accounts where uuid=$2))`,
-      [id, accountId ?? null],
-    );
-    return (result.rowCount ?? 0) > 0;
-  }
   async update(
     id: string,
     input: {
@@ -290,13 +286,15 @@ export class PostgresApiKeyRepository {
     return result.rows[0] ?? null;
   }
 }
-export class ApiKeyService {
+export class ApiKeyService extends ApiKeyManagementRepository {
   constructor(
     private readonly repository: PostgresApiKeyRepository,
     private readonly sql: QueryExecutor,
     private readonly uow?: UnitOfWork,
     private readonly configuredEncryptionKey = process.env.API_KEY_ENCRYPTION_KEY,
-  ) {}
+  ) {
+    super();
+  }
   async create(input: {
     accountId: string;
     name: string;
@@ -348,11 +346,11 @@ export class ApiKeyService {
   listPage(input: Parameters<PostgresApiKeyRepository["listPage"]>[0]) {
     return this.repository.listPage(input);
   }
-  revoke(id: string, accountId?: string) {
-    return this.repository.revoke(id, accountId);
-  }
   find(id: string, accountId?: string) {
     return this.repository.findById(id, accountId);
+  }
+  findById(id: string) {
+    return this.repository.findById(id);
   }
   update(
     id: string,

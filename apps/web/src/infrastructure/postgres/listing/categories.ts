@@ -1,17 +1,17 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
-import type {
-  ListingCategoryInput,
-  ListingCategoryRepository,
-} from "@/modules/listing/category/category";
 import {
   ListingCategoryConflictError,
   ListingCategoryInUseError,
+  ListingCategoryRepository,
+  type ListingCategoryInput,
 } from "@/modules/listing/category/category";
 
 type CategoryRow = { id: string; name: string; slug: string };
 
-export class PostgresListingCategoryRepository implements ListingCategoryRepository {
-  constructor(private readonly sql: QueryExecutor) {}
+export class PostgresListingCategoryRepository extends ListingCategoryRepository {
+  constructor(private readonly sql: QueryExecutor) {
+    super();
+  }
 
   async list() {
     return (

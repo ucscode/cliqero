@@ -177,7 +177,7 @@ describe("authoritative Blog SQLite schema", () => {
     db.pragma("foreign_keys = ON");
     applyBlogMigrations(db, migrationDirectory);
     const repository = new SqliteBlogRepository(db);
-    const category = repository.createCategory({ name: "Guides", slug: "guides" });
+    const category = repository.categoryRepository.create({ name: "Guides", slug: "guides" });
     const post = repository.create(
       "post-1",
       {

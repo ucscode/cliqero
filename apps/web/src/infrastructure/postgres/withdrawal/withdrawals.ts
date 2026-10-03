@@ -2,10 +2,10 @@ import { Money } from "@/modules/money/money";
 import type { QueryExecutor } from "../shared/database";
 import type {
   Withdrawal,
-  WithdrawalRepository,
   WithdrawalState,
   DestinationField,
 } from "@/modules/withdrawal/withdrawal";
+import { WithdrawalRepository } from "@/modules/withdrawal/withdrawal";
 interface Row {
   id: string;
   cursor_id?: string;
@@ -31,8 +31,10 @@ interface Row {
   created_at: Date;
   updated_at: Date;
 }
-export class PostgresWithdrawalRepository implements WithdrawalRepository {
-  constructor(private readonly sql: QueryExecutor) {}
+export class PostgresWithdrawalRepository extends WithdrawalRepository {
+  constructor(private readonly sql: QueryExecutor) {
+    super();
+  }
   async findById(id: string) {
     return this.find("w.uuid=$1", [id]);
   }
@@ -99,13 +101,15 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
       ],
     );
   }
-  async updateMutable(value: Withdrawal) {
+  async update(value: Withdrawal, expectedState: WithdrawalState = value.state) {
     const result = await this.sql.query(
       `update withdrawal_capability.withdrawals
           set amount_minor=$2,fee_minor=$3,net_amount_minor=$4,currency=$5,
               saved_destination_id=$6,destination_method=$7,destination_method_name=$8,
-              destination_name=$9,destination_details=$10::jsonb,reason=$11,updated_at=now()
-        where uuid=$1 and state='requested'`,
+              destination_name=$9,destination_details=$10::jsonb,reason=$11,state=$12,
+              approved_at=case when $12='approved' then coalesce(approved_at,now()) else approved_at end,
+              updated_at=now()
+        where uuid=$1 and state=$13`,
       [
         value.id,
         value.amount.minorAmount.toString(),
@@ -118,11 +122,13 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
         value.destination.name,
         JSON.stringify(value.destination.fields),
         value.reason ?? null,
+        value.state,
+        expectedState,
       ],
     );
-    if (result.rowCount !== 1) throw new Error("Only requested withdrawals can be edited");
+    if (result.rowCount !== 1) throw new Error(`Invalid withdrawal update from ${expectedState}`);
   }
-  async deleteMutable(id: string) {
+  async delete(id: string) {
     const result = await this.sql.query(
       `delete from withdrawal_capability.withdrawals where uuid=$1 and state in ('requested','rejected','cancelled','failed')`,
       [id],
@@ -136,13 +142,6 @@ export class PostgresWithdrawalRepository implements WithdrawalRepository {
       [id],
     );
     if (result.rowCount !== 1) throw new Error("Withdrawal not found");
-  }
-  async transition(id: string, from: WithdrawalState, to: WithdrawalState, reason?: string) {
-    const result = await this.sql.query(
-      `update withdrawal_capability.withdrawals set state=$3,reason=coalesce($4,reason),updated_at=now(),approved_at=case when $3='approved' then now() else approved_at end,completed_at=case when $3='completed' then now() else completed_at end where uuid=$1 and state=$2`,
-      [id, from, to, reason ?? null],
-    );
-    if (result.rowCount !== 1) throw new Error(`Invalid withdrawal transition from ${from}`);
   }
   async complete(
     id: string,

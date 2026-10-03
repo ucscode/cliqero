@@ -277,8 +277,7 @@ function appWith(
       },
       withdrawals: {
         list: async () => ({ items: [], nextCursor: null }),
-        approve: async () => ({}),
-        reject: async () => ({}),
+        update: async (_actorId: string, _id: string, input: unknown) => ({ input }),
         cancel: async () => ({}),
         complete: async (_actorId: string, id: string, input: unknown) => ({ id, input }),
       },
@@ -295,10 +294,9 @@ function appWith(
       listingReviews: {
         visible: async () => ({ items: [], nextCursor: null }),
         mine: async () => null,
-        submit: async () => ({}),
+        create: async () => ({}),
         summariesForListings: async () => new Map(),
         operatorQueue: async () => ({ items: [], nextCursor: null }),
-        moderate: async () => ({}),
         update: async () => ({}),
         ...reviewOverrides,
       },
@@ -306,9 +304,9 @@ function appWith(
         queryCatalogue: async () => ({ items: [], nextCursor: null }),
         queryStorefront: async () => ({ items: [], nextCursor: null }),
         getOwner: async (_account: unknown, id: string) => ({ id }),
-        getCatalogue: async (id: string) => ({ id }),
-        setCatalogueState: vi.fn(async (_account: unknown, _id: string, state: string) => ({
-          state,
+        get: async (id: string) => ({ id }),
+        update: vi.fn(async (_account: unknown, _id: string, input: { state: string }) => ({
+          state: input.state,
         })),
       },
       integrations: { listForListing: async () => [] },
@@ -342,14 +340,22 @@ function appWith(
         }),
         deletePreview: () => {},
         delete: () => {},
-        createCategory: (name: string) => ({
-          id: "00000000-0000-4000-8000-000000000009",
-          name,
-          slug: "sample",
-        }),
-        updateCategory: (id: string, name: string) => ({ id, name, slug: "sample" }),
-        deleteCategory: () => {},
-        categoryIsUsed: () => false,
+        categoryService: {
+          create: (name: string) => ({
+            id: "00000000-0000-4000-8000-000000000009",
+            name,
+            slug: "sample",
+          }),
+          get: (id: string) => ({ id, name: "Sample", slug: "sample" }),
+          update: (id: string, input: Record<string, string>) => ({
+            id,
+            name: input.name ?? "Sample",
+            slug: input.slug ?? "sample",
+          }),
+          delete: () => {},
+          deleteForRoot: () => {},
+          ...((blogOverrides.categoryService as object | undefined) ?? {}),
+        },
         ...blogOverrides,
       },
     } as any,
@@ -787,8 +793,10 @@ describe("Hono API foundation", () => {
 
     for (const field of ["name", "slug"] as const) {
       const duplicate = await appWith(user, undefined, undefined, {
-        createCategory: () => {
-          throw new BlogCategoryConflictError(field);
+        categoryService: {
+          create: () => {
+            throw new BlogCategoryConflictError(field);
+          },
         },
       }).fetch(
         new Request("http://localhost/api/blog/categories", {

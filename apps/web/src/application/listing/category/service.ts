@@ -1,6 +1,7 @@
 import slugify from "slugify";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { AuditRecorder } from "@/application/shared/audit";
+import { CrudService } from "@/kernel/crud";
 import {
   ListingCategoryConflictError,
   ListingCategoryInUseError,
@@ -13,18 +14,42 @@ import {
   type ListingCategoryRepository,
 } from "@/modules/listing/category/category";
 
-export class ListingCategoryService {
+export class ListingCategoryService extends CrudService<
+  [name: string, suppliedSlug?: string],
+  [id: string],
+  [id: string, input: ListingCategoryInput],
+  [id: string],
+  Promise<ListingCategory>,
+  Promise<ListingCategory>,
+  Promise<ListingCategory>,
+  Promise<void>
+> {
   constructor(
     private readonly repository: ListingCategoryRepository,
     private readonly uow: UnitOfWork,
     private readonly audit?: AuditRecorder,
-  ) {}
+  ) {
+    super();
+  }
+
+  override create(name: string, suppliedSlug?: string): Promise<ListingCategory> {
+    return this.uow.transaction(async () => {
+      const normalizedName = listingCategoryNameSchema.parse(name);
+      const slug = suppliedSlug?.trim()
+        ? listingCategorySlugSchema.parse(suppliedSlug)
+        : await this.uniqueSlug(
+            slugify(normalizedName, { lower: true, strict: true, trim: true }) || "category",
+          );
+      await this.ensureAvailable(normalizedName, slug);
+      return this.repository.create({ name: normalizedName, slug });
+    });
+  }
 
   list() {
     return this.repository.list();
   }
 
-  async get(id: string) {
+  override async get(id: string) {
     const category = await this.repository.findById(listingCategoryIdSchema.parse(id));
     if (!category) throw new ListingCategoryNotFoundError();
     return category;
@@ -39,20 +64,7 @@ export class ListingCategoryService {
     return categories;
   }
 
-  create(name: string, suppliedSlug?: string): Promise<ListingCategory> {
-    return this.uow.transaction(async () => {
-      const normalizedName = listingCategoryNameSchema.parse(name);
-      const slug = suppliedSlug?.trim()
-        ? listingCategorySlugSchema.parse(suppliedSlug)
-        : await this.uniqueSlug(
-            slugify(normalizedName, { lower: true, strict: true, trim: true }) || "category",
-          );
-      await this.ensureAvailable(normalizedName, slug);
-      return this.repository.create({ name: normalizedName, slug });
-    });
-  }
-
-  update(id: string, input: ListingCategoryInput): Promise<ListingCategory> {
+  override update(id: string, input: ListingCategoryInput): Promise<ListingCategory> {
     return this.uow.transaction(async () => {
       const current = await this.repository.findById(id);
       if (!current) throw new ListingCategoryNotFoundError();
@@ -67,7 +79,7 @@ export class ListingCategoryService {
     });
   }
 
-  async delete(id: string) {
+  override async delete(id: string): Promise<void> {
     return this.uow.transaction(async () => {
       const category = await this.repository.findById(id);
       if (!category) throw new ListingCategoryNotFoundError();

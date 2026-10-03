@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PublicApplicationError } from "@/kernel/errors";
+import { CrudRepository } from "@/kernel/crud";
 
 export const blogStatusSchema = z.enum(["draft", "published"]);
 export const blogPostInputSchema = z
@@ -34,6 +35,22 @@ export const blogCategorySlugSchema = z
 
 export type BlogCategory = { id: string; slug: string; name: string };
 export type BlogTag = { slug: string; name: string };
+
+export abstract class BlogCategoryRepository extends CrudRepository<
+  [input: { name: string; slug: string }],
+  [id: string],
+  [id: string, input: { name?: string; slug?: string }],
+  [id: string],
+  BlogCategory,
+  BlogCategory | null,
+  BlogCategory | null,
+  void
+> {
+  abstract transaction<T>(operation: () => T): T;
+  abstract list(): BlogCategory[];
+  abstract isUsed(id: string): boolean;
+  abstract deleteForRoot(id: string): void;
+}
 
 /** The common renderer contract for canonical posts and private editor snapshots. */
 export type BlogRenderablePost = {

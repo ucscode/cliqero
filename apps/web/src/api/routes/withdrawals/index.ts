@@ -188,14 +188,15 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       try {
         const id = c.req.valid("param").withdrawalId;
         const result =
-          body.status === "approved"
-            ? await container.withdrawals.approve(p.accountId, id)
-            : body.status === "rejected"
-              ? await container.withdrawals.reject(p.accountId, id, body.reason)
-              : await container.withdrawals.complete(p.accountId, id, {
-                  externalReference: body.external_reference,
-                  note: body.note,
-                });
+          body.status === "completed"
+            ? await container.withdrawals.complete(p.accountId, id, {
+                externalReference: body.external_reference,
+                note: body.note,
+              })
+            : await container.withdrawals.update(p.accountId, id, {
+                state: body.status,
+                reason: body.status === "rejected" ? body.reason : undefined,
+              });
         return c.json(jsonSafe(result), 200);
       } catch (error) {
         return domainError(c, error);

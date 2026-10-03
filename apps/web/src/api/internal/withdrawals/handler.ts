@@ -22,12 +22,18 @@ const createSchema = z
   .strict();
 const updateSchema = z
   .object({
-    amount_minor: z.string().regex(/^[1-9]\d*$/),
-    destination_id: z.uuid(),
-    state: z.enum(["requested", "approved", "rejected"]),
-    reason: z.string().trim().max(1000),
+    amount_minor: z
+      .string()
+      .regex(/^[1-9]\d*$/)
+      .optional(),
+    destination_id: z.uuid().optional(),
+    state: z.enum(["requested", "approved", "rejected", "completed"]).optional(),
+    reason: z.string().trim().max(1000).optional(),
+    external_reference: z.string().trim().max(200).optional(),
+    note: z.string().trim().max(500).optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated.");
 const querySchema = z.object({
   search: z.string().max(200).optional(),
   state: z
@@ -118,12 +124,19 @@ export class InternalWithdrawalRoutes {
     if (principal instanceof Response) return principal;
     try {
       const body = updateSchema.parse(await this.json(request));
-      await this.container.withdrawals.updateByOperator(principal.accountId, id, {
-        amountMinor: body.amount_minor,
-        destinationId: body.destination_id,
-        state: body.state,
-        reason: body.reason,
-      });
+      if (body.state === "completed") {
+        await this.container.withdrawals.complete(principal.accountId, id, {
+          externalReference: body.external_reference,
+          note: body.note,
+        });
+      } else {
+        await this.container.withdrawals.update(principal.accountId, id, {
+          amountMinor: body.amount_minor,
+          destinationId: body.destination_id,
+          state: body.state,
+          reason: body.reason,
+        });
+      }
       return this.respond(await this.container.operatorWithdrawals.get(id));
     } catch (error) {
       return apiError(error, request);
@@ -134,37 +147,7 @@ export class InternalWithdrawalRoutes {
     const principal = await this.session(request, "withdrawals.manage", true);
     if (principal instanceof Response) return principal;
     try {
-      return this.respond(
-        await this.container.withdrawals.deleteByOperator(principal.accountId, id),
-      );
-    } catch (error) {
-      return apiError(error, request);
-    }
-  }
-
-  async transition(request: Request, id: string) {
-    const principal = await this.session(request, "withdrawals.manage", true);
-    if (principal instanceof Response) return principal;
-    try {
-      const body = z
-        .object({
-          status: z.enum(["approved", "rejected", "completed"]),
-          reason: z.string().max(1000).optional(),
-          external_reference: z.string().max(200).optional(),
-          note: z.string().max(500).optional(),
-        })
-        .strict()
-        .parse(await this.json(request));
-      if (body.status === "approved")
-        await this.container.withdrawals.approve(principal.accountId, id);
-      else if (body.status === "rejected")
-        await this.container.withdrawals.reject(principal.accountId, id, body.reason ?? "");
-      else
-        await this.container.withdrawals.complete(principal.accountId, id, {
-          externalReference: body.external_reference,
-          note: body.note,
-        });
-      return this.respond(await this.container.operatorWithdrawals.get(id));
+      return this.respond(await this.container.withdrawals.delete(principal.accountId, id));
     } catch (error) {
       return apiError(error, request);
     }
@@ -181,7 +164,7 @@ export class InternalWithdrawalRoutes {
       const results = [];
       for (const id of [...new Set(ids)]) {
         try {
-          await this.container.withdrawals.deleteByOperator(principal.accountId, id);
+          await this.container.withdrawals.delete(principal.accountId, id);
           results.push({ id, deleted: true, error: null });
         } catch (error) {
           results.push({
@@ -242,7 +225,5 @@ export const internalWithdrawalUpdate = (request: Request, id: string) =>
   new InternalWithdrawalRoutes(getContainer()).update(request, id);
 export const internalWithdrawalDelete = (request: Request, id: string) =>
   new InternalWithdrawalRoutes(getContainer()).delete(request, id);
-export const internalWithdrawalTransition = (request: Request, id: string) =>
-  new InternalWithdrawalRoutes(getContainer()).transition(request, id);
 export const internalWithdrawalBulkDelete = (request: Request) =>
   new InternalWithdrawalRoutes(getContainer()).bulkDelete(request);

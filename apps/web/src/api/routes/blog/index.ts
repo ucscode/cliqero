@@ -257,7 +257,37 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
         const name = blogCategoryNameSchema.parse(body.name);
         const slug = body.slug === undefined ? undefined : body.slug.trim();
         if (slug) blogCategorySlugSchema.parse(slug);
-        return c.json(container.blog.createCategory(name, slug), 201);
+        return c.json(container.blog.categoryService.create(name, slug), 201);
+      } catch (error) {
+        return categoryConflict(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/blog/categories/{categoryId}",
+      request: { params: z.object({ categoryId: z.string().uuid() }) },
+      responses: {
+        200: {
+          description: "Blog category",
+          content: { "application/json": { schema: blogCategorySchema } },
+        },
+        403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
+        404: { description: "Not found", content: { "application/json": { schema: errorSchema } } },
+        409: {
+          description: "Category conflict",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:read");
+      if (denied) return denied;
+      try {
+        return c.json(container.blog.categoryService.get(c.req.valid("param").categoryId), 200);
       } catch (error) {
         return categoryConflict(c, error);
       }
@@ -298,7 +328,10 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       if (denied) return denied;
       try {
         return c.json(
-          container.blog.updateCategory(c.req.valid("param").categoryId, c.req.valid("json")),
+          container.blog.categoryService.update(
+            c.req.valid("param").categoryId,
+            c.req.valid("json"),
+          ),
           200,
         );
       } catch (error) {
@@ -326,7 +359,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
       if (denied) return denied;
       try {
-        container.blog.deleteCategory(c.req.valid("param").categoryId);
+        container.blog.categoryService.delete(c.req.valid("param").categoryId);
         return c.body(null, 204);
       } catch (error) {
         if (error instanceof BlogCategoryInUseError)
@@ -420,7 +453,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
           if (publishDenied) return publishDenied;
         }
         return c.json(
-          operatorBlogJson(container.blog.save(c.req.valid("param").postId, body, p.accountId)),
+          operatorBlogJson(container.blog.update(c.req.valid("param").postId, body, p.accountId)),
           200,
         );
       } catch (error) {

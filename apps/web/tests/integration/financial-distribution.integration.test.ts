@@ -39,7 +39,8 @@ suite("purchase financial distribution", () => {
   async function completed(attributionSource?: string) {
     const seller = await account(`seller${newId().slice(0, 5)}`),
       buyer = await account(`buyer${newId().slice(0, 5)}`);
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Auditable",
       shortDescription: "Auditable purchase",
       longDescription: "Detailed auditable listing.",
@@ -195,7 +196,8 @@ suite("purchase financial distribution", () => {
        values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [seller.id],
     );
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Earning delete fixture",
       shortDescription: "Referral earning",
       longDescription: "A real completed referral-backed purchase.",
@@ -258,7 +260,8 @@ suite("purchase financial distribution", () => {
     const seller = await account(`sell${newId().slice(0, 5)}`),
       buyer = await account(`buy${newId().slice(0, 5)}`);
     await app.referralGraphService.establish(buyer.id, parent.id);
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Referral",
       shortDescription: "Referral purchase",
       longDescription: "Detailed referral listing.",

@@ -119,7 +119,7 @@ suite("Operator catalogue editor API contract", () => {
       categories: [],
       media: [],
     });
-    expect(await app.listingService.getCatalogue(created.id)).toMatchObject({
+    expect(await app.listingService.get(created.id)).toMatchObject({
       featuredPosition: 3,
       state: "archived",
     });

@@ -4,7 +4,6 @@ import { stringify as stringifyCsvSync } from "csv-stringify/sync";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 import type { Account } from "@/modules/identity/account";
-import type { ListingState } from "@/modules/listing";
 import type { ListingService } from "@/application/listing/service";
 import type { ListingMediaService } from "@/application/listing/media";
 import type { ListingMedia, ListingMediaRepository } from "@/modules/listing/media/media";
@@ -151,7 +150,7 @@ export class ListingTransferService {
         let listing;
         if (existing) {
           listing = catalogue
-            ? await this.listings.updateCatalogue(owner, existing.id, {
+            ? await this.listings.update(owner, existing.id, {
                 title: record.title,
                 shortDescription: record.short_description,
                 longDescription: record.long_description,
@@ -159,6 +158,7 @@ export class ListingTransferService {
                 currency: record.currency,
                 destination: record.destination,
                 metadata: record.metadata,
+                ...(catalogue ? { state: record.state } : {}),
               })
             : await this.listings.update(owner, existing.id, {
                 title: record.title,
@@ -168,6 +168,7 @@ export class ListingTransferService {
                 currency: record.currency,
                 destination: record.destination,
                 metadata: record.metadata,
+                ...(catalogue ? { state: record.state } : {}),
               });
         } else {
           listing = catalogue
@@ -236,7 +237,8 @@ export class ListingTransferService {
               : this.media.requestDeletion(owner, listing.id, old.id));
         for (let position = 0; position < desiredIds.length; position++)
           await this.media.update(owner, listing.id, desiredIds[position], { position });
-        await this.applyState(owner, listing.id, listing.state, record.state, catalogue);
+        if (listing.state !== record.state)
+          listing = await this.listings.update(owner, listing.id, { state: record.state });
         if (created) result.created++;
         else result.updated++;
         result.records.push({
@@ -278,7 +280,7 @@ export class ListingTransferService {
     const id = record.retry_identity?.slice("listing:".length) ?? record.id;
     if (catalogue && id) {
       try {
-        return await this.listings.getCatalogue(id);
+        return await this.listings.get(id);
       } catch {
         if (mode === "upsert" || record.retry_identity)
           throw new Error(
@@ -304,38 +306,6 @@ export class ListingTransferService {
     if (mode === "upsert")
       throw new Error("Upsert requires external_key, retry_identity, or an owned listing id");
     return null;
-  }
-  private async applyState(
-    owner: Account,
-    id: string,
-    current: ListingState,
-    target: ListingState,
-    catalogue = false,
-  ) {
-    if (target === current) return;
-    const archive = catalogue
-        ? this.listings.archiveCatalogue.bind(this.listings)
-        : this.listings.archive.bind(this.listings),
-      restore = catalogue
-        ? this.listings.restoreCatalogue.bind(this.listings)
-        : this.listings.restore.bind(this.listings),
-      publish = catalogue
-        ? this.listings.publishCatalogue.bind(this.listings)
-        : this.listings.publish.bind(this.listings);
-    if (target === "draft") {
-      if (current === "published") {
-        await archive(owner, id);
-        current = "archived";
-      }
-      if (current === "archived") await restore(owner, id);
-      return;
-    }
-    if (target === "published") {
-      if (current === "archived") await restore(owner, id);
-      if (current !== "published") await publish(owner, id);
-      return;
-    }
-    await archive(owner, id);
   }
 }
 

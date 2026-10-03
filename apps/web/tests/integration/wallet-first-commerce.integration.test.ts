@@ -31,7 +31,8 @@ suite("wallet-first durable commerce", () => {
       password: "correct-horse-staple",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Wallet item",
       shortDescription: "A wallet-funded item",
       longDescription: "Detailed wallet item.",
@@ -179,7 +180,8 @@ suite("wallet-first durable commerce", () => {
       password: "correct-horse-battery",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Free access item",
       shortDescription: "A free listing",
       longDescription: "No payment is required.",
@@ -303,7 +305,8 @@ suite("wallet-first durable commerce", () => {
     });
     await app.referralGraphService.establish(parent.id, grandparent.id);
     await app.referralGraphService.establish(buyer.id, parent.id);
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Policy item",
       shortDescription: "A policy item",
       longDescription: "Detailed policy item.",

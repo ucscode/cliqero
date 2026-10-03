@@ -41,7 +41,8 @@ suite("package entitlement integration API", () => {
       password: "correct-horse-staple",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title,
       shortDescription: "A generic destination listing",
       longDescription: "The destination owns the functionality.",

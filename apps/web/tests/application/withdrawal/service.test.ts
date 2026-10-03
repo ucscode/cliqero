@@ -51,10 +51,9 @@ function fixture(
       listForAccount: async () => ({ items: [], nextCursor: null }),
       listForOperator: async () => [],
       create,
-      updateMutable: async () => undefined,
-      deleteMutable: async () => undefined,
+      update: async () => undefined,
+      delete: async () => undefined,
       deleteForRoot: async () => undefined,
-      transition: async () => undefined,
       complete,
     },
     {
@@ -110,7 +109,7 @@ function fixture(
 describe("WithdrawalService request fees", () => {
   it("snapshots gross, capped fee, and net and credits Treasury at request time", async () => {
     const { service, create, reserve, treasuryCreate } = fixture();
-    const withdrawal = await service.request({
+    const withdrawal = await service.create({
       accountId: "account-1",
       amountMinor: 50_000n,
       currency: "USD",
@@ -208,7 +207,10 @@ describe("WithdrawalService manual completion", () => {
     const { service, withdrawal, releaseOrComplete } = fixture();
 
     await expect(
-      service.reject("operator-1", withdrawal.id, "Operator rejected"),
+      service.update("operator-1", withdrawal.id, {
+        state: "rejected",
+        reason: "Operator rejected",
+      }),
     ).resolves.toMatchObject({
       state: "rejected",
     });
@@ -225,7 +227,7 @@ describe("WithdrawalService policy enforcement", () => {
   it("enforces configured minimum and maximum amounts server-side", async () => {
     const belowMinimum = fixture("requested", { minimum: 1000n, maximum: 5000n });
     await expect(
-      belowMinimum.service.request({
+      belowMinimum.service.create({
         accountId: "account-1",
         amountMinor: 999n,
         currency: "USD",
@@ -236,7 +238,7 @@ describe("WithdrawalService policy enforcement", () => {
     ).rejects.toThrow("below the minimum");
     const aboveMaximum = fixture("requested", { minimum: 1000n, maximum: 5000n });
     await expect(
-      aboveMaximum.service.request({
+      aboveMaximum.service.create({
         accountId: "account-1",
         amountMinor: 5001n,
         currency: "USD",

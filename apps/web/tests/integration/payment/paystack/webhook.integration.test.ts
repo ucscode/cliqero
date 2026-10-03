@@ -100,7 +100,8 @@ suite("Paystack webhook to commerce consequence", () => {
       password: "correct-horse-staple",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Paystack listing",
       shortDescription: "Pay with a reliable provider",
       longDescription: "Detailed Paystack listing.",

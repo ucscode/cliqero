@@ -3,9 +3,9 @@ import { PublicApplicationError } from "@/kernel/errors";
 import { Money } from "@/modules/money/money";
 import {
   Listing,
+  ListingRepository,
   type ListingCategorySummary,
   type ListingMetadata,
-  type ListingRepository,
   type ListingState,
   type ListingVisibility,
 } from "@/modules/listing";
@@ -35,11 +35,13 @@ interface ListingRow {
   has_rating?: boolean;
 }
 
-export class PostgresListingRepository implements ListingRepository {
+export class PostgresListingRepository extends ListingRepository {
   constructor(
     private readonly sql: QueryExecutor,
     private readonly uow?: UnitOfWork,
-  ) {}
+  ) {
+    super();
+  }
   async findById(id: string): Promise<Listing | null> {
     const row = (
       await this.sql.query<ListingRow>(
@@ -154,32 +156,49 @@ export class PostgresListingRepository implements ListingRepository {
         rows.length > input.limit ? this.encodeCursor(visible.at(-1)!.id, cursorScope) : null,
     };
   }
-  async save(listing: Listing): Promise<void> {
-    const persist = async () => {
-      await this.sql.query(
-        `insert into listing_capability.listings
-        (uuid, seller_id, title, short_description, long_description, price_minor, price_currency, compare_at_price_minor, visibility, destination_url, metadata, state, external_key, featured_position)
-       values ($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14)
-       on conflict (uuid) do update set title=excluded.title, short_description=excluded.short_description, long_description=excluded.long_description,
-         price_minor=excluded.price_minor, price_currency=excluded.price_currency, compare_at_price_minor=excluded.compare_at_price_minor,
-         visibility=excluded.visibility, destination_url=excluded.destination_url, metadata=excluded.metadata, state=excluded.state, external_key=excluded.external_key, featured_position=excluded.featured_position, updated_at=now()`,
-        [
-          listing.id,
-          listing.sellerId,
-          listing.title,
-          listing.shortDescription,
-          listing.longDescription,
-          listing.price.minorAmount.toString(),
-          listing.price.currency,
-          listing.compareAtPrice?.minorAmount.toString() ?? null,
-          listing.visibility,
-          listing.destination,
-          JSON.stringify(listing.metadata),
-          listing.state,
-          listing.externalKey,
-          listing.featuredPosition,
-        ],
-      );
+  async create(listing: Listing): Promise<void> {
+    await this.persist(listing, true);
+  }
+
+  async update(id: string, listing: Listing): Promise<Listing | null> {
+    if (id !== listing.id) throw new Error("Listing update identity cannot change");
+    const updated = await this.persist(listing, false);
+    return updated ? listing : null;
+  }
+
+  private async persist(listing: Listing, creating: boolean): Promise<boolean> {
+    return this.mutate(async () => {
+      const values = [
+        listing.id,
+        listing.sellerId,
+        listing.title,
+        listing.shortDescription,
+        listing.longDescription,
+        listing.price.minorAmount.toString(),
+        listing.price.currency,
+        listing.compareAtPrice?.minorAmount.toString() ?? null,
+        listing.visibility,
+        listing.destination,
+        JSON.stringify(listing.metadata),
+        listing.state,
+        listing.externalKey,
+        listing.featuredPosition,
+      ];
+      const result = creating
+        ? await this.sql.query(
+            `insert into listing_capability.listings
+            (uuid, seller_id, title, short_description, long_description, price_minor, price_currency, compare_at_price_minor, visibility, destination_url, metadata, state, external_key, featured_position)
+            values ($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14)`,
+            values,
+          )
+        : await this.sql.query(
+            `update listing_capability.listings set title=$3,short_description=$4,long_description=$5,
+             price_minor=$6,price_currency=$7,compare_at_price_minor=$8,visibility=$9,destination_url=$10,
+             metadata=$11::jsonb,state=$12,external_key=$13,featured_position=$14,updated_at=now()
+             where uuid=$1 and seller_id=(select id from identity_capability.accounts where uuid=$2) and deleted_at is null`,
+            values,
+          );
+      if (!creating && result.rowCount !== 1) return false;
       await this.sql.query(
         "delete from listing_capability.listing_categories where listing_id=(select id from listing_capability.listings where uuid=$1)",
         [listing.id],
@@ -196,9 +215,8 @@ export class PostgresListingRepository implements ListingRepository {
         if (inserted.rowCount !== listing.categories.length)
           throw new Error("One or more catalogue categories are no longer available");
       }
-    };
-    if (this.uow) await this.uow.transaction(persist);
-    else await persist();
+      return true;
+    });
   }
   async delete(id: string): Promise<boolean> {
     const result = await this.sql.query(

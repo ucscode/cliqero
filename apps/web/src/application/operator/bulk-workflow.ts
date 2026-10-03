@@ -10,19 +10,18 @@ export interface OperatorBulkWorkflowDependencies {
   };
   operatorEarnings: { deleteForRoot(actorId: string, entryId: string): Promise<unknown> };
   earningsAdjustments: { deleteForRoot(actorId: string, adjustmentId: string): Promise<unknown> };
-  withdrawals: { deleteByOperator(actorId: string, withdrawalId: string): Promise<unknown> };
+  withdrawals: { delete(actorId: string, withdrawalId: string): Promise<unknown> };
   operatorTreasury: { deleteForRoot(actorId: string, entryId: string): Promise<unknown> };
   listingService: {
-    deleteCatalogue(actor: Account, listingId: string): Promise<unknown>;
+    delete(actor: Account, listingId: string): Promise<unknown>;
     deleteCatalogueForRoot(actor: Account, listingId: string): Promise<unknown>;
-    setCatalogueState(
+    update(
       actor: Account,
       listingId: string,
-      state: "draft" | "published" | "archived",
+      input: { state: "draft" | "published" | "archived" },
     ): Promise<unknown>;
   };
   listingReviews: {
-    moderate(actor: Account, reviewId: string, status: "approved" | "rejected"): Promise<unknown>;
     update(
       actor: Account,
       reviewId: string,
@@ -32,7 +31,7 @@ export interface OperatorBulkWorkflowDependencies {
   };
   blog: {
     delete(postId: string): unknown;
-    deleteCategoryForRoot(categoryId: string): unknown;
+    categoryService: { deleteForRoot(categoryId: string): unknown };
   };
   listingCategories: { deleteForRoot(categoryId: string, actorId: string): Promise<unknown> };
 }
@@ -52,14 +51,14 @@ export type OperatorBulkCommand =
     }
   | {
       resource: "listings";
-      action: "set-state";
+      action: "update";
       state: "draft" | "published" | "archived";
       ids: string[];
     }
   | { resource: "listings"; action: "delete"; ids: string[] }
   | {
       resource: "reviews";
-      action: "moderate";
+      action: "update";
       status: "approved" | "rejected";
       ids: string[];
     }
@@ -108,7 +107,7 @@ export class OperatorBulkWorkflow {
             await this.container.earningsAdjustments.deleteForRoot(actor.id, id);
             break;
           case "withdrawals":
-            await this.container.withdrawals.deleteByOperator(actor.id, id);
+            await this.container.withdrawals.delete(actor.id, id);
             break;
           case "treasury":
             await this.container.operatorTreasury.deleteForRoot(actor.id, id);
@@ -117,7 +116,7 @@ export class OperatorBulkWorkflow {
             if (command.action === "delete") {
               await this.container.listingService.deleteCatalogueForRoot(actor, id);
             } else {
-              await this.container.listingService.setCatalogueState(actor, id, command.state);
+              await this.container.listingService.update(actor, id, { state: command.state });
             }
             break;
           case "reviews":
@@ -131,7 +130,7 @@ export class OperatorBulkWorkflow {
             this.container.blog.delete(id);
             break;
           case "blog-categories":
-            this.container.blog.deleteCategoryForRoot(id);
+            this.container.blog.categoryService.deleteForRoot(id);
             break;
           case "catalogue-categories":
             await this.container.listingCategories.deleteForRoot(id, actor.id);

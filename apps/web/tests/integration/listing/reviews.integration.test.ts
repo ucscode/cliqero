@@ -48,7 +48,8 @@ suite("listing review visibility", () => {
       password: "correct-horse-battery",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(owner, {
+    const listing = await app.listingService.create(owner, {
+      state: "published",
       title: "Reviewable listing",
       shortDescription: "A reviewable listing",
       longDescription: "A published listing.",
@@ -56,7 +57,7 @@ suite("listing review visibility", () => {
       currency: "USD",
       destination: "https://example.com/access",
     });
-    const approved = await app.listingReviews.submit(approvedAuthor, listing.id, {
+    const approved = await app.listingReviews.create(approvedAuthor, listing.id, {
       rating: 4,
       body: "Approved review",
     });
@@ -65,12 +66,12 @@ suite("listing review visibility", () => {
        values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [owner.id],
     );
-    await app.listingReviews.moderate(owner, approved.id, "approved");
-    const pendingA = await app.listingReviews.submit(authorA, listing.id, {
+    await app.listingReviews.update(owner, approved.id, { status: "approved" });
+    const pendingA = await app.listingReviews.create(authorA, listing.id, {
       rating: 3,
       body: "Pending review from A",
     });
-    const pendingB = await app.listingReviews.submit(authorB, listing.id, {
+    const pendingB = await app.listingReviews.create(authorB, listing.id, {
       rating: 5,
       body: "Pending review from B",
     });
@@ -107,7 +108,8 @@ suite("listing review visibility", () => {
        values((select id from identity_capability.accounts where uuid=$1),'reviews.moderate')`,
       [owner.id],
     );
-    const listing = await app.listingService.createPublished(owner, {
+    const listing = await app.listingService.create(owner, {
+      state: "published",
       title: "Review sorting listing",
       shortDescription: "Sorting",
       longDescription: "Sorting reviews",
@@ -125,7 +127,7 @@ suite("listing review visibility", () => {
         country: "NG",
       });
       submitted.push(
-        await app.listingReviews.submit(author, listing.id, { rating: ratings[index]! }),
+        await app.listingReviews.create(author, listing.id, { rating: ratings[index]! }),
       );
     }
     await app.database.query(
@@ -181,7 +183,8 @@ suite("listing review visibility", () => {
       password: "correct-horse-battery",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(owner, {
+    const listing = await app.listingService.create(owner, {
+      state: "published",
       title: "Aggregate listing",
       shortDescription: "A listing with aggregate reviews",
       longDescription: "A published listing.",
@@ -189,14 +192,14 @@ suite("listing review visibility", () => {
       currency: "USD",
       destination: "https://example.com/access",
     });
-    const approved = await app.listingReviews.submit(approvedAuthor, listing.id, { rating: 4 });
+    const approved = await app.listingReviews.create(approvedAuthor, listing.id, { rating: 4 });
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
        values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [owner.id],
     );
-    await app.listingReviews.moderate(owner, approved.id, "approved");
-    const pending = await app.listingReviews.submit(pendingAuthor, listing.id, { rating: 1 });
+    await app.listingReviews.update(owner, approved.id, { status: "approved" });
+    const pending = await app.listingReviews.create(pendingAuthor, listing.id, { rating: 1 });
 
     const visible = await app.listingReviews.visible({
       listingId: listing.id,
@@ -222,7 +225,8 @@ suite("listing review visibility", () => {
       [owner.id],
     );
     const createListing = (externalKey: string) =>
-      app.listingService.createPublished(owner, {
+      app.listingService.create(owner, {
+        state: "published",
         title: `Rating listing ${externalKey}`,
         shortDescription: "Listing used to verify rating sort",
         longDescription: "Rating sort integration fixture.",
@@ -256,12 +260,12 @@ suite("listing review visibility", () => {
       ),
     ];
     for (const [listing, author, rating] of approvedRatings) {
-      const review = await app.listingReviews.submit(author, listing.id, { rating });
-      await app.listingReviews.moderate(owner, review.id, "approved");
+      const review = await app.listingReviews.create(author, listing.id, { rating });
+      await app.listingReviews.update(owner, review.id, { status: "approved" });
     }
-    const pending = await app.listingReviews.submit(authors[15]!, pendingOnly.id, { rating: 1 });
-    const rejected = await app.listingReviews.submit(authors[14]!, rejectedOnly.id, { rating: 5 });
-    await app.listingReviews.moderate(owner, rejected.id, "rejected");
+    const pending = await app.listingReviews.create(authors[15]!, pendingOnly.id, { rating: 1 });
+    const rejected = await app.listingReviews.create(authors[14]!, rejectedOnly.id, { rating: 5 });
+    await app.listingReviews.update(owner, rejected.id, { status: "rejected" });
     expect(pending.status).toBe("pending");
 
     const collect = async (direction: "asc" | "desc") => {
@@ -302,7 +306,7 @@ suite("listing review visibility", () => {
     ).toEqual(new Map());
   });
 
-  it("moderates reviews through individual resource operations and refuses invalid transitions", async () => {
+  it("changes review status through the canonical update operation", async () => {
     const owner = await app.authentication.register({
       email: "bulk-review-owner@example.com",
       username: "bulk_review_owner",
@@ -321,7 +325,8 @@ suite("listing review visibility", () => {
       password: "correct-horse-battery",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(owner, {
+    const listing = await app.listingService.create(owner, {
+      state: "published",
       title: "Bulk moderation listing",
       shortDescription: "Listing for bulk review moderation",
       longDescription: "A published listing.",
@@ -329,8 +334,8 @@ suite("listing review visibility", () => {
       currency: "USD",
       destination: "https://example.com/bulk-review",
     });
-    const first = await app.listingReviews.submit(authorA, listing.id, { rating: 4 });
-    const second = await app.listingReviews.submit(authorB, listing.id, { rating: 5 });
+    const first = await app.listingReviews.create(authorA, listing.id, { rating: 4 });
+    const second = await app.listingReviews.create(authorB, listing.id, { rating: 5 });
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
        values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
@@ -338,26 +343,24 @@ suite("listing review visibility", () => {
     );
 
     const results = await Promise.all([
-      app.listingReviews.moderate(owner, first.id, "approved"),
-      app.listingReviews.moderate(owner, second.id, "approved"),
+      app.listingReviews.update(owner, first.id, { status: "approved" }),
+      app.listingReviews.update(owner, second.id, { status: "approved" }),
     ]);
     expect(results.map((review) => review.id)).toEqual([first.id, second.id]);
-    await expect(app.listingReviews.moderate(owner, first.id, "rejected")).rejects.toThrow(
-      "Review not found or is no longer pending",
-    );
+    await expect(
+      app.listingReviews.update(owner, first.id, { status: "rejected" }),
+    ).resolves.toMatchObject({ id: first.id, status: "rejected" });
 
     const approved = await app.listingReviews.operatorQueue(owner, {
       status: "approved",
       limit: 10,
     });
-    expect(approved.items.map((review) => review.id)).toEqual(
-      expect.arrayContaining([first.id, second.id]),
-    );
-    expect(approved.items).toHaveLength(2);
-    expect(approved.items.every((review) => review.moderatedBy === owner.id)).toBe(true);
-    await expect(app.listingReviews.moderate(authorA, second.id, "rejected")).rejects.toThrow(
-      "Forbidden",
-    );
+    expect(approved.items.map((review) => review.id)).toEqual(expect.arrayContaining([second.id]));
+    expect(approved.items).toHaveLength(1);
+    expect(approved.items[0]?.moderatedBy).toBe(owner.id);
+    await expect(
+      app.listingReviews.update(authorA, second.id, { status: "rejected" }),
+    ).rejects.toThrow("Forbidden");
   });
 
   it("supports authorized review inspection, long-content edits, listing filters, and audited deletion", async () => {
@@ -379,7 +382,8 @@ suite("listing review visibility", () => {
       password: "correct-horse-battery",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(owner, {
+    const listing = await app.listingService.create(owner, {
+      state: "published",
       title: "Review CRUD listing",
       shortDescription: "Review CRUD summary",
       longDescription: "A listing used to test operator review CRUD.",
@@ -387,7 +391,8 @@ suite("listing review visibility", () => {
       currency: "USD",
       destination: "https://example.test/review-crud",
     });
-    const unrelatedListing = await app.listingService.createPublished(unrelatedOwner, {
+    const unrelatedListing = await app.listingService.create(unrelatedOwner, {
+      state: "published",
       title: "Unrelated review listing",
       shortDescription: "Another review summary",
       longDescription: "A separate listing.",
@@ -395,11 +400,11 @@ suite("listing review visibility", () => {
       currency: "USD",
       destination: "https://example.test/review-unrelated",
     });
-    const edited = await app.listingReviews.submit(author, listing.id, {
+    const edited = await app.listingReviews.create(author, listing.id, {
       rating: 3,
       body: "Initial content",
     });
-    const retained = await app.listingReviews.submit(author, unrelatedListing.id, {
+    const retained = await app.listingReviews.create(author, unrelatedListing.id, {
       rating: 5,
       body: "Unrelated content",
     });
@@ -409,10 +414,10 @@ suite("listing review visibility", () => {
              ((select id from identity_capability.accounts where uuid=$2),'reviews.moderate')`,
       [owner.id, unrelatedOwner.id],
     );
-    await app.listingReviews.moderate(owner, edited.id, "approved");
-    await app.listingReviews.moderate(unrelatedOwner, retained.id, "approved");
+    await app.listingReviews.update(owner, edited.id, { status: "approved" });
+    await app.listingReviews.update(unrelatedOwner, retained.id, { status: "approved" });
 
-    const initialDetail = await app.listingReviews.getOperator(owner, edited.id);
+    const initialDetail = await app.listingReviews.get(owner, edited.id);
     expect(initialDetail).toMatchObject({
       reviewer: "review_crud_author",
       listingTitle: "Review CRUD listing",
@@ -442,7 +447,7 @@ suite("listing review visibility", () => {
       count: 1,
     });
     await app.listingReviews.delete(owner, edited.id);
-    await expect(app.listingReviews.getOperator(owner, edited.id)).rejects.toMatchObject({
+    await expect(app.listingReviews.get(owner, edited.id)).rejects.toMatchObject({
       status: 404,
       code: "not_found",
     });
@@ -459,7 +464,7 @@ suite("listing review visibility", () => {
       [edited.id],
     );
     expect(audit.rows.map(({ action }) => action)).toEqual([
-      "review.moderated",
+      "review.updated",
       "review.updated",
       "review.updated",
       "review.deleted",
@@ -480,7 +485,8 @@ suite("listing review visibility", () => {
          ((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [operator.id],
     );
-    const listing = await app.listingService.createPublished(operator, {
+    const listing = await app.listingService.create(operator, {
+      state: "published",
       title: "Bulk review listing",
       shortDescription: "Bulk moderation fixture",
       longDescription: "Used to verify review bulk workflows.",
@@ -497,20 +503,20 @@ suite("listing review visibility", () => {
         country: "NG",
       });
       reviews.push(
-        await app.listingReviews.submit(author, listing.id, {
+        await app.listingReviews.create(author, listing.id, {
           rating: index + 3,
           body: `Bulk review ${index}`,
         }),
       );
     }
-    await app.listingReviews.moderate(operator, reviews[0]!.id, "approved");
-    await app.listingReviews.moderate(operator, reviews[1]!.id, "rejected");
+    await app.listingReviews.update(operator, reviews[0]!.id, { status: "approved" });
+    await app.listingReviews.update(operator, reviews[1]!.id, { status: "rejected" });
     const workflow = new OperatorBulkWorkflow(app);
 
     await expect(
       workflow.execute(operator, {
         resource: "reviews",
-        action: "moderate",
+        action: "update",
         status: "approved",
         ids: reviews.map(({ id }) => id),
       }),
@@ -525,7 +531,7 @@ suite("listing review visibility", () => {
     await expect(
       workflow.execute(operator, {
         resource: "reviews",
-        action: "moderate",
+        action: "update",
         status: "rejected",
         ids: reviews.map(({ id }) => id),
       }),

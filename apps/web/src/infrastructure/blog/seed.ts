@@ -23,7 +23,7 @@ const posts = Array.from({ length: 20 }, (_, index) => ({
 for (const fixture of posts) {
   const category =
     service.categories().find((item) => item.name === fixture.category) ??
-    service.createCategory(fixture.category);
+    service.categoryService.create(fixture.category);
   const current = service.get(fixture.slug);
   const status = fixture.published ? "published" : "draft";
   if (!current) {
@@ -52,7 +52,7 @@ for (const fixture of posts) {
       .join(",") === [...fixture.tags].sort().join(",") &&
     current.status === status;
   if (!same) {
-    service.save(
+    service.update(
       current.id,
       {
         slug: fixture.slug,

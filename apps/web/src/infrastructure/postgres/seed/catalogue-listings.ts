@@ -37,13 +37,11 @@ export class CatalogueListingSeeder {
       };
       const existing = await this.listings.findByExternalKey(actor, fixture.externalKey);
       let listing = existing
-        ? await this.listings.updateCatalogue(actor, existing.id, input)
+        ? await this.listings.update(actor, existing.id, input)
         : await this.listings.createCatalogue(actor, input);
 
-      if (listing.state === "archived")
-        listing = await this.listings.restoreCatalogue(actor, listing.id);
-      if (listing.state === "draft")
-        listing = await this.listings.publishCatalogue(actor, listing.id);
+      if (listing.state !== "published")
+        listing = await this.listings.update(actor, listing.id, { state: "published" });
       seeded.push(listing);
     }
     return seeded;

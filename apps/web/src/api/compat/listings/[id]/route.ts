@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiError, authenticatedAccount, authenticatedPrincipal } from "../../http";
 import { getContainer } from "@/infrastructure/container";
-import { ownerListingView, listingWithMediaView } from "@/application/listing/service";
+import { listingWithMediaView } from "@/application/listing/service";
 import { apiAuthorizer } from "@/api/shared/authorization";
 import { verifyListingPreviewToken } from "@/security/listing-preview";
 
@@ -36,7 +36,7 @@ export async function GET(
   const preview = new URL(request.url).searchParams.get("preview");
   if (verifyListingPreviewToken(preview, listingId)) {
     try {
-      const listing = await c.listingService.getCatalogue(listingId);
+      const listing = await c.listingService.get(listingId);
       return Response.json(
         listingWithMediaView(
           listing,
@@ -59,7 +59,7 @@ export async function GET(
   );
   if (!managementFailure) {
     try {
-      const listing = await c.listingService.getCatalogue(listingId);
+      const listing = await c.listingService.get(listingId);
       return Response.json(
         listingWithMediaView(
           listing,
@@ -120,35 +120,20 @@ export async function PATCH(
     const container = getContainer();
     await container.operators.requireCapability(account.id, "catalogue.manage");
     const body = listingSchema.parse(await request.json());
-    if (body.state !== undefined && Object.keys(body).length === 1) {
-      return Response.json(
-        ownerListingView(
-          await container.listingService.setCatalogueState(
-            account,
-            (await params).listingId,
-            body.state,
-          ),
-        ),
-      );
-    }
-    const listing = await container.listingService.updateCatalogue(
-      account,
-      (await params).listingId,
-      {
-        title: body.title,
-        shortDescription: body.short_description,
-        longDescription: body.long_description,
-        priceMinor: body.price_minor,
-        currency: body.currency,
-        destination: body.destination,
-        metadata: body.metadata,
-        compareAtPriceMinor: body.compare_at_price_minor,
-        featuredPosition: body.featured_position,
-        visibility: body.visibility,
-        categoryIds: body.category_ids,
-        state: body.state,
-      },
-    );
+    const listing = await container.listingService.update(account, (await params).listingId, {
+      title: body.title,
+      shortDescription: body.short_description,
+      longDescription: body.long_description,
+      priceMinor: body.price_minor,
+      currency: body.currency,
+      destination: body.destination,
+      metadata: body.metadata,
+      compareAtPriceMinor: body.compare_at_price_minor,
+      featuredPosition: body.featured_position,
+      visibility: body.visibility,
+      categoryIds: body.category_ids,
+      state: body.state,
+    });
     return Response.json(
       listingWithMediaView(
         listing,
@@ -184,7 +169,7 @@ export async function DELETE(
   if (!z.uuid().safeParse(listingId).success)
     return Response.json({ error: "Listing not found" }, { status: 404 });
   try {
-    await getContainer().listingService.deleteCatalogue(account, listingId);
+    await getContainer().listingService.delete(account, listingId);
     return new Response(null, { status: 204 });
   } catch (error) {
     return apiError(error, request);

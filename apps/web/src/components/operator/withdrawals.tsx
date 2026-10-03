@@ -620,10 +620,10 @@ export function OperatorWithdrawalDetail({
     try {
       const status =
         action === "approve" ? "approved" : action === "reject" ? "rejected" : "completed";
-      await apiFetch(`/internal/withdrawals/${withdrawalId}/transition`, {
-        method: "POST",
+      await apiFetch(`/internal/withdrawals/${withdrawalId}`, {
+        method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status, ...body }),
+        body: JSON.stringify({ state: status, ...body }),
       });
       await load();
     } catch (cause) {

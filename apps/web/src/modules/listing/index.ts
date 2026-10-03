@@ -1,6 +1,7 @@
 import { DomainInvariantError } from "@/kernel/errors";
 import type { Id } from "@/kernel/ids";
 import { Money } from "@/modules/money/money";
+import { CrudRepository } from "@/kernel/crud";
 
 export type ListingState = "draft" | "published" | "archived";
 export type ListingVisibility = "public" | "authenticated";
@@ -42,17 +43,21 @@ export class Listing {
     compareAtPrice?: Money | null;
     visibility?: ListingVisibility;
     categories?: readonly ListingCategorySummary[];
+    state?: ListingState;
   }): Listing {
     const title = input.title.trim();
     if (!title) throw new DomainInvariantError("Listing title is required");
     const destination = new URL(input.destination);
     if (!["http:", "https:"].includes(destination.protocol))
       throw new DomainInvariantError("Listing destination must use HTTP or HTTPS");
+    const state = input.state ?? "draft";
+    const shortDescription = normalizeShortDescription(input.shortDescription);
+    if (state === "published") ensurePublishedShortDescription(shortDescription);
     return new Listing(
       input.id,
       input.sellerId,
       title,
-      normalizeShortDescription(input.shortDescription),
+      shortDescription,
       input.longDescription.trim(),
       input.price,
       validateCompareAtPrice(input.price, input.compareAtPrice ?? null),
@@ -60,7 +65,7 @@ export class Listing {
       normalizeCategories(input.categories ?? []),
       destination,
       normalizeMetadata(input.metadata ?? {}),
-      "draft",
+      state,
       validateExternalKey(input.externalKey ?? null),
       validateFeaturedPosition(input.featuredPosition ?? null),
     );
@@ -100,23 +105,6 @@ export class Listing {
     );
   }
 
-  publish(): void {
-    if (this.stateValue !== "draft")
-      throw new DomainInvariantError("Only a draft listing can be published");
-    ensurePublishedShortDescription(this.shortDescriptionValue);
-    this.stateValue = "published";
-  }
-
-  archive(): void {
-    if (this.stateValue === "archived") return;
-    this.stateValue = "archived";
-  }
-  restore(): void {
-    if (this.stateValue !== "archived")
-      throw new DomainInvariantError("Only an archived listing can be restored");
-    this.stateValue = "draft";
-  }
-
   update(input: {
     title: string;
     shortDescription: string;
@@ -128,6 +116,7 @@ export class Listing {
     compareAtPrice?: Money | null;
     visibility?: ListingVisibility;
     categories?: readonly ListingCategorySummary[];
+    state?: ListingState;
   }): void {
     const title = input.title.trim();
     if (!title) throw new DomainInvariantError("Listing title is required");
@@ -135,7 +124,8 @@ export class Listing {
     if (!["http:", "https:"].includes(destination.protocol))
       throw new DomainInvariantError("Listing destination must use HTTP or HTTPS");
     const shortDescription = normalizeShortDescription(input.shortDescription);
-    if (this.stateValue === "published") ensurePublishedShortDescription(shortDescription);
+    const state = input.state ?? this.stateValue;
+    if (state === "published") ensurePublishedShortDescription(shortDescription);
     this.titleValue = title;
     this.shortDescriptionValue = shortDescription;
     this.longDescriptionValue = input.longDescription.trim();
@@ -146,6 +136,7 @@ export class Listing {
     this.destinationValue = destination;
     this.metadataValue = normalizeMetadata(input.metadata);
     this.featuredPositionValue = validateFeaturedPosition(input.featuredPosition ?? null);
+    this.stateValue = state;
   }
 
   get state() {
@@ -209,10 +200,18 @@ function ensurePublishedShortDescription(value: string) {
   if (!value) throw new DomainInvariantError("Published listing short description is required");
 }
 
-export interface ListingRepository {
-  findById(id: Id): Promise<Listing | null>;
-  findByExternalKey(sellerId: Id, key: string): Promise<Listing | null>;
-  query(input: {
+export abstract class ListingRepository extends CrudRepository<
+  [listing: Listing],
+  [id: Id],
+  [id: Id, listing: Listing],
+  [id: Id],
+  Promise<void>,
+  Promise<Listing | null>,
+  Promise<Listing | null>,
+  Promise<boolean>
+> {
+  abstract findByExternalKey(sellerId: Id, key: string): Promise<Listing | null>;
+  abstract query(input: {
     sellerId?: Id;
     publicOnly?: boolean;
     state?: ListingState;
@@ -224,9 +223,7 @@ export interface ListingRepository {
     visibility?: ListingVisibility | "all";
     limit: number;
   }): Promise<{ items: readonly Listing[]; nextCursor: string | null }>;
-  save(listing: Listing): Promise<void>;
-  delete(id: Id): Promise<boolean>;
-  deleteForRoot(id: Id): Promise<boolean>;
+  abstract deleteForRoot(id: Id): Promise<boolean>;
 }
 
 function validateCompareAtPrice(price: Money, compareAtPrice: Money | null) {

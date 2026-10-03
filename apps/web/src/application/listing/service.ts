@@ -16,8 +16,37 @@ import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { RatingSummary } from "@/modules/listing/reviews/review";
 import type { AuditRecorder } from "@/application/shared/audit";
 import { PublicApplicationError } from "@/kernel/errors";
+import { CrudService } from "@/kernel/crud";
+import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 
-export class ListingService {
+export type ListingCreateInput = {
+  title: string;
+  shortDescription: string;
+  longDescription: string;
+  priceMinor: string;
+  currency: string;
+  destination: string;
+  metadata?: ListingMetadata;
+  externalKey?: string | null;
+  featuredPosition?: number | null;
+  compareAtPriceMinor?: string | null;
+  visibility?: ListingVisibility;
+  categoryIds?: readonly string[];
+  state?: ListingState;
+};
+
+export type ListingUpdateInput = Partial<ListingCreateInput>;
+
+export class ListingService extends CrudService<
+  [seller: Account, input: ListingCreateInput],
+  [id: Id],
+  [actor: Account, id: Id, input: ListingUpdateInput],
+  [actor: Account, id: Id],
+  Promise<Listing>,
+  Promise<Listing>,
+  Promise<Listing>,
+  Promise<{ id: Id }>
+> {
   constructor(
     private readonly listings: ListingRepository,
     private readonly authorization: AuthorizationPolicy,
@@ -29,24 +58,11 @@ export class ListingService {
       deleteForListing(actorId: string, listingId: Id): Promise<number>;
     },
     private readonly rootMediaDeleter?: { deleteAllForRoot(listingId: Id): Promise<number> },
-  ) {}
-  async create(
-    seller: Account,
-    input: {
-      title: string;
-      shortDescription: string;
-      longDescription: string;
-      priceMinor: string;
-      currency: string;
-      destination: string;
-      metadata?: ListingMetadata;
-      externalKey?: string | null;
-      featuredPosition?: number | null;
-      compareAtPriceMinor?: string | null;
-      visibility?: ListingVisibility;
-      categoryIds?: readonly string[];
-    },
+    private readonly operators?: OperatorAuthorizationService,
   ) {
+    super();
+  }
+  override async create(seller: Account, input: ListingCreateInput) {
     if (input.currency.trim().toUpperCase() !== "USD")
       throw new Error("Listings must use the canonical USD currency");
     const categories = input.categoryIds ? await this.requireCategories(input.categoryIds) : [];
@@ -67,40 +83,16 @@ export class ListingService {
           : Money.of(BigInt(input.compareAtPriceMinor), input.currency),
       visibility: input.visibility,
       categories,
+      state: input.state,
     });
-    await this.listings.save(listing);
+    await this.listings.create(listing);
     return listing;
   }
-  async createPublished(
-    seller: Account,
-    input: {
-      title: string;
-      shortDescription: string;
-      longDescription: string;
-      priceMinor: string;
-      currency: string;
-      destination: string;
-      metadata?: ListingMetadata;
-      featuredPosition?: number | null;
-      externalKey?: string | null;
-      compareAtPriceMinor?: string | null;
-      visibility?: ListingVisibility;
-      categoryIds?: readonly string[];
-    },
-  ) {
-    const listing = await this.create(seller, input);
-    return this.publish(seller, listing.id);
-  }
   /** Catalogue-managed creation. The manager is an audit actor, not a seller/payee. */
-  async createCatalogue(
-    actor: Account,
-    input: Parameters<ListingService["create"]>[1] & { state?: ListingState },
-  ) {
+  async createCatalogue(actor: Account, input: ListingCreateInput) {
     return this.catalogueMutation(async () => {
       const { state = "draft", ...listingInput } = input;
-      const listing = await this.create(actor, listingInput);
-      this.applyCatalogueState(listing, state);
-      if (state !== "draft") await this.listings.save(listing);
+      const listing = await this.create(actor, { ...listingInput, state });
       await this.audit(actor.id, "listing.created", listing.id, null, {
         state: listing.state,
         title: listing.title,
@@ -110,64 +102,15 @@ export class ListingService {
       return listing;
     });
   }
-  async update(
-    actor: Account,
-    id: Id,
-    input: {
-      title?: string;
-      shortDescription?: string;
-      longDescription?: string;
-      priceMinor?: string;
-      currency?: string;
-      destination?: string;
-      metadata?: ListingMetadata;
-      featuredPosition?: number | null;
-      compareAtPriceMinor?: string | null;
-      visibility?: ListingVisibility;
-      categoryIds?: readonly string[];
-    },
-  ) {
-    const listing = await this.listings.findById(id);
-    if (!listing) throw new Error("Listing not found");
-    if (!this.authorization.canModifyListing(actor, listing)) throw new Error("Forbidden");
-    if (input.currency !== undefined && input.currency.trim().toUpperCase() !== "USD")
-      throw new Error("Listings must use the canonical USD currency");
-    const categories =
-      input.categoryIds === undefined
-        ? listing.categories
-        : await this.requireCategories(input.categoryIds);
-    listing.update({
-      title: input.title ?? listing.title,
-      shortDescription: input.shortDescription ?? listing.shortDescription,
-      longDescription: input.longDescription ?? listing.longDescription,
-      price: Money.of(
-        BigInt(input.priceMinor ?? listing.price.minorAmount.toString()),
-        input.currency ?? listing.price.currency,
-      ),
-      destination: input.destination ?? listing.destination,
-      metadata: input.metadata ?? listing.metadata,
-      featuredPosition:
-        input.featuredPosition === undefined ? listing.featuredPosition : input.featuredPosition,
-      compareAtPrice:
-        input.compareAtPriceMinor === undefined
-          ? listing.compareAtPrice
-          : input.compareAtPriceMinor === null
-            ? null
-            : Money.of(BigInt(input.compareAtPriceMinor), input.currency ?? listing.price.currency),
-      visibility: input.visibility,
-      categories,
-    });
-    await this.listings.save(listing);
-    return listing;
-  }
-  async updateCatalogue(
-    _actor: Account,
-    id: Id,
-    input: Parameters<ListingService["update"]>[2] & { state?: ListingState },
-  ) {
+  override async update(actor: Account, id: Id, input: ListingUpdateInput) {
     return this.catalogueMutation(async () => {
       const listing = await this.listings.findById(id);
       if (!listing) throw new Error("Listing not found");
+      if (
+        !this.authorization.canModifyListing(actor, listing) &&
+        !(await this.operators?.hasCapability(actor.id, "catalogue.manage"))
+      )
+        throw new Error("Forbidden");
       if (input.currency !== undefined && input.currency.trim().toUpperCase() !== "USD")
         throw new Error("Listings must use the canonical USD currency");
       const previous = {
@@ -204,9 +147,33 @@ export class ListingService {
         visibility: input.visibility,
         categories,
       });
-      if (input.state !== undefined) this.applyCatalogueState(listing, input.state);
-      await this.listings.save(listing);
-      await this.audit(_actor.id, "listing.updated", listing.id, previous, {
+      listing.update({
+        title: input.title ?? listing.title,
+        shortDescription: input.shortDescription ?? listing.shortDescription,
+        longDescription: input.longDescription ?? listing.longDescription,
+        price: Money.of(
+          BigInt(input.priceMinor ?? listing.price.minorAmount.toString()),
+          input.currency ?? listing.price.currency,
+        ),
+        destination: input.destination ?? listing.destination,
+        metadata: input.metadata ?? listing.metadata,
+        featuredPosition:
+          input.featuredPosition === undefined ? listing.featuredPosition : input.featuredPosition,
+        compareAtPrice:
+          input.compareAtPriceMinor === undefined
+            ? listing.compareAtPrice
+            : input.compareAtPriceMinor === null
+              ? null
+              : Money.of(
+                  BigInt(input.compareAtPriceMinor),
+                  input.currency ?? listing.price.currency,
+                ),
+        visibility: input.visibility,
+        categories,
+        state: input.state,
+      });
+      await this.listings.update(id, listing);
+      await this.audit(actor.id, "listing.updated", listing.id, previous, {
         state: listing.state,
         title: listing.title,
         price_minor: listing.price.minorAmount.toString(),
@@ -215,65 +182,7 @@ export class ListingService {
       return listing;
     });
   }
-  async publish(actor: Account, id: Id) {
-    const listing = await this.owned(actor, id);
-    listing.publish();
-    await this.listings.save(listing);
-    return listing;
-  }
-  async archive(actor: Account, id: Id) {
-    const listing = await this.owned(actor, id);
-    listing.archive();
-    await this.listings.save(listing);
-    return listing;
-  }
-  async restore(actor: Account, id: Id) {
-    const listing = await this.owned(actor, id);
-    listing.restore();
-    await this.listings.save(listing);
-    return listing;
-  }
-  async publishCatalogue(_actor: Account, id: Id) {
-    return this.catalogueMutation(async () => {
-      const listing = await this.listings.findById(id);
-      if (!listing) throw new Error("Listing not found");
-      const previous = { state: listing.state };
-      listing.publish();
-      await this.listings.save(listing);
-      await this.audit(_actor.id, "listing.published", listing.id, previous, {
-        state: listing.state,
-      });
-      return listing;
-    });
-  }
-  async archiveCatalogue(_actor: Account, id: Id) {
-    return this.catalogueMutation(async () => {
-      const listing = await this.listings.findById(id);
-      if (!listing) throw new Error("Listing not found");
-      const previous = { state: listing.state };
-      listing.archive();
-      await this.listings.save(listing);
-      if (previous.state !== listing.state)
-        await this.audit(_actor.id, "listing.archived", listing.id, previous, {
-          state: listing.state,
-        });
-      return listing;
-    });
-  }
-  async restoreCatalogue(_actor: Account, id: Id) {
-    return this.catalogueMutation(async () => {
-      const listing = await this.listings.findById(id);
-      if (!listing) throw new Error("Listing not found");
-      const previous = { state: listing.state };
-      listing.restore();
-      await this.listings.save(listing);
-      await this.audit(_actor.id, "listing.restored", listing.id, previous, {
-        state: listing.state,
-      });
-      return listing;
-    });
-  }
-  async deleteCatalogue(actor: Account, id: Id) {
+  override async delete(actor: Account, id: Id) {
     return this.catalogueMutation(async () => {
       const listing = await this.listings.findById(id);
       if (!listing) throw new PublicApplicationError("Listing not found.", "not_found", 404);
@@ -319,12 +228,7 @@ export class ListingService {
       return { id };
     });
   }
-  async setCatalogueState(actor: Account, id: Id, state: "draft" | "published" | "archived") {
-    if (state === "published") return this.publishCatalogue(actor, id);
-    if (state === "archived") return this.archiveCatalogue(actor, id);
-    return this.restoreCatalogue(actor, id);
-  }
-  async getCatalogue(id: Id) {
+  override async get(id: Id) {
     const listing = await this.listings.findById(id);
     if (!listing) throw new Error("Listing not found");
     return listing;
@@ -426,20 +330,6 @@ export class ListingService {
       return [];
     }
     return this.categoryService.requireIds(ids);
-  }
-  private applyCatalogueState(listing: Listing, state: ListingState) {
-    if (listing.state === state) return;
-    if (state === "archived") {
-      listing.archive();
-      return;
-    }
-    if (state === "draft") {
-      if (listing.state === "published") listing.archive();
-      if (listing.state === "archived") listing.restore();
-      return;
-    }
-    if (listing.state === "archived") listing.restore();
-    listing.publish();
   }
   private catalogueMutation<T>(operation: () => Promise<T>) {
     return this.uow ? this.uow.transaction(operation) : operation();

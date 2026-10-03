@@ -1,9 +1,5 @@
-import type {
-  ListingReview,
-  ListingReviewRepository,
-  RatingSummary,
-  ReviewStatus,
-} from "@/modules/listing/reviews/review";
+import type { ListingReview, RatingSummary, ReviewStatus } from "@/modules/listing/reviews/review";
+import { ListingReviewRepository } from "@/modules/listing/reviews/review";
 import type { QueryExecutor } from "../shared/database";
 import { approvedReviewSummaryCte } from "./approved-review-summary";
 import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "../operator/cursor";
@@ -25,8 +21,10 @@ type ReviewRow = {
   cursor_sort_value?: string;
 };
 
-export class PostgresListingReviewRepository implements ListingReviewRepository {
-  constructor(private readonly sql: QueryExecutor) {}
+export class PostgresListingReviewRepository extends ListingReviewRepository {
+  constructor(private readonly sql: QueryExecutor) {
+    super();
+  }
   async findById(id: string) {
     const row = (
       await this.sql.query<ReviewRow>(
@@ -51,7 +49,7 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
     ).rows[0];
     return row ? this.review(row) : null;
   }
-  async savePending(input: {
+  async create(input: {
     id: string;
     listingId: string;
     accountId: string;
@@ -71,18 +69,6 @@ export class PostgresListingReviewRepository implements ListingReviewRepository 
       )
     ).rows[0]!;
     return this.review(row);
-  }
-  async moderate(id: string, status: "approved" | "rejected", moderatorId: string) {
-    const row = (
-      await this.sql.query<ReviewRow>(
-        `with updated as (update listing_capability.reviews set status=$2,moderated_at=now(),moderated_by=(select id from identity_capability.accounts where uuid=$3),updated_at=now()
-         where uuid=$1 and status='pending' returning *)
-         select u.uuid as id,l.uuid as listing_id,a.uuid as account_id,u.rating,u.body,u.status,u.created_at,u.updated_at,u.moderated_at,moderator.uuid as moderated_by
-         from updated u join listing_capability.listings l on l.id=u.listing_id join identity_capability.accounts a on a.id=u.account_id left join identity_capability.accounts moderator on moderator.id=u.moderated_by`,
-        [id, status, moderatorId],
-      )
-    ).rows[0];
-    return row ? this.review(row) : null;
   }
   async update(
     id: string,

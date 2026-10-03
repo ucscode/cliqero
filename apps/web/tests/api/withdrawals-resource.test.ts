@@ -118,7 +118,7 @@ describe("owner withdrawal resource mutation", () => {
   });
 
   it("accepts destination_id and rejects the legacy free-form destination contract", async () => {
-    const request = vi.fn(async () => withdrawal);
+    const create = vi.fn(async () => withdrawal);
     fixtures.container = {
       principalResolver: {
         resolve: vi.fn(async () => ({
@@ -129,7 +129,7 @@ describe("owner withdrawal resource mutation", () => {
           scopes: new Set<string>(),
         })),
       },
-      withdrawals: { request },
+      withdrawals: { create },
     };
     const valid = await withdrawalCollectionRoute.POST(
       new Request("http://localhost/api/withdrawals", {
@@ -143,7 +143,7 @@ describe("owner withdrawal resource mutation", () => {
       }),
     );
     expect(valid.status).toBe(201);
-    expect(request).toHaveBeenCalledWith(
+    expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         accountId: withdrawal.accountId,
         amountMinor: 1250n,
@@ -178,7 +178,7 @@ describe("owner withdrawal resource mutation", () => {
       }),
     );
     expect(note.status).toBe(400);
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it("cancels through PATCH and retains no DELETE command", async () => {

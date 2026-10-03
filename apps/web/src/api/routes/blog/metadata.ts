@@ -54,6 +54,13 @@ export const blogOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
   },
   {
     path: "/api/blog/categories/{categoryId}",
+    method: "get",
+    mode: "account",
+    capability: "content.manage",
+    scope: "blog:read",
+  },
+  {
+    path: "/api/blog/categories/{categoryId}",
     method: "patch",
     mode: "account",
     capability: "content.manage",

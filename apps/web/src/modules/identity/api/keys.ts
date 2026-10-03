@@ -1,3 +1,5 @@
+import { CrudRepository } from "@/kernel/crud";
+
 export interface ApiKeyRecord {
   id: string;
   accountId: string;
@@ -12,15 +14,29 @@ export interface ApiKeyRecord {
   revokedAt: Date | null;
 }
 
-export interface ApiKeyManagementService {
-  create(input: {
-    accountId: string;
-    name: string;
-    scopes: string[];
-    createdBy: string;
-    expiresAt?: Date | null;
-    status?: "active" | "revoked";
-  }): Promise<{
+export abstract class ApiKeyManagementRepository extends CrudRepository<
+  [
+    input: {
+      accountId: string;
+      name: string;
+      scopes: string[];
+      createdBy: string;
+      expiresAt?: Date | null;
+      status?: "active" | "revoked";
+    },
+  ],
+  [id: string],
+  [
+    id: string,
+    input: {
+      name: string;
+      scopes: string[];
+      expiresAt: Date | null;
+      status?: "active" | "revoked";
+    },
+  ],
+  [id: string, accountId?: string],
+  Promise<{
     id: string;
     secret: string;
     name: string;
@@ -29,8 +45,12 @@ export interface ApiKeyManagementService {
     createdAt: Date;
     expiresAt: Date | null;
     revokedAt: Date | null;
-  }>;
-  listPage(input: {
+  }>,
+  Promise<ApiKeyRecord | null>,
+  Promise<boolean>,
+  Promise<boolean>
+> {
+  abstract listPage(input: {
     accountId?: string;
     search?: string;
     state?: "active" | "expired" | "revoked" | "all";
@@ -43,18 +63,8 @@ export interface ApiKeyManagementService {
     items: readonly (ApiKeyRecord & { pageCursor: string })[];
     nextCursor: string | null;
   }>;
-  find(id: string, accountId?: string): Promise<ApiKeyRecord | null>;
-  revoke(id: string, accountId?: string): Promise<boolean>;
-  update(
-    id: string,
-    input: {
-      name: string;
-      scopes: string[];
-      expiresAt: Date | null;
-      status?: "active" | "revoked";
-    },
-  ): Promise<boolean>;
-  reassign(input: {
+  abstract find(id: string, accountId?: string): Promise<ApiKeyRecord | null>;
+  abstract reassign(input: {
     id: string;
     accountId: string;
     name: string;
@@ -62,6 +72,5 @@ export interface ApiKeyManagementService {
     expiresAt: Date | null;
     status: "active" | "revoked";
   }): Promise<{ secret: string; keyPrefix: string } | null>;
-  reveal(id: string): Promise<string | null>;
-  delete(id: string, accountId?: string): Promise<boolean>;
+  abstract reveal(id: string): Promise<string | null>;
 }

@@ -37,7 +37,7 @@ export async function authorizeListingIntegration(
       response: Response.json({ error: "Listing not found", code: "not_found" }, { status: 404 }),
     };
   try {
-    await container.listingService.getCatalogue(listingId);
+    await container.listingService.get(listingId);
     return { principal, container, access: "manager" as const };
   } catch {
     return {

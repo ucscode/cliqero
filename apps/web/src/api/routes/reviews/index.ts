@@ -39,7 +39,7 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
     const body = z
       .object({ rating: z.number().int().min(1).max(5), body: z.string().max(2000).optional() })
       .parse(await c.req.json());
-    const review = await container.listingReviews.submit(p.account, c.req.param("listingId"), body);
+    const review = await container.listingReviews.create(p.account, c.req.param("listingId"), body);
     return c.json({ item: reviewJson(review, { reviewer: p.account.username, isMine: true }) });
   });
 
@@ -107,9 +107,7 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
     if (denied) return denied;
     try {
       return c.json({
-        item: reviewJson(
-          await container.listingReviews.getOperator(p.account, c.req.param("reviewId")),
-        ),
+        item: reviewJson(await container.listingReviews.get(p.account, c.req.param("reviewId"))),
       });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : "Review not found" }, 404);

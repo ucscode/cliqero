@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BlogService } from "@/application/blog/service";
+import { CrudService } from "@/kernel/crud";
 import { SqliteBlogRepository } from "@/infrastructure/blog/repository";
 import { closeBlogDatabaseForTests, getBlogDatabase } from "@/infrastructure/blog/database";
 
@@ -12,6 +13,9 @@ describe("BlogService SQLite workflow", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cliqero-blog-"));
     process.env.BLOG_DATABASE_PATH = path.join(dir, "blog.sqlite");
     service = new BlogService(new SqliteBlogRepository(getBlogDatabase().sqlite));
+  });
+  it("uses the shared CRUD service contract for ordinary blog categories", () => {
+    expect(service.categoryService).toBeInstanceOf(CrudService);
   });
   afterEach(() => {
     closeBlogDatabaseForTests();
@@ -28,14 +32,14 @@ describe("BlogService SQLite workflow", () => {
     const draft = service.create(input(), "account-1", "k1");
     expect(draft.status).toBe("draft");
     expect(service.get(draft.slug, true)).toBeNull();
-    const published = service.save(
+    const published = service.update(
       draft.id,
       { title: "Published title", status: "published" },
       "account-1",
     )!;
     expect(published).toMatchObject({ title: "Published title", status: "published" });
     expect(service.get(published.slug, true)?.title).toBe("Published title");
-    expect(service.save(published.id, { status: "draft" }, "account-1")?.status).toBe("draft");
+    expect(service.update(published.id, { status: "draft" }, "account-1")?.status).toBe("draft");
   });
   it("keeps create idempotency and rejects key reuse with different input", () => {
     const first = service.create(input(), "account-1", "same");
@@ -45,9 +49,9 @@ describe("BlogService SQLite workflow", () => {
     );
   });
   it("assigns multiple categories, synchronizes replacements, and filters by any assigned category", () => {
-    const guides = service.createCategory("Guides");
-    const product = service.createCategory("Product");
-    const other = service.createCategory("Other");
+    const guides = service.categoryService.create("Guides");
+    const product = service.categoryService.create("Product");
+    const other = service.categoryService.create("Other");
     const post = service.create(
       input({
         status: "published",
@@ -61,15 +65,17 @@ describe("BlogService SQLite workflow", () => {
     expect(
       service.list({ publishedOnly: true, category: "product" }).items.map((p) => p.id),
     ).toEqual([post.id]);
-    expect(service.save(post.id, { category_ids: [other.id] }, null)?.categories).toEqual([other]);
-    expect(() => service.deleteCategory(other.id)).toThrow(/assigned/);
+    expect(service.update(post.id, { category_ids: [other.id] }, null)?.categories).toEqual([
+      other,
+    ]);
+    expect(() => service.categoryService.delete(other.id)).toThrow(/assigned/);
     expect(service.list({ publishedOnly: true, category: "guides" }).items).toEqual([]);
   });
   it("root category deletion removes assignments but preserves the article", () => {
-    const category = service.createCategory("Root cleanup category");
+    const category = service.categoryService.create("Root cleanup category");
     const post = service.create(input({ category_ids: [category.id] }), "author");
 
-    service.deleteCategoryForRoot(category.id);
+    service.categoryService.deleteForRoot(category.id);
 
     expect(service.get(post.id)).toMatchObject({ id: post.id, categories: [] });
     expect(service.categories()).not.toContainEqual(category);
@@ -119,8 +125,8 @@ describe("BlogService SQLite workflow", () => {
     );
   });
   it("creates and refreshes a private preview without mutating canonical posts", () => {
-    const category = service.createCategory("Guides");
-    const categoryTwo = service.createCategory("AI");
+    const category = service.categoryService.create("Guides");
+    const categoryTwo = service.categoryService.create("AI");
     const post = service.create(
       input({ title: "Canonical", status: "published", category_ids: [category.id] }),
       "owner",
@@ -171,16 +177,20 @@ describe("BlogService SQLite workflow", () => {
     expect(db.prepare("select id from blog_previews where id=?").get(stale.id)).toBeUndefined();
   });
   it("enforces category name and slug conflicts and preserves slugs when names change", () => {
-    const category = service.createCategory("Mara & Klara");
-    const explicit = service.createCategory("Guides", "help-center");
+    const category = service.categoryService.create("Mara & Klara");
+    const explicit = service.categoryService.create("Guides", "help-center");
     expect(category.slug).toBe("mara-and-klara");
     expect(explicit.slug).toBe("help-center");
-    expect(service.updateCategory(category.id, { name: "New Guides" }).slug).toBe("mara-and-klara");
-    expect(service.updateCategory(category.id, { slug: "editorial-guides" }).slug).toBe(
+    expect(service.categoryService.update(category.id, { name: "New Guides" }).slug).toBe(
+      "mara-and-klara",
+    );
+    expect(service.categoryService.update(category.id, { slug: "editorial-guides" }).slug).toBe(
       "editorial-guides",
     );
-    expect(() => service.createCategory("guides")).toThrow(/name already exists/);
-    expect(() => service.createCategory("Duplicate", "help-center")).toThrow(/slug already exists/);
-    expect(() => service.createCategory("Bad slug", "Bad Slug")).toThrow();
+    expect(() => service.categoryService.create("guides")).toThrow(/name already exists/);
+    expect(() => service.categoryService.create("Duplicate", "help-center")).toThrow(
+      /slug already exists/,
+    );
+    expect(() => service.categoryService.create("Bad slug", "Bad Slug")).toThrow();
   });
 });

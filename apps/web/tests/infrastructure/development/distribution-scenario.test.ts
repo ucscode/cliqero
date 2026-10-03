@@ -26,8 +26,8 @@ function createHarness() {
     price: Money.of(1200n, "USD"),
     destination: "https://example.test/access",
     externalKey: "toolkit-01",
+    state: "published",
   });
-  listing.publish();
 
   let availableMinor = 700n;
   let invocation = 0;

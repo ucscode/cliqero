@@ -79,9 +79,9 @@ suite("listing management and media", () => {
         currency: "USD",
         destination: "https://private.example/archive",
       });
-    await app.listingService.publish(owner, published.id);
-    await app.listingService.publish(owner, archived.id);
-    await app.listingService.archive(owner, archived.id);
+    await app.listingService.update(owner, published.id, { state: "published" });
+    await app.listingService.update(owner, archived.id, { state: "published" });
+    await app.listingService.update(owner, archived.id, { state: "archived" });
     expect(
       (await app.listingService.queryPublic({ search: "needle", limit: 20 })).items.map(
         (item) => item.id,
@@ -92,7 +92,9 @@ suite("listing management and media", () => {
     expect((await app.listingService.getOwner(owner, draft.id)).state).toBe("draft");
     expect((await app.listingService.getOwner(owner, archived.id)).state).toBe("archived");
     await expect(app.listingService.getOwner(other, draft.id)).rejects.toThrow("Forbidden");
-    expect((await app.listingService.restore(owner, archived.id)).state).toBe("draft");
+    expect((await app.listingService.update(owner, archived.id, { state: "draft" })).state).toBe(
+      "draft",
+    );
   });
 
   it("root bulk deletion physically removes an assigned listing and its purchase history", async () => {
@@ -111,7 +113,8 @@ suite("listing management and media", () => {
       currency: "USD",
       destination: "https://example.test/root-delete-simple",
     });
-    const listing = await app.listingService.createPublished(owner, {
+    const listing = await app.listingService.create(owner, {
+      state: "published",
       title: "Root deletion listing",
       shortDescription: "Dependency cleanup test",
       longDescription: "This listing has a category and completed purchase history.",
@@ -232,7 +235,7 @@ suite("listing management and media", () => {
     const dependencies = Object.create(app) as typeof app;
     Object.defineProperty(dependencies, "blog", { value: blog });
     try {
-      const category = blog.createCategory("Root-managed category");
+      const category = blog.categoryService.create("Root-managed category");
       const retainedPost = blog.create(
         {
           title: "Retained article",
@@ -288,7 +291,7 @@ suite("listing management and media", () => {
       priceMinor: "0",
       compareAtPriceMinor: "4000",
     });
-    await app.listingService.publish(owner, listing.id);
+    await app.listingService.update(owner, listing.id, { state: "published" });
 
     const persisted = await app.listingService.getPublic(listing.id);
     expect(persisted?.price.minorAmount).toBe(0n);
@@ -300,7 +303,8 @@ suite("listing management and media", () => {
 
   it("deletes managed listings with history by tombstoning, preserving snapshots, and revoking integrations", async () => {
     const { owner, other: buyer } = await accounts("delete");
-    const listing = await app.listingService.createPublished(owner, {
+    const listing = await app.listingService.create(owner, {
+      state: "published",
       title: "Historical listing",
       shortDescription: "Retained in purchase history",
       longDescription: "Snapshot-safe historical details.",
@@ -308,7 +312,8 @@ suite("listing management and media", () => {
       currency: "USD",
       destination: "https://example.test/historical-listing",
     });
-    const otherListing = await app.listingService.createPublished(owner, {
+    const otherListing = await app.listingService.create(owner, {
+      state: "published",
       title: "Other retained listing",
       shortDescription: "Another access scope",
       longDescription: "This listing remains active.",
@@ -337,13 +342,13 @@ suite("listing management and media", () => {
     const historicalPurchase = await app.purchases.findById(checkout.purchaseId);
     expect(historicalPurchase?.terms.title).toBe("Historical listing");
 
-    await app.listingService.deleteCatalogue(owner, listing.id);
+    await app.listingService.delete(owner, listing.id);
 
     expect(await app.listingService.getPublic(listing.id)).toBeNull();
     expect(
       (await app.listingService.queryPublic({ limit: 50 })).items.map(({ id }) => id),
     ).not.toContain(listing.id);
-    await expect(app.listingService.getCatalogue(listing.id)).rejects.toThrow("Listing not found");
+    await expect(app.listingService.get(listing.id)).rejects.toThrow("Listing not found");
     await expect(
       app.walletCheckout.initiate({
         buyerId: buyer.id,
@@ -397,8 +402,8 @@ suite("listing management and media", () => {
       destination: "https://example.test/public",
       featuredPosition: 2,
     });
-    await app.listingService.publish(owner, membersOnly.id);
-    await app.listingService.publish(owner, publicListing.id);
+    await app.listingService.update(owner, membersOnly.id, { state: "published" });
+    await app.listingService.update(owner, publicListing.id, { state: "published" });
 
     const anonymous = await app.listingService.queryStorefront(
       { kind: "anonymous" },
@@ -469,7 +474,8 @@ suite("listing management and media", () => {
     ];
     const listings: Listing[] = [];
     for (const [index, fixture] of fixtures.entries()) {
-      const listing = await app.listingService.createPublished(owner, {
+      const listing = await app.listingService.create(owner, {
+        state: "published",
         ...fixture,
         shortDescription: "Sort fixture summary",
         longDescription: "Sort fixture details.",
@@ -553,10 +559,11 @@ suite("listing management and media", () => {
           destination: "https://example.com/transition",
           externalKey: key,
         });
-      if (source === "published") await app.listingService.publish(owner, listing.id);
+      if (source === "published")
+        await app.listingService.update(owner, listing.id, { state: "published" });
       if (source === "archived") {
-        await app.listingService.publish(owner, listing.id);
-        await app.listingService.archive(owner, listing.id);
+        await app.listingService.update(owner, listing.id, { state: "published" });
+        await app.listingService.update(owner, listing.id, { state: "archived" });
       }
       const body = JSON.stringify([
         {
@@ -790,11 +797,11 @@ suite("listing management and media", () => {
       "Forbidden",
     );
     expect(
-      (await app.listingService.updateCatalogue(managerB, listing.id, { title: "Curated" })).title,
+      (await app.listingService.update(managerB, listing.id, { title: "Curated" })).title,
     ).toBe("Curated");
-    await app.listingService.publishCatalogue(managerB, listing.id);
-    await app.listingService.archiveCatalogue(managerB, listing.id);
-    await app.listingService.restoreCatalogue(managerB, listing.id);
+    await app.listingService.update(managerB, listing.id, { state: "published" });
+    await app.listingService.update(managerB, listing.id, { state: "archived" });
+    await app.listingService.update(managerB, listing.id, { state: "draft" });
     const listingAudit = (
       await app.database.query<{
         action: string;
@@ -809,9 +816,9 @@ suite("listing management and media", () => {
     expect(listingAudit.map((row) => [row.action, row.actor_id])).toEqual([
       ["listing.created", managerA.id],
       ["listing.updated", managerB.id],
-      ["listing.published", managerB.id],
-      ["listing.archived", managerB.id],
-      ["listing.restored", managerB.id],
+      ["listing.updated", managerB.id],
+      ["listing.updated", managerB.id],
+      ["listing.updated", managerB.id],
     ]);
     expect(listingAudit[2].previous_state).toMatchObject({ state: "draft" });
     expect(listingAudit[2].new_state).toMatchObject({ state: "published" });
@@ -930,7 +937,7 @@ suite("listing management and media", () => {
         altText: "Detail",
         position: 1,
       });
-      await app.listingService.publish(owner, listing.id);
+      await app.listingService.update(owner, listing.id, { state: "published" });
       const exported = await app.listingTransfer.export(owner);
       expect(exported[0]).toMatchObject({
         short_description: "Round-trip listing",
@@ -1063,6 +1070,11 @@ suite("listing management and media", () => {
         destination: "https://example.com/second",
         externalKey: "catalogue-shared-key",
       });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'catalogue.manage')`,
+      [owner.id],
+    );
     const catalogueRecord = {
       id: second.id,
       external_key: "catalogue-shared-key",
@@ -1209,20 +1221,18 @@ suite("listing management and media", () => {
     const draft = await makeDraft("Bulk draft");
     const archived = await makeDraft("Bulk archived");
     const unrelated = await makeDraft("Unrelated draft");
-    await app.listingService.archiveCatalogue(owner, archived.id);
+    await app.listingService.update(owner, archived.id, { state: "archived" });
 
-    await app.listingService.setCatalogueState(owner, draft.id, "published");
-    await expect(
-      app.listingService.setCatalogueState(owner, archived.id, "published"),
-    ).rejects.toThrow("Only a draft listing can be published");
-    expect((await app.listingService.getCatalogue(draft.id)).state).toBe("published");
-    expect((await app.listingService.getCatalogue(archived.id)).state).toBe("archived");
-    expect((await app.listingService.getCatalogue(unrelated.id)).state).toBe("draft");
+    await app.listingService.update(owner, draft.id, { state: "published" });
+    await app.listingService.update(owner, archived.id, { state: "published" });
+    expect((await app.listingService.get(draft.id)).state).toBe("published");
+    expect((await app.listingService.get(archived.id)).state).toBe("published");
+    expect((await app.listingService.get(unrelated.id)).state).toBe("draft");
 
-    await app.listingService.setCatalogueState(owner, draft.id, "archived");
-    expect((await app.listingService.getCatalogue(draft.id)).state).toBe("archived");
-    await app.listingService.setCatalogueState(owner, archived.id, "draft");
-    expect((await app.listingService.getCatalogue(archived.id)).state).toBe("draft");
-    expect((await app.listingService.getCatalogue(unrelated.id)).state).toBe("draft");
+    await app.listingService.update(owner, draft.id, { state: "archived" });
+    expect((await app.listingService.get(draft.id)).state).toBe("archived");
+    await app.listingService.update(owner, archived.id, { state: "draft" });
+    expect((await app.listingService.get(archived.id)).state).toBe("draft");
+    expect((await app.listingService.get(unrelated.id)).state).toBe("draft");
   });
 });

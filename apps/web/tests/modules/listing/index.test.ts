@@ -21,8 +21,8 @@ describe("Listing lifecycle", () => {
       longDescription: "Free access.",
       price: Money.of(0n, "USD"),
       destination: "https://example.com/free",
+      state: "published",
     });
-    free.publish();
     expect(free.commercialSnapshot().price.minorAmount).toBe("0");
     expect(() => Money.of(-1n, "USD")).toThrow("Money cannot be negative");
   });
@@ -30,17 +30,18 @@ describe("Listing lifecycle", () => {
   it("uses explicit draft, publish, archive, and draft restore transitions", () => {
     const listing = create();
     expect(listing.state).toBe("draft");
-    listing.publish();
+    updateState(listing, "published");
     expect(listing.state).toBe("published");
-    listing.archive();
+    updateState(listing, "archived");
     expect(listing.state).toBe("archived");
-    listing.restore();
+    updateState(listing, "draft");
     expect(listing.state).toBe("draft");
   });
-  it("does not permit direct republishing from archived", () => {
+  it("applies archived-to-published changes through the ordinary update field", () => {
     const listing = create();
-    listing.archive();
-    expect(() => listing.publish()).toThrow();
+    updateState(listing, "archived");
+    updateState(listing, "published");
+    expect(listing.state).toBe("published");
   });
 
   it("requires a short description when publishing and preserves that invariant on update", () => {
@@ -54,10 +55,12 @@ describe("Listing lifecycle", () => {
       destination: "https://example.com",
     });
     expect(draft.shortDescription).toBe("");
-    expect(() => draft.publish()).toThrow("Published listing short description is required");
+    expect(() => updateState(draft, "published")).toThrow(
+      "Published listing short description is required",
+    );
 
     const published = create();
-    published.publish();
+    updateState(published, "published");
     expect(() =>
       published.update({
         title: published.title,
@@ -91,7 +94,7 @@ describe("Listing lifecycle", () => {
       metadata: draft.metadata,
     });
     expect(draft.shortDescription).toBe("");
-    draft.archive();
+    updateState(draft, "archived");
     draft.update({
       title: draft.title,
       shortDescription: " ",
@@ -162,7 +165,7 @@ describe("Listing lifecycle", () => {
       price: Money.of(100n, "USD"),
       destination: "https://example.com",
     });
-    listing.publish();
+    updateState(listing, "published");
     expect(listing.commercialSnapshot()).toMatchObject({
       shortDescription: "Quick benefit",
       longDescription: "Full details",
@@ -248,3 +251,19 @@ describe("Listing lifecycle", () => {
     expect(listing.categories.map((category) => category.name)).toEqual(["API", "Toolkit"]);
   });
 });
+
+function updateState(listing: Listing, state: "draft" | "published" | "archived") {
+  listing.update({
+    title: listing.title,
+    shortDescription: listing.shortDescription,
+    longDescription: listing.longDescription,
+    price: listing.price,
+    destination: listing.destination,
+    metadata: listing.metadata,
+    featuredPosition: listing.featuredPosition,
+    compareAtPrice: listing.compareAtPrice,
+    visibility: listing.visibility,
+    categories: listing.categories,
+    state,
+  });
+}

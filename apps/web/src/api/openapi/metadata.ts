@@ -219,7 +219,6 @@ function operationSummary(path: string, method: string) {
   if (path === "/api/me/profile") return method === "get" ? "Get profile" : "Update profile";
   if (path === "/api/me/session") return "Get current session";
   if (path === "/api/access/verify") return "Verify purchase access";
-  if (path.endsWith("/revoke")) return "Revoke API key";
   if (path.endsWith("/reverse")) return "Reverse a purchase";
   if (path.endsWith("/settlement")) return "Settle earnings";
   if (path.endsWith("/reconcile"))

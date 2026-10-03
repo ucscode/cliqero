@@ -3,6 +3,8 @@ import type { Account } from "@/modules/identity/account";
 import type { ListingRepository } from "@/modules/listing";
 import {
   type ListingReviewRepository,
+  type ListingReview,
+  type OperatorListingReview,
   type ReviewStatus,
   validateReviewInput,
 } from "@/modules/listing/reviews/review";
@@ -10,19 +12,35 @@ import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import type { AuditRecorder } from "@/application/shared/audit";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { PublicApplicationError } from "@/kernel/errors";
+import { CrudService } from "@/kernel/crud";
 
-export class ListingReviewService {
+export class ListingReviewService extends CrudService<
+  [account: Account, listingId: Id, input: { rating: number; body?: string }],
+  [account: Account, reviewId: Id],
+  [
+    account: Account,
+    reviewId: Id,
+    input: { rating?: number; body?: string; status?: ReviewStatus },
+  ],
+  [account: Account, reviewId: Id],
+  Promise<ListingReview>,
+  Promise<ListingReview | OperatorListingReview>,
+  Promise<OperatorListingReview>,
+  Promise<{ id: Id }>
+> {
   constructor(
     private readonly reviews: ListingReviewRepository,
     private readonly listings: ListingRepository,
     private readonly operators: OperatorAuthorizationService,
     private readonly audit?: AuditRecorder,
     private readonly uow?: UnitOfWork,
-  ) {}
-  async submit(account: Account, listingId: Id, input: { rating: number; body?: string }) {
+  ) {
+    super();
+  }
+  override async create(account: Account, listingId: Id, input: { rating: number; body?: string }) {
     const listing = await this.listings.findById(listingId);
     if (!listing || listing.state !== "published") throw new Error("Listing not found");
-    return this.reviews.savePending({
+    return this.reviews.create({
       id: newId(),
       listingId,
       accountId: account.id,
@@ -51,49 +69,13 @@ export class ListingReviewService {
       return { items: [], nextCursor: null };
     return this.reviews.queryVisible(input);
   }
-  async moderate(account: Account, reviewId: Id, status: "approved" | "rejected") {
-    await this.operators.requireCapability(account.id, "reviews.moderate");
-    const operation = async () => {
-      const current = await this.reviews.findById(reviewId);
-      if (!current)
-        throw new PublicApplicationError(
-          "Review not found or is no longer pending",
-          "review_not_pending",
-          409,
-        );
-      if (current.status === status) return current;
-      if (current.status !== "pending")
-        throw new PublicApplicationError(
-          "Review not found or is no longer pending",
-          "review_not_pending",
-          409,
-        );
-      const updated = await this.reviews.moderate(reviewId, status, account.id);
-      if (!updated)
-        throw new PublicApplicationError(
-          "Review not found or is no longer pending",
-          "review_not_pending",
-          409,
-        );
-      await this.audit?.record({
-        actorId: account.id,
-        action: "review.moderated",
-        subjectType: "review",
-        subjectId: reviewId,
-        previousState: { status: current.status },
-        newState: { status },
-      });
-      return updated;
-    };
-    return this.uow ? this.uow.transaction(operation) : operation();
-  }
-  async getOperator(account: Account, reviewId: Id) {
+  override async get(account: Account, reviewId: Id) {
     await this.operators.requireCapability(account.id, "reviews.moderate");
     const review = await this.reviews.findById(reviewId);
     if (!review) throw new PublicApplicationError("Review not found.", "not_found", 404);
     return review;
   }
-  async update(
+  override async update(
     account: Account,
     reviewId: Id,
     input: { rating?: number; body?: string; status?: ReviewStatus },
@@ -124,7 +106,7 @@ export class ListingReviewService {
     };
     return this.uow ? this.uow.transaction(operation) : operation();
   }
-  async delete(account: Account, reviewId: Id) {
+  override async delete(account: Account, reviewId: Id) {
     await this.operators.requireCapability(account.id, "reviews.moderate");
     const operation = async () => {
       const current = await this.reviews.findById(reviewId);

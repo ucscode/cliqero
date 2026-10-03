@@ -43,7 +43,8 @@ suite("development distribution scenario PostgreSQL path", () => {
       country: "NG",
     });
     await app.referralGraphService.establish(buyer.id, parent.id);
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Distribution scenario integration item",
       shortDescription: "Real persisted flow",
       longDescription: "Exercises the development distribution scenario.",

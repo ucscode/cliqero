@@ -259,7 +259,7 @@ export function OperatorReviews({
       setBulkOutcome(null);
       const results = await runOperatorBulkAction({
         resource: "reviews",
-        action: "moderate",
+        action: "update",
         status: action === "approve" ? "approved" : "rejected",
         ids: reviews.map((review) => review.id),
       });

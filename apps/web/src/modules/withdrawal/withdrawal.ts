@@ -1,4 +1,5 @@
 import type { Money } from "@/modules/money/money";
+import { CrudRepository } from "@/kernel/crud";
 export type WithdrawalState =
   "requested" | "approved" | "rejected" | "cancelled" | "completed" | "failed";
 
@@ -57,29 +58,32 @@ export interface WithdrawalPolicy {
 export interface WithdrawalPolicySource {
   getActive(): Promise<WithdrawalPolicy>;
 }
-export interface WithdrawalRepository {
-  findById(id: string): Promise<Withdrawal | null>;
-  findByIdForUpdate(id: string): Promise<Withdrawal | null>;
-  findByIdempotencyKey(accountId: string, key: string): Promise<Withdrawal | null>;
-  listForAccount(
+export abstract class WithdrawalRepository extends CrudRepository<
+  [withdrawal: Withdrawal],
+  [id: string],
+  [withdrawal: Withdrawal, expectedState?: WithdrawalState],
+  [id: string],
+  Promise<void>,
+  Promise<Withdrawal | null>,
+  Promise<void>,
+  Promise<void>
+> {
+  abstract findByIdForUpdate(id: string): Promise<Withdrawal | null>;
+  abstract findByIdempotencyKey(accountId: string, key: string): Promise<Withdrawal | null>;
+  abstract listForAccount(
     accountId: string,
     page: { cursor?: string; limit: number },
   ): Promise<{ items: readonly Withdrawal[]; nextCursor: string | null }>;
-  listForOperator(filter?: {
+  abstract listForOperator(filter?: {
     state?: WithdrawalState;
     limit?: number;
   }): Promise<readonly Withdrawal[]>;
-  create(withdrawal: Withdrawal): Promise<void>;
-  updateMutable(withdrawal: Withdrawal): Promise<void>;
-  deleteMutable(id: string): Promise<void>;
-  deleteForRoot(id: string): Promise<void>;
-  transition(
-    id: string,
-    from: WithdrawalState,
-    to: WithdrawalState,
-    reason?: string,
-  ): Promise<void>;
-  complete(
+  abstract create(withdrawal: Withdrawal): Promise<void>;
+  abstract findById(id: string): Promise<Withdrawal | null>;
+  abstract update(withdrawal: Withdrawal, expectedState?: WithdrawalState): Promise<void>;
+  abstract delete(id: string): Promise<void>;
+  abstract deleteForRoot(id: string): Promise<void>;
+  abstract complete(
     id: string,
     actorId: string,
     externalReference: string | null,

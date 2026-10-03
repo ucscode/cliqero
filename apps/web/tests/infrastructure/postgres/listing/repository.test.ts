@@ -22,7 +22,7 @@ describe("PostgresListingRepository descriptions", () => {
       destination: "https://example.com",
     });
 
-    await repository.save(listing);
+    await repository.create(listing);
     await repository.query({ search: "Markdown", limit: 20 });
     const searchQuery = calls.find((call) => call.sql.includes("to_tsvector"));
 
@@ -187,7 +187,7 @@ describe("PostgresListingRepository descriptions", () => {
         { id: "00000000-0000-4000-8000-000000000002", name: "Toolkit", slug: "toolkit" },
       ],
     });
-    await repository.save(listing);
+    await repository.create(listing);
     expect(calls[0]).toContain("compare_at_price_minor, visibility");
     expect(calls[1]).toContain("delete from listing_capability.listing_categories");
     expect(calls[2]).toContain("insert into listing_capability.listing_categories");

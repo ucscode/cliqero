@@ -29,7 +29,8 @@ suite("persisted commerce and access vertical path", () => {
       password: "correct-horse-staple",
       country: "NG",
     });
-    const listing = await app.listingService.createPublished(seller, {
+    const listing = await app.listingService.create(seller, {
+      state: "published",
       title: "Private destination",
       shortDescription: "Access the private destination",
       longDescription: "Access elsewhere",
@@ -179,7 +180,8 @@ suite("persisted commerce and access vertical path", () => {
       app.integrations.authenticate(validCredential.credential + "bad"),
     ).resolves.toBeNull();
 
-    const otherListing = await app.listingService.createPublished(seller, {
+    const otherListing = await app.listingService.create(seller, {
+      state: "published",
       title: "Other",
       shortDescription: "Another catalogue item",
       longDescription: "Detailed other listing.",
