@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { WithdrawalService } from "@/application/withdrawal/service";
 import { Money } from "@/modules/money/money";
 import type { Withdrawal } from "@/modules/withdrawal/withdrawal";
+import type { WithdrawalIdempotencyMatch } from "@/modules/withdrawal/withdrawal";
 
 function fixture(
   state: Withdrawal["state"] = "approved",
@@ -42,12 +43,15 @@ function fixture(
   const releaseOrComplete = vi.fn(async () => undefined);
   const append = vi.fn(async () => undefined);
   const requireCapability = vi.fn(async () => undefined);
+  const findByIdempotencyKey = vi.fn<
+    (accountId: string, key: string) => Promise<WithdrawalIdempotencyMatch | null>
+  >(async () => null);
   const service = new WithdrawalService(
     {
       findById: async () => withdrawal,
       findByIdForUpdate: async () =>
         withdrawalForUpdate === undefined ? withdrawal : withdrawalForUpdate,
-      findByIdempotencyKey: async () => null,
+      findByIdempotencyKey,
       listForAccount: async () => ({ items: [], nextCursor: null }),
       listForOperator: async () => [],
       create,
@@ -103,8 +107,57 @@ function fixture(
     reserve,
     treasuryCreate,
     auditRecord,
+    findByIdempotencyKey,
   };
 }
+
+describe("WithdrawalService idempotency intent", () => {
+  it("matches equivalent normalized intent while rejecting state or reason changes", async () => {
+    const { service, withdrawal, findByIdempotencyKey } = fixture();
+    findByIdempotencyKey.mockResolvedValue({
+      withdrawal: { ...withdrawal, state: "approved", reason: "Changed later" },
+      initialState: "requested",
+      initialReason: null,
+    });
+    const same = await service.create({
+      accountId: "account-1",
+      amountMinor: 2500n,
+      currency: "USD",
+      destinationId: "destination-1",
+      idempotencyKey: "key-1",
+      correlationId: "retry-correlation",
+      initialReason: "   ",
+    });
+    expect(same.state).toBe("approved");
+    await expect(
+      service.create({
+        accountId: "account-1",
+        amountMinor: 2500n,
+        currency: "USD",
+        destinationId: "destination-1",
+        idempotencyKey: "key-1",
+        correlationId: "retry-correlation",
+        initialState: "approved",
+      }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict" });
+    findByIdempotencyKey.mockResolvedValue({
+      withdrawal,
+      initialState: "requested",
+      initialReason: "original reason",
+    });
+    await expect(
+      service.create({
+        accountId: "account-1",
+        amountMinor: 2500n,
+        currency: "USD",
+        destinationId: "destination-1",
+        idempotencyKey: "key-1",
+        correlationId: "retry-correlation",
+        initialReason: "different reason",
+      }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict" });
+  });
+});
 
 describe("WithdrawalService request fees", () => {
   it("snapshots gross, capped fee, and net and credits Treasury at request time", async () => {

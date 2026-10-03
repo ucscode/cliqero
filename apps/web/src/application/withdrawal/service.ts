@@ -6,6 +6,7 @@ import type {
   Withdrawal,
   WithdrawalPolicySource,
   WithdrawalRepository,
+  WithdrawalIdempotencyMatch,
 } from "@/modules/withdrawal/withdrawal";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import { Money } from "@/modules/money/money";
@@ -90,13 +91,17 @@ export class WithdrawalService extends CrudService<
     });
   }
   override async create(input: WithdrawalCreateInput): Promise<Withdrawal> {
+    const initialState = input.initialState ?? "requested";
+    const initialReason = input.initialReason?.trim() || null;
+    if (initialState === "rejected" && !initialReason)
+      throw new PublicApplicationError("A rejection reason is required.", "reason_required", 400);
     const existing = await this.withdrawals.findByIdempotencyKey(
       input.accountId,
       input.idempotencyKey,
     );
-    if (existing) return this.resolveIdempotent(existing, input);
+    if (existing) return this.resolveIdempotent(existing, input, initialState, initialReason);
     const policy = await this.policy.getActive();
-    if (!policy.enabled && (input.initialState ?? "requested") !== "rejected")
+    if (!policy.enabled && initialState !== "rejected")
       throw new PublicApplicationError("Withdrawals are disabled.", "withdrawals_disabled", 409);
     if (input.currency !== policy.minimumAmount.currency)
       throw new PublicApplicationError(
@@ -116,16 +121,12 @@ export class WithdrawalService extends CrudService<
         "invalid_amount",
         400,
       );
-    const initialState = input.initialState ?? "requested";
-    const initialReason = input.initialReason?.trim() || null;
-    if (initialState === "rejected" && !initialReason)
-      throw new PublicApplicationError("A rejection reason is required.", "reason_required", 400);
     return this.persistence.withIdempotencyLock(input.accountId, input.idempotencyKey, async () => {
       const prior = await this.withdrawals.findByIdempotencyKey(
         input.accountId,
         input.idempotencyKey,
       );
-      if (prior) return this.resolveIdempotent(prior, input);
+      if (prior) return this.resolveIdempotent(prior, input, initialState, initialReason);
       const destination = await this.destinations.resolveForWithdrawal(
         input.accountId,
         input.destinationId,
@@ -201,26 +202,31 @@ export class WithdrawalService extends CrudService<
     });
   }
   private resolveIdempotent(
-    existing: Withdrawal,
+    existing: WithdrawalIdempotencyMatch,
     input: {
       accountId: string;
       amountMinor: bigint;
       currency: string;
       destinationId: string;
     },
+    initialState: NonNullable<WithdrawalCreateInput["initialState"]>,
+    initialReason: string | null,
   ) {
+    const withdrawal = existing.withdrawal;
     const same =
-      existing.accountId === input.accountId &&
-      existing.amount.minorAmount === input.amountMinor &&
-      existing.amount.currency === input.currency &&
-      existing.destination.savedDestinationId === input.destinationId;
+      withdrawal.accountId === input.accountId &&
+      withdrawal.amount.minorAmount === input.amountMinor &&
+      withdrawal.amount.currency === input.currency &&
+      withdrawal.destination.savedDestinationId === input.destinationId &&
+      existing.initialState === initialState &&
+      existing.initialReason === initialReason;
     if (!same)
       throw new PublicApplicationError(
         "This idempotency key is already used for a different withdrawal.",
         "idempotency_conflict",
         409,
       );
-    return existing;
+    return withdrawal;
   }
   async list(accountId: string, page: { cursor?: string; limit: number }) {
     return this.withdrawals.listForAccount(accountId, page);

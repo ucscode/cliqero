@@ -4,6 +4,7 @@ import type {
   Withdrawal,
   WithdrawalState,
   DestinationField,
+  WithdrawalIdempotencyMatch,
 } from "@/modules/withdrawal/withdrawal";
 import { WithdrawalRepository } from "@/modules/withdrawal/withdrawal";
 interface Row {
@@ -41,11 +42,28 @@ export class PostgresWithdrawalRepository extends WithdrawalRepository {
   async findByIdForUpdate(id: string) {
     return this.find("w.uuid=$1", [id], true);
   }
-  async findByIdempotencyKey(accountId: string, key: string) {
-    return this.find(
-      "w.account_id=(select id from identity_capability.accounts where uuid=$1) and w.idempotency_key=$2",
-      [accountId, key],
-    );
+  async findByIdempotencyKey(
+    accountId: string,
+    key: string,
+  ): Promise<WithdrawalIdempotencyMatch | null> {
+    const row = (
+      await this.sql.query<
+        Row & {
+          creation_state: "requested" | "approved" | "rejected";
+          creation_reason: string | null;
+        }
+      >(
+        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.fee_minor,w.net_amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.idempotency_key,w.correlation_id,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) as completed_by,w.completed_at,w.created_at,w.updated_at,w.creation_state,w.creation_reason from withdrawal_capability.withdrawals w where w.account_id=(select id from identity_capability.accounts where uuid=$1) and w.idempotency_key=$2`,
+        [accountId, key],
+      )
+    ).rows[0];
+    return row
+      ? {
+          withdrawal: this.map(row),
+          initialState: row.creation_state,
+          initialReason: row.creation_reason,
+        }
+      : null;
   }
   async listForAccount(accountId: string, page: { cursor?: string; limit: number }) {
     const cursor = decodeAccountCursor(page.cursor);
@@ -80,7 +98,7 @@ export class PostgresWithdrawalRepository extends WithdrawalRepository {
   }
   async create(value: Withdrawal) {
     await this.sql.query(
-      `insert into withdrawal_capability.withdrawals(uuid,account_id,amount_minor,fee_minor,net_amount_minor,currency,saved_destination_id,destination_method,destination_method_name,destination_name,destination_details,state,idempotency_key,correlation_id,reason,created_at,updated_at) values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,$16,$16)`,
+      `insert into withdrawal_capability.withdrawals(uuid,account_id,amount_minor,fee_minor,net_amount_minor,currency,saved_destination_id,destination_method,destination_method_name,destination_name,destination_details,state,idempotency_key,correlation_id,reason,creation_state,creation_reason,created_at,updated_at) values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,$12,$15,$16,$16)`,
       [
         value.id,
         value.accountId,

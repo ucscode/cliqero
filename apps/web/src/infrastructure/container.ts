@@ -1,4 +1,5 @@
 import { PostgresDatabase } from "./postgres/shared/database";
+import { ApplicationEncryption } from "@/kernel/encryption";
 import { PostgresOutbox } from "./postgres/shared/outbox";
 import { PostgresIdempotencyRepository } from "./postgres/shared/idempotency";
 import { PostgresAccountRepository } from "./postgres/identity/accounts";
@@ -507,7 +508,10 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     ),
   );
   const apiKeyRepository = lazy(() => new PostgresApiKeyRepository(database));
-  const apiKeys = lazy(() => new ApiKeyService(apiKeyRepository(), database, database));
+  const applicationEncryption = lazy(() => new ApplicationEncryption());
+  const apiKeys = lazy(
+    () => new ApiKeyService(apiKeyRepository(), database, database, applicationEncryption()),
+  );
   const operatorApiKeys = lazy(
     () => new OperatorApiKeyService(apiKeys(), accounts(), operators(), auditRecorder(), database),
   );

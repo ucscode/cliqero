@@ -62,6 +62,11 @@ suite("operator API-key administration", () => {
           headers.set("host", url.host);
           request = new Request(request, { headers });
         }
+        if (url.pathname.endsWith("/secret") && !request.headers.has("origin")) {
+          const headers = new Headers(request.headers);
+          headers.set("origin", url.origin);
+          request = new Request(request, { headers });
+        }
         if (url.pathname === "/internal/api-keys") {
           if (request.method === "GET") return routes.collection(request);
           if (request.method === "POST") return routes.create(request);
@@ -71,6 +76,9 @@ suite("operator API-key administration", () => {
         const reassignMatch = /^\/internal\/api-keys\/([^/]+)\/reassign$/.exec(url.pathname);
         if (reassignMatch && request.method === "POST")
           return routes.reassign(request, decodeURIComponent(reassignMatch[1]));
+        const secretMatch = /^\/internal\/api-keys\/([^/]+)\/secret$/.exec(url.pathname);
+        if (secretMatch && request.method === "GET")
+          return routes.secret(request, decodeURIComponent(secretMatch[1]));
         const match = /^\/internal\/api-keys\/([^/]+)$/.exec(url.pathname);
         if (match) return routes.item(request, decodeURIComponent(match[1]));
         return Promise.resolve(Response.json({ error: "Not found" }, { status: 404 }));
@@ -197,6 +205,18 @@ suite("operator API-key administration", () => {
     expect(created.status).toBe(201);
     const key = await created.json();
     expect(await app.apiKeys.authenticate(key.secret)).toMatchObject({ accountId: root.id });
+    const revealed = await routes.secret(
+      new Request(`http://localhost:3000/internal/api-keys/${key.id}/secret`, {
+        headers: {
+          cookie: cookie!,
+          host: "localhost:3000",
+          origin: "http://localhost:3000",
+        },
+      }),
+      key.id,
+    );
+    expect(revealed.status).toBe(200);
+    expect(await revealed.json()).toEqual({ secret: key.secret, legacy: false });
     const bearer = await routes.collection(
       new Request("http://localhost:3000/internal/api-keys", {
         headers: { authorization: `Bearer ${key.secret}` },
@@ -476,6 +496,44 @@ suite("operator API-key administration", () => {
     expect(
       (await deletedMetadata.json()).items.map((item: { id: string }) => item.id),
     ).not.toContain(created.id);
+  });
+
+  it("authenticates by hash when recovery data is unavailable and reports legacy keys without secrets", async () => {
+    const owner = await account("hashonlykeyowner");
+    await grant(owner.id, "api_keys.manage");
+    const key = await app.apiKeys.create({
+      accountId: owner.id,
+      name: "Hash-only compatibility",
+      scopes: [],
+      createdBy: owner.id,
+    });
+    await app.database.query(
+      `update identity_capability.api_keys set secret_ciphertext=null,secret_nonce=null,secret_auth_tag=null,secret_key_version=null where uuid=$1`,
+      [key.id],
+    );
+
+    expect(await app.apiKeys.authenticate(key.secret)).toMatchObject({ accountId: owner.id });
+    expect(await app.apiKeys.reveal(key.id)).toBeNull();
+    const legacy = await sessionApi(owner.id, ["api_keys.manage"]).fetch(
+      new Request(`http://localhost/internal/api-keys/${key.id}/secret`),
+    );
+    expect(legacy.status).toBe(200);
+    expect(await legacy.json()).toEqual({ secret: null, legacy: true });
+
+    const damaged = await app.apiKeys.create({
+      accountId: owner.id,
+      name: "Damaged recovery copy",
+      scopes: [],
+      createdBy: owner.id,
+    });
+    await app.database.query(
+      `update identity_capability.api_keys set secret_ciphertext=decode('00','hex') where uuid=$1`,
+      [damaged.id],
+    );
+    expect(await app.apiKeys.authenticate(damaged.secret)).toMatchObject({ accountId: owner.id });
+    await expect(app.apiKeys.reveal(damaged.id)).rejects.toMatchObject({
+      code: "secret_unavailable",
+    });
   });
 
   it("bulk-deletes server-side with independent per-key authorization and partial outcomes", async () => {

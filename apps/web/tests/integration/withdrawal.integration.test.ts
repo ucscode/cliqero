@@ -145,6 +145,7 @@ suite("withdrawal lifecycle", () => {
   });
   it("rejects forged over-balance amounts without partially committing withdrawal work", async () => {
     const { seller, destinationId } = await setup();
+    const treasuryBefore = (await app.treasuryRepository.summary()).balanceMinor;
 
     await expect(
       app.withdrawals.create({
@@ -169,9 +170,14 @@ suite("withdrawal lifecycle", () => {
       `select count(*)::text as count from kernel.outbox_events where event_name='withdrawal.requested' and payload->>'accountId'=$1`,
       [seller.id],
     );
+    const treasuryRows = await app.database.query<{ count: string }>(
+      `select count(*)::text as count from treasury_capability.entries where idempotency_key like 'withdrawal:%:fee:%'`,
+    );
     expect(withdrawalCount.rows[0]?.count).toBe("0");
     expect(reservationCount.rows[0]?.count).toBe("0");
     expect(outboxCount.rows[0]?.count).toBe("0");
+    expect(treasuryRows.rows[0]?.count).toBe("0");
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(treasuryBefore);
   });
   it("rejects another account's destination and scopes idempotency keys per account", async () => {
     const first = await setup();
@@ -347,6 +353,70 @@ suite("withdrawal lifecycle", () => {
         (item) => item.id === first.id,
       ),
     ).toHaveLength(1);
+  });
+
+  it("binds idempotency to original state and normalized initial reason after later updates", async () => {
+    const { seller, destinationId } = await setup();
+    const created = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: "creation-intent-key",
+      correlationId: newId(),
+      initialReason: "  customer request  ",
+    });
+    await app.withdrawals.update(seller.id, created.id, {
+      state: "approved",
+      reason: "reviewed by operator",
+    });
+
+    await expect(
+      app.withdrawals.create({
+        accountId: seller.id,
+        amountMinor: 1000n,
+        currency: "USD",
+        destinationId,
+        idempotencyKey: "creation-intent-key",
+        correlationId: newId(),
+        initialReason: "customer request",
+      }),
+    ).resolves.toMatchObject({ id: created.id, state: "approved" });
+
+    await expect(
+      app.withdrawals.create({
+        accountId: seller.id,
+        amountMinor: 1000n,
+        currency: "USD",
+        destinationId,
+        idempotencyKey: "creation-intent-key",
+        correlationId: newId(),
+        initialReason: "other intent",
+      }),
+    ).rejects.toThrow("This idempotency key is already used for a different withdrawal.");
+    await expect(
+      app.withdrawals.create({
+        accountId: seller.id,
+        amountMinor: 1000n,
+        currency: "USD",
+        destinationId,
+        idempotencyKey: "creation-intent-key",
+        correlationId: newId(),
+        initialState: "approved",
+        initialReason: "customer request",
+      }),
+    ).rejects.toThrow("This idempotency key is already used for a different withdrawal.");
+    const snapshot = await app.database.query<{
+      creation_state: string;
+      creation_reason: string | null;
+    }>(
+      `select creation_state,creation_reason from withdrawal_capability.withdrawals where uuid=$1`,
+      [created.id],
+    );
+    expect(snapshot.rows[0]).toEqual({
+      creation_state: "requested",
+      creation_reason: "customer request",
+    });
   });
   it("converges concurrent identical requests on one withdrawal", async () => {
     const { seller, destinationId } = await setup();

@@ -892,6 +892,14 @@ commonly configured, or important for immediate operator visibility. Variables
 already surfaced through tracked module/provider configuration remain
 documented with that configuration rather than being duplicated indiscriminately.
 
+Application-owned encryption-at-rest uses the shared `APP_ENCRYPTION_KEY`
+through the application encryption service. Derive purpose-specific keys from
+that root; do not add feature-specific application-encryption variables when
+cryptographic separation can be provided by purpose-specific derivation.
+Authentication, signing, external-provider, and infrastructure secrets remain
+separate. Keep root-key parsing and cryptographic primitives out of domain and
+application services.
+
 Use the repository formatter and quality checks before considering TypeScript or
 Next.js changes complete:
 

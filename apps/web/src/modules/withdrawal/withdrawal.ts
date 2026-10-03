@@ -50,6 +50,11 @@ export interface Withdrawal {
   createdAt: Date;
   updatedAt: Date;
 }
+export type WithdrawalIdempotencyMatch = {
+  withdrawal: Withdrawal;
+  initialState: Extract<WithdrawalState, "requested" | "approved" | "rejected">;
+  initialReason: string | null;
+};
 export interface WithdrawalPolicy {
   minimumAmount: Money;
   maximumAmount: Money | null;
@@ -69,7 +74,10 @@ export abstract class WithdrawalRepository extends CrudRepository<
   Promise<void>
 > {
   abstract findByIdForUpdate(id: string): Promise<Withdrawal | null>;
-  abstract findByIdempotencyKey(accountId: string, key: string): Promise<Withdrawal | null>;
+  abstract findByIdempotencyKey(
+    accountId: string,
+    key: string,
+  ): Promise<WithdrawalIdempotencyMatch | null>;
   abstract listForAccount(
     accountId: string,
     page: { cursor?: string; limit: number },

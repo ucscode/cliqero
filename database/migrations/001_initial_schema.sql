@@ -1746,6 +1746,11 @@ CREATE TABLE withdrawal_capability.withdrawals (
     CONSTRAINT withdrawals_state_valid CHECK ((state = ANY (ARRAY['requested'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text, 'completed'::text, 'failed'::text])))
 );
 
+ALTER TABLE withdrawal_capability.withdrawals
+    ADD COLUMN creation_state text DEFAULT 'requested'::text NOT NULL,
+    ADD COLUMN creation_reason text,
+    ADD CONSTRAINT withdrawals_creation_state_valid CHECK ((creation_state = ANY (ARRAY['requested'::text, 'approved'::text, 'rejected'::text])));
+
 -- Name: destinations; Type: TABLE; Schema: withdrawal_capability; Owner: -
 --
 
