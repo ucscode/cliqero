@@ -146,30 +146,6 @@ export class ListingService extends CrudService<
                 ),
         visibility: input.visibility,
         categories,
-      });
-      listing.update({
-        title: input.title ?? listing.title,
-        shortDescription: input.shortDescription ?? listing.shortDescription,
-        longDescription: input.longDescription ?? listing.longDescription,
-        price: Money.of(
-          BigInt(input.priceMinor ?? listing.price.minorAmount.toString()),
-          input.currency ?? listing.price.currency,
-        ),
-        destination: input.destination ?? listing.destination,
-        metadata: input.metadata ?? listing.metadata,
-        featuredPosition:
-          input.featuredPosition === undefined ? listing.featuredPosition : input.featuredPosition,
-        compareAtPrice:
-          input.compareAtPriceMinor === undefined
-            ? listing.compareAtPrice
-            : input.compareAtPriceMinor === null
-              ? null
-              : Money.of(
-                  BigInt(input.compareAtPriceMinor),
-                  input.currency ?? listing.price.currency,
-                ),
-        visibility: input.visibility,
-        categories,
         state: input.state,
       });
       await this.listings.update(id, listing);

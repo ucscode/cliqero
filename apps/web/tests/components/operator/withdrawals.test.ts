@@ -30,8 +30,9 @@ describe("operator manual withdrawal workflow", () => {
       });
     expect(source).toContain("Mark as paid");
   });
-  it("records already-sent payments through the withdrawal PATCH resource", () => {
-    expect(source).toContain('method: "PATCH"');
+  it("records already-sent payments through the explicit completion command", () => {
+    expect(source).toContain('method: "POST"');
+    expect(source).toContain("/internal/withdrawals/${withdrawalId}/complete");
     expect(source).toContain("external_reference: externalReference.trim()");
     expect(source).toContain("note: completionNote.trim()");
     expect(source).toContain("Send the payment outside Cliqero first");

@@ -193,6 +193,35 @@ describe("WithdrawalService manual completion", () => {
     ]);
   });
 
+  it("keeps cancellation as a command that releases funds, reverses fees, and emits an event", async () => {
+    const { service, withdrawal, releaseOrComplete, append, treasuryCreate } = fixture("requested");
+
+    await expect(service.cancel("account-1", withdrawal.id)).resolves.toMatchObject({
+      state: "cancelled",
+    });
+    expect(releaseOrComplete).toHaveBeenCalledWith({
+      withdrawalId: withdrawal.id,
+      accountId: withdrawal.accountId,
+      kind: "released",
+      correlationId: withdrawal.correlationId,
+    });
+    expect(treasuryCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direction: "debit",
+        amountMinor: withdrawal.fee?.minorAmount,
+        sourceKind: "withdrawal_fee_reversal",
+        correlationId: withdrawal.correlationId,
+      }),
+    );
+    expect(append).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: "withdrawal.cancelled",
+        aggregateId: withdrawal.id,
+        correlationId: withdrawal.correlationId,
+      }),
+    ]);
+  });
+
   it("rejects completion unless the withdrawal is approved", async () => {
     const { service, withdrawal, complete, releaseOrComplete } = fixture("requested");
 

@@ -22,4 +22,17 @@ export const withdrawalOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     capability: "withdrawals.manage",
     scope: "withdrawals:manage",
   },
+  {
+    path: "/api/withdrawals/{withdrawalId}/cancel",
+    method: "post",
+    mode: "account",
+    scope: "withdrawals:create",
+  },
+  {
+    path: "/api/withdrawals/{withdrawalId}/complete",
+    method: "post",
+    mode: "account",
+    capability: "withdrawals.manage",
+    scope: "withdrawals:manage",
+  },
 ];

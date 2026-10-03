@@ -17,15 +17,79 @@ function harness() {
         capabilities: ["withdrawals.manage"],
       })),
     },
-    operatorWithdrawals: { list: vi.fn(), get: vi.fn() },
-    withdrawals: { delete: remove },
+    operatorWithdrawals: { list: vi.fn(), get: vi.fn(async (id: string) => ({ id })) },
+    withdrawals: {
+      delete: remove,
+      update: vi.fn(async (_actor: string, id: string, input: unknown) => ({ id, input })),
+      complete: vi.fn(async (_actor: string, id: string, input: unknown) => ({ id, input })),
+    },
     withdrawalDestinations: { list: vi.fn() },
     operatorAccounts: { list: vi.fn() },
   };
-  return { routes: new InternalWithdrawalRoutes(container as never), remove };
+  return { routes: new InternalWithdrawalRoutes(container as never), remove, container };
 }
 
 describe("internal Operator withdrawal routes", () => {
+  const sameOriginJson = (url: string, method: string, value: unknown) =>
+    new Request(url, {
+      method,
+      headers: {
+        host: "localhost",
+        origin: "http://localhost",
+        "sec-fetch-site": "same-origin",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(value),
+    });
+
+  it("keeps ordinary status changes on PATCH and rejects completion-only fields", async () => {
+    const { routes, container } = harness();
+    const patch = await routes.update(
+      sameOriginJson(`http://localhost/internal/withdrawals/${uuid("1")}`, "PATCH", {
+        state: "approved",
+      }),
+      uuid("1"),
+    );
+    expect(patch.status).toBe(200);
+    expect(container.withdrawals.update).toHaveBeenCalledWith(accountId, uuid("1"), {
+      amountMinor: undefined,
+      destinationId: undefined,
+      state: "approved",
+      reason: undefined,
+    });
+    expect(container.withdrawals.complete).not.toHaveBeenCalled();
+
+    for (const payload of [
+      { external_reference: "ignored" },
+      { note: "ignored" },
+      { state: "completed", external_reference: "transfer-1" },
+    ]) {
+      const response = await routes.update(
+        sameOriginJson(`http://localhost/internal/withdrawals/${uuid("1")}`, "PATCH", payload),
+        uuid("1"),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(container.withdrawals.complete).not.toHaveBeenCalled();
+  });
+
+  it("records completion through the explicit command with evidence metadata", async () => {
+    const { routes, container } = harness();
+    const response = await routes.complete(
+      sameOriginJson(`http://localhost/internal/withdrawals/${uuid("1")}/complete`, "POST", {
+        external_reference: "transfer-1",
+        note: "Sent from bank portal",
+      }),
+      uuid("1"),
+    );
+    expect(response.status).toBe(200);
+    expect(container.withdrawals.complete).toHaveBeenCalledWith(accountId, uuid("1"), {
+      externalReference: "transfer-1",
+      note: "Sent from bank portal",
+    });
+    expect(container.withdrawals.update).not.toHaveBeenCalled();
+  });
+
   it("uses one session-only bulk request and returns per-record outcomes", async () => {
     const { routes, remove } = harness();
     const response = await routes.bulkDelete(

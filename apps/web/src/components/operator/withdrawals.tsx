@@ -618,13 +618,20 @@ export function OperatorWithdrawalDetail({
     setBusy(true);
     setError(null);
     try {
-      const status =
-        action === "approve" ? "approved" : action === "reject" ? "rejected" : "completed";
-      await apiFetch(`/internal/withdrawals/${withdrawalId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ state: status, ...body }),
-      });
+      if (action === "complete") {
+        await apiFetch(`/internal/withdrawals/${withdrawalId}/complete`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body ?? {}),
+        });
+      } else {
+        const status = action === "approve" ? "approved" : "rejected";
+        await apiFetch(`/internal/withdrawals/${withdrawalId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ state: status, ...body }),
+        });
+      }
       await load();
     } catch (cause) {
       setError(message(cause));

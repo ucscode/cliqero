@@ -21,6 +21,7 @@ function appWith(
   categoryOverrides: Record<string, unknown> = {},
   reviewOverrides: Record<string, unknown> = {},
   principalResolverOverride?: { resolve: (request: Request) => Promise<any> },
+  withdrawalOverrides: Record<string, unknown> = {},
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
   const resolvedPrincipal = principal ?? {
@@ -280,6 +281,7 @@ function appWith(
         update: async (_actorId: string, _id: string, input: unknown) => ({ input }),
         cancel: async () => ({}),
         complete: async (_actorId: string, id: string, input: unknown) => ({ id, input }),
+        ...withdrawalOverrides,
       },
       fundsReservation: {
         summarize: async () => [],
@@ -968,7 +970,12 @@ describe("Hono API foundation", () => {
     });
     expect(paths["/api/withdrawals/{withdrawalId}/approve"]).toBeUndefined();
     expect(paths["/api/withdrawals/{withdrawalId}/reject"]).toBeUndefined();
-    expect(paths["/api/withdrawals/{withdrawalId}/complete"]).toBeUndefined();
+    expect(paths["/api/withdrawals/{withdrawalId}/cancel"].post["x-required-api-scope"]).toBe(
+      "withdrawals:create",
+    );
+    expect(paths["/api/withdrawals/{withdrawalId}/complete"].post["x-required-api-scope"]).toBe(
+      "withdrawals:manage",
+    );
     expect(paths["/api/withdrawals/{withdrawalId}/payout"]).toBeUndefined();
     expect(paths["/api/withdrawals/{withdrawalId}/payout/reconcile"]).toBeUndefined();
     expect(paths["/api/treasury"].get).toMatchObject({
@@ -1436,7 +1443,7 @@ describe("Hono API foundation", () => {
       ).status,
     ).toBe(200);
   });
-  it("uses PATCH for owner cancellation and does not retain command-style withdrawal routes", async () => {
+  it("uses PATCH for ordinary state updates without action-specific state routes", async () => {
     const owner = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: {},
@@ -1449,12 +1456,12 @@ describe("Hono API foundation", () => {
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "cancelled" }),
+        body: JSON.stringify({ status: "approved" }),
       },
     );
     expect(getLegacyRouteAccess(new URL(patch.url).pathname, patch.method)).toEqual({
       mode: "account",
-      scope: "withdrawals:create",
+      scope: "withdrawals:manage",
     });
     expect(
       (
@@ -1467,7 +1474,7 @@ describe("Hono API foundation", () => {
     ).toBe(405);
 
     const operator = { ...owner, capabilities: ["system.root"] };
-    for (const action of ["approve", "reject", "complete", "payout", "payout/reconcile"]) {
+    for (const action of ["approve", "reject", "payout", "payout/reconcile"]) {
       expect(
         (
           await appWith(operator).fetch(
@@ -1480,7 +1487,7 @@ describe("Hono API foundation", () => {
       ).toBe(404);
     }
   });
-  it("records manual completion only through the withdrawals manage PATCH scope", async () => {
+  it("records manual completion only through its withdrawals manage command", async () => {
     const ordinary = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: {},
@@ -1488,12 +1495,12 @@ describe("Hono API foundation", () => {
       capabilities: [],
       scopes: new Set<string>(),
     };
-    const request = () =>
-      new Request("http://localhost/api/withdrawals/00000000-0000-4000-8000-000000000010", {
-        method: "PATCH",
+    const path = "/api/withdrawals/00000000-0000-4000-8000-000000000010/complete";
+    const request = (url = path) =>
+      new Request(`http://localhost${url}`, {
+        method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          status: "completed",
           external_reference: "transfer-1",
           note: "Sent outside Cliqero",
         }),
@@ -1510,16 +1517,78 @@ describe("Hono API foundation", () => {
         }).fetch(request())
       ).status,
     ).toBe(403);
+    const complete = vi.fn(async (_actor: string, id: string, input: unknown) => ({ id, input }));
+    const allowedResponse = await appWith(
+      {
+        ...ordinary,
+        kind: "api_key" as const,
+        capabilities: ["system.root"],
+        scopes: new Set(["withdrawals:manage"]),
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { complete },
+    ).fetch(request());
+    expect(allowedResponse.status).toBe(200);
+    expect(complete).toHaveBeenCalledWith(
+      ordinary.accountId,
+      "00000000-0000-4000-8000-000000000010",
+      { externalReference: "transfer-1", note: "Sent outside Cliqero" },
+    );
     expect(
       (
-        await appWith({
-          ...ordinary,
-          kind: "api_key" as const,
-          capabilities: ["system.root"],
-          scopes: new Set(["withdrawals:manage"]),
-        }).fetch(request())
+        await appWith({ ...ordinary, capabilities: ["system.root"] }).fetch(
+          new Request("http://localhost/api/withdrawals/00000000-0000-4000-8000-000000000010", {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ status: "completed", external_reference: "not-accepted" }),
+          }),
+        )
       ).status,
-    ).toBe(200);
+    ).toBe(400);
+  });
+  it("exposes customer cancellation as a command, not a PATCH state", async () => {
+    const ownerKey = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "api_key" as const,
+      capabilities: [],
+      scopes: new Set(["withdrawals:create"]),
+    };
+    const path = "/api/withdrawals/00000000-0000-4000-8000-000000000010";
+    const cancelled = vi.fn(async () => ({ id: "withdrawal-1", state: "cancelled" }));
+    const app = appWith(
+      ownerKey,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { cancel: cancelled },
+    );
+    const response = await app.fetch(
+      new Request(`http://localhost${path}/cancel`, { method: "POST" }),
+    );
+    expect(response.status).toBe(200);
+    expect(cancelled).toHaveBeenCalledWith(
+      ownerKey.accountId,
+      "00000000-0000-4000-8000-000000000010",
+    );
+
+    const patch = await app.fetch(
+      new Request(`http://localhost${path}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      }),
+    );
+    expect(patch.status).toBe(400);
+    expect(cancelled).toHaveBeenCalledOnce();
   });
   it("protects distribution and earnings inspection with the capability and scope intersection", async () => {
     const ordinary = {
@@ -1757,7 +1826,7 @@ describe("Hono API foundation", () => {
       getLegacyRouteAccess("/api/withdrawals/00000000-0000-4000-8000-000000000001", "PATCH"),
     ).toEqual({
       mode: "account",
-      scope: "withdrawals:create",
+      scope: "withdrawals:manage",
     });
     expect(
       getLegacyRouteAccess(

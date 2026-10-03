@@ -11,6 +11,7 @@ import { errorSchema } from "../../shared/schemas";
 import { jsonSafe } from "../../shared/serialization";
 import {
   operatorWithdrawalAttentionSchema,
+  operatorWithdrawalCompleteSchema,
   operatorWithdrawalDetailSchema,
   operatorWithdrawalPatchSchema,
   operatorWithdrawalSchema,
@@ -19,10 +20,7 @@ import {
 import { crudMaxRows } from "@/config/crud";
 import { hasCapability } from "@/modules/identity/capabilities";
 import { listOwnedWithdrawals } from "@/api/compat/withdrawals/route";
-import {
-  GET as getOwnedWithdrawal,
-  PATCH as cancelOwnedWithdrawal,
-} from "@/api/compat/withdrawals/[id]/route";
+import { GET as getOwnedWithdrawal } from "@/api/compat/withdrawals/[id]/route";
 
 export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
   const maxRows = crudMaxRows();
@@ -152,10 +150,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
         body: {
           content: {
             "application/json": {
-              schema: z.union([
-                operatorWithdrawalPatchSchema,
-                z.object({ status: z.literal("cancelled") }).strict(),
-              ]),
+              schema: operatorWithdrawalPatchSchema,
             },
           },
         },
@@ -179,24 +174,96 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const body = c.req.valid("json");
-      if (body.status === "cancelled")
-        return (await cancelOwnedWithdrawal(c.req.raw, {
-          params: Promise.resolve({ withdrawalId: c.req.valid("param").withdrawalId }),
-        })) as never;
       const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;
       try {
         const id = c.req.valid("param").withdrawalId;
-        const result =
-          body.status === "completed"
-            ? await container.withdrawals.complete(p.accountId, id, {
-                externalReference: body.external_reference,
-                note: body.note,
-              })
-            : await container.withdrawals.update(p.accountId, id, {
-                state: body.status,
-                reason: body.status === "rejected" ? body.reason : undefined,
-              });
+        const result = await container.withdrawals.update(p.accountId, id, {
+          state: body.status,
+          reason: body.status === "rejected" ? body.reason : undefined,
+        });
+        return c.json(jsonSafe(result), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/withdrawals/{withdrawalId}/cancel",
+      request: withdrawalParam,
+      responses: {
+        200: {
+          description: "Withdrawal cancellation recorded and reservation released",
+          content: { "application/json": { schema: z.any() } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Withdrawal creation scope required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireScope(c, p, "withdrawals:create");
+      if (denied) return denied;
+      try {
+        const result = await container.withdrawals.cancel(
+          p.accountId,
+          c.req.valid("param").withdrawalId,
+        );
+        return c.json(jsonSafe(result), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/withdrawals/{withdrawalId}/complete",
+      request: {
+        ...withdrawalParam,
+        body: {
+          content: { "application/json": { schema: operatorWithdrawalCompleteSchema } },
+        },
+      },
+      responses: {
+        200: {
+          description: "Approved withdrawal completion recorded",
+          content: { "application/json": { schema: z.any() } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Withdrawal management permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
+      if (denied) return denied;
+      try {
+        const body = c.req.valid("json");
+        const result = await container.withdrawals.complete(
+          p.accountId,
+          c.req.valid("param").withdrawalId,
+          {
+            externalReference: body.external_reference,
+            note: body.note,
+          },
+        );
         return c.json(jsonSafe(result), 200);
       } catch (error) {
         return domainError(c, error);

@@ -1,10 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { getLegacyRouteAccess } from "@/api/legacy-dispatch";
 import { presentWithdrawal, presentWithdrawalPolicy } from "@/api/compat/withdrawals/presentation";
-import { operatorWithdrawalDetailSchema } from "@/api/routes/withdrawals/contracts";
+import {
+  operatorWithdrawalCompleteSchema,
+  operatorWithdrawalDetailSchema,
+  operatorWithdrawalPatchSchema,
+} from "@/api/routes/withdrawals/contracts";
 import { Money } from "@/modules/money/money";
 
 describe("withdrawal API contract", () => {
+  it("separates ordinary PATCH states from completion command metadata", () => {
+    expect(operatorWithdrawalPatchSchema.safeParse({ status: "approved" }).success).toBe(true);
+    expect(
+      operatorWithdrawalPatchSchema.safeParse({ status: "rejected", reason: "Not eligible" })
+        .success,
+    ).toBe(true);
+    expect(operatorWithdrawalPatchSchema.safeParse({ status: "completed" }).success).toBe(false);
+    expect(
+      operatorWithdrawalPatchSchema.safeParse({ status: "approved", external_reference: "x" })
+        .success,
+    ).toBe(false);
+    expect(
+      operatorWithdrawalCompleteSchema.parse({
+        external_reference: "transfer-1",
+        note: "Paid outside Cliqero",
+      }),
+    ).toEqual({ external_reference: "transfer-1", note: "Paid outside Cliqero" });
+    expect(() => operatorWithdrawalCompleteSchema.parse({ status: "completed" })).toThrow();
+  });
+
   it("accepts hidden server-owned fields in operator withdrawal details", () => {
     const result = operatorWithdrawalDetailSchema.parse({
       id: "00000000-0000-4000-8000-000000000001",
@@ -149,5 +173,8 @@ describe("withdrawal API contract", () => {
     );
     expect(getLegacyRouteAccess("/api/withdrawals", "GET")?.scope).toBe("withdrawals:read");
     expect(getLegacyRouteAccess("/api/withdrawals", "POST")?.scope).toBe("withdrawals:create");
+    expect(getLegacyRouteAccess("/api/withdrawals/example", "PATCH")?.scope).toBe(
+      "withdrawals:manage",
+    );
   });
 });

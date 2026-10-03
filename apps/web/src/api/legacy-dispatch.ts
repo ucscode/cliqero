@@ -101,7 +101,12 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
   if (pattern === "/api/withdrawals/:withdrawalId")
     return {
       mode: "account",
-      scope: method === "PATCH" ? "withdrawals:create" : "withdrawals:read",
+      scope:
+        method === "PATCH"
+          ? "withdrawals:manage"
+          : method === "GET"
+            ? "withdrawals:read"
+            : "withdrawals:create",
     };
   return { mode: "account" };
 }

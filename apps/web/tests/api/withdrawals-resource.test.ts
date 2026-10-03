@@ -181,60 +181,8 @@ describe("owner withdrawal resource mutation", () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels through PATCH and retains no DELETE command", async () => {
-    const cancel = vi.fn(async () => withdrawal);
-    fixtures.container = {
-      principalResolver: {
-        resolve: vi.fn(async () => ({
-          accountId: withdrawal.accountId,
-          account: { id: withdrawal.accountId },
-          kind: "user_session",
-          capabilities: [],
-          scopes: new Set<string>(),
-        })),
-      },
-      withdrawals: { cancel },
-    };
-
-    const response = await withdrawalRoute.PATCH(
-      new Request("http://localhost/api/withdrawals/withdrawal", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "cancelled" }),
-      }),
-      { params: Promise.resolve({ withdrawalId: withdrawal.id }) },
-    );
-
-    expect(response.status).toBe(200);
-    expect(cancel).toHaveBeenCalledWith(withdrawal.accountId, withdrawal.id);
+  it("does not expose cancellation as PATCH or DELETE on the compatibility detail", () => {
+    expect("PATCH" in withdrawalRoute).toBe(false);
     expect("DELETE" in withdrawalRoute).toBe(false);
-  });
-
-  it("requires withdrawals:create for API-key cancellation", async () => {
-    const cancel = vi.fn(async () => withdrawal);
-    fixtures.container = {
-      principalResolver: {
-        resolve: vi.fn(async () => ({
-          accountId: withdrawal.accountId,
-          account: { id: withdrawal.accountId },
-          kind: "api_key",
-          capabilities: [],
-          scopes: new Set<string>(),
-        })),
-      },
-      withdrawals: { cancel },
-    };
-
-    const response = await withdrawalRoute.PATCH(
-      new Request("http://localhost/api/withdrawals/withdrawal", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "cancelled" }),
-      }),
-      { params: Promise.resolve({ withdrawalId: withdrawal.id }) },
-    );
-
-    expect(response.status).toBe(403);
-    expect(cancel).not.toHaveBeenCalled();
   });
 });
