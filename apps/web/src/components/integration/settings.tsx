@@ -18,6 +18,7 @@ import { Badge } from "../ui/badge";
 import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { OneTimeSecret } from "../settings/one-time-secret";
+import { useOperatorConfirmation } from "../operator/ui/confirmation";
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiClientError ? error.message : fallback;
@@ -29,6 +30,7 @@ function dateLabel(value: string | null | undefined) {
 
 /** Reserved for operator catalogue workflows; not mounted in ordinary Settings. */
 export function IntegrationSettings() {
+  const confirm = useOperatorConfirmation();
   const [items, setItems] = useState<Integration[]>([]);
   const [listings, setListings] = useState<ListingPage["items"]>([]);
   const [name, setName] = useState("");
@@ -118,7 +120,15 @@ export function IntegrationSettings() {
     }
   }
   async function revoke(item: Integration) {
-    if (!window.confirm(`Revoke ${item.name}? Existing credentials will stop working.`)) return;
+    if (
+      !(await confirm({
+        title: `Revoke ${item.name}?`,
+        description: "Existing credentials will stop working.",
+        confirmLabel: "Revoke",
+        destructive: true,
+      }))
+    )
+      return;
     setBusy(item.id);
     setError(null);
     try {
@@ -131,7 +141,14 @@ export function IntegrationSettings() {
     }
   }
   async function rotate(item: Integration) {
-    if (!window.confirm(`Rotate ${item.name}'s credential? The old credential will stop working.`))
+    if (
+      !(await confirm({
+        title: `Rotate ${item.name}'s credential?`,
+        description: "The old credential will stop working.",
+        confirmLabel: "Rotate",
+        destructive: true,
+      }))
+    )
       return;
     setBusy(item.id);
     setError(null);

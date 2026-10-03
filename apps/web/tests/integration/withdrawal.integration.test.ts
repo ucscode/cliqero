@@ -93,7 +93,7 @@ suite("withdrawal lifecycle", () => {
         idempotencyKey: "w-2",
         correlationId: newId(),
       }),
-    ).rejects.toThrow("Insufficient available funds");
+    ).rejects.toThrow("Insufficient available earnings.");
     await expect(
       app.withdrawals.create({
         accountId: seller.id,
@@ -155,7 +155,7 @@ suite("withdrawal lifecycle", () => {
         idempotencyKey: "forged-over-balance",
         correlationId: newId(),
       }),
-    ).rejects.toThrow("Insufficient available funds");
+    ).rejects.toThrow("Insufficient available earnings.");
 
     const withdrawalCount = await app.database.query<{ count: string }>(
       `select count(*)::text as count from withdrawal_capability.withdrawals where account_id=(select id from identity_capability.accounts where uuid=$1)`,
@@ -186,7 +186,7 @@ suite("withdrawal lifecycle", () => {
         idempotencyKey: "foreign-destination",
         correlationId: newId(),
       }),
-    ).rejects.toThrow("Withdrawal destination not found");
+    ).rejects.toThrow("Payout destination not found for this account.");
 
     const firstWithdrawal = await app.withdrawals.create({
       accountId: first.seller.id,
@@ -285,7 +285,7 @@ suite("withdrawal lifecycle", () => {
     await app.withdrawalDestinations.update(seller.id, destinationId, { status: "archived" });
     await expect(
       app.withdrawalDestinations.resolveForWithdrawal(seller.id, destinationId),
-    ).rejects.toThrow("archived");
+    ).rejects.toThrow("This payout destination is unavailable.");
     await expect(
       app.withdrawals.create({
         accountId: seller.id,
@@ -305,7 +305,7 @@ suite("withdrawal lifecycle", () => {
         idempotencyKey: "archived-new-request",
         correlationId: newId(),
       }),
-    ).rejects.toThrow("archived");
+    ).rejects.toThrow("This payout destination is unavailable.");
     expect(
       (await app.withdrawalRepository.findById(first.id))?.destination.fields.find(
         (field) => field.name === "account_number",
@@ -331,7 +331,7 @@ suite("withdrawal lifecycle", () => {
         idempotencyKey: "semantic-key",
         correlationId: newId(),
       }),
-    ).rejects.toThrow("already used for another request");
+    ).rejects.toThrow("This idempotency key is already used for a different withdrawal.");
     await expect(
       app.withdrawals.create({
         accountId: seller.id,
@@ -341,7 +341,7 @@ suite("withdrawal lifecycle", () => {
         idempotencyKey: "semantic-key",
         correlationId: newId(),
       }),
-    ).rejects.toThrow("already used for another request");
+    ).rejects.toThrow("This idempotency key is already used for a different withdrawal.");
     expect(
       (await app.withdrawalRepository.listForAccount(seller.id, { limit: 50 })).items.filter(
         (item) => item.id === first.id,
@@ -433,7 +433,7 @@ suite("withdrawal lifecycle", () => {
         (completed.fee?.minorAmount ?? 0n),
     );
     await expect(app.withdrawals.complete(seller.id, completed.id)).rejects.toThrow(
-      "Invalid withdrawal transition from completed",
+      "Only approved withdrawals can be completed; this one is completed.",
     );
     expect((await app.treasuryRepository.summary()).balanceMinor).toBe(feeAfterCompletion);
     const feeRows = await app.database.query<{ count: string; amount: string }>(
@@ -467,7 +467,7 @@ suite("withdrawal lifecycle", () => {
         idempotencyKey: "after-completion",
         correlationId: newId(),
       }),
-    ).rejects.toThrow("Insufficient available funds");
+    ).rejects.toThrow("Insufficient available earnings.");
   });
   it("cancels a requested withdrawal and releases its reservation", async () => {
     const { seller, destinationId } = await setup();

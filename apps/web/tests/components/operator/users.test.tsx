@@ -150,18 +150,17 @@ describe("operator users list", () => {
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Next<\/button>/);
   });
 
-  it("keeps email editable only for creation and excludes credentials and immutable fields", () => {
+  it("keeps email editable for account creation and authorized account edits", () => {
     const callbacks = {
       onUsernameChange: vi.fn(),
       onEmailChange: vi.fn(),
       onCountryChange: vi.fn(),
     };
     const create = renderToStaticMarkup(
-      <OperatorUserFormFields create username="" email="" country="" {...callbacks} />,
+      <OperatorUserFormFields username="" email="" country="" {...callbacks} />,
     );
     const edit = renderToStaticMarkup(
       <OperatorUserFormFields
-        create={false}
         username="alpha"
         email="alpha@example.test"
         country="NG"
@@ -170,11 +169,16 @@ describe("operator users list", () => {
     );
 
     expect(create).toContain('type="email"');
-    expect(edit).toContain("Email (managed by account holder)");
-    expect(edit).toContain('readOnly=""');
-    expect(edit).toContain('disabled=""');
+    expect(edit).toContain('type="email"');
+    expect(edit).not.toContain('readOnly=""');
+    expect(edit).not.toContain('disabled=""');
     expect(create + edit).not.toContain('type="password"');
-    expect(edit).not.toContain('name="email"');
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/operator/users.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("canonical sign-in address");
+    expect(source).toContain("mark it unverified");
   });
 
   it("shows Create only with account-management authority and builds permitted row actions", () => {
@@ -311,11 +315,11 @@ describe("operator capability administration", () => {
       resolve(process.cwd(), "src/components/operator/users.tsx"),
       "utf8",
     );
-    expect(source).toContain('import AsyncSelect from "react-select/async"');
-    expect(source).toContain("loadOptions={loadParentOptions}");
+    expect(source).toContain('import { OperatorAccountSelector } from "./ui/account-selector"');
+    expect(source).toContain("loadAccounts={loadParentOptions}");
     expect(source).toContain("setSelectedParent(option)");
     expect(source).not.toContain("onChange={(option) => void reassign");
-    expect(source).toContain("onClick={() => void reassign(selectedParent?.account ?? null)}");
+    expect(source).toContain("onClick={() => void reassign(selectedParent)}");
     expect(source).toContain('title="Referral context"');
     expect(source).toContain('label: "Parent"');
     expect(source).toContain(

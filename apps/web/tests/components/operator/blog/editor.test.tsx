@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { OperatorBlogEditor } from "@/components/operator/blog";
 import { ToastProvider } from "@/components/toast/provider";
+import { OperatorConfirmationProvider } from "@/components/operator/ui/confirmation";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -9,7 +10,9 @@ describe("Operator Blog editor actions", () => {
   it("always exposes Preview and a canonical Status field for an unsaved post", () => {
     const html = renderToStaticMarkup(
       <ToastProvider>
-        <OperatorBlogEditor />
+        <OperatorConfirmationProvider>
+          <OperatorBlogEditor />
+        </OperatorConfirmationProvider>
       </ToastProvider>,
     );
     expect(html).toContain(">Preview</button>");

@@ -3924,4 +3924,33 @@ ALTER TABLE treasury_capability.entries
 ALTER TABLE ledger_capability.earnings_adjustments
   ADD COLUMN IF NOT EXISTS correlation_id uuid;
 
+-- Append-only operator Treasury corrections; each adjustment produces exactly one canonical ledger fact.
+CREATE TABLE treasury_capability.adjustments (
+    uuid uuid DEFAULT gen_random_uuid() NOT NULL,
+    amount_minor bigint NOT NULL,
+    reason text NOT NULL,
+    reference text,
+    created_by bigint NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    correlation_id uuid NOT NULL,
+    idempotency_key text NOT NULL,
+    CONSTRAINT treasury_adjustments_nonzero CHECK (amount_minor <> 0),
+    CONSTRAINT treasury_adjustments_reason_nonempty CHECK (length(btrim(reason)) > 0),
+    CONSTRAINT treasury_adjustments_uuid_unique UNIQUE (uuid),
+    CONSTRAINT treasury_adjustments_idempotency_unique UNIQUE (idempotency_key),
+    CONSTRAINT treasury_adjustments_actor_fk FOREIGN KEY (created_by)
+      REFERENCES identity_capability.accounts(id)
+);
+CREATE INDEX treasury_adjustments_created_idx
+  ON treasury_capability.adjustments (created_at DESC, id DESC);
+CREATE UNIQUE INDEX treasury_adjustment_ledger_entry_unique
+  ON treasury_capability.entries (source_kind, source_id)
+  WHERE source_kind = 'treasury_adjustment';
+CREATE TRIGGER treasury_adjustments_append_only
+  BEFORE UPDATE OR DELETE ON treasury_capability.adjustments
+  FOR EACH ROW EXECUTE FUNCTION treasury_capability.prevent_entry_mutation();
+COMMENT ON TABLE treasury_capability.adjustments IS
+  'Append-only signed operator Treasury adjustments; each row identifies its deterministic treasury ledger entry.';
+
 -- End of canonical PostgreSQL baseline.

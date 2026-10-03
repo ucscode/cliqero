@@ -70,21 +70,26 @@ export function ListingDetail({
   id,
   previewToken,
   reviewsVisible,
+  initialListing,
+  privatePreview = false,
 }: {
   id: string;
   previewToken?: string;
   reviewsVisible: boolean;
+  initialListing?: Listing;
+  privatePreview?: boolean;
 }) {
   const router = useRouter();
   const session = authClient.useSession();
-  const [listing, setListing] = useState<Listing | null>(null);
+  const [listing, setListing] = useState<Listing | null>(initialListing ?? null);
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialListing);
   const [message, setMessage] = useState<string | null>(null);
   const [promoteMessage, setPromoteMessage] = useState<string | null>(null);
   const [referralUrl, setReferralUrl] = useState<string | null>(null);
   const [promoting, setPromoting] = useState(false);
   useEffect(() => {
+    if (initialListing) return;
     const query = previewToken ? `?preview=${encodeURIComponent(previewToken)}` : "";
     void apiFetch<Listing>(`/api/listings/${id}${query}`)
       .then((nextListing) => {
@@ -99,7 +104,7 @@ export function ListingDetail({
         ),
       )
       .finally(() => setLoading(false));
-  }, [id, previewToken]);
+  }, [id, previewToken, initialListing]);
   if (loading)
     return (
       <main className="mx-auto min-h-screen max-w-6xl px-4 py-10 sm:px-8">
@@ -147,10 +152,12 @@ export function ListingDetail({
   }
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-8 sm:py-12">
-      <TextLink href="/catalogue" className="mb-8 inline-flex text-sm">
-        <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
-        Back to catalogue
-      </TextLink>
+      {!privatePreview && (
+        <TextLink href="/catalogue" className="mb-8 inline-flex text-sm">
+          <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
+          Back to catalogue
+        </TextLink>
+      )}
       <section
         aria-labelledby="listing-title"
         className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]"
@@ -237,23 +244,33 @@ export function ListingDetail({
             />
           </div>
           <div className="grid gap-3">
-            <Button onClick={buy}>
-              {isFreeListingPrice(currentListing.price.minor_amount) ? "Get free" : "Buy now"}
-            </Button>
-            {currentListing.visibility === "authenticated" ? (
-              <p className="text-sm text-slate-500">
-                Members-only listings can’t be promoted because they aren’t visible to new visitors.
-              </p>
-            ) : (
-              canShowPromote(Boolean(session.data?.user)) &&
-              !referralUrl && (
-                <Button variant="secondary" onClick={promote} disabled={promoting}>
-                  Promote
+            {!privatePreview && (
+              <>
+                <Button onClick={buy}>
+                  {isFreeListingPrice(currentListing.price.minor_amount) ? "Get free" : "Buy now"}
                 </Button>
-              )
+                {currentListing.visibility === "authenticated" ? (
+                  <p className="text-sm text-slate-500">
+                    Members-only listings can’t be promoted because they aren’t visible to new
+                    visitors.
+                  </p>
+                ) : (
+                  canShowPromote(Boolean(session.data?.user)) &&
+                  !referralUrl && (
+                    <Button variant="secondary" onClick={promote} disabled={promoting}>
+                      Promote
+                    </Button>
+                  )
+                )}
+                {promoteMessage && <Alert>{promoteMessage}</Alert>}
+                {referralUrl && <ReferralShareActions url={referralUrl} />}
+              </>
             )}
-            {promoteMessage && <Alert>{promoteMessage}</Alert>}
-            {referralUrl && <ReferralShareActions url={referralUrl} />}
+            {privatePreview && (
+              <p className="rounded-md bg-slate-100 p-3 text-sm text-slate-600">
+                Private preview · Not visible in the public catalogue
+              </p>
+            )}
           </div>
         </aside>
       </section>
@@ -269,14 +286,18 @@ export function ListingDetail({
             About this listing
           </h2>
           <ListingMarkdown content={listingDetailDescription(currentListing)} />
-          <Button className="mt-8" onClick={buy}>
-            {isFreeListingPrice(currentListing.price.minor_amount) ? "Get free" : "Buy now"}
-          </Button>
+          {!privatePreview && (
+            <Button className="mt-8" onClick={buy}>
+              {isFreeListingPrice(currentListing.price.minor_amount) ? "Get free" : "Buy now"}
+            </Button>
+          )}
         </section>
       )}
-      <ListingReviewSection reviewsVisible={reviewsVisible} rating={currentListing.rating}>
-        <ListingReviews listingId={currentListing.id} />
-      </ListingReviewSection>
+      {!privatePreview && (
+        <ListingReviewSection reviewsVisible={reviewsVisible} rating={currentListing.rating}>
+          <ListingReviews listingId={currentListing.id} />
+        </ListingReviewSection>
+      )}
     </main>
   );
 }

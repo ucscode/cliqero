@@ -24,6 +24,8 @@ export type WithdrawalCreateInput = {
   destinationId: string;
   idempotencyKey: string;
   correlationId: string;
+  initialState?: "requested" | "approved" | "rejected";
+  initialReason?: string;
 };
 export type WithdrawalUpdateInput = {
   amountMinor?: string;
@@ -64,6 +66,8 @@ export class WithdrawalService extends CrudService<
       amountMinor: string;
       destinationId: string;
       idempotencyKey: string;
+      state?: "requested" | "approved" | "rejected";
+      reason?: string;
     },
   ) {
     await this.operators.requireCapability(actorId, "withdrawals.manage");
@@ -81,6 +85,8 @@ export class WithdrawalService extends CrudService<
       destinationId: input.destinationId,
       idempotencyKey: input.idempotencyKey,
       correlationId: newId(),
+      initialState: input.state ?? "requested",
+      initialReason: input.reason,
     });
   }
   override async create(input: WithdrawalCreateInput): Promise<Withdrawal> {
@@ -90,13 +96,30 @@ export class WithdrawalService extends CrudService<
     );
     if (existing) return this.resolveIdempotent(existing, input);
     const policy = await this.policy.getActive();
-    if (!policy.enabled) throw new Error("Withdrawals are disabled");
+    if (!policy.enabled && (input.initialState ?? "requested") !== "rejected")
+      throw new PublicApplicationError("Withdrawals are disabled.", "withdrawals_disabled", 409);
     if (input.currency !== policy.minimumAmount.currency)
-      throw new Error("Withdrawal currency is not supported");
+      throw new PublicApplicationError(
+        "Withdrawal currency is not supported.",
+        "invalid_currency",
+        400,
+      );
     if (input.amountMinor < policy.minimumAmount.minorAmount)
-      throw new Error("Withdrawal amount is below the minimum");
+      throw new PublicApplicationError(
+        "Withdrawal amount is below the minimum.",
+        "invalid_amount",
+        400,
+      );
     if (policy.maximumAmount && input.amountMinor > policy.maximumAmount.minorAmount)
-      throw new Error("Withdrawal amount exceeds the maximum");
+      throw new PublicApplicationError(
+        "Withdrawal amount exceeds the maximum.",
+        "invalid_amount",
+        400,
+      );
+    const initialState = input.initialState ?? "requested";
+    const initialReason = input.initialReason?.trim() || null;
+    if (initialState === "rejected" && !initialReason)
+      throw new PublicApplicationError("A rejection reason is required.", "reason_required", 400);
     return this.persistence.withIdempotencyLock(input.accountId, input.idempotencyKey, async () => {
       const prior = await this.withdrawals.findByIdempotencyKey(
         input.accountId,
@@ -116,36 +139,58 @@ export class WithdrawalService extends CrudService<
         fee: Money.of(0n, "USD"),
         netAmount: amount,
         destination,
-        state: "requested",
+        state: initialState,
         idempotencyKey: input.idempotencyKey,
         correlationId: input.correlationId,
-        reason: null,
+        reason: initialReason,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
       const feePolicy = await this.feePolicy.getActive();
-      const { feeMinor, netMinor } = calculateFee(amount.minorAmount, feePolicy, "withdrawal");
+      const { feeMinor, netMinor } =
+        initialState === "rejected"
+          ? { feeMinor: 0n, netMinor: amount.minorAmount }
+          : calculateFee(amount.minorAmount, feePolicy, "withdrawal");
       withdrawal.fee = Money.of(feeMinor, "USD");
       withdrawal.netAmount = Money.of(netMinor, "USD");
       await this.withdrawals.create(withdrawal);
-      await this.reconcileTreasuryFee(
-        withdrawal,
-        0n,
-        feeMinor,
-        input.correlationId,
-        "request",
-        input.accountId,
-      );
-      await this.funds.reserve({
-        withdrawalId: id,
-        accountId: input.accountId,
-        amount,
-        correlationId: input.correlationId,
-      });
+      if (feeMinor > 0n)
+        await this.reconcileTreasuryFee(
+          withdrawal,
+          0n,
+          feeMinor,
+          input.correlationId,
+          "request",
+          input.accountId,
+        );
+      if (initialState !== "rejected")
+        try {
+          await this.funds.reserve({
+            withdrawalId: id,
+            accountId: input.accountId,
+            amount,
+            correlationId: input.correlationId,
+          });
+        } catch (cause) {
+          if (cause instanceof Error && cause.message.includes("Insufficient available funds"))
+            throw new PublicApplicationError(
+              "Insufficient available earnings.",
+              "insufficient_funds",
+              409,
+            );
+          if (cause instanceof Error && cause.message.includes("Account not found"))
+            throw new PublicApplicationError("Account not found.", "not_found", 404);
+          throw cause;
+        }
       await this.outbox.append([
         {
           id: newId(),
-          name: "withdrawal.requested",
+          name:
+            initialState === "approved"
+              ? "withdrawal.approved"
+              : initialState === "rejected"
+                ? "withdrawal.rejected"
+                : "withdrawal.requested",
           aggregateId: id,
           correlationId: input.correlationId,
           occurredAt: new Date(),
@@ -169,7 +214,12 @@ export class WithdrawalService extends CrudService<
       existing.amount.minorAmount === input.amountMinor &&
       existing.amount.currency === input.currency &&
       existing.destination.savedDestinationId === input.destinationId;
-    if (!same) throw new Error("Withdrawal idempotency key is already used for another request");
+    if (!same)
+      throw new PublicApplicationError(
+        "This idempotency key is already used for a different withdrawal.",
+        "idempotency_conflict",
+        409,
+      );
     return existing;
   }
   async list(accountId: string, page: { cursor?: string; limit: number }) {
@@ -186,7 +236,11 @@ export class WithdrawalService extends CrudService<
       if (!withdrawal || withdrawal.accountId !== accountId)
         throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
       if (withdrawal.state !== "requested")
-        throw new Error("Withdrawal cannot be cancelled in its current state");
+        throw new PublicApplicationError(
+          "Withdrawal cannot be cancelled in its current state.",
+          "invalid_transition",
+          409,
+        );
       await this.withdrawals.update(
         { ...withdrawal, state: "cancelled", reason: "Cancelled by account" },
         "requested",
@@ -227,14 +281,26 @@ export class WithdrawalService extends CrudService<
     const externalReference = input.externalReference?.trim() || null;
     const note = input.note?.trim() || null;
     if (externalReference && externalReference.length > 200)
-      throw new Error("External reference must be 200 characters or fewer");
+      throw new PublicApplicationError(
+        "External reference must be 200 characters or fewer.",
+        "invalid_reference",
+        400,
+      );
     if (note && note.length > 500)
-      throw new Error("Completion note must be 500 characters or fewer");
+      throw new PublicApplicationError(
+        "Completion note must be 500 characters or fewer.",
+        "invalid_note",
+        400,
+      );
     return this.uow.transaction(async () => {
       const withdrawal = await this.withdrawals.findByIdForUpdate(id);
-      if (!withdrawal) throw new Error("Withdrawal not found");
+      if (!withdrawal) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
       if (withdrawal.state !== "approved")
-        throw new Error(`Invalid withdrawal transition from ${withdrawal.state}`);
+        throw new PublicApplicationError(
+          `Only approved withdrawals can be completed; this one is ${withdrawal.state}.`,
+          "invalid_transition",
+          409,
+        );
       const completedAt = await this.withdrawals.complete(id, actorId, externalReference, note);
       await this.funds.releaseOrComplete({
         withdrawalId: id,
@@ -349,13 +415,24 @@ export class WithdrawalService extends CrudService<
         reason: reason || null,
         updatedAt: new Date(),
       };
-      if (current.state === "requested" && amountMinor !== current.amount.minorAmount)
-        await this.funds.resize({
-          withdrawalId: id,
-          accountId: current.accountId,
-          amount,
-          correlationId: current.correlationId,
-        });
+      if (current.state === "requested" && amountMinor !== current.amount.minorAmount) {
+        try {
+          await this.funds.resize({
+            withdrawalId: id,
+            accountId: current.accountId,
+            amount,
+            correlationId: current.correlationId,
+          });
+        } catch (cause) {
+          if (cause instanceof Error && cause.message.includes("Insufficient available funds"))
+            throw new PublicApplicationError(
+              "Insufficient available earnings.",
+              "insufficient_funds",
+              409,
+            );
+          throw cause;
+        }
+      }
       if (current.state === "requested" && amountChanged)
         await this.reconcileTreasuryFee(
           updated,

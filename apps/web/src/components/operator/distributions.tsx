@@ -24,6 +24,7 @@ import { CrudSortSelect } from "@/components/crud/sort-select";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
+import { useOperatorConfirmation } from "./ui/confirmation";
 
 function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
@@ -36,6 +37,7 @@ function stateLabel(value: string) {
 }
 
 export function OperatorDistributionList({ canDelete = false }: { canDelete?: boolean }) {
+  const confirm = useOperatorConfirmation();
   const [search, setSearch] = useState("");
   const [sortChoice, setSortChoice] = useState("created:desc");
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
@@ -89,8 +91,15 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
             type: "action" as const,
             label: "Delete",
             destructive: true,
-            onSelect: () => {
-              if (!window.confirm("Delete this distribution and its generated ledger facts?"))
+            onSelect: async () => {
+              if (
+                !(await confirm({
+                  title: "Delete distribution?",
+                  description: "Delete this distribution and its generated ledger facts?",
+                  confirmLabel: "Delete",
+                  destructive: true,
+                }))
+              )
                 return;
               void runOperatorBulkAction({
                 resource: "distributions",
@@ -113,7 +122,15 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
             label: "Delete",
             destructive: true,
             onSelect: async (items) => {
-              if (!window.confirm(`Delete ${items.length} selected distributions?`)) return false;
+              if (
+                !(await confirm({
+                  title: "Delete distributions?",
+                  description: `Delete ${items.length} selected distributions?`,
+                  confirmLabel: "Delete",
+                  destructive: true,
+                }))
+              )
+                return false;
               const outcome = await runOperatorBulkAction({
                 resource: "distributions",
                 action: "delete",

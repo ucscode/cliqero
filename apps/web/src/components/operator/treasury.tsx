@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import {
   apiFetch,
   formatMinorUsd,
-  parseUsdMinor,
   type OperatorTreasuryEntry,
   type OperatorTreasuryPage,
   type OperatorTreasurySummary,
@@ -13,14 +13,12 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
-import { Alert } from "../ui/alert";
 import { Money } from "../money";
 import { HoneypotField } from "../honeypot-field";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
 import { OperatorMetricCard } from "./ui/metric-card";
 import { OperatorFilterField } from "./ui/toolbar";
-import { OperatorSection } from "./ui/section";
 import { CrudIndex } from "@/components/crud/index-page";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
@@ -29,18 +27,33 @@ import { CrudSortSelect } from "@/components/crud/sort-select";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
+import { Textarea } from "../ui/textarea";
+import { RequiredLabel } from "../ui/label";
+import { useOperatorConfirmation } from "./ui/confirmation";
+import { useToast } from "../toast/provider";
+import { CrudEdit } from "@/components/crud/edit";
+
+function signedUsdMinor(value: string) {
+  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
+  if (!match) throw new Error("Enter a USD amount with no more than two decimal places.");
+  const minor = BigInt(match[2]!) * 100n + BigInt((match[3] ?? "").padEnd(2, "0") || "0");
+  const signed = match[1] === "-" ? -minor : minor;
+  if (signed === 0n) throw new Error("Adjustment amount must be non-zero.");
+  return signed.toString();
+}
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Treasury data is temporarily unavailable.";
 }
 
-export function OperatorTreasuryForm({ onCreated }: { onCreated?: () => void | Promise<void> }) {
+export function OperatorTreasuryForm() {
+  const router = useRouter();
+  const toast = useToast();
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [amount, setAmount] = useState("");
-  const [entryDirection, setEntryDirection] = useState<"credit" | "debit">("credit");
-  const [title, setTitle] = useState("");
-  const [note, setNote] = useState("");
+  const [reason, setReason] = useState("");
+  const [reference, setReference] = useState("");
 
   async function createEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,18 +61,18 @@ export function OperatorTreasuryForm({ onCreated }: { onCreated?: () => void | P
     setFormError(null);
     let amountMinor: string;
     try {
-      amountMinor = parseUsdMinor(amount);
+      amountMinor = signedUsdMinor(amount);
     } catch (cause) {
       setFormError(errorMessage(cause));
       return;
     }
-    if (!title.trim()) {
-      setFormError("Enter a title for this treasury entry.");
+    if (!reason.trim()) {
+      setFormError("Enter a reason for this treasury adjustment.");
       return;
     }
     setSaving(true);
     try {
-      await apiFetch<OperatorTreasuryEntry>("/api/treasury/entries", {
+      await apiFetch<OperatorTreasuryEntry>("/api/treasury/adjustments", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -67,16 +80,13 @@ export function OperatorTreasuryForm({ onCreated }: { onCreated?: () => void | P
           ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
         },
         body: JSON.stringify({
-          direction: entryDirection,
           amount_minor: amountMinor,
-          title,
-          note: note || undefined,
+          reason,
+          reference: reference || undefined,
         }),
       });
-      setAmount("");
-      setTitle("");
-      setNote("");
-      await onCreated?.();
+      toast.success("Treasury adjustment recorded.");
+      router.push("/operator/treasury");
     } catch (cause) {
       setFormError(errorMessage(cause));
     } finally {
@@ -85,64 +95,69 @@ export function OperatorTreasuryForm({ onCreated }: { onCreated?: () => void | P
   }
 
   return (
-    <OperatorSection
-      title="Record a company entry"
-      description="Creates a treasury accounting entry."
-      surface
+    <CrudEdit
+      mode="create"
+      eyebrow="Company accounting"
+      title="Treasury adjustment"
+      description="Record a signed correction. The ledger derives direction and title from the amount; normal Treasury facts remain domain-generated."
+      backHref="/operator/treasury"
+      backLabel="Back to Treasury"
+      saving={saving}
+      onSubmit={(event) => void createEntry(event)}
+      error={formError}
+      submitLabel="Record adjustment"
+      savingLabel="Recording…"
+      sectionTitle="Adjustment details"
+      widthClassName="max-w-3xl"
     >
-      <form className="grid gap-5 sm:grid-cols-2" onSubmit={(event) => void createEntry(event)}>
-        <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
-          Direction
-          <Select
-            value={entryDirection}
-            onChange={(event) => setEntryDirection(event.target.value as "credit" | "debit")}
-          >
-            <option value="credit">Credit</option>
-            <option value="debit">Debit</option>
-          </Select>
-        </label>
-        <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
-          Amount (USD)
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
+          <RequiredLabel htmlFor="treasury-adjustment-amount">Signed amount (USD)</RequiredLabel>
           <Input
+            id="treasury-adjustment-amount"
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             placeholder="0.00"
             inputMode="decimal"
+            required
             aria-describedby="treasury-amount-help"
           />
           <span id="treasury-amount-help" className="text-xs font-normal leading-5 text-slate-500">
-            Exact cents are recorded; enter dollars such as 10.00.
+            Positive values credit Treasury; negative values debit it. Exact cents are recorded.
           </span>
-        </label>
+        </div>
+        <div className="grid content-start gap-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
+          <RequiredLabel htmlFor="treasury-adjustment-reason">Reason</RequiredLabel>
+          <Textarea
+            id="treasury-adjustment-reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            maxLength={1000}
+            required
+          />
+        </div>
         <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
-          Title
-          <Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} />
+          Reference (optional)
+          <Input
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            maxLength={200}
+          />
         </label>
-        <label className="grid content-start gap-1.5 text-sm font-medium text-slate-700">
-          Note (optional)
-          <Input value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} />
-        </label>
-        <div className="flex flex-wrap items-center gap-3 pt-1 sm:col-span-2">
-          {formError && (
-            <div className="basis-full">
-              <Alert>{formError}</Alert>
-            </div>
-          )}
-          <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Add treasury entry"}
-          </Button>
+        <div className="sm:col-span-2">
           <HoneypotField />
         </div>
-      </form>
-    </OperatorSection>
+      </div>
+    </CrudEdit>
   );
 }
 
 export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolean }) {
+  const confirm = useOperatorConfirmation();
   const [summary, setSummary] = useState<OperatorTreasurySummary | null>(null);
   const [search, setSearch] = useState("");
   const [direction, setDirection] = useState<"" | "credit" | "debit">("");
-  const [source, setSource] = useState<"" | "automatic" | "manual">("");
+  const [source, setSource] = useState<"" | "automatic" | "adjustment">("");
   const [sortChoice, setSortChoice] = useState("created:desc");
   const [sort, sort_direction] = sortChoice.split(":") as ["created" | "amount", "asc" | "desc"];
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
@@ -151,7 +166,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
       filters: {
         search: string;
         direction: "" | "credit" | "debit";
-        source: "" | "automatic" | "manual";
+        source: "" | "automatic" | "adjustment";
         sort: string;
         sort_direction: string;
       },
@@ -181,9 +196,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
       key: "entry",
       label: "Entry",
       primary: true,
-      render: (entry) => (
-        <OperatorPrimaryCell title={entry.title} subtitle={entry.note ?? entry.id} />
-      ),
+      render: (entry) => <OperatorPrimaryCell title={entry.title} subtitle={entry.note ?? "—"} />,
     },
     {
       key: "direction",
@@ -196,18 +209,19 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
       render: (entry) =>
         entry.source?.kind === "distribution" ? (
           <Link href={`/operator/distributions/${entry.source.id}`}>Distribution</Link>
-        ) : entry.source?.kind === "withdrawal_fee" ? (
-          <Link href={`/operator/withdrawals/${entry.source.id}`}>Withdrawal fee</Link>
+        ) : entry.source?.kind === "withdrawal_fee" ||
+          entry.source?.kind === "withdrawal_fee_reversal" ? (
+          <Link href={`/operator/withdrawals/${entry.source.id}`}>Withdrawal</Link>
         ) : entry.source?.kind === "wallet_transfer" ? (
-          <span className="break-all">Wallet transfer fee · {entry.source.id}</span>
+          <span>Wallet transfer</span>
+        ) : entry.source?.kind === "treasury_adjustment" ? (
+          <span>Adjustment</span>
         ) : entry.source ? (
-          <span>
-            {entry.source.kind.replaceAll("_", " ")} · {entry.source.id}
-          </span>
+          <span>{entry.source.kind.replaceAll("_", " ")}</span>
         ) : entry.actor ? (
           `@${entry.actor.username}`
         ) : (
-          "Manual operator entry"
+          "Legacy entry"
         ),
     },
     {
@@ -247,7 +261,16 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
             label: "Delete",
             destructive: true,
             onSelect: async () => {
-              if (!window.confirm("Delete this treasury entry?")) return;
+              if (
+                !(await confirm({
+                  title: "Delete Treasury entry?",
+                  description:
+                    "This permanently removes the selected ledger fact and preserves an audit snapshot.",
+                  confirmLabel: "Delete",
+                  destructive: true,
+                }))
+              )
+                return;
               const result = await runOperatorBulkAction({
                 resource: "treasury",
                 action: "delete",
@@ -267,7 +290,16 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
           label: "Delete",
           destructive: true,
           onSelect: async (items) => {
-            if (!window.confirm(`Delete ${items.length} selected treasury entries?`)) return false;
+            if (
+              !(await confirm({
+                title: `Delete ${items.length} Treasury entries?`,
+                description:
+                  "This permanently removes the selected ledger facts and preserves audit snapshots.",
+                confirmLabel: "Delete",
+                destructive: true,
+              }))
+            )
+              return false;
             const outcome = await runOperatorBulkAction({
               resource: "treasury",
               action: "delete",
@@ -292,8 +324,8 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
     <CrudIndex
       eyebrow="Company accounting"
       title="Treasury"
-      description="Inspect Cliqero-owned allocations and operator entries. Wallet deposits and user earnings remain separate."
-      createAction={{ label: "New entry", href: "/operator/treasury/new" }}
+      description="Inspect deterministic company ledger facts and authorized signed adjustments. Wallet deposits and user earnings remain separate."
+      createAction={{ label: "New adjustment", href: "/operator/treasury/new" }}
       beforeTable={
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {summary ? (
@@ -350,8 +382,8 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
               onChange={(event) => setSource(event.target.value as typeof source)}
             >
               <option value="">All sources</option>
-              <option value="automatic">Automatic platform allocations</option>
-              <option value="manual">Manual operator entries</option>
+              <option value="automatic">System-generated</option>
+              <option value="adjustment">Adjustments</option>
             </Select>
           </OperatorFilterField>
           <div className="flex items-end gap-2">

@@ -160,6 +160,25 @@ export class PostgresListingRepository extends ListingRepository {
     await this.persist(listing, true);
   }
 
+  async countsForListings(ids: readonly string[]) {
+    if (!ids.length) return new Map<string, { reviews: number; purchases: number }>();
+    const rows = (
+      await this.sql.query<{ id: string; reviews: string; purchases: string }>(
+        `select l.uuid id,
+                (select count(*) from listing_capability.reviews r where r.listing_id=l.id) reviews,
+                (select count(*) from purchase_capability.purchases p where p.listing_id=l.id) purchases
+           from listing_capability.listings l where l.uuid=any($1::uuid[])`,
+        [ids],
+      )
+    ).rows;
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        { reviews: Number(row.reviews), purchases: Number(row.purchases) },
+      ]),
+    );
+  }
+
   async update(id: string, listing: Listing): Promise<Listing | null> {
     if (id !== listing.id) throw new Error("Listing update identity cannot change");
     const updated = await this.persist(listing, false);

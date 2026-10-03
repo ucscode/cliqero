@@ -19,6 +19,10 @@ function harness() {
     },
     operatorWithdrawals: { list: vi.fn(), get: vi.fn(async (id: string) => ({ id })) },
     withdrawals: {
+      requestByOperator: vi.fn(async (_actor: string, input: unknown) => ({
+        id: uuid("9"),
+        input,
+      })),
       delete: remove,
       update: vi.fn(async (_actor: string, id: string, input: unknown) => ({ id, input })),
       complete: vi.fn(async (_actor: string, id: string, input: unknown) => ({ id, input })),
@@ -88,6 +92,42 @@ describe("internal Operator withdrawal routes", () => {
       note: "Sent from bank portal",
     });
     expect(container.withdrawals.update).not.toHaveBeenCalled();
+  });
+
+  it("creates requested/approved/rejected records through ordinary create semantics without a follow-up read", async () => {
+    const { routes, container } = harness();
+    const response = await routes.create(
+      sameOriginJson("http://localhost/internal/withdrawals", "POST", {
+        account_id: uuid("1"),
+        amount_minor: "1200",
+        destination_id: uuid("2"),
+        idempotency_key: uuid("3"),
+        state: "rejected",
+        reason: "Not eligible for payout",
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(container.withdrawals.requestByOperator).toHaveBeenCalledWith(accountId, {
+      accountId: uuid("1"),
+      amountMinor: "1200",
+      destinationId: uuid("2"),
+      idempotencyKey: uuid("3"),
+      state: "rejected",
+      reason: "Not eligible for payout",
+    });
+    expect(container.operatorWithdrawals.get).not.toHaveBeenCalled();
+
+    const invalid = await routes.create(
+      sameOriginJson("http://localhost/internal/withdrawals", "POST", {
+        account_id: uuid("1"),
+        amount_minor: "1200",
+        destination_id: uuid("2"),
+        idempotency_key: uuid("4"),
+        state: "rejected",
+      }),
+    );
+    expect(invalid.status).toBe(400);
+    expect(container.withdrawals.requestByOperator).toHaveBeenCalledTimes(1);
   });
 
   it("uses one session-only bulk request and returns per-record outcomes", async () => {

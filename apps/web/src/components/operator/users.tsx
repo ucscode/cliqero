@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import AsyncSelect from "react-select/async";
 import {
   apiFetch,
   ApiClientError,
@@ -22,6 +21,7 @@ import { OperatorErrorState } from "./ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { OperatorLoadingState } from "./ui/loading-state";
 import { OperatorSection } from "./ui/section";
+import { useOperatorConfirmation } from "./ui/confirmation";
 import { OperatorFilterField } from "./ui/toolbar";
 import { CrudIndex } from "@/components/crud/index-page";
 import { CrudDetail } from "@/components/crud/detail";
@@ -37,33 +37,21 @@ import { HoneypotField } from "../honeypot-field";
 import { Input } from "../ui/input";
 import { Alert } from "../ui/alert";
 import { CountrySelect } from "../country-select";
-import { Label } from "../ui/label";
+import { Label, RequiredLabel } from "../ui/label";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { useToast } from "../toast/provider";
+import { OperatorAccountSelector } from "./ui/account-selector";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The account service is temporarily unavailable.";
 }
-
-type ParentOption = { value: string; label: string; account: OperatorAccountSummary };
-
-const parentSelectStyles = {
-  control: (base: object) => ({ ...base, minHeight: 42 }),
-  menuPortal: (base: object) => ({ ...base, zIndex: 80 }),
-};
 
 async function searchParentAccounts(query: string, currentAccountId: string) {
   if (!query.trim()) return [];
   const result = await apiFetch<OperatorAccountPage>(
     `/api/accounts?search=${encodeURIComponent(query.trim())}&limit=10`,
   );
-  return result.items
-    .filter((candidate) => candidate.id !== currentAccountId)
-    .map((candidate) => ({
-      value: candidate.id,
-      label: `@${candidate.username} · ${candidate.displayName || candidate.email || candidate.id}`,
-      account: candidate,
-    }));
+  return result.items.filter((candidate) => candidate.id !== currentAccountId);
 }
 
 export function operatorUserRowActions(
@@ -126,6 +114,7 @@ export function OperatorUsersList({
   canDelete?: boolean;
   deletedNotice?: boolean;
 }) {
+  const confirm = useOperatorConfirmation();
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -187,9 +176,12 @@ export function OperatorUsersList({
       bulkOutcome={bulkOutcome}
       onDelete={async (account) => {
         if (
-          !window.confirm(
-            `Delete @${account.username}? Account access and credentials will be removed; historical platform records will remain.`,
-          )
+          !(await confirm({
+            title: "Delete account?",
+            description: `Delete @${account.username}? Account access and credentials will be removed; historical platform records will remain.`,
+            confirmLabel: "Delete",
+            destructive: true,
+          }))
         )
           return;
         try {
@@ -208,9 +200,12 @@ export function OperatorUsersList({
       }}
       onBulkDelete={async (accounts) => {
         if (
-          !window.confirm(
-            `Delete ${accounts.length} selected account(s)? Account access and credentials will be removed; historical platform records will remain.`,
-          )
+          !(await confirm({
+            title: "Delete accounts?",
+            description: `Delete ${accounts.length} selected account(s)? Account access and credentials will be removed; historical platform records will remain.`,
+            confirmLabel: "Delete",
+            destructive: true,
+          }))
         )
           return false;
         const results = await runOperatorBulkAction({
@@ -438,12 +433,13 @@ export function OperatorUserDetail({
   canManage?: boolean;
 }) {
   const router = useRouter();
+  const confirm = useOperatorConfirmation();
   const [account, setAccount] = useState<OperatorAccountDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [parentError, setParentError] = useState<string | null>(null);
-  const [selectedParent, setSelectedParent] = useState<ParentOption | null>(null);
+  const [selectedParent, setSelectedParent] = useState<OperatorAccountSummary | null>(null);
   const [capabilityView, setCapabilityView] = useState<CapabilityAdministrationView | null>(null);
   const [capabilityLoading, setCapabilityLoading] = useState(true);
   const [capabilityError, setCapabilityError] = useState<string | null>(null);
@@ -533,9 +529,24 @@ export function OperatorUserDetail({
       const warning = capabilityView.isSelf
         ? "Remove your own master operator authority? Another root account must remain."
         : "Remove master operator authority from this account? Another root account must remain.";
-      if (!window.confirm(warning)) return;
+      if (
+        !(await confirm({
+          title: "Remove root authority?",
+          description: warning,
+          confirmLabel: "Remove",
+          destructive: true,
+        }))
+      )
+        return;
     } else if (action === "grant" && capability === "system.root") {
-      if (!window.confirm("Grant master operator authority to this account?")) return;
+      if (
+        !(await confirm({
+          title: "Grant root authority?",
+          description: "Grant master operator authority to this account?",
+          confirmLabel: "Grant",
+        }))
+      )
+        return;
     }
     setCapabilitySaving(capability);
     setCapabilityError(null);
@@ -582,7 +593,7 @@ export function OperatorUserDetail({
     }
   }
 
-  async function loadParentOptions(query: string): Promise<ParentOption[]> {
+  async function loadParentOptions(query: string): Promise<OperatorAccountSummary[]> {
     setParentError(null);
     try {
       return await searchParentAccounts(query, accountId);
@@ -595,9 +606,12 @@ export function OperatorUserDetail({
   async function deleteAccount() {
     if (!account || deleting) return;
     if (
-      !window.confirm(
-        `Delete @${account.username}? Account access and credentials will be removed; historical platform records will remain.`,
-      )
+      !(await confirm({
+        title: "Delete account?",
+        description: `Delete @${account.username}? Account access and credentials will be removed; historical platform records will remain.`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
     )
       return;
     setDeleting(true);
@@ -708,29 +722,17 @@ export function OperatorUserDetail({
                     <div className="grid gap-3">
                       <div className="grid gap-2">
                         <Label htmlFor="operator-new-parent">New parent</Label>
-                        <AsyncSelect<ParentOption, false>
+                        <OperatorAccountSelector
                           inputId="operator-new-parent"
-                          cacheOptions
-                          defaultOptions={false}
-                          loadOptions={loadParentOptions}
+                          loadAccounts={loadParentOptions}
                           value={selectedParent}
                           isDisabled={saving}
-                          isClearable
-                          isLoading={saving}
                           onChange={(option) => {
                             setSelectedParent(option);
                             setParentError(null);
                           }}
                           placeholder="Search username, email or account ID"
-                          noOptionsMessage={({ inputValue }) =>
-                            inputValue.trim()
-                              ? "No eligible account found."
-                              : "Start typing to search."
-                          }
-                          styles={parentSelectStyles}
-                          menuPortalTarget={
-                            typeof document === "undefined" ? undefined : document.body
-                          }
+                          excludedAccountId={account.id}
                         />
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -739,10 +741,10 @@ export function OperatorUserDetail({
                           disabled={
                             saving ||
                             !selectedParent ||
-                            selectedParent.account.id === account.id ||
-                            selectedParent.account.id === account.parent?.id
+                            selectedParent.id === account.id ||
+                            selectedParent.id === account.parent?.id
                           }
-                          onClick={() => void reassign(selectedParent?.account ?? null)}
+                          onClick={() => void reassign(selectedParent)}
                         >
                           {saving ? "Saving…" : "Assign parent"}
                         </Button>
@@ -751,13 +753,16 @@ export function OperatorUserDetail({
                             type="button"
                             variant="secondary"
                             disabled={saving}
-                            onClick={() => {
+                            onClick={async () => {
                               if (
-                                window.confirm(
-                                  `Remove @${account.parent!.username} as this account’s parent? Descendants will remain attached.`,
-                                )
+                                await confirm({
+                                  title: "Remove parent?",
+                                  description: `Remove @${account.parent!.username} as this account’s parent? Descendants will remain attached.`,
+                                  confirmLabel: "Remove parent",
+                                  destructive: true,
+                                })
                               )
-                                void reassign(null);
+                                await reassign(null);
                             }}
                           >
                             Remove parent
@@ -801,7 +806,6 @@ export function OperatorUserDetail({
 }
 
 export function OperatorUserFormFields({
-  create,
   username,
   email,
   country,
@@ -809,7 +813,6 @@ export function OperatorUserFormFields({
   onEmailChange,
   onCountryChange,
 }: {
-  create: boolean;
   username: string;
   email: string;
   country: string;
@@ -820,7 +823,7 @@ export function OperatorUserFormFields({
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-2">
-        <Label htmlFor="operator-account-username">Username</Label>
+        <RequiredLabel htmlFor="operator-account-username">Username</RequiredLabel>
         <Input
           id="operator-account-username"
           autoComplete="off"
@@ -831,25 +834,18 @@ export function OperatorUserFormFields({
           onChange={(event) => onUsernameChange(event.target.value)}
         />
       </div>
-      {create ? (
-        <div className="grid gap-2">
-          <Label htmlFor="operator-account-email">Email</Label>
-          <Input
-            id="operator-account-email"
-            type="email"
-            autoComplete="email"
-            required
-            maxLength={254}
-            value={email}
-            onChange={(event) => onEmailChange(event.target.value)}
-          />
-        </div>
-      ) : (
-        <div className="grid gap-2">
-          <Label htmlFor="operator-account-email">Email (managed by account holder)</Label>
-          <Input id="operator-account-email" value={email} readOnly disabled />
-        </div>
-      )}
+      <div className="grid gap-2">
+        <RequiredLabel htmlFor="operator-account-email">Email</RequiredLabel>
+        <Input
+          id="operator-account-email"
+          type="email"
+          autoComplete="email"
+          required
+          maxLength={254}
+          value={email}
+          onChange={(event) => onEmailChange(event.target.value)}
+        />
+      </div>
       <CountrySelect
         id="operator-account-country"
         value={country}
@@ -942,7 +938,11 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
         const account = await apiFetch<OperatorAccountDetail>(`/api/accounts/${accountId}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ username: username.trim(), country: country || null }),
+          body: JSON.stringify({
+            username: username.trim(),
+            email: email.trim(),
+            country: country || null,
+          }),
         });
         router.push(`/operator/users/${account.id}`);
         router.refresh();
@@ -962,7 +962,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
       description={
         create
           ? "Choose how the account holder sets their credential, then choose whether to notify them."
-          : "Update the account username or country. Email and referral relationships are managed separately."
+          : "Update the account username, authentication email, or country. Referral relationships are managed separately."
       }
       backHref="/operator/users"
       saving={saving}
@@ -974,7 +974,6 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
       sectionTitle={create ? "Account details" : "Editable profile fields"}
     >
       <OperatorUserFormFields
-        create={create}
         username={username}
         email={email}
         country={country}
@@ -1008,7 +1007,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
           {credentialMode === "password" && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="operator-account-password">Password</Label>
+                <RequiredLabel htmlFor="operator-account-password">Password</RequiredLabel>
                 <Input
                   id="operator-account-password"
                   type="password"
@@ -1019,7 +1018,9 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="operator-account-confirm-password">Confirm password</Label>
+                <RequiredLabel htmlFor="operator-account-confirm-password">
+                  Confirm password
+                </RequiredLabel>
                 <Input
                   id="operator-account-confirm-password"
                   type="password"
@@ -1057,7 +1058,7 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
       <p className="text-sm text-slate-600">
         {create
           ? "Choose how the account holder receives their initial password. Parent assignment remains a separate hierarchy operation."
-          : "Email changes require the account holder’s Better Auth verification flow. Parent assignment remains a separate hierarchy operation."}
+          : "Email updates change the canonical sign-in address and mark it unverified until the new address is verified. Parent assignment remains a separate hierarchy operation."}
       </p>
     </CrudEdit>
   );

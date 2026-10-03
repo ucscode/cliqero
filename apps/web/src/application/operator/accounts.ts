@@ -7,6 +7,7 @@ import { PublicApplicationError } from "@/kernel/errors";
 import { CrudService } from "@/kernel/crud";
 
 export interface OperatorAccountReader {
+  updateEmail(accountId: string, email: string): Promise<void>;
   get(accountId: string): Promise<{
     id: string;
     username: string;
@@ -50,6 +51,7 @@ export interface OperatorAccountDeletionRepository {
 
 export type OperatorAccountProfileUpdate = {
   username?: string;
+  email?: string;
   country?: string | null;
 };
 
@@ -145,6 +147,24 @@ export class OperatorAccountManagementService extends CrudService<
   override async update(actorId: string, accountId: string, input: OperatorAccountProfileUpdate) {
     return this.uow.transaction(async () => {
       const previous = await this.accounts.get(accountId);
+      if (
+        input.email !== undefined &&
+        input.email.trim().toLowerCase() !== previous.email?.toLowerCase()
+      ) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim()))
+          throw new PublicApplicationError("Enter a valid email address.", "invalid_email", 400);
+        try {
+          await this.accounts.updateEmail(accountId, input.email.trim().toLowerCase());
+        } catch (cause) {
+          if (cause instanceof Error && cause.message === "email_taken")
+            throw new PublicApplicationError(
+              "That email address is already in use.",
+              "email_taken",
+              409,
+            );
+          throw cause;
+        }
+      }
       await this.profiles.update(accountId, input);
       const updated = await this.accounts.get(accountId);
       await this.audit.record({
@@ -152,8 +172,12 @@ export class OperatorAccountManagementService extends CrudService<
         action: "operator.account_profile_updated",
         subjectType: "account",
         subjectId: accountId,
-        previousState: { username: previous.username, country: previous.country },
-        newState: { username: updated.username, country: updated.country },
+        previousState: {
+          username: previous.username,
+          email: previous.email,
+          country: previous.country,
+        },
+        newState: { username: updated.username, email: updated.email, country: updated.country },
       });
       return updated;
     });

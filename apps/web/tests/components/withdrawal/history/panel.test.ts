@@ -25,8 +25,8 @@ describe("customer withdrawal history page", () => {
 
   it("preserves cancellation and status/reason display through the shared history list", () => {
     expect(source).not.toContain("window.confirm");
-    expect(source).toContain('method: "PATCH"');
-    expect(source).toContain('JSON.stringify({ status: "cancelled" })');
+    expect(source).toContain("`/api/withdrawals/${withdrawal.id}/cancel`");
+    expect(source).toContain('method: "POST"');
     expect(source).toContain("Cancel withdrawal request?");
     expect(source).toContain("Keep request");
     expect(source).toContain("onCancel={setWithdrawalToCancel}");

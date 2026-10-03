@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api-client";
 import type { ListingCategory } from "@/modules/listing/category/category";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label, RequiredLabel } from "@/components/ui/label";
 import { CrudEdit } from "@/components/crud/edit";
 import { CrudIndex } from "@/components/crud/index-page";
 import type { CrudColumn } from "@/components/crud/table";
@@ -15,6 +15,7 @@ import { OperatorPrimaryCell } from "@/components/operator/ui/data-cells";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { useOperatorConfirmation } from "../ui/confirmation";
 import { OperatorErrorState } from "@/components/operator/ui/error-state";
 import {
   OperatorBulkOutcome,
@@ -23,6 +24,7 @@ import {
 import { useToast } from "@/components/toast/provider";
 
 export function OperatorListingCategories({ canDelete = false }: { canDelete?: boolean }) {
+  const confirm = useOperatorConfirmation();
   const toast = useToast();
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
@@ -33,9 +35,12 @@ export function OperatorListingCategories({ canDelete = false }: { canDelete?: b
 
   async function remove(category: ListingCategory) {
     if (
-      !window.confirm(
-        `Delete category “${category.name}”? Its listing assignments will be removed.`,
-      )
+      !(await confirm({
+        title: "Delete category?",
+        description: `Delete category “${category.name}”? Its listing assignments will be removed.`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
     )
       return;
     setActionError(null);
@@ -54,7 +59,15 @@ export function OperatorListingCategories({ canDelete = false }: { canDelete?: b
     }
   }
   async function removeMany(categories: readonly ListingCategory[]) {
-    if (!window.confirm(`Delete ${categories.length} selected catalogue categories?`)) return false;
+    if (
+      !(await confirm({
+        title: "Delete categories?",
+        description: `Delete ${categories.length} selected catalogue categories?`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return false;
     setActionError(null);
     setBulkOutcome(null);
     try {
@@ -203,7 +216,7 @@ export function OperatorListingCategoryEditor({ initial }: { initial?: ListingCa
       sectionTitle="Category details"
     >
       <div>
-        <Label htmlFor="catalogue-category-name">Name</Label>
+        <RequiredLabel htmlFor="catalogue-category-name">Name</RequiredLabel>
         <Input
           id="catalogue-category-name"
           value={name}

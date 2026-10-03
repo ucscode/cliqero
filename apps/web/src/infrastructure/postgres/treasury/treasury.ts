@@ -1,5 +1,6 @@
 import type { QueryExecutor } from "../shared/database";
 import type { TreasuryEntry, TreasuryRepository } from "@/modules/treasury/treasury";
+import { newId } from "@/kernel/ids";
 export class PostgresTreasuryRepository implements TreasuryRepository {
   constructor(private sql: QueryExecutor) {}
   async create(v: TreasuryEntry) {
@@ -79,6 +80,78 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
     const credits = BigInt(row.credits),
       debits = BigInt(row.debits);
     return { creditsMinor: credits, debitsMinor: debits, balanceMinor: credits - debits };
+  }
+
+  async createAdjustment(v: Parameters<TreasuryRepository["createAdjustment"]>[0]) {
+    const adjustment = await this.sql.query<any>(
+      `insert into treasury_capability.adjustments(uuid,amount_minor,reason,reference,created_by,idempotency_key,correlation_id,created_at)
+       values($1,$2,$3,$4,(select id from identity_capability.accounts where uuid=$5),$6,$7,$8)
+       on conflict(idempotency_key) do nothing returning uuid`,
+      [
+        v.id,
+        v.amountMinor.toString(),
+        v.reason,
+        v.reference,
+        v.actorId,
+        v.idempotencyKey,
+        v.correlationId,
+        v.createdAt,
+      ],
+    );
+    const adjustmentId = adjustment.rows[0]?.uuid;
+    if (!adjustmentId) {
+      const existing = (
+        await this.sql.query<any>(
+          `select adjustment.uuid,adjustment.amount_minor,adjustment.reason,adjustment.reference,
+                adjustment.idempotency_key,adjustment.correlation_id,actor.uuid actor_uuid
+           from treasury_capability.adjustments adjustment
+           join identity_capability.accounts actor on actor.id=adjustment.created_by
+          where adjustment.idempotency_key=$1`,
+          [v.idempotencyKey],
+        )
+      ).rows[0];
+      if (
+        !existing ||
+        BigInt(existing.amount_minor) !== v.amountMinor ||
+        existing.reason !== v.reason ||
+        existing.reference !== v.reference ||
+        existing.actor_uuid !== v.actorId
+      )
+        throw new Error(
+          "Treasury adjustment idempotency key already used for a different adjustment",
+        );
+      const priorEntry = (
+        await this.sql.query<any>(
+          `select e.*,e.uuid as id,a.uuid as actor_id from treasury_capability.entries e
+          left join identity_capability.accounts a on a.id=e.actor_id
+         where e.source_kind='treasury_adjustment' and e.source_id=$1`,
+          [existing.uuid],
+        )
+      ).rows[0];
+      if (!priorEntry) throw new Error("Treasury adjustment ledger fact is unavailable");
+      return map(priorEntry);
+    }
+    const direction = v.amountMinor > 0n ? "credit" : "debit";
+    const amountMinor = v.amountMinor > 0n ? v.amountMinor : -v.amountMinor;
+    const note = v.reference ? `${v.reason}\nReference: ${v.reference}` : v.reason;
+    const result = await this.sql.query<any>(
+      `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,correlation_id,created_at)
+       values($1,$2,$3,'Treasury adjustment',$4,'treasury_adjustment',$5,$6,
+         (select id from identity_capability.accounts where uuid=$7),$8,$9)
+       returning *,uuid as id,(select uuid from identity_capability.accounts where id=actor_id) as actor_id`,
+      [
+        newId(),
+        direction,
+        amountMinor.toString(),
+        note,
+        adjustmentId,
+        `treasury-adjustment:${v.idempotencyKey}`,
+        v.actorId,
+        v.correlationId,
+        v.createdAt,
+      ],
+    );
+    return map(result.rows[0]);
   }
 }
 function map(r: any): TreasuryEntry {

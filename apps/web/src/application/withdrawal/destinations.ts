@@ -6,6 +6,7 @@ import type {
   WithdrawalDestinationRepository,
 } from "@/modules/withdrawal/withdrawal";
 import { WithdrawalMethodRegistry } from "@/modules/withdrawal/methods/registry";
+import { PublicApplicationError } from "@/kernel/errors";
 
 export class WithdrawalDestinationService {
   constructor(
@@ -96,9 +97,27 @@ export class WithdrawalDestinationService {
     const account = await this.requireAccount(accountId);
     const destination = await this.destinations.findById(id);
     if (!destination || destination.accountId !== accountId)
-      throw new Error("Withdrawal destination not found");
-    if (destination.status !== "active") throw new Error("This withdrawal destination is archived");
-    const method = this.methods.requireAvailable(destination.method, account);
+      throw new PublicApplicationError(
+        "Payout destination not found for this account.",
+        "destination_not_found",
+        404,
+      );
+    if (destination.status !== "active")
+      throw new PublicApplicationError(
+        "This payout destination is unavailable.",
+        "destination_unavailable",
+        409,
+      );
+    let method;
+    try {
+      method = this.methods.requireAvailable(destination.method, account);
+    } catch {
+      throw new PublicApplicationError(
+        "This payout method is unavailable for the account.",
+        "destination_unavailable",
+        409,
+      );
+    }
     return {
       savedDestinationId: destination.id,
       method: method.id,
@@ -110,7 +129,7 @@ export class WithdrawalDestinationService {
 
   private async requireAccount(accountId: string) {
     const account = await this.accounts.findById?.(accountId);
-    if (!account) throw new Error("Account not found");
+    if (!account) throw new PublicApplicationError("Account not found.", "not_found", 404);
     return account;
   }
 

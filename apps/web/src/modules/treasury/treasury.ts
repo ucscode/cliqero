@@ -1,4 +1,5 @@
 import { newId } from "@/kernel/ids";
+import { PublicApplicationError } from "@/kernel/errors";
 export type TreasuryDirection = "credit" | "debit";
 export interface TreasuryEntry {
   id: string;
@@ -23,47 +24,65 @@ export interface TreasuryRepository {
     direction?: TreasuryDirection;
   }): Promise<{ items: readonly TreasuryEntry[]; nextCursor: string | null }>;
   summary(): Promise<{ creditsMinor: bigint; debitsMinor: bigint; balanceMinor: bigint }>;
+  createAdjustment(input: {
+    id: string;
+    amountMinor: bigint;
+    reason: string;
+    reference: string | null;
+    actorId: string;
+    idempotencyKey: string;
+    correlationId: string;
+    createdAt: Date;
+  }): Promise<TreasuryEntry>;
 }
 export class TreasuryService {
-  constructor(private repo: TreasuryRepository) {}
-  async createManual(input: {
-    direction: TreasuryDirection;
+  constructor(
+    private repo: TreasuryRepository,
+    private uow?: { transaction<T>(fn: () => Promise<T>): Promise<T> },
+  ) {}
+  async createAdjustment(input: {
     amountMinor: bigint;
-    title: string;
-    note?: string | null;
+    reason: string;
+    reference?: string | null;
     actorId: string;
     idempotencyKey: string;
     correlationId?: string | null;
   }) {
-    if (input.amountMinor <= 0n) throw new Error("Treasury amount must be positive");
-    const title = input.title.trim();
-    if (!title) throw new Error("Treasury title is required");
-    const note = input.note?.trim() || null;
-    const draft = {
-      id: newId(),
-      direction: input.direction,
-      amountMinor: input.amountMinor,
-      title,
-      note,
-      sourceKind: null,
-      sourceId: null,
-      idempotencyKey: input.idempotencyKey,
-      actorId: input.actorId,
-      correlationId: input.correlationId ?? null,
-      createdAt: new Date(),
-    };
-    const entry = await this.repo.create(draft);
-    if (
-      entry.direction !== draft.direction ||
-      entry.amountMinor !== draft.amountMinor ||
-      entry.title !== draft.title ||
-      entry.note !== draft.note ||
-      entry.actorId !== draft.actorId ||
-      entry.sourceKind !== null ||
-      entry.sourceId !== null ||
-      entry.correlationId !== draft.correlationId
-    )
-      throw new Error("Treasury idempotency key already used for a different entry");
-    return entry;
+    if (input.amountMinor === 0n)
+      throw new PublicApplicationError(
+        "Treasury adjustment amount must be non-zero.",
+        "invalid_adjustment",
+        400,
+      );
+    const reason = input.reason.trim();
+    if (!reason)
+      throw new PublicApplicationError(
+        "Treasury adjustment reason is required.",
+        "reason_required",
+        400,
+      );
+    return this.uow
+      ? this.uow.transaction(() =>
+          this.repo.createAdjustment({
+            id: newId(),
+            amountMinor: input.amountMinor,
+            reason,
+            reference: input.reference?.trim() || null,
+            actorId: input.actorId,
+            idempotencyKey: input.idempotencyKey,
+            correlationId: input.correlationId ?? newId(),
+            createdAt: new Date(),
+          }),
+        )
+      : this.repo.createAdjustment({
+          id: newId(),
+          amountMinor: input.amountMinor,
+          reason,
+          reference: input.reference?.trim() || null,
+          actorId: input.actorId,
+          idempotencyKey: input.idempotencyKey,
+          correlationId: input.correlationId ?? newId(),
+          createdAt: new Date(),
+        });
   }
 }

@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import AsyncSelect from "react-select/async";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import { CrudIndex } from "@/components/crud/index-page";
 import { CrudSortSelect } from "@/components/crud/sort-select";
 import type { CrudColumn } from "@/components/crud/table";
-import { apiFetch, type OperatorAccountPage, type OperatorAccountSummary } from "@/lib/api-client";
+import { apiFetch, type OperatorAccountSummary } from "@/lib/api-client";
 import { useToast } from "../../toast/provider";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -15,6 +14,8 @@ import { Label } from "../../ui/label";
 import { Select } from "../../ui/select";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "../ui/bulk-outcome";
 import { OperatorValueCell } from "../ui/data-cells";
+import { useOperatorConfirmation } from "../ui/confirmation";
+import { OperatorAccountSelector } from "../ui/account-selector";
 import {
   apiKeyCollectionQuery,
   apiKeyFiltersEqual,
@@ -24,7 +25,6 @@ import {
   type OperatorApiKeyRow,
 } from "./model";
 
-type AccountOption = { value: string; label: string; account: OperatorAccountSummary };
 type ApiKeyCollectionPage = {
   items: OperatorApiKeyRow[];
   next_cursor: string | null;
@@ -34,30 +34,15 @@ type ApiKeyBulkOutcome = {
   failed: Array<{ id: string; message: string }>;
 };
 
-const selectStyles = {
-  control: (base: object) => ({ ...base, minHeight: 42 }),
-  menuPortal: (base: object) => ({ ...base, zIndex: 80 }),
-};
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "API keys are temporarily unavailable.";
 
-async function searchAccounts(query: string): Promise<AccountOption[]> {
-  if (!query.trim()) return [];
-  const result = await apiFetch<OperatorAccountPage>(
-    `/api/accounts?search=${encodeURIComponent(query.trim())}&limit=10`,
-  );
-  return result.items.map((candidate) => ({
-    value: candidate.id,
-    label: `@${candidate.username} · ${candidate.email ?? candidate.id}`,
-    account: candidate,
-  }));
-}
-
 export function OperatorApiKeys({ canDelete = false }: { canDelete?: boolean }) {
+  const confirm = useOperatorConfirmation();
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [state, setState] = useState<ApiKeyCollectionFilters["state"]>("all");
-  const [accountFilter, setAccountFilter] = useState<AccountOption | null>(null);
+  const [accountFilter, setAccountFilter] = useState<OperatorAccountSummary | null>(null);
   const [sortChoice, setSortChoice] = useState("created:desc");
   const [appliedFilters, setAppliedFilters] = useState(INITIAL_API_KEY_FILTERS);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
@@ -78,7 +63,7 @@ export function OperatorApiKeys({ canDelete = false }: { canDelete?: boolean }) 
       ApiKeyCollectionFilters["sort"],
       ApiKeyCollectionFilters["direction"],
     ];
-    return { search, accountId: accountFilter?.value ?? null, state, sort, direction };
+    return { search, accountId: accountFilter?.id ?? null, state, sort, direction };
   }
 
   async function applyDraft() {
@@ -107,7 +92,15 @@ export function OperatorApiKeys({ canDelete = false }: { canDelete?: boolean }) 
   }
 
   async function remove(key: OperatorApiKeyRow) {
-    if (!window.confirm(`Delete API key “${key.name}”? This cannot be undone.`)) return;
+    if (
+      !(await confirm({
+        title: "Delete API key?",
+        description: `Delete API key “${key.name}”? This cannot be undone.`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return;
     try {
       await apiFetch(`/internal/api-keys/${key.id}`, { method: "DELETE" });
       await collection.refresh();
@@ -119,7 +112,14 @@ export function OperatorApiKeys({ canDelete = false }: { canDelete?: boolean }) 
 
   async function deleteSelected(keys: readonly OperatorApiKeyRow[]) {
     if (!keys.length) return false;
-    if (!window.confirm(`Delete ${keys.length} selected API key(s)? This cannot be undone.`))
+    if (
+      !(await confirm({
+        title: "Delete API keys?",
+        description: `Delete ${keys.length} selected API key(s)? This cannot be undone.`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
       return false;
     try {
       const outcome = await apiFetch<ApiKeyBulkOutcome>("/internal/api-keys/actions/delete", {
@@ -231,17 +231,11 @@ export function OperatorApiKeys({ canDelete = false }: { canDelete?: boolean }) 
           </div>
           <div className="grid gap-2">
             <Label htmlFor="api-key-account-filter">Account</Label>
-            <AsyncSelect<AccountOption, false>
+            <OperatorAccountSelector
               inputId="api-key-account-filter"
-              cacheOptions
-              defaultOptions={false}
-              loadOptions={searchAccounts}
               value={accountFilter}
               onChange={setAccountFilter}
               placeholder="All manageable accounts"
-              isClearable
-              styles={selectStyles}
-              menuPortalTarget={typeof document === "undefined" ? undefined : document.body}
             />
           </div>
           <div className="grid gap-2">

@@ -8,7 +8,7 @@ import { apiFetch } from "@/lib/api-client";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Select } from "../../ui/select";
-import { Label } from "../../ui/label";
+import { Label, RequiredLabel } from "../../ui/label";
 import { Textarea } from "../../ui/textarea";
 import { MultiSelect } from "../../ui/multi-select";
 import type { BlogPost, BlogCategory } from "@/modules/blog/domain/blog";
@@ -22,12 +22,14 @@ import type { CrudColumn } from "@/components/crud/table";
 import { CrudEdit } from "@/components/crud/edit";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { useOperatorConfirmation } from "../ui/confirmation";
 import { OperatorErrorState } from "../ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "../ui/bulk-outcome";
 import { useToast } from "@/components/toast/provider";
 import { CrudSortSelect } from "@/components/crud/sort-select";
 
 export function OperatorBlogList({ canDelete = false }: { canDelete?: boolean }) {
+  const confirm = useOperatorConfirmation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [sortChoice, setSortChoice] = useState("created:desc");
@@ -54,7 +56,15 @@ export function OperatorBlogList({ canDelete = false }: { canDelete?: boolean })
     { search: "", status: "", sort: "created", direction: "desc" },
   );
   async function remove(post: BlogPost) {
-    if (!window.confirm(`Delete “${post.title}”?`)) return;
+    if (
+      !(await confirm({
+        title: "Delete post?",
+        description: `Delete “${post.title}”?`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return;
     setActionError(null);
     setBulkOutcome(null);
     try {
@@ -70,7 +80,15 @@ export function OperatorBlogList({ canDelete = false }: { canDelete?: boolean })
     }
   }
   async function bulk(posts: readonly BlogPost[]) {
-    if (!window.confirm(`Delete ${posts.length} selected articles?`)) return false;
+    if (
+      !(await confirm({
+        title: "Delete posts?",
+        description: `Delete ${posts.length} selected articles?`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return false;
     setActionError(null);
     setBulkOutcome(null);
     try {
@@ -244,6 +262,7 @@ export function OperatorBlogList({ canDelete = false }: { canDelete?: boolean })
 }
 
 export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
+  const confirm = useOperatorConfirmation();
   const router = useRouter();
   const toast = useToast();
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -349,7 +368,16 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
     if (post) toast.success(initial ? "Post saved." : "Post created.");
   }
   async function remove() {
-    if (!saved || !window.confirm("Delete this blog post?")) return;
+    if (
+      !saved ||
+      !(await confirm({
+        title: "Delete blog post?",
+        description: "This post will be permanently deleted.",
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return;
     try {
       await apiFetch(`/api/blog/posts/${saved.id}`, { method: "DELETE" });
       toast.success("Post deleted.");
@@ -420,7 +448,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
     >
       <div className="grid gap-4">
         <div>
-          <Label htmlFor="blog-title">Title</Label>
+          <RequiredLabel htmlFor="blog-title">Title</RequiredLabel>
           <Input
             id="blog-title"
             value={title}

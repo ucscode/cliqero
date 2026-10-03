@@ -11,6 +11,7 @@ type Row = {
   reference: string | null;
   created_by: string;
   created_at: Date | string;
+  current_balance_minor?: string;
 };
 
 export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentRepository {
@@ -47,7 +48,14 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
     const rows = (
       await this.sql.query<Row & { cursor_id: string }>(
         `select e.uuid id,e.id cursor_id,a.uuid account_id,a.username,e.amount_minor,e.reason,e.reference,
-              actor.uuid created_by,e.created_at
+              actor.uuid created_by,e.created_at,
+              (coalesce((select sum(case when entry.direction='credit' then entry.amount_minor else -entry.amount_minor end)
+                from ledger_capability.entries entry left join ledger_capability.entry_settlements settlement on settlement.original_entry_id=entry.id
+                where entry.account_id=a.id and entry.currency='USD' and entry.entry_type='purchase-earnings'
+                  and (entry.balance_state='available' or settlement.id is not null)),0)
+               + coalesce((select sum(adjustment.amount_minor) from ledger_capability.earnings_adjustments adjustment where adjustment.account_id=a.id),0)
+               - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=a.id and res.currency='USD'
+                  and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0))::bigint current_balance_minor
          from ledger_capability.earnings_adjustments e
          join identity_capability.accounts a on a.id=e.account_id
          join identity_capability.accounts actor on actor.id=e.created_by
@@ -118,6 +126,8 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
       reference: row.reference,
       createdBy: row.created_by,
       createdAt: new Date(row.created_at).toISOString(),
+      currentBalanceMinor:
+        row.current_balance_minor == null ? null : String(row.current_balance_minor),
     };
   }
 

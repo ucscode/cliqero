@@ -9,12 +9,15 @@ import {
   type ApiKeyCollectionFilters,
 } from "@/components/operator/api-keys/model";
 import { ToastProvider } from "@/components/toast/provider";
+import { OperatorConfirmationProvider } from "@/components/operator/ui/confirmation";
 
 describe("Operator API-key collection interactions", () => {
   it("shows the collection and dedicated create link without rendering a create dialog", () => {
     const html = renderToStaticMarkup(
       <ToastProvider>
-        <OperatorApiKeys />
+        <OperatorConfirmationProvider>
+          <OperatorApiKeys />
+        </OperatorConfirmationProvider>
       </ToastProvider>,
     );
     expect(html).toContain("API keys");

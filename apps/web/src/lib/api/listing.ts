@@ -45,6 +45,8 @@ export type OperatorListing = Listing & {
   destination: string;
   external_key: string | null;
   managed_by?: string;
+  review_count: number;
+  purchase_count: number;
 };
 
 export type OperatorListingPage = {

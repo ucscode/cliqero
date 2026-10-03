@@ -8,6 +8,7 @@ const target = new Account("00000000-0000-4000-8000-000000000002", "new_user", "
 
 function fixture(options: { failReset?: boolean; deletionContext?: Record<string, unknown> } = {}) {
   const audits: AuditRecordInput[] = [];
+  let email = "new@example.test";
   const register = vi.fn(async () => target);
   const registerWithoutPassword = vi.fn(async () => target);
   const requestPasswordSetup = vi.fn(async () => {
@@ -31,11 +32,14 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     update: updateProfile,
   };
   const accounts = {
+    updateEmail: vi.fn(async (_accountId: string, nextEmail: string) => {
+      email = nextEmail;
+    }),
     get: async () => ({
       id: target.id,
       username: "new_user",
       displayName: null,
-      email: "new@example.test",
+      email,
       country: "NG",
       createdAt: new Date().toISOString(),
       deletedAt: null,
@@ -79,6 +83,7 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     requestPasswordSetup,
     sendOperatorAccountCreatedEmail: vi.fn(async () => undefined),
     updateProfile,
+    accounts,
     deletion,
     authentication,
   };
@@ -186,6 +191,22 @@ describe("OperatorAccountManagementService", () => {
       subjectId: target.id,
       previousState: { username: "new_user", country: "NG" },
       newState: { username: "new_user", country: "NG" },
+    });
+  });
+
+  it("updates the canonical email identity and audits the normalized before/after values", async () => {
+    const { service, accounts, audits, updateProfile } = fixture();
+    await expect(
+      service.update(actorId, target.id, { email: "  New.Address@example.test  " }),
+    ).resolves.toMatchObject({ email: "new.address@example.test" });
+
+    expect(accounts.updateEmail).toHaveBeenCalledWith(target.id, "new.address@example.test");
+    expect(updateProfile).toHaveBeenCalledWith(target.id, {
+      email: "  New.Address@example.test  ",
+    });
+    expect(audits[0]).toMatchObject({
+      previousState: { email: "new@example.test" },
+      newState: { email: "new.address@example.test" },
     });
   });
 

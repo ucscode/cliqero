@@ -180,10 +180,9 @@ export function WithdrawalsPanel() {
       setCancelling(true);
       setError(null);
       try {
-        await apiFetch<Withdrawal>(`/api/withdrawals/${withdrawal.id}`, {
-          method: "PATCH",
+        await apiFetch<Withdrawal>(`/api/withdrawals/${withdrawal.id}/cancel`, {
+          method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ status: "cancelled" }),
         });
         setWithdrawalToCancel(null);
         await load(true);

@@ -28,15 +28,15 @@ describe("operator manual withdrawal workflow", () => {
         editable: false,
         stateOptions: [],
       });
-    expect(source).toContain("Mark as paid");
+    expect(source).toContain("Complete payout");
   });
   it("records already-sent payments through the explicit completion command", () => {
     expect(source).toContain('method: "POST"');
     expect(source).toContain("/internal/withdrawals/${withdrawalId}/complete");
-    expect(source).toContain("external_reference: externalReference.trim()");
-    expect(source).toContain("note: completionNote.trim()");
-    expect(source).toContain("Send the payment outside Cliqero first");
-    expect(source).toContain("Mark as paid");
+    expect(source).toContain("external_reference: externalReference");
+    expect(source).toContain("note: completionNote");
+    expect(source).toContain("Completion records payout evidence, settles the reservation");
+    expect(source).toContain("Complete payout");
   });
 
   it("does not render automatic execution, retry, reconciliation, or attempt history", () => {

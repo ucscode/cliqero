@@ -55,7 +55,7 @@ describe("catalogue listing route sorting contract", () => {
           scopes: new Set<string>(),
         })),
       },
-      listingService: { queryCatalogue },
+      listingService: { queryCatalogue, catalogueCounts: vi.fn(async () => new Map()) },
       listingMediaRepository: { listByListings: vi.fn(async () => new Map()) },
       listingMedia: { publicUrl: vi.fn() },
     };

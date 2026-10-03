@@ -36,17 +36,31 @@ export class OperatorTreasuryService {
   async deleteForRoot(actorId: string, id: string) {
     const operation = async () => {
       const row = await this.get(id);
+      const adjustment =
+        row.source?.kind === "treasury_adjustment"
+          ? ((
+              await this.sql.query<any>(
+                `select uuid,amount_minor,reason,reference,correlation_id,created_at
+               from treasury_capability.adjustments where uuid=$1`,
+                [row.source.id],
+              )
+            ).rows[0] ?? null)
+          : null;
       await this.sql.query("select set_config('cliqero.root_delete','on',true)");
       const deleted = await this.sql.query(
         `delete from treasury_capability.entries where uuid=$1`,
         [id],
       );
       if ((deleted.rowCount ?? 0) !== 1) throw new Error("Treasury entry not found");
+      if (adjustment)
+        await this.sql.query(`delete from treasury_capability.adjustments where uuid=$1`, [
+          row.source!.id,
+        ]);
       await this.sql.query(
         `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
          values('root.delete','treasury_entry',$1,$2::jsonb,null,$3::uuid,
                 (select id from identity_capability.accounts where uuid=$4))`,
-        [id, JSON.stringify(row), newId(), actorId],
+        [id, JSON.stringify({ entry: row, adjustment }), newId(), actorId],
       );
       return { id, deleted: true as const };
     };
@@ -74,7 +88,7 @@ export class OperatorTreasuryService {
   async list(input: {
     search?: string;
     direction?: "credit" | "debit";
-    source?: "automatic" | "manual";
+    source?: "automatic" | "adjustment";
     cursor?: string;
     limit: number;
     sort?: "created" | "amount";
@@ -86,8 +100,7 @@ export class OperatorTreasuryService {
     const orderBy = sort === "amount" ? "e.amount_minor" : "e.created_at";
     const cursorType = sort === "amount" ? "bigint" : "timestamptz";
     const search = cleanSearch(input.search);
-    const sourceKind =
-      input.source === "automatic" ? "automatic" : input.source === "manual" ? null : undefined;
+    const sourceKind = input.source;
     const values: unknown[] = [
       search,
       input.direction ?? null,
@@ -96,7 +109,7 @@ export class OperatorTreasuryService {
     const conditions = [
       `($1::text is null or e.uuid::text=$1 or e.title ilike '%'||$1||'%' escape '\\' or e.note ilike '%'||$1||'%' escape '\\' or e.source_id::text=$1)`,
       `($2::text is null or e.direction=$2)`,
-      `($3::text is null or ($3::text='automatic' and e.source_kind is not null) or ($3::text='manual' and e.source_kind is null))`,
+      `($3::text is null or ($3::text='automatic' and e.source_kind is not null and e.source_kind <> 'treasury_adjustment') or ($3::text='adjustment' and e.source_kind='treasury_adjustment'))`,
     ];
     const cursorClause = cursor
       ? `and (${orderBy},e.id) ${direction === "asc" ? ">" : "<"} ($4::${cursorType},$5::bigint)`

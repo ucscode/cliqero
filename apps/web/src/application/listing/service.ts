@@ -264,6 +264,9 @@ export class ListingService extends CrudService<
   }) {
     return this.listings.query(input);
   }
+  catalogueCounts(ids: readonly string[]) {
+    return this.listings.countsForListings(ids);
+  }
   findByExternalKey(actor: Account, key: string) {
     return this.listings.findByExternalKey(actor.id, key);
   }

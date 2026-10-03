@@ -5,13 +5,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   apiFetch,
   formatMinorUsd,
   minorToUsdInput,
   parseUsdMinor,
   type ListingMedia,
+  type Listing,
   type Integration,
   type IntegrationCredential,
   type OperatorListing,
@@ -23,7 +24,7 @@ import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { HoneypotField } from "../honeypot-field";
 import { Textarea } from "../ui/textarea";
-import { Label } from "../ui/label";
+import { Label, RequiredLabel } from "../ui/label";
 import { Alert } from "../ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { useToast } from "../toast/provider";
@@ -35,6 +36,7 @@ import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui
 import { CrudIndex } from "@/components/crud/index-page";
 import { CrudSortSelect } from "@/components/crud/sort-select";
 import { CrudEdit } from "@/components/crud/edit";
+import { CrudDetail } from "@/components/crud/detail";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
@@ -44,6 +46,9 @@ import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { useOperatorConfirmation } from "./ui/confirmation";
+import { openResolvedWindow } from "./ui/async-window";
+import { ListingDetail } from "../listing/detail";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -90,6 +95,7 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const toast = useToast();
+  const confirm = useOperatorConfirmation();
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
   const collection = useCrudCollection(
@@ -118,7 +124,16 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
   );
 
   async function changeState(listing: OperatorListing, action: "publish" | "restore" | "archive") {
-    if (action === "archive" && !window.confirm(`Archive “${listing.title}”?`)) return;
+    if (
+      action === "archive" &&
+      !(await confirm({
+        title: "Archive listing?",
+        description: `Archive “${listing.title}”?`,
+        confirmLabel: "Archive",
+        destructive: true,
+      }))
+    )
+      return;
     setActionError(null);
     setBulkOutcome(null);
     try {
@@ -141,7 +156,12 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
 
   async function deleteListing(listing: OperatorListing) {
     if (
-      !window.confirm(`Permanently delete “${listing.title}” and its dependent purchase history?`)
+      !(await confirm({
+        title: "Delete listing?",
+        description: `Permanently delete “${listing.title}” and its dependent purchase history?`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
     )
       return;
     try {
@@ -164,9 +184,12 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
   ) {
     if (
       action === "archive" &&
-      !window.confirm(
-        `Archive ${listings.length} selected listing${listings.length === 1 ? "" : "s"}?`,
-      )
+      !(await confirm({
+        title: "Archive listings?",
+        description: `Archive ${listings.length} selected listing${listings.length === 1 ? "" : "s"}?`,
+        confirmLabel: "Archive",
+        destructive: true,
+      }))
     )
       return false;
     setActionError(null);
@@ -201,9 +224,12 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
 
   async function bulkDelete(listings: readonly OperatorListing[]) {
     if (
-      !window.confirm(
-        `Permanently delete ${listings.length} selected listing${listings.length === 1 ? "" : "s"} and dependent purchase history?`,
-      )
+      !(await confirm({
+        title: "Delete listings?",
+        description: `Permanently delete ${listings.length} selected listing${listings.length === 1 ? "" : "s"} and dependent purchase history?`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
     )
       return false;
     setActionError(null);
@@ -347,6 +373,24 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
       render: (listing) => <OperatorStatusCell status={listing.state ?? "draft"} />,
     },
     {
+      key: "reviews",
+      label: "Reviews",
+      render: (listing) => (
+        <Link href={`/operator/reviews?listing=${encodeURIComponent(listing.id)}`}>
+          {listing.review_count}
+        </Link>
+      ),
+    },
+    {
+      key: "purchases",
+      label: "Purchases",
+      render: (listing) => (
+        <Link href={`/operator/purchases?listing=${encodeURIComponent(listing.id)}`}>
+          {listing.purchase_count}
+        </Link>
+      ),
+    },
+    {
       key: "price",
       label: "Price",
       render: (listing) => (
@@ -366,19 +410,12 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
     {
       type: "action" as const,
       label: "Open listing",
-      onSelect: () => {
-        const tab = window.open("about:blank", "_blank", "noopener,noreferrer");
-        if (!tab) return;
-        if (listing.state === "published") {
-          tab.location.href = `/listings/${listing.id}`;
-          return;
-        }
-        void apiFetch<{ url: string }>(`/internal/listings/${listing.id}/preview-token`)
-          .then(({ url }) => {
-            tab.location.href = url;
-          })
-          .catch(() => tab.close());
-      },
+      onSelect: () =>
+        void openResolvedWindow(async () => {
+          if (listing.state === "published") return `/listings/${listing.id}`;
+          return (await apiFetch<{ url: string }>(`/internal/listings/${listing.id}/preview-token`))
+            .url;
+        }),
     },
     ...(listing.state === "draft"
       ? [
@@ -630,6 +667,16 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stagedMedia, setStagedMedia] = useState<ReturnType<typeof createCatalogueImagePreview>[]>(
+    [],
+  );
+  const stagedMediaRef = useRef(stagedMedia);
+
+  useEffect(() => {
+    stagedMediaRef.current = stagedMedia;
+  }, [stagedMedia]);
+
+  useEffect(() => () => stagedMediaRef.current.forEach((item) => item.dispose()), []);
 
   useEffect(() => {
     void apiFetch<{ items: ListingCategory[] }>("/api/catalogue/categories")
@@ -719,13 +766,75 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             category_ids: form.categoryIds,
           }),
         });
-        toast.success("Listing created.");
+        let failedUploads = 0;
+        for (const { file } of stagedMedia) {
+          try {
+            const data = new FormData();
+            data.set("file", file);
+            await apiFetch(`/api/listings/${next.id}/media`, { method: "POST", body: data });
+          } catch {
+            failedUploads++;
+          }
+        }
+        if (failedUploads) {
+          toast.error(
+            `Listing created, but ${failedUploads} image upload${failedUploads === 1 ? "" : "s"} failed. Open the listing to retry.`,
+          );
+        } else {
+          toast.success("Listing created.");
+        }
         router.replace(`/operator/catalogue/${next.id}`);
       }
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openDraftPreview() {
+    try {
+      if (!form.title.trim() || !form.shortDescription.trim() || !form.destination.trim()) {
+        setError("Enter a title, short description, and access URL before previewing.");
+        return;
+      }
+      const listing: Listing = {
+        id: `preview-${crypto.randomUUID()}`,
+        title: form.title.trim(),
+        short_description: form.shortDescription,
+        long_description: form.longDescription,
+        test_only: null,
+        price: { minor_amount: parseUsdMinor(form.price, { allowZero: true }), currency: "USD" },
+        compare_at_price: form.compareAtPrice.trim()
+          ? { minor_amount: parseUsdMinor(form.compareAtPrice), currency: "USD" }
+          : null,
+        visibility: form.visibility,
+        categories: categories
+          .filter((category) => form.categoryIds.includes(category.id))
+          .map(({ id, name, slug }) => ({ id, name, slug })),
+        metadata: {},
+        state: form.state,
+        featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
+        rating: null,
+        media: stagedMedia.map(({ file, previewUrl }, position) => ({
+          id: `preview-media-${position}`,
+          url: previewUrl,
+          mime_type: file.type,
+          width: null,
+          height: null,
+          position,
+          alt_text: file.name,
+        })),
+      };
+      sessionStorage.setItem("cliqero.operator.listing-preview", JSON.stringify(listing));
+      const tab = window.open("/operator/catalogue/preview", "_blank");
+      if (!tab) {
+        setError("Allow pop-ups to open the private preview.");
+        return;
+      }
+      tab.opener = null;
+    } catch (cause) {
+      setError(errorMessage(cause));
     }
   }
 
@@ -756,17 +865,24 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
               onClick={(event) => {
                 if (listing.state === "published") return;
                 event.preventDefault();
-                const tab = window.open("about:blank", "_blank", "noopener,noreferrer");
-                if (!tab) return;
-                void apiFetch<{ url: string }>(`/internal/listings/${listing.id}/preview-token`)
-                  .then(({ url }) => (tab.location.href = url))
-                  .catch(() => tab.close());
+                void openResolvedWindow(
+                  async () =>
+                    (
+                      await apiFetch<{ url: string }>(
+                        `/internal/listings/${listing.id}/preview-token`,
+                      )
+                    ).url,
+                );
               }}
             >
               Open listing
             </Link>
           </Button>
-        ) : null
+        ) : (
+          <Button type="button" variant="secondary" size="xs" onClick={openDraftPreview}>
+            Preview
+          </Button>
+        )
       }
       onSubmit={save}
       afterFields={
@@ -779,7 +895,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       }
     >
       <div className="grid gap-2">
-        <Label htmlFor="listing-title">Title</Label>
+        <RequiredLabel htmlFor="listing-title">Title</RequiredLabel>
         <Input
           id="listing-title"
           required
@@ -788,11 +904,12 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="listing-short-description">Short description</Label>
+        <RequiredLabel htmlFor="listing-short-description">Short description</RequiredLabel>
         <Textarea
           id="listing-short-description"
           rows={3}
           maxLength={200}
+          required
           value={form.shortDescription}
           onChange={(event) => setForm({ ...form, shortDescription: event.target.value })}
         />
@@ -812,7 +929,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="grid content-start gap-2">
-          <Label htmlFor="listing-price">Price (USD)</Label>
+          <RequiredLabel htmlFor="listing-price">Price (USD)</RequiredLabel>
           <Input
             id="listing-price"
             required
@@ -839,7 +956,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           </p>
         </div>
         <div className="grid content-start gap-2">
-          <Label htmlFor="listing-access-url">Access URL</Label>
+          <RequiredLabel htmlFor="listing-access-url">Access URL</RequiredLabel>
           <Input
             id="listing-access-url"
             required
@@ -883,6 +1000,51 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           Published listings require a short description.
         </p>
       </div>
+      {!editing && (
+        <div className="grid gap-3">
+          <Label htmlFor="listing-staged-media">Listing images (optional)</Label>
+          <Input
+            id="listing-staged-media"
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            multiple
+            onChange={(event) => {
+              const files = [...(event.target.files ?? [])];
+              setStagedMedia((current) => [...current, ...files.map(createCatalogueImagePreview)]);
+              event.target.value = "";
+            }}
+          />
+          {stagedMedia.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {stagedMedia.map((media, index) => (
+                <figure key={`${media.file.name}-${index}`} className="grid gap-2">
+                  <img
+                    src={media.previewUrl}
+                    alt={`Preview of ${media.file.name}`}
+                    className="max-h-56 w-fit max-w-full rounded-md border object-contain"
+                  />
+                  <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                    <figcaption className="break-all">{media.file.name}</figcaption>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="xs"
+                      onClick={() =>
+                        setStagedMedia((current) => {
+                          current[index]?.dispose();
+                          return current.filter((_, position) => position !== index);
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </figure>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <fieldset className="grid gap-2">
         <legend className="text-sm font-semibold text-slate-800">Categories</legend>
         <MultiSelect
@@ -929,12 +1091,38 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   );
 }
 
+export function OperatorCatalogueDraftPreview() {
+  const [listing, setListing] = useState<Listing | null>(null);
+  useEffect(() => {
+    try {
+      const value = sessionStorage.getItem("cliqero.operator.listing-preview");
+      // The private draft is external browser state and is only readable after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (value) setListing(JSON.parse(value) as Listing);
+    } catch {
+      setListing(null);
+    }
+  }, []);
+  if (!listing)
+    return (
+      <CrudDetail
+        eyebrow="Private preview"
+        title="Preview unavailable"
+        description="Return to the listing form and open Preview again."
+      />
+    );
+  return (
+    <ListingDetail id={listing.id} initialListing={listing} privatePreview reviewsVisible={false} />
+  );
+}
+
 function CatalogueIntegrations({ listingId }: { listingId: string }) {
   const [items, setItems] = useState<Integration[]>([]);
   const [name, setName] = useState("");
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const confirm = useOperatorConfirmation();
 
   async function load() {
     try {
@@ -981,7 +1169,15 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
     }
   }
   async function rotate(item: Integration) {
-    if (!window.confirm(`Rotate the credential for “${item.name}”?`)) return;
+    if (
+      !(await confirm({
+        title: "Rotate credential?",
+        description: `Rotate the credential for “${item.name}”? The old credential will stop working.`,
+        confirmLabel: "Rotate",
+        destructive: true,
+      }))
+    )
+      return;
     try {
       const result = await apiFetch<IntegrationCredential>(
         `/api/listings/${listingId}/integrations/${item.id}/rotate`,
@@ -994,7 +1190,15 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
     }
   }
   async function revoke(item: Integration) {
-    if (!window.confirm(`Revoke “${item.name}”?`)) return;
+    if (
+      !(await confirm({
+        title: "Revoke credential?",
+        description: `Revoke “${item.name}”? Existing credentials will stop working.`,
+        confirmLabel: "Revoke",
+        destructive: true,
+      }))
+    )
+      return;
     try {
       await apiFetch(`/api/listings/${listingId}/integrations/${item.id}`, {
         method: "DELETE",
@@ -1081,6 +1285,7 @@ function CatalogueMedia({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useOperatorConfirmation();
   const [selectedImage, setSelectedImage] = useState<ReturnType<
     typeof createCatalogueImagePreview
   > | null>(null);
@@ -1118,7 +1323,15 @@ function CatalogueMedia({
     }
   }
   async function remove(media: ListingMedia) {
-    if (!window.confirm("Remove this media from the listing?")) return;
+    if (
+      !(await confirm({
+        title: "Remove listing media?",
+        description: "Remove this media from the listing?",
+        confirmLabel: "Remove",
+        destructive: true,
+      }))
+    )
+      return;
     try {
       await apiFetch(`/api/listings/${listing.id}/media/${media.id}`, {
         method: "DELETE",

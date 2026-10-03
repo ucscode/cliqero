@@ -156,7 +156,9 @@ describe("WithdrawalDestinationService", () => {
     expect(destinationRepository.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: "archived" }),
     );
-    await expect(service.resolveForWithdrawal("owner", created.id)).rejects.toThrow("archived");
+    await expect(service.resolveForWithdrawal("owner", created.id)).rejects.toThrow(
+      "This payout destination is unavailable.",
+    );
   });
 
   it("keeps disabled destinations visible as unavailable history", async () => {

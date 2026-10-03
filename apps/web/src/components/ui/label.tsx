@@ -13,4 +13,13 @@ const Label = React.forwardRef<
   />
 ));
 Label.displayName = LabelPrimitive.Root.displayName;
-export { Label };
+
+const RequiredLabel = React.forwardRef<
+  React.ElementRef<typeof LabelPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <Label ref={ref} className={cn("required", className)} {...props} />
+));
+RequiredLabel.displayName = "RequiredLabel";
+
+export { Label, RequiredLabel };

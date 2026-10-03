@@ -224,6 +224,9 @@ export abstract class ListingRepository extends CrudRepository<
     limit: number;
   }): Promise<{ items: readonly Listing[]; nextCursor: string | null }>;
   abstract deleteForRoot(id: Id): Promise<boolean>;
+  abstract countsForListings(
+    ids: readonly Id[],
+  ): Promise<ReadonlyMap<Id, { reviews: number; purchases: number }>>;
 }
 
 function validateCompareAtPrice(price: Money, compareAtPrice: Money | null) {

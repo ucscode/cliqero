@@ -13,7 +13,7 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
   const treasuryEntryQuery = z.object({
     search: z.string().max(100).optional(),
     direction: z.enum(["credit", "debit"]).optional(),
-    source: z.enum(["automatic", "manual"]).optional(),
+    source: z.enum(["automatic", "adjustment"]).optional(),
     sort: z
       .enum(["created", "amount"])
       .default("created")
@@ -167,28 +167,27 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
       }
     },
   );
-  const treasuryEntryBody = z
+  const treasuryAdjustmentBody = z
     .object({
-      direction: z.enum(["credit", "debit"]),
       amount_minor: z
         .string()
-        .regex(/^[1-9]\d*$/)
+        .regex(/^-?[1-9]\d*$/)
         .max(18),
-      title: z.string().trim().min(1).max(200),
-      note: z.string().trim().max(1000).optional(),
+      reason: z.string().trim().min(1).max(1000),
+      reference: z.string().trim().max(200).optional(),
     })
     .strict();
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/treasury/entries",
+      path: "/api/treasury/adjustments",
       request: {
         headers: z.object({ "idempotency-key": z.string().trim().min(1).max(200) }),
-        body: { content: { "application/json": { schema: treasuryEntryBody } } },
+        body: { content: { "application/json": { schema: treasuryAdjustmentBody } } },
       },
       responses: {
         201: {
-          description: "Treasury entry created",
+          description: "Signed Treasury adjustment and deterministic ledger entry created",
           content: { "application/json": { schema: operatorTreasuryEntrySchema } },
         },
         400: {
@@ -216,11 +215,10 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
-        const entry = await container.treasury.createManual({
-          direction: body.direction,
+        const entry = await container.treasury.createAdjustment({
           amountMinor: BigInt(body.amount_minor),
-          title: body.title,
-          note: body.note,
+          reason: body.reason,
+          reference: body.reference,
           actorId: p.accountId,
           idempotencyKey:
             c.req.header("Idempotency-Key") ??
@@ -228,7 +226,6 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
               throw new Error("A valid Idempotency-Key is required");
             })(),
         });
-        const actor = await container.profiles.get(p.accountId);
         return c.json(
           jsonSafe({
             id: entry.id,
@@ -236,8 +233,11 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
             amountMinor: entry.amountMinor.toString(),
             title: entry.title,
             note: entry.note,
-            source: null,
-            actor: { id: p.accountId, username: p.account.username, email: actor.email },
+            source:
+              entry.sourceKind && entry.sourceId
+                ? { kind: entry.sourceKind, id: entry.sourceId }
+                : null,
+            actor: { id: p.accountId, username: p.account.username, email: null },
             createdAt: entry.createdAt.toISOString(),
           }),
           201,

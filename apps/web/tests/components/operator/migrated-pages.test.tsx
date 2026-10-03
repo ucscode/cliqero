@@ -19,9 +19,14 @@ import {
   OperatorWithdrawalList,
 } from "@/components/operator/withdrawals";
 import { ToastProvider } from "@/components/toast/provider";
+import { OperatorConfirmationProvider } from "@/components/operator/ui/confirmation";
 
 function renderPage(element: ReactNode) {
-  return renderToStaticMarkup(<ToastProvider>{element}</ToastProvider>);
+  return renderToStaticMarkup(
+    <ToastProvider>
+      <OperatorConfirmationProvider>{element}</OperatorConfirmationProvider>
+    </ToastProvider>,
+  );
 }
 
 vi.mock("next/navigation", () => ({

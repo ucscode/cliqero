@@ -17,12 +17,14 @@ import { CrudSortSelect } from "@/components/crud/sort-select";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
+import { useOperatorConfirmation } from "./ui/confirmation";
 
 const formatDate = (value: string) => new Date(value).toLocaleString();
 const label = (value: string) =>
   value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolean }) {
+  const confirm = useOperatorConfirmation();
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
   const [sortChoice, setSortChoice] = useState("created:desc");
@@ -104,7 +106,15 @@ export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolea
           label: "Delete",
           destructive: true,
           onSelect: async (items) => {
-            if (!window.confirm(`Delete ${items.length} selected earnings entries?`)) return false;
+            if (
+              !(await confirm({
+                title: "Delete earnings entries?",
+                description: `Delete ${items.length} selected earnings entries?`,
+                confirmLabel: "Delete",
+                destructive: true,
+              }))
+            )
+              return false;
             const outcome = await runOperatorBulkAction({
               resource: "earnings",
               action: "delete",
@@ -243,8 +253,16 @@ export function OperatorEarningsList({ canDelete = false }: { canDelete?: boolea
                 type: "action" as const,
                 label: "Delete",
                 destructive: true,
-                onSelect: () => {
-                  if (!window.confirm("Delete this earnings entry?")) return;
+                onSelect: async () => {
+                  if (
+                    !(await confirm({
+                      title: "Delete earnings entry?",
+                      description: "Delete this earnings entry?",
+                      confirmLabel: "Delete",
+                      destructive: true,
+                    }))
+                  )
+                    return;
                   void runOperatorBulkAction({
                     resource: "earnings",
                     action: "delete",

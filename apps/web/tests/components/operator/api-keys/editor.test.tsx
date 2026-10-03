@@ -44,7 +44,7 @@ describe("Operator API-key create and edit pages", () => {
     expect(source).not.toContain("MultiSelect");
     expect(source).toContain('useState<"active" | "revoked">("active")');
     expect(source).toContain("state: payload.state");
-    expect(source).toContain("account.value !== originalAccountId");
+    expect(source).toContain("account.id !== originalAccountId");
     expect(source).toContain('mode === "create" ? "New API key" : "Edit API key"');
     const positions = [
       source.indexOf('Label htmlFor="api-key-account"'),

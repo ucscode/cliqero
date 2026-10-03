@@ -1,13 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ApiClientError, apiFetch } from "@/lib/api-client";
-import { Button } from "../ui/button";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ApiClientError, apiFetch, type OperatorAccountSummary } from "@/lib/api-client";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Alert } from "../ui/alert";
+import { RequiredLabel, Label } from "../ui/label";
+import { Textarea } from "../ui/textarea";
+import { useToast } from "../toast/provider";
 import { Money } from "../money";
+import { CrudEdit } from "@/components/crud/edit";
 import { CrudIndex } from "@/components/crud/index-page";
 import { CrudDetail } from "@/components/crud/detail";
 import type { CrudColumn } from "@/components/crud/table";
@@ -15,8 +17,8 @@ import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorPrimaryCell } from "./ui/data-cells";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
-import AsyncSelect from "react-select/async";
-import type { OperatorAccountPage } from "@/lib/api-client";
+import { OperatorAccountSelector } from "./ui/account-selector";
+import { useOperatorConfirmation } from "./ui/confirmation";
 
 type Adjustment = {
   id: string;
@@ -27,36 +29,18 @@ type Adjustment = {
   reference: string | null;
   createdBy: string;
   createdAt: string;
+  currentBalanceMinor?: string | null;
 };
 
-type AccountOption = { value: string; label: string };
-const accountSelectStyles = {
-  control: (base: object) => ({ ...base, minHeight: 42 }),
-  menuPortal: (base: object) => ({ ...base, zIndex: 80 }),
-};
-
-export function OperatorEarningsAdjustmentForm({
-  onCreated,
-}: {
-  onCreated?: () => void | Promise<void>;
-}) {
-  const [account, setAccount] = useState<AccountOption | null>(null);
+export function OperatorEarningsAdjustmentForm() {
+  const router = useRouter();
+  const toast = useToast();
+  const [account, setAccount] = useState<OperatorAccountSummary | null>(null);
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [reference, setReference] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  async function searchAccounts(query: string): Promise<AccountOption[]> {
-    if (!query.trim()) return [];
-    const result = await apiFetch<OperatorAccountPage>(
-      `/api/accounts?search=${encodeURIComponent(query.trim())}&limit=10`,
-    );
-    return result.items.map((item) => ({
-      value: item.id,
-      label: `@${item.username} · ${item.displayName || item.email || item.id}`,
-    }));
-  }
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,17 +51,14 @@ export function OperatorEarningsAdjustmentForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          account_id: account?.value,
+          account_id: account?.id,
           amount_minor: amount.trim(),
           reason,
           reference: reference.trim() || null,
         }),
       });
-      setAccount(null);
-      setAmount("");
-      setReason("");
-      setReference("");
-      await onCreated?.();
+      toast.success("Earnings adjustment posted.");
+      router.push("/operator/earnings-adjustments");
     } catch (cause) {
       setError(
         cause instanceof ApiClientError ? cause.message : "The adjustment could not be created.",
@@ -88,31 +69,36 @@ export function OperatorEarningsAdjustmentForm({
   }
 
   return (
-    <form onSubmit={create} className="grid gap-4 rounded-xl border bg-white p-5 md:grid-cols-2">
-      <h2 className="text-lg font-semibold md:col-span-2">New adjustment</h2>
-      <p className="text-sm text-slate-600 md:col-span-2">
-        This posts a signed ledger adjustment. Positive increases the account balance; negative
-        decreases it.
+    <CrudEdit
+      mode="create"
+      eyebrow="Earnings ledger"
+      title="New adjustment"
+      description="Post a signed earnings adjustment for an account."
+      backHref="/operator/earnings-adjustments"
+      backLabel="Back to adjustments"
+      saving={saving}
+      onSubmit={(event) => void create(event)}
+      error={error}
+      submitLabel="Post adjustment"
+      savingLabel="Posting…"
+      sectionTitle="Adjustment details"
+      widthClassName="max-w-3xl"
+    >
+      <p className="text-sm text-slate-600">
+        Positive increases the account balance; negative decreases it. Amounts use USD minor units:
+        1000 = $10.00 and -500 = -$5.00.
       </p>
       <div className="grid gap-2">
-        <Label htmlFor="adjustment-account">Account</Label>
-        <AsyncSelect<AccountOption, false>
+        <RequiredLabel htmlFor="adjustment-account">Account</RequiredLabel>
+        <OperatorAccountSelector
           inputId="adjustment-account"
-          instanceId="adjustment-account"
-          cacheOptions
-          defaultOptions={false}
-          loadOptions={searchAccounts}
           value={account}
           onChange={setAccount}
-          placeholder="Search by username, email, or name"
-          noOptionsMessage={() => "Search for an account"}
-          styles={accountSelectStyles}
-          menuPortalTarget={typeof document === "undefined" ? undefined : document.body}
-          aria-label="Account"
+          required
         />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="adjustment-amount">Signed amount in USD minor units</Label>
+        <RequiredLabel htmlFor="adjustment-amount">Signed amount in USD minor units</RequiredLabel>
         <Input
           id="adjustment-amount"
           inputMode="numeric"
@@ -122,9 +108,9 @@ export function OperatorEarningsAdjustmentForm({
           required
         />
       </div>
-      <div className="grid gap-2 md:col-span-2">
-        <Label htmlFor="adjustment-reason">Reason</Label>
-        <Input
+      <div className="grid gap-2">
+        <RequiredLabel htmlFor="adjustment-reason">Reason</RequiredLabel>
+        <Textarea
           id="adjustment-reason"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
@@ -139,15 +125,7 @@ export function OperatorEarningsAdjustmentForm({
           onChange={(event) => setReference(event.target.value)}
         />
       </div>
-      <div className="flex items-end">
-        <Button disabled={saving}>{saving ? "Posting…" : "Post adjustment"}</Button>
-      </div>
-      {error && (
-        <div className="md:col-span-2">
-          <Alert>{error}</Alert>
-        </div>
-      )}
-    </form>
+    </CrudEdit>
   );
 }
 
@@ -158,6 +136,7 @@ export function OperatorEarningsAdjustments({
   canManage: boolean;
   canDelete?: boolean;
 }) {
+  const confirm = useOperatorConfirmation();
   const [items, setItems] = useState<Adjustment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -206,6 +185,12 @@ export function OperatorEarningsAdjustments({
       ),
     },
     {
+      key: "balance",
+      label: "Current earnings",
+      render: (item) =>
+        item.currentBalanceMinor == null ? "—" : <Money minor={item.currentBalanceMinor} />,
+    },
+    {
       key: "reason",
       label: "Reason",
       render: (item) => (
@@ -235,7 +220,14 @@ export function OperatorEarningsAdjustments({
           label: "Delete",
           destructive: true,
           onSelect: async (selected) => {
-            if (!window.confirm(`Delete ${selected.length} selected earning adjustments?`))
+            if (
+              !(await confirm({
+                title: "Delete earnings adjustments?",
+                description: `Delete ${selected.length} selected earning adjustments?`,
+                confirmLabel: "Delete",
+                destructive: true,
+              }))
+            )
               return false;
             const outcome = await runOperatorBulkAction({
               resource: "earnings-adjustments",
@@ -289,7 +281,15 @@ export function OperatorEarningsAdjustments({
                 label: "Delete",
                 destructive: true,
                 onSelect: async () => {
-                  if (!window.confirm("Delete this earnings adjustment?")) return;
+                  if (
+                    !(await confirm({
+                      title: "Delete earnings adjustment?",
+                      description: "Delete this earnings adjustment?",
+                      confirmLabel: "Delete",
+                      destructive: true,
+                    }))
+                  )
+                    return;
                   const result = await runOperatorBulkAction({
                     resource: "earnings-adjustments",
                     action: "delete",

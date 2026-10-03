@@ -18,8 +18,18 @@ const createSchema = z
     amount_minor: z.string().regex(/^[1-9]\d*$/),
     destination_id: z.uuid(),
     idempotency_key: z.uuid(),
+    state: z.enum(["requested", "approved", "rejected"]).default("requested"),
+    reason: z.string().trim().max(1000).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.state === "rejected" && !value.reason)
+      context.addIssue({
+        code: "custom",
+        path: ["reason"],
+        message: "A rejection reason is required.",
+      });
+  });
 const updateSchema = z
   .object({
     amount_minor: z
@@ -31,7 +41,16 @@ const updateSchema = z
     reason: z.string().trim().max(1000).optional(),
   })
   .strict()
-  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated.");
+  .superRefine((value, context) => {
+    if (Object.keys(value).length === 0)
+      context.addIssue({ code: "custom", message: "At least one field must be updated." });
+    if (value.state === "rejected" && !value.reason)
+      context.addIssue({
+        code: "custom",
+        path: ["reason"],
+        message: "A rejection reason is required.",
+      });
+  });
 const completeSchema = z
   .object({
     external_reference: z.string().trim().max(200).optional(),
@@ -116,8 +135,12 @@ export class InternalWithdrawalRoutes {
         amountMinor: body.amount_minor,
         destinationId: body.destination_id,
         idempotencyKey: body.idempotency_key,
+        state: body.state,
+        reason: body.reason,
       });
-      return this.respond(await this.container.operatorWithdrawals.get(created.id), 201);
+      // Return the successfully persisted domain result directly. A second projection
+      // read must not turn a successful reservation into an apparent failed POST.
+      return this.respond(created, 201);
     } catch (error) {
       return apiError(error, request);
     }

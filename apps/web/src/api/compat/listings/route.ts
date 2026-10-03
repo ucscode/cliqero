@@ -131,10 +131,13 @@ export async function GET(
       const media = await c.listingMediaRepository.listByListings(
         page.items.map((item) => item.id),
       );
+      const counts = await c.listingService.catalogueCounts(page.items.map((item) => item.id));
       return Response.json({
-        items: page.items.map((item) =>
-          listingWithMediaView(item, media.get(item.id) ?? [], c.listingMedia, true),
-        ),
+        items: page.items.map((item) => ({
+          ...listingWithMediaView(item, media.get(item.id) ?? [], c.listingMedia, true),
+          review_count: counts.get(item.id)?.reviews ?? 0,
+          purchase_count: counts.get(item.id)?.purchases ?? 0,
+        })),
         next_cursor: page.nextCursor,
       });
     }

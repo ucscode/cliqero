@@ -226,7 +226,7 @@ describe("WithdrawalService manual completion", () => {
     const { service, withdrawal, complete, releaseOrComplete } = fixture("requested");
 
     await expect(service.complete("operator-1", withdrawal.id)).rejects.toThrow(
-      "Invalid withdrawal transition from requested",
+      "Only approved withdrawals can be completed; this one is requested.",
     );
     expect(complete).not.toHaveBeenCalled();
     expect(releaseOrComplete).not.toHaveBeenCalled();

@@ -22,6 +22,7 @@ import { CrudEdit } from "@/components/crud/edit";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { useOperatorConfirmation } from "./ui/confirmation";
 
 type Review = ListingReview & { reviewer?: string; listing_title?: string };
 type OperatorReviewDetail = Review & { moderated_by?: string | null };
@@ -37,6 +38,7 @@ export function reviewQueueBulkActions<T extends { status: string }>(
 }
 
 export function OperatorReviewEditor({ reviewId }: { reviewId: string }) {
+  const confirm = useOperatorConfirmation();
   const router = useRouter();
   const toast = useToast();
   const [review, setReview] = useState<OperatorReviewDetail | null>(null);
@@ -80,9 +82,12 @@ export function OperatorReviewEditor({ reviewId }: { reviewId: string }) {
 
   async function remove() {
     if (
-      !window.confirm(
-        "Delete this review? It will be removed from customer reviews and rating totals.",
-      )
+      !(await confirm({
+        title: "Delete review?",
+        description: "It will be removed from customer reviews and rating totals.",
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
     )
       return;
     setSaving(true);
@@ -209,6 +214,7 @@ export function OperatorReviews({
   initialListingId?: string;
   canDelete?: boolean;
 }) {
+  const confirm = useOperatorConfirmation();
   const toast = useToast();
   const [viewingReview, setViewingReview] = useState<Review | null>(null);
   const [status, setStatus] = useState("all");
@@ -284,7 +290,16 @@ export function OperatorReviews({
     }
   }
   async function deleteMany(reviews: readonly Review[]) {
-    if (!window.confirm(`Permanently delete ${reviews.length} selected review(s)?`)) return false;
+    if (
+      !(await confirm({
+        title: `Delete ${reviews.length} selected review(s)?`,
+        description:
+          "These reviews will be permanently removed from customer reviews and rating totals.",
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return false;
     try {
       setActionError(null);
       setBulkOutcome(null);
@@ -515,8 +530,16 @@ export function OperatorReviews({
                 type: "action" as const,
                 label: "Delete",
                 destructive: true,
-                onSelect: () => {
-                  if (!window.confirm("Permanently delete this review?")) return;
+                onSelect: async () => {
+                  if (
+                    !(await confirm({
+                      title: "Delete review?",
+                      description: "This review will be permanently removed.",
+                      confirmLabel: "Delete",
+                      destructive: true,
+                    }))
+                  )
+                    return;
                   void runOperatorBulkAction({
                     resource: "reviews",
                     action: "delete",

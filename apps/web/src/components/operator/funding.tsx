@@ -9,6 +9,7 @@ import {
   type OperatorFundingDetail as FundingDetail,
   type OperatorFundingPage,
   type OperatorFundingState,
+  type OperatorAccountSummary,
 } from "@/lib/api-client";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -24,6 +25,10 @@ import type { CrudColumn } from "@/components/crud/table";
 import type { OperatorAction } from "./ui/actions-menu";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
+import { useOperatorConfirmation } from "./ui/confirmation";
+import { OperatorAccountSelector } from "./ui/account-selector";
+import { Textarea } from "../ui/textarea";
+import { RequiredLabel } from "../ui/label";
 
 const states: Array<{ value: OperatorFundingState; label: string }> = [
   { value: "initialization_pending", label: "Initialization pending" },
@@ -50,7 +55,6 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Funding data is temporarily unavailable.";
 }
 
-type FundingAccountOption = { id: string; username: string; email: string | null };
 type AdministrativeFundingState = "confirmed" | "failed" | "blocked" | "cancelled";
 const administrativeStates: AdministrativeFundingState[] = [
   "confirmed",
@@ -68,9 +72,7 @@ function majorFromMinor(value: string) {
 
 export function AdministrativeFundingForm({ fundingId }: { fundingId?: string }) {
   const router = useRouter();
-  const [accounts, setAccounts] = useState<FundingAccountOption[]>([]);
-  const [accountSearch, setAccountSearch] = useState("");
-  const [accountId, setAccountId] = useState("");
+  const [account, setAccount] = useState<OperatorAccountSummary | null>(null);
   const [amount, setAmount] = useState("");
   const [state, setState] = useState<AdministrativeFundingState>("confirmed");
   const [reason, setReason] = useState("");
@@ -82,32 +84,24 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
 
   useEffect(() => {
     let active = true;
-    void Promise.all([
-      fundingId ? apiFetch<FundingDetail>(`/api/funding/${fundingId}`) : Promise.resolve(null),
-      apiFetch<{ items: FundingAccountOption[] }>("/internal/funding/accounts?search=&limit=20"),
-    ])
-      .then(([funding, result]) => {
+    void (fundingId ? apiFetch<FundingDetail>(`/api/funding/${fundingId}`) : Promise.resolve(null))
+      .then((funding) => {
         if (!active) return;
-        const eligible = result.items;
-        setAccounts(eligible);
         if (funding) {
           if (funding.origin !== "administrative")
             throw new Error("Provider funding is immutable.");
-          setAccountId(funding.account.id);
+          setAccount({
+            ...funding.account,
+            displayName: null,
+            country: null,
+            createdAt: "",
+            directReferralCount: 0,
+          });
           setAmount(majorFromMinor(funding.canonicalAmountMinor));
           setState(funding.state as AdministrativeFundingState);
           setReason(funding.reason ?? "");
           setReference(funding.administrativeReference ?? "");
-          if (!eligible.some((account) => account.id === funding.account.id))
-            setAccounts([
-              {
-                id: funding.account.id,
-                username: funding.account.username,
-                email: funding.account.email,
-              },
-              ...eligible,
-            ]);
-        } else if (eligible[0]) setAccountId(eligible[0].id);
+        }
       })
       .catch((cause: unknown) => active && setError(errorMessage(cause)))
       .finally(() => active && setLoading(false));
@@ -133,7 +127,7 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
         state,
         reason,
         reference: reference.trim() || null,
-        ...(fundingId ? {} : { account_id: accountId }),
+        ...(fundingId ? {} : { account_id: account?.id }),
       };
       if (!fundingId && !createKey.current) createKey.current = crypto.randomUUID();
       await apiFetch(fundingId ? `/internal/funding/${fundingId}` : "/internal/funding", {
@@ -153,23 +147,6 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
     }
   }
 
-  async function searchAccounts(value: string) {
-    setAccountSearch(value);
-    try {
-      const result = await apiFetch<{ items: FundingAccountOption[] }>(
-        `/internal/funding/accounts?search=${encodeURIComponent(value)}&limit=20`,
-      );
-      setAccounts((current) => {
-        const selected = current.find((account) => account.id === accountId);
-        return selected && !result.items.some((account) => account.id === selected.id)
-          ? [selected, ...result.items]
-          : result.items;
-      });
-    } catch (cause) {
-      setError(errorMessage(cause));
-    }
-  }
-
   if (loading)
     return <CrudDetail eyebrow="Funding management" title="Administrative funding" loading />;
   return (
@@ -182,29 +159,18 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
           {error && <OperatorErrorState message={error} />}
           <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
             {!fundingId && (
-              <label className="grid gap-1 text-sm font-medium">
-                Account
-                <Input
-                  value={accountSearch}
-                  onChange={(event) => void searchAccounts(event.target.value)}
-                  placeholder="Search username or email"
-                />
-                <Select
-                  value={accountId}
-                  onChange={(event) => setAccountId(event.target.value)}
+              <div className="grid gap-1 text-sm font-medium">
+                <RequiredLabel htmlFor="funding-account">Account</RequiredLabel>
+                <OperatorAccountSelector
+                  inputId="funding-account"
+                  endpoint="/internal/funding/accounts"
+                  value={account}
+                  onChange={setAccount}
                   required
-                >
-                  <option value="">Select account</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      @{account.username}
-                      {account.email ? ` · ${account.email}` : ""}
-                    </option>
-                  ))}
-                </Select>
-              </label>
+                />
+              </div>
             )}
-            <label className="grid gap-1 text-sm font-medium">
+            <label className="required grid gap-1 text-sm font-medium">
               Amount (USD)
               <Input
                 type="number"
@@ -228,9 +194,9 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
                 ))}
               </Select>
             </label>
-            <label className="grid gap-1 text-sm font-medium">
+            <label className="required grid gap-1 text-sm font-medium">
               Reason
-              <Input
+              <Textarea
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 maxLength={1000}
@@ -246,7 +212,7 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
               />
             </label>
             <div className="flex gap-2">
-              <Button type="submit" disabled={saving || (!fundingId && !accountId)}>
+              <Button type="submit" disabled={saving || (!fundingId && !account?.id)}>
                 {saving ? "Saving…" : "Save"}
               </Button>
               <Button
@@ -293,6 +259,7 @@ export function OperatorFundingList({
   canManage?: boolean;
   canDelete?: boolean;
 }) {
+  const confirm = useOperatorConfirmation();
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorFundingState | "">("");
   const [provider, setProvider] = useState("");
@@ -367,7 +334,7 @@ export function OperatorFundingList({
         funding.walletCredit ? (
           <OperatorStatusCell status={funding.walletCredit.state} />
         ) : funding.walletEffect?.state === "available" ? (
-          <span className="text-emerald-700">Available</span>
+          <OperatorStatusCell status="available" />
         ) : (
           "—"
         ),
@@ -397,7 +364,15 @@ export function OperatorFundingList({
             label: "Delete",
             destructive: true,
             onSelect: async () => {
-              if (!window.confirm("Delete this funding record?")) return;
+              if (
+                !(await confirm({
+                  title: "Delete funding record?",
+                  description: "Delete this funding record and its linked financial effects?",
+                  confirmLabel: "Delete",
+                  destructive: true,
+                }))
+              )
+                return;
               await apiFetch(`/internal/funding/${funding.id}`, { method: "DELETE" });
               await collection.retry();
             },
@@ -515,11 +490,14 @@ export function OperatorFundingList({
                     .map((item) => item.id);
                   if (!ids.length) return false;
                   if (
-                    !window.confirm(
-                      canDelete
+                    !(await confirm({
+                      title: "Delete funding records?",
+                      description: canDelete
                         ? `Delete ${ids.length} funding record(s)? Linked provider evidence and wallet credits will be removed.`
                         : `Delete ${ids.length} administrative funding record(s)? Provider records will be retained.`,
-                    )
+                      confirmLabel: "Delete",
+                      destructive: true,
+                    }))
                   )
                     return false;
                   const response = await apiFetch<{
@@ -567,6 +545,7 @@ export function OperatorFundingDetail({
   canDelete?: boolean;
 }) {
   const router = useRouter();
+  const confirm = useOperatorConfirmation();
   const [funding, setFunding] = useState<FundingDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -606,7 +585,15 @@ export function OperatorFundingDetail({
   }
 
   async function confirmBankTransfer() {
-    if (!funding || !canManage || !window.confirm("Confirm that this bank transfer was received?"))
+    if (
+      !funding ||
+      !canManage ||
+      !(await confirm({
+        title: "Confirm bank transfer?",
+        description: "Confirm that this bank transfer was received?",
+        confirmLabel: "Confirm",
+      }))
+    )
       return;
     setConfirming(true);
     setError(null);
@@ -623,7 +610,17 @@ export function OperatorFundingDetail({
   }
 
   async function deleteFunding() {
-    if (!funding || !canDelete || !window.confirm("Delete this funding record?")) return;
+    if (
+      !funding ||
+      !canDelete ||
+      !(await confirm({
+        title: "Delete funding record?",
+        description: "Delete this funding record and its linked financial effects?",
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return;
     setError(null);
     try {
       await apiFetch(`/internal/funding/${funding.id}`, { method: "DELETE" });

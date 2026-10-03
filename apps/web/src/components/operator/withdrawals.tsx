@@ -28,6 +28,10 @@ import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
 import { CrudSortSelect } from "@/components/crud/sort-select";
 import type { FormEvent } from "react";
+import { OperatorAccountSelector } from "./ui/account-selector";
+import { useOperatorConfirmation } from "./ui/confirmation";
+import { Textarea } from "../ui/textarea";
+import { RequiredLabel } from "../ui/label";
 
 function minorToMajor(value: string) {
   const amount = BigInt(value);
@@ -63,14 +67,14 @@ export function operatorWithdrawalDeleteAllowed(
 export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string }) {
   const router = useRouter();
   const [item, setItem] = useState<Detail | null>(null);
-  const [accounts, setAccounts] = useState<OperatorAccountSummary[]>([]);
-  const [accountSearch, setAccountSearch] = useState("");
-  const [accountId, setAccountId] = useState("");
+  const [account, setAccount] = useState<OperatorAccountSummary | null>(null);
   const [destinations, setDestinations] = useState<WithdrawalDestination[]>([]);
   const [destinationId, setDestinationId] = useState("");
   const [amount, setAmount] = useState("");
   const [state, setState] = useState<"requested" | "approved" | "rejected">("requested");
   const [reason, setReason] = useState("");
+  const [externalReference, setExternalReference] = useState("");
+  const [completionNote, setCompletionNote] = useState("");
   const [loading, setLoading] = useState(Boolean(withdrawalId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,39 +83,29 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
     let active = true;
     const load = async () => {
       try {
-        const [accountsResult, detail] = await Promise.all([
-          apiFetch<{ items: OperatorAccountSummary[] }>("/internal/withdrawals/accounts?search="),
-          withdrawalId
-            ? apiFetch<Detail>(`/internal/withdrawals/${withdrawalId}`)
-            : Promise.resolve(null),
-        ]);
+        const detail = withdrawalId
+          ? await apiFetch<Detail>(`/internal/withdrawals/${withdrawalId}`)
+          : null;
         if (!active) return;
-        let options = accountsResult.items;
         if (detail) {
           setItem(detail);
-          setAccountId(detail.account.id);
+          setAccount({
+            id: detail.account.id,
+            username: detail.account.username,
+            email: detail.account.email,
+            displayName: null,
+            country: null,
+            createdAt: "",
+            directReferralCount: 0,
+          });
           setAmount(minorToMajor(detail.amountMinor));
           setState(
             detail.state === "approved" || detail.state === "rejected" ? detail.state : "requested",
           );
           setReason(detail.reason ?? "");
-          if (!options.some((entry) => entry.id === detail.account.id))
-            options = [
-              {
-                id: detail.account.id,
-                username: detail.account.username,
-                displayName: null,
-                email: detail.account.email,
-                country: null,
-                createdAt: "",
-                directReferralCount: 0,
-              },
-              ...options,
-            ];
           if (!operatorWithdrawalEditPolicy(detail.state).editable)
             throw new Error("This withdrawal has no editable fields.");
-        } else if (options[0]) setAccountId(options[0].id);
-        setAccounts(options);
+        }
       } catch (cause) {
         if (active) setError(message(cause));
       } finally {
@@ -125,10 +119,10 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
   }, [withdrawalId]);
 
   useEffect(() => {
-    if (!accountId) return;
+    if (!account?.id) return;
     let active = true;
     void apiFetch<WithdrawalDestination[]>(
-      `/internal/withdrawals/destinations?account_id=${encodeURIComponent(accountId)}`,
+      `/internal/withdrawals/destinations?account_id=${encodeURIComponent(account.id)}`,
     )
       .then((result) => {
         if (!active) return;
@@ -147,19 +141,7 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
     return () => {
       active = false;
     };
-  }, [accountId, item]);
-
-  async function searchAccounts(value: string) {
-    setAccountSearch(value);
-    try {
-      const result = await apiFetch<{ items: OperatorAccountSummary[] }>(
-        `/internal/withdrawals/accounts?search=${encodeURIComponent(value)}`,
-      );
-      setAccounts(result.items);
-    } catch (cause) {
-      setError(message(cause));
-    }
-  }
+  }, [account?.id, item]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -189,14 +171,34 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            account_id: accountId,
+            account_id: account?.id,
             amount_minor: amountMinor,
             destination_id: destinationId,
             idempotency_key: crypto.randomUUID(),
+            state,
+            reason,
           }),
         });
       }
       router.push("/operator/withdrawals");
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function completeWithdrawal() {
+    if (!withdrawalId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await apiFetch(`/internal/withdrawals/${withdrawalId}/complete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ external_reference: externalReference, note: completionNote }),
+      });
+      router.push(`/operator/withdrawals/${withdrawalId}`);
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -215,29 +217,18 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
           {error && <OperatorErrorState message={error} />}
           <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
             {!withdrawalId && (
-              <label className="grid gap-1 text-sm font-medium">
-                Account
-                <Input
-                  value={accountSearch}
-                  onChange={(event) => void searchAccounts(event.target.value)}
-                  placeholder="Search username or email"
-                />
-                <Select
-                  value={accountId}
-                  onChange={(event) => setAccountId(event.target.value)}
+              <div className="grid gap-1 text-sm font-medium">
+                <RequiredLabel htmlFor="withdrawal-account">Account</RequiredLabel>
+                <OperatorAccountSelector
+                  inputId="withdrawal-account"
+                  endpoint="/internal/withdrawals/accounts"
+                  value={account}
+                  onChange={setAccount}
                   required
-                >
-                  <option value="">Select account</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      @{account.username}
-                      {account.email ? ` · ${account.email}` : ""}
-                    </option>
-                  ))}
-                </Select>
-              </label>
+                />
+              </div>
             )}
-            <label className="grid gap-1 text-sm font-medium">
+            <label className="required grid gap-1 text-sm font-medium">
               Amount (USD)
               <Input
                 type="number"
@@ -251,7 +242,7 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                 }
               />
             </label>
-            <label className="grid gap-1 text-sm font-medium">
+            <label className="required grid gap-1 text-sm font-medium">
               Payout destination
               <Select
                 value={destinationId}
@@ -273,8 +264,8 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                 ))}
               </Select>
             </label>
-            {withdrawalId && (
-              <label className="grid gap-1 text-sm font-medium">
+            {
+              <label className="required grid gap-1 text-sm font-medium">
                 Status
                 <Select
                   value={state}
@@ -289,20 +280,61 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                   )}
                 </Select>
               </label>
-            )}
-            {withdrawalId && (
-              <label className="grid gap-1 text-sm font-medium">
+            }
+            {
+              <label
+                className={`grid gap-1 text-sm font-medium ${state === "rejected" ? "required" : ""}`}
+              >
                 Reason
-                <Input
+                <Textarea
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                   maxLength={1000}
                   placeholder="Required when rejecting"
+                  required={state === "rejected"}
                 />
               </label>
+            }
+            {item?.state === "approved" && (
+              <OperatorSection
+                title="Complete payout"
+                description="Completion records payout evidence, settles the reservation, and emits the completion event."
+                surface
+              >
+                <div className="grid gap-3">
+                  <label className="grid gap-1 text-sm font-medium">
+                    External reference (optional)
+                    <Input
+                      value={externalReference}
+                      onChange={(event) => setExternalReference(event.target.value)}
+                      maxLength={200}
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium">
+                    Completion note (optional)
+                    <Textarea
+                      value={completionNote}
+                      onChange={(event) => setCompletionNote(event.target.value)}
+                      maxLength={500}
+                    />
+                  </label>
+                  <div>
+                    <Button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void completeWithdrawal()}
+                    >
+                      Complete payout
+                    </Button>
+                  </div>
+                </div>
+              </OperatorSection>
             )}
             <div className="flex gap-2">
-              <Button type="submit" disabled={saving || !accountId || !destinationId}>
+              <Button
+                type="submit"
+                disabled={saving || (!withdrawalId && !account?.id) || !destinationId}
+              >
                 {saving ? "Saving…" : "Save"}
               </Button>
               <Button
@@ -337,6 +369,7 @@ export function OperatorWithdrawalList({
   canManage?: boolean;
   canDelete?: boolean;
 }) {
+  const confirm = useOperatorConfirmation();
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorWithdrawalState | "">("");
   const [attention, setAttention] = useState("");
@@ -511,11 +544,14 @@ export function OperatorWithdrawalList({
                 destructive: true,
                 onSelect: async (items) => {
                   if (
-                    !window.confirm(
-                      canDelete
-                        ? `Delete ${items.length} selected withdrawal record(s)?`
-                        : `Delete ${items.length} mutable withdrawal request(s)? Completed payouts cannot be deleted.`,
-                    )
+                    !(await confirm({
+                      title: `Delete ${items.length} withdrawal record(s)?`,
+                      description: canDelete
+                        ? "This permanently removes the selected records."
+                        : "Only mutable requests can be deleted; completed payouts remain financial history.",
+                      confirmLabel: "Delete",
+                      destructive: true,
+                    }))
                   )
                     return false;
                   const result = await apiFetch<{
@@ -545,7 +581,15 @@ export function OperatorWithdrawalList({
                 label: "Delete",
                 destructive: true,
                 onSelect: async () => {
-                  if (!window.confirm("Delete this withdrawal record?")) return;
+                  if (
+                    !(await confirm({
+                      title: "Delete withdrawal?",
+                      description: "This withdrawal record will be permanently removed.",
+                      confirmLabel: "Delete",
+                      destructive: true,
+                    }))
+                  )
+                    return;
                   await apiFetch(`/internal/withdrawals/${item.id}`, { method: "DELETE" });
                   await collection.retry();
                 },
@@ -584,20 +628,13 @@ export function OperatorWithdrawalList({
 export function OperatorWithdrawalDetail({
   withdrawalId,
   canManage = false,
-  canDelete = false,
 }: {
   withdrawalId: string;
   canManage?: boolean;
-  canDelete?: boolean;
 }) {
-  const router = useRouter();
   const [item, setItem] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [reason, setReason] = useState("");
-  const [externalReference, setExternalReference] = useState("");
-  const [completionNote, setCompletionNote] = useState("");
   async function load() {
     setLoading(true);
     setError(null);
@@ -614,51 +651,6 @@ export function OperatorWithdrawalDetail({
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [withdrawalId]);
-  async function act(action: "approve" | "reject" | "complete", body?: Record<string, unknown>) {
-    setBusy(true);
-    setError(null);
-    try {
-      if (action === "complete") {
-        await apiFetch(`/internal/withdrawals/${withdrawalId}/complete`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-        });
-      } else {
-        const status = action === "approve" ? "approved" : "rejected";
-        await apiFetch(`/internal/withdrawals/${withdrawalId}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ state: status, ...body }),
-        });
-      }
-      await load();
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function remove() {
-    if (
-      !window.confirm(
-        canDelete
-          ? "Delete this withdrawal record?"
-          : "Delete this mutable withdrawal request? Completed payout history cannot be deleted.",
-      )
-    )
-      return;
-    setBusy(true);
-    setError(null);
-    try {
-      await apiFetch(`/internal/withdrawals/${withdrawalId}`, { method: "DELETE" });
-      router.push("/operator/withdrawals");
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
   if (loading && !item) return <CrudDetail eyebrow="Withdrawal fact" title="Withdrawal" loading />;
   if (!item)
     return (
@@ -740,70 +732,6 @@ export function OperatorWithdrawalDetail({
               </p>
             </OperatorSection>
           )}
-          <OperatorSection title="Available actions" surface>
-            <div className="operator-action-row">
-              {operatorWithdrawalDeleteAllowed(item.state, canManage, canDelete) && (
-                <Button variant="destructive" disabled={busy} onClick={() => void remove()}>
-                  Delete
-                </Button>
-              )}
-              {canManage && item.state === "requested" && (
-                <Button disabled={busy} onClick={() => void act("approve")}>
-                  Approve
-                </Button>
-              )}
-              {canManage && (item.state === "requested" || item.state === "approved") ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (reason.trim()) void act("reject", { reason });
-                  }}
-                >
-                  <Input
-                    aria-label="Rejection reason"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Reason for rejection"
-                  />
-                  <Button variant="secondary" disabled={busy || reason.trim().length < 3}>
-                    Reject
-                  </Button>
-                </form>
-              ) : null}
-              {canManage && item.state === "approved" && (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void act("complete", {
-                      external_reference: externalReference.trim() || undefined,
-                      note: completionNote.trim() || undefined,
-                    });
-                  }}
-                  className="operator-action-row"
-                >
-                  <p className="panel-intro">
-                    Send the payment outside Cliqero first. This action only records a payment that
-                    has already been sent.
-                  </p>
-                  <Input
-                    aria-label="External payment reference"
-                    value={externalReference}
-                    onChange={(event) => setExternalReference(event.target.value)}
-                    placeholder="External reference (optional)"
-                    maxLength={200}
-                  />
-                  <Input
-                    aria-label="Completion note"
-                    value={completionNote}
-                    onChange={(event) => setCompletionNote(event.target.value)}
-                    placeholder="Note (optional)"
-                    maxLength={500}
-                  />
-                  <Button disabled={busy}>Mark as paid</Button>
-                </form>
-              )}
-            </div>
-          </OperatorSection>
         </>
       }
     />

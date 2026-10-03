@@ -71,6 +71,7 @@ export function registerAccountManagementRoutes(
   const accountUpdateBody = z
     .object({
       username: usernameSchema.optional(),
+      email: z.email().trim().max(254).optional(),
       country: z
         .string()
         .trim()
@@ -80,9 +81,13 @@ export function registerAccountManagementRoutes(
         .optional(),
     })
     .strict()
-    .refine((value) => value.username !== undefined || value.country !== undefined, {
-      message: "Provide at least one supported profile field.",
-    });
+    .refine(
+      (value) =>
+        value.username !== undefined || value.email !== undefined || value.country !== undefined,
+      {
+        message: "Provide at least one supported profile field.",
+      },
+    );
 
   app.openapi(
     createRoute({
@@ -258,7 +263,8 @@ export function registerAccountManagementRoutes(
       path: "/api/accounts/{accountId}",
       tags: ["Accounts"],
       summary: "Update an account profile",
-      description: "Updates supported username and country fields for an active account.",
+      description:
+        "Updates supported username, authentication email, and country fields for an active account.",
       request: {
         params: z.object({ accountId: z.string().uuid() }),
         body: { content: { "application/json": { schema: accountUpdateBody } } },

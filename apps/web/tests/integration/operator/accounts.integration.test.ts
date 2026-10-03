@@ -79,6 +79,48 @@ suite("operator account index PostgreSQL projection", () => {
     expect(JSON.stringify(audit.rows[0]?.new_state)).not.toContain(manualPassword);
   });
 
+  it("updates the canonical authentication email, operator projection, and audit record together", async () => {
+    const actor = await app.authentication.register({
+      email: "ops.email.actor@example.test",
+      username: "ops_email_actor",
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    const target = await app.authentication.register({
+      email: "ops.email.before@example.test",
+      username: "ops_email_target",
+      password: "correct-horse-battery",
+      country: "GH",
+    });
+
+    const updated = await app.operatorAccountManagement.update(actor.id, target.id, {
+      email: "OPS.EMAIL.AFTER@example.test",
+    });
+
+    expect(updated.email).toBe("ops.email.after@example.test");
+    const identity = await app.database.query<{ email: string; email_verified: boolean }>(
+      `select auth_user.email,auth_user."emailVerified" email_verified
+         from better_auth."user" auth_user
+         join identity_capability.auth_account_links link on link.auth_user_id=auth_user.id
+        where link.account_id=(select id from identity_capability.accounts where uuid=$1)`,
+      [target.id],
+    );
+    expect(identity.rows).toEqual([
+      { email: "ops.email.after@example.test", email_verified: false },
+    ]);
+
+    const audit = await app.database.query<{ previous_state: unknown; new_state: unknown }>(
+      `select previous_state,new_state from kernel.audit_records
+        where action='operator.account_profile_updated' and subject_id=$1
+        order by occurred_at desc limit 1`,
+      [target.id],
+    );
+    expect(audit.rows[0]).toMatchObject({
+      previous_state: expect.objectContaining({ email: "ops.email.before@example.test" }),
+      new_state: expect.objectContaining({ email: "ops.email.after@example.test" }),
+    });
+  });
+
   it("lists canonical accounts, searches profile fields, and paginates without skips or repeats", async () => {
     const first = await app.authentication.register({
       email: "ops.account.first@example.test",

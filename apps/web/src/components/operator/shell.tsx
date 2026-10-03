@@ -35,6 +35,7 @@ import { OperatorErrorState } from "./ui/error-state";
 import { OperatorLoadingState } from "./ui/loading-state";
 import { OperatorPage, OperatorPageHeader } from "./ui/page";
 import { SidebarNavGroup, type SidebarNavItem } from "../sidebar/nav-group";
+import { OperatorConfirmationProvider } from "./ui/confirmation";
 
 export function OperatorShell({
   capabilities,
@@ -212,138 +213,140 @@ export function OperatorShell({
     .filter((group) => group.items.length);
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-slate-50">
-        <Sidebar>
-          <SidebarHeader>
-            <BrandLink className="text-slate-900" />
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarMenu id="operator-navigation" aria-label="Operator navigation">
-                {navigation
-                  .filter((item) => item.key === "overview" && item.visible)
-                  .map((item) => (
-                    <SidebarMenuItem key={item.key}>
-                      <SidebarMenuButton asChild isActive={activeSection === item.key}>
-                        <Link href={item.href}>{item.label}</Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                {groups
-                  .filter((group) => group.label === "Catalogue")
-                  .map((group) => (
-                    <SidebarNavGroup
-                      key={`${group.label}-${activeSection}`}
-                      label={group.label}
-                      items={group.items}
-                      activeKey={activeSection}
-                    />
-                  ))}
-                {navigation
-                  .filter((item) => item.key !== "overview" && item.visible)
-                  .map((item) => (
-                    <SidebarMenuItem key={item.key}>
-                      <SidebarMenuButton asChild isActive={activeSection === item.key}>
-                        <Link href={item.href}>{item.label}</Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                {groups
-                  .filter((group) => group.label !== "Catalogue")
-                  .map((group) => (
-                    <SidebarNavGroup
-                      key={`${group.label}-${activeSection}`}
-                      label={group.label}
-                      items={group.items}
-                      activeKey={activeSection}
-                    />
-                  ))}
+    <OperatorConfirmationProvider>
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full bg-slate-50">
+          <Sidebar>
+            <SidebarHeader>
+              <BrandLink className="text-slate-900" />
+            </SidebarHeader>
+            <SidebarContent>
+              <SidebarGroup>
+                <SidebarMenu id="operator-navigation" aria-label="Operator navigation">
+                  {navigation
+                    .filter((item) => item.key === "overview" && item.visible)
+                    .map((item) => (
+                      <SidebarMenuItem key={item.key}>
+                        <SidebarMenuButton asChild isActive={activeSection === item.key}>
+                          <Link href={item.href}>{item.label}</Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  {groups
+                    .filter((group) => group.label === "Catalogue")
+                    .map((group) => (
+                      <SidebarNavGroup
+                        key={`${group.label}-${activeSection}`}
+                        label={group.label}
+                        items={group.items}
+                        activeKey={activeSection}
+                      />
+                    ))}
+                  {navigation
+                    .filter((item) => item.key !== "overview" && item.visible)
+                    .map((item) => (
+                      <SidebarMenuItem key={item.key}>
+                        <SidebarMenuButton asChild isActive={activeSection === item.key}>
+                          <Link href={item.href}>{item.label}</Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  {groups
+                    .filter((group) => group.label !== "Catalogue")
+                    .map((group) => (
+                      <SidebarNavGroup
+                        key={`${group.label}-${activeSection}`}
+                        label={group.label}
+                        items={group.items}
+                        activeKey={activeSection}
+                      />
+                    ))}
+                </SidebarMenu>
+              </SidebarGroup>
+            </SidebarContent>
+            <SidebarFooter>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/dashboard">User dashboard</Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarFooter>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/dashboard">User dashboard</Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarFooter>
-        </Sidebar>
-        <SidebarInset>
-          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-white/95 px-4 backdrop-blur lg:px-8">
-            <SidebarTrigger aria-label="Open operator navigation" />
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="ml-auto inline-flex items-center gap-2 px-2 py-1.5"
-                  aria-label="Open operator account menu"
-                >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-800">
-                    {username.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="hidden sm:inline">{username}</span>
-                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem className="text-xs text-slate-500" disabled>
-                  {email}
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard?section=settings">Account settings</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void signOut()}>Sign out</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </header>
-          <main className="min-w-0 p-4 lg:p-8">
-            <div className="mx-auto w-full max-w-[1600px] space-y-6">
-              {children ?? (
-                <OperatorPage>
-                  <OperatorPageHeader
-                    eyebrow={
-                      hasCapability(capabilities, "system.root")
-                        ? "Platform operations"
-                        : "Authorized operations"
-                    }
-                    title={
-                      hasCapability(capabilities, "system.root")
-                        ? "A clear view of the platform"
-                        : "A focused operational view"
-                    }
-                    description="Authoritative operational counts from Cliqero services."
-                    actions={
-                      <Badge variant="default">
-                        {hasCapability(capabilities, "system.root")
-                          ? "Full operator access"
-                          : "Direct capabilities"}
-                      </Badge>
-                    }
-                  />
-                  {error && (
-                    <OperatorErrorState message={error} retry={() => window.location.reload()} />
-                  )}
-                  {loading ? (
-                    <OperatorLoadingState variant="section" label="Loading operator overview" />
-                  ) : overview ? (
-                    <OverviewMetrics overview={overview} />
-                  ) : (
-                    <OperatorEmptyState
-                      title="Overview unavailable"
-                      description="Try refreshing this page."
+            </SidebarFooter>
+          </Sidebar>
+          <SidebarInset>
+            <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-white/95 px-4 backdrop-blur lg:px-8">
+              <SidebarTrigger aria-label="Open operator navigation" />
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="ml-auto inline-flex items-center gap-2 px-2 py-1.5"
+                    aria-label="Open operator account menu"
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-800">
+                      {username.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="hidden sm:inline">{username}</span>
+                    <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem className="text-xs text-slate-500" disabled>
+                    {email}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard?section=settings">Account settings</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void signOut()}>Sign out</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </header>
+            <main className="min-w-0 p-4 lg:p-8">
+              <div className="mx-auto w-full max-w-[1600px] space-y-6">
+                {children ?? (
+                  <OperatorPage>
+                    <OperatorPageHeader
+                      eyebrow={
+                        hasCapability(capabilities, "system.root")
+                          ? "Platform operations"
+                          : "Authorized operations"
+                      }
+                      title={
+                        hasCapability(capabilities, "system.root")
+                          ? "A clear view of the platform"
+                          : "A focused operational view"
+                      }
+                      description="Authoritative operational counts from Cliqero services."
+                      actions={
+                        <Badge variant="default">
+                          {hasCapability(capabilities, "system.root")
+                            ? "Full operator access"
+                            : "Direct capabilities"}
+                        </Badge>
+                      }
                     />
-                  )}
-                </OperatorPage>
-              )}
-            </div>
-          </main>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
+                    {error && (
+                      <OperatorErrorState message={error} retry={() => window.location.reload()} />
+                    )}
+                    {loading ? (
+                      <OperatorLoadingState variant="section" label="Loading operator overview" />
+                    ) : overview ? (
+                      <OverviewMetrics overview={overview} />
+                    ) : (
+                      <OperatorEmptyState
+                        title="Overview unavailable"
+                        description="Try refreshing this page."
+                      />
+                    )}
+                  </OperatorPage>
+                )}
+              </div>
+            </main>
+          </SidebarInset>
+        </div>
+      </SidebarProvider>
+    </OperatorConfirmationProvider>
   );
 }
 

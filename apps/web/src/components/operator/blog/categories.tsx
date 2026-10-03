@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api-client";
 import type { BlogCategory } from "@/modules/blog/domain/blog";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { Label } from "../../ui/label";
+import { Label, RequiredLabel } from "../../ui/label";
 import { CrudEdit } from "@/components/crud/edit";
 import { CrudIndex } from "@/components/crud/index-page";
 import type { CrudColumn } from "@/components/crud/table";
@@ -15,11 +15,13 @@ import { OperatorPrimaryCell } from "../ui/data-cells";
 import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { useOperatorConfirmation } from "../ui/confirmation";
 import { OperatorErrorState } from "../ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "../ui/bulk-outcome";
 import { useToast } from "@/components/toast/provider";
 
 export function OperatorBlogCategories({ canDelete = false }: { canDelete?: boolean }) {
+  const confirm = useOperatorConfirmation();
   const toast = useToast();
   const [actionError, setActionError] = useState<string | null>(null);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
@@ -28,7 +30,15 @@ export function OperatorBlogCategories({ canDelete = false }: { canDelete?: bool
     return { items: result.items, nextCursor: null };
   }, {});
   async function remove(category: BlogCategory) {
-    if (!window.confirm(`Delete category “${category.name}”?`)) return;
+    if (
+      !(await confirm({
+        title: "Delete category?",
+        description: `Delete category “${category.name}”?`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return;
     setActionError(null);
     setBulkOutcome(null);
     try {
@@ -45,7 +55,15 @@ export function OperatorBlogCategories({ canDelete = false }: { canDelete?: bool
     }
   }
   async function removeMany(categories: readonly BlogCategory[]) {
-    if (!window.confirm(`Delete ${categories.length} selected blog categories?`)) return false;
+    if (
+      !(await confirm({
+        title: "Delete categories?",
+        description: `Delete ${categories.length} selected blog categories?`,
+        confirmLabel: "Delete",
+        destructive: true,
+      }))
+    )
+      return false;
     setActionError(null);
     setBulkOutcome(null);
     try {
@@ -184,7 +202,7 @@ export function OperatorBlogCategoryEditor({ initial }: { initial?: BlogCategory
       sectionTitle="Category details"
     >
       <div>
-        <Label htmlFor="category-name">Name</Label>
+        <RequiredLabel htmlFor="category-name">Name</RequiredLabel>
         <Input
           id="category-name"
           value={name}

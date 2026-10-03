@@ -241,14 +241,14 @@ function appWith(
           currency: "USD",
         }),
         list: async () => ({ items: [], nextCursor: null }),
-        createManual: async (input: any) => ({
+        createAdjustment: async (input: any) => ({
           id: "00000000-0000-4000-8000-000000000004",
-          direction: input.direction,
-          amountMinor: input.amountMinor,
-          title: input.title.trim(),
-          note: input.note ?? null,
-          sourceKind: null,
-          sourceId: null,
+          direction: input.amountMinor > 0n ? "credit" : "debit",
+          amountMinor: input.amountMinor > 0n ? input.amountMinor : -input.amountMinor,
+          title: "Treasury adjustment",
+          note: input.reason,
+          sourceKind: "treasury_adjustment",
+          sourceId: "00000000-0000-4000-8000-000000000005",
           actorId: input.actorId,
           createdAt: new Date(),
         }),
@@ -264,14 +264,14 @@ function appWith(
         }),
       },
       treasury: {
-        createManual: async (input: any) => ({
+        createAdjustment: async (input: any) => ({
           id: "00000000-0000-4000-8000-000000000004",
-          direction: input.direction,
-          amountMinor: input.amountMinor,
-          title: input.title.trim(),
-          note: input.note ?? null,
-          sourceKind: null,
-          sourceId: null,
+          direction: input.amountMinor > 0n ? "credit" : "debit",
+          amountMinor: input.amountMinor > 0n ? input.amountMinor : -input.amountMinor,
+          title: "Treasury adjustment",
+          note: input.reason,
+          sourceKind: "treasury_adjustment",
+          sourceId: "00000000-0000-4000-8000-000000000005",
           actorId: input.actorId,
           createdAt: new Date(),
         }),
@@ -305,6 +305,7 @@ function appWith(
       listingService: {
         queryCatalogue: async () => ({ items: [], nextCursor: null }),
         queryStorefront: async () => ({ items: [], nextCursor: null }),
+        catalogueCounts: async () => new Map(),
         getOwner: async (_account: unknown, id: string) => ({ id }),
         get: async (id: string) => ({ id }),
         update: vi.fn(async (_account: unknown, _id: string, input: { state: string }) => ({
@@ -983,7 +984,7 @@ describe("Hono API foundation", () => {
       "x-required-api-scope": "treasury:read",
     });
     expect(paths["/api/treasury"].get.description ?? "").not.toContain("Authentication:");
-    expect(paths["/api/treasury/entries"].post).toMatchObject({
+    expect(paths["/api/treasury/adjustments"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:manage",
     });
@@ -1967,7 +1968,7 @@ describe("Hono API foundation", () => {
       ).status,
     ).toBe(403);
   });
-  it("requires accounts.manage for account mutations and rejects mass-assignment fields", async () => {
+  it("requires accounts.manage for account mutations and accepts canonical email updates", async () => {
     const target = "00000000-0000-4000-8000-000000000007";
     const base = {
       accountId: "00000000-0000-4000-8000-000000000001",
@@ -2102,7 +2103,15 @@ describe("Hono API foundation", () => {
       (
         await update(
           { ...base, capabilities: ["accounts.manage"] },
-          { username: "changed", email: "spoof@example.test" },
+          { username: "changed", email: "operator-updated@example.test" },
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await update(
+          { ...base, capabilities: ["accounts.manage"] },
+          { capabilities: ["system.root"] },
         )
       ).status,
     ).toBe(400);
@@ -2231,10 +2240,10 @@ describe("Hono API foundation", () => {
     ).toBe(200);
     const post = (principal: any) =>
       appWith(principal).fetch(
-        new Request("http://localhost/api/treasury/entries", {
+        new Request("http://localhost/api/treasury/adjustments", {
           method: "POST",
           headers: { "content-type": "application/json", "Idempotency-Key": "test-key" },
-          body: JSON.stringify({ direction: "credit", amount_minor: "100", title: "Test" }),
+          body: JSON.stringify({ amount_minor: "100", reason: "Correction" }),
         }),
       );
     expect((await post({ ...base, capabilities: ["system.root"] })).status).toBe(201);
@@ -2332,13 +2341,12 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const response = await appWith(principal).fetch(
-      new Request("http://localhost/api/treasury/entries", {
+      new Request("http://localhost/api/treasury/adjustments", {
         method: "POST",
         headers: { "content-type": "application/json", "Idempotency-Key": "strict-key" },
         body: JSON.stringify({
-          direction: "credit",
           amount_minor: "100",
-          title: "Unsafe override",
+          reason: "Unsafe override",
           source_kind: "distribution",
           actor_id: principal.accountId,
         }),

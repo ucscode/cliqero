@@ -18,6 +18,7 @@ import { OperatorErrorState } from "./ui/error-state";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
+import { useOperatorConfirmation } from "./ui/confirmation";
 
 type Purchase = {
   id: string;
@@ -51,6 +52,7 @@ export function OperatorPurchaseList({
   initialListing?: string;
   canDelete?: boolean;
 }) {
+  const confirm = useOperatorConfirmation();
   const [buyer, setBuyer] = useState(initialBuyer);
   const [listing, setListing] = useState(initialListing);
   const [state, setState] = useState("");
@@ -108,7 +110,15 @@ export function OperatorPurchaseList({
           label: "Delete",
           destructive: true,
           onSelect: async (items) => {
-            if (!window.confirm(`Delete ${items.length} selected purchases?`)) return false;
+            if (
+              !(await confirm({
+                title: "Delete purchases?",
+                description: `Delete ${items.length} selected purchases?`,
+                confirmLabel: "Delete",
+                destructive: true,
+              }))
+            )
+              return false;
             const outcome = await runOperatorBulkAction({
               resource: "purchases",
               action: "delete",
@@ -207,8 +217,15 @@ export function OperatorPurchaseList({
                 type: "action" as const,
                 label: "Delete",
                 destructive: true,
-                onSelect: () => {
-                  if (!window.confirm("Delete this purchase and its dependent commerce facts?"))
+                onSelect: async () => {
+                  if (
+                    !(await confirm({
+                      title: "Delete purchase?",
+                      description: "Delete this purchase and its dependent commerce facts?",
+                      confirmLabel: "Delete",
+                      destructive: true,
+                    }))
+                  )
                     return;
                   void runOperatorBulkAction({
                     resource: "purchases",

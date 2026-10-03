@@ -4,101 +4,104 @@ import {
   type TreasuryEntry,
   type TreasuryRepository,
 } from "@/modules/treasury/treasury";
+
 class Fake implements TreasuryRepository {
   items: TreasuryEntry[] = [];
-  async create(v: TreasuryEntry) {
-    const old = this.items.find((x) => x.idempotencyKey === v.idempotencyKey);
-    if (old) return old;
-    this.items.push(v);
-    return v;
+  async create(value: TreasuryEntry) {
+    this.items.push(value);
+    return value;
+  }
+  async createAdjustment(value: Parameters<TreasuryRepository["createAdjustment"]>[0]) {
+    const old = this.items.find((entry) => entry.idempotencyKey === value.idempotencyKey);
+    if (old) {
+      if (old.amountMinor !== (value.amountMinor > 0n ? value.amountMinor : -value.amountMinor))
+        throw new Error(
+          "Treasury adjustment idempotency key already used for a different adjustment",
+        );
+      return old;
+    }
+    const entry: TreasuryEntry = {
+      id: value.id,
+      direction: value.amountMinor > 0n ? "credit" : "debit",
+      amountMinor: value.amountMinor > 0n ? value.amountMinor : -value.amountMinor,
+      title: "Treasury adjustment",
+      note: value.reference ? `${value.reason}\nReference: ${value.reference}` : value.reason,
+      sourceKind: "treasury_adjustment",
+      sourceId: value.id,
+      idempotencyKey: value.idempotencyKey,
+      actorId: value.actorId,
+      correlationId: value.correlationId,
+      createdAt: value.createdAt,
+    };
+    this.items.push(entry);
+    return entry;
   }
   async findById(id: string) {
-    return this.items.find((x) => x.id === id) ?? null;
+    return this.items.find((entry) => entry.id === id) ?? null;
   }
-  async findByIdempotencyKey(k: string) {
-    return this.items.find((x) => x.idempotencyKey === k) ?? null;
+  async findByIdempotencyKey(key: string) {
+    return this.items.find((entry) => entry.idempotencyKey === key) ?? null;
   }
   async list() {
     return { items: this.items, nextCursor: null };
   }
   async summary() {
-    const c = this.items
-        .filter((x) => x.direction === "credit")
-        .reduce((n, x) => n + x.amountMinor, 0n),
-      d = this.items.filter((x) => x.direction === "debit").reduce((n, x) => n + x.amountMinor, 0n);
-    return { creditsMinor: c, debitsMinor: d, balanceMinor: c - d };
+    const creditsMinor = this.items
+      .filter((item) => item.direction === "credit")
+      .reduce((sum, item) => sum + item.amountMinor, 0n);
+    const debitsMinor = this.items
+      .filter((item) => item.direction === "debit")
+      .reduce((sum, item) => sum + item.amountMinor, 0n);
+    return { creditsMinor, debitsMinor, balanceMinor: creditsMinor - debitsMinor };
   }
 }
-describe("treasury facts", () => {
-  it("creates idempotent manual credits and debits", async () => {
-    const repo = new Fake(),
-      service = new TreasuryService(repo);
-    const credit = await service.createManual({
+
+describe("Treasury adjustments", () => {
+  it("derives deterministic ledger direction and source from a signed adjustment", async () => {
+    const repo = new Fake();
+    const service = new TreasuryService(repo);
+    const credit = await service.createAdjustment({
+      amountMinor: 500n,
+      reason: "Correct allocation",
+      reference: "CASE-1",
+      actorId: "actor",
+      idempotencyKey: "adjustment-1",
+    });
+    expect(credit).toMatchObject({
       direction: "credit",
       amountMinor: 500n,
-      title: "Wrong payment received",
-      note: "Recorded in error",
-      actorId: "a",
-      idempotencyKey: "manual-1",
+      title: "Treasury adjustment",
+      sourceKind: "treasury_adjustment",
+      sourceId: credit.id,
+      note: "Correct allocation\nReference: CASE-1",
     });
-    expect(credit.direction).toBe("credit");
-    expect(
-      await service.createManual({
-        direction: "credit",
-        amountMinor: 500n,
-        title: "Wrong payment received",
-        note: "Recorded in error",
-        actorId: "a",
-        idempotencyKey: "manual-1",
-      }),
-    ).toBe(credit);
-    const debit = await service.createManual({
-      direction: "debit",
-      amountMinor: 500n,
-      title: "Correction for wrong payment received",
-      note: "Cancels the earlier mistaken receipt",
-      actorId: "a",
-      idempotencyKey: "manual-2",
+    const debit = await service.createAdjustment({
+      amountMinor: -200n,
+      reason: "Reverse over-allocation",
+      actorId: "actor",
+      idempotencyKey: "adjustment-2",
     });
-    expect(debit.direction).toBe("debit");
-    expect((await repo.summary()).balanceMinor).toBe(0n);
+    expect(debit).toMatchObject({ direction: "debit", amountMinor: 200n });
+    expect((await repo.summary()).balanceMinor).toBe(300n);
   });
-  it("rejects mismatched idempotency reuse and invalid entries", async () => {
-    const repo = new Fake(),
-      service = new TreasuryService(repo);
-    await service.createManual({
-      direction: "debit",
-      amountMinor: 200n,
-      title: "Domain renewal",
-      actorId: "a",
-      idempotencyKey: "manual-1",
-    });
+
+  it("requires a non-zero amount and reason", async () => {
+    const service = new TreasuryService(new Fake());
     await expect(
-      service.createManual({
-        direction: "credit",
-        amountMinor: 200n,
-        title: "Different meaning",
-        actorId: "a",
-        idempotencyKey: "manual-1",
-      }),
-    ).rejects.toThrow("idempotency key");
-    await expect(
-      service.createManual({
-        direction: "credit",
+      service.createAdjustment({
         amountMinor: 0n,
-        title: "x",
+        reason: "reason",
         actorId: "a",
-        idempotencyKey: "manual-2",
+        idempotencyKey: "zero",
       }),
-    ).rejects.toThrow("positive");
+    ).rejects.toThrow("non-zero");
     await expect(
-      service.createManual({
-        direction: "credit",
+      service.createAdjustment({
         amountMinor: 1n,
-        title: "  ",
+        reason: "  ",
         actorId: "a",
-        idempotencyKey: "manual-3",
+        idempotencyKey: "blank",
       }),
-    ).rejects.toThrow("title");
+    ).rejects.toThrow("reason");
   });
 });

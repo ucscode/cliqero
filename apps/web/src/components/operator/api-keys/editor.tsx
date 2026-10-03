@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import AsyncSelect from "react-select/async";
 import { useRouter } from "next/navigation";
-import { apiFetch, type OperatorAccountPage, type OperatorAccountSummary } from "@/lib/api-client";
+import { apiFetch, type OperatorAccountSummary } from "@/lib/api-client";
 import { CrudEdit } from "@/components/crud/edit";
 import { OperatorPage, OperatorPageHeader } from "@/components/operator/ui/page";
 import { OperatorSection } from "@/components/operator/ui/section";
@@ -11,33 +10,17 @@ import { useToast } from "../../toast/provider";
 import { Alert } from "../../ui/alert";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { Label } from "../../ui/label";
+import { Label, RequiredLabel } from "../../ui/label";
 import { toggleApiKeyScope, type OperatorApiKeyRow } from "./model";
 import { ApiKeyScopeList } from "./scope-list";
+import { OperatorAccountSelector } from "../ui/account-selector";
 
-type AccountOption = { value: string; label: string; account: OperatorAccountSummary };
 type ScopeResponse = { manageable_scopes: string[] };
 type ItemResponse = { item: OperatorApiKeyRow };
 
 const COLLECTION = "/operator/api-keys";
-const selectStyles = {
-  control: (base: object) => ({ ...base, minHeight: 42 }),
-  menuPortal: (base: object) => ({ ...base, zIndex: 80 }),
-};
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "API key could not be loaded.";
-
-async function searchAccounts(query: string): Promise<AccountOption[]> {
-  if (!query.trim()) return [];
-  const result = await apiFetch<OperatorAccountPage>(
-    `/api/accounts?search=${encodeURIComponent(query.trim())}&limit=10`,
-  );
-  return result.items.map((account) => ({
-    value: account.id,
-    label: `@${account.username} · ${account.email ?? account.id}`,
-    account,
-  }));
-}
 
 export function OperatorApiKeyEditor({
   mode,
@@ -50,7 +33,7 @@ export function OperatorApiKeyEditor({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [account, setAccount] = useState<AccountOption | null>(null);
+  const [account, setAccount] = useState<OperatorAccountSummary | null>(null);
   const [key, setKey] = useState<OperatorApiKeyRow | null>(null);
   const [name, setName] = useState("");
   const [manageableScopes, setManageableScopes] = useState<string[]>([]);
@@ -77,13 +60,13 @@ export function OperatorApiKeyEditor({
         setKey(item);
         setOriginalAccountId(item.account_id);
         setAccount({
-          value: item.account_id,
-          label: `@${item.account_username} · ${item.account_email ?? item.account_id}`,
-          account: {
-            id: item.account_id,
-            username: item.account_username,
-            email: item.account_email,
-          } as OperatorAccountSummary,
+          id: item.account_id,
+          username: item.account_username,
+          email: item.account_email,
+          displayName: null,
+          country: null,
+          createdAt: "",
+          directReferralCount: 0,
         });
         setName(item.name);
         setExpiry(item.expires_at ? new Date(item.expires_at).toISOString().slice(0, 10) : "");
@@ -105,7 +88,7 @@ export function OperatorApiKeyEditor({
     };
   }, [apiKeyId, mode]);
 
-  async function chooseAccount(value: AccountOption | null) {
+  async function chooseAccount(value: OperatorAccountSummary | null) {
     const requestId = ++scopeRequest.current;
     setAccount(value);
     setManageableScopes([]);
@@ -114,7 +97,7 @@ export function OperatorApiKeyEditor({
     setLoadingScopes(true);
     try {
       const result = await apiFetch<ScopeResponse>(
-        `/internal/api-keys?account_id=${encodeURIComponent(value.value)}`,
+        `/internal/api-keys?account_id=${encodeURIComponent(value.id)}`,
       );
       if (requestId === scopeRequest.current) {
         setManageableScopes(result.manageable_scopes);
@@ -140,14 +123,14 @@ export function OperatorApiKeyEditor({
         state: status,
       };
       if (mode === "edit" && apiKeyId) {
-        if (account.value !== originalAccountId) {
+        if (account.id !== originalAccountId) {
           const replacement = await apiFetch<{ secret: string }>(
             `/internal/api-keys/${apiKeyId}/reassign`,
             {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
-                account_id: account.value,
+                account_id: account.id,
                 name: payload.name,
                 scopes: payload.scopes,
                 expires_at: payload.expires_at,
@@ -175,7 +158,7 @@ export function OperatorApiKeyEditor({
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            account_id: account.value,
+            account_id: account.id,
             name: payload.name,
             scopes: payload.scopes,
             expires_at: payload.expires_at,
@@ -275,26 +258,25 @@ export function OperatorApiKeyEditor({
       sectionTitle="API key details"
     >
       <div className="grid gap-2">
-        <Label htmlFor="api-key-account">Account</Label>
+        {mode === "create" || canReassignOwner ? (
+          <RequiredLabel htmlFor="api-key-account">Account</RequiredLabel>
+        ) : (
+          <Label htmlFor="api-key-account">Account</Label>
+        )}
         {mode === "edit" && !canReassignOwner ? (
           <p
             id="api-key-account"
             className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-800"
           >
-            @{account?.account.username} · {account?.account.email ?? account?.value}
+            @{account?.username} · {account?.email ?? account?.id}
           </p>
         ) : (
-          <AsyncSelect<AccountOption, false>
+          <OperatorAccountSelector
             inputId="api-key-account"
-            cacheOptions
-            defaultOptions={false}
-            loadOptions={searchAccounts}
             value={account}
             onChange={(value) => void chooseAccount(value)}
+            required={mode === "create"}
             placeholder="Search accounts by username or email"
-            isClearable
-            styles={selectStyles}
-            menuPortalTarget={typeof document === "undefined" ? undefined : document.body}
           />
         )}
       </div>
@@ -305,7 +287,7 @@ export function OperatorApiKeyEditor({
         </p>
       )}
       <div className="grid gap-2">
-        <Label htmlFor="api-key-name">Name</Label>
+        <RequiredLabel htmlFor="api-key-name">Name</RequiredLabel>
         <Input
           id="api-key-name"
           required

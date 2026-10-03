@@ -29,6 +29,34 @@ export type OperatorAccountDetail = OperatorAccountSummary & {
 export class OperatorAccountService {
   constructor(private readonly sql: QueryExecutor) {}
 
+  async updateEmail(accountId: string, email: string) {
+    try {
+      const result = await this.sql.query(
+        `update better_auth."user" auth_user
+            set email=$2, "emailVerified"=false, "updatedAt"=now()
+           from identity_capability.auth_account_links link
+           where link.account_id=(select id from identity_capability.accounts where uuid=$1)
+             and link.auth_user_id=auth_user.id and link.onboarding_state='complete'`,
+        [accountId, email],
+      );
+      if ((result.rowCount ?? 0) !== 1)
+        throw new PublicApplicationError(
+          "Account authentication identity not found.",
+          "not_found",
+          404,
+        );
+    } catch (cause) {
+      if (
+        cause &&
+        typeof cause === "object" &&
+        "code" in cause &&
+        (cause as { code?: unknown }).code === "23505"
+      )
+        throw new Error("email_taken");
+      throw cause;
+    }
+  }
+
   async list(input: {
     search?: string;
     cursor?: string;
