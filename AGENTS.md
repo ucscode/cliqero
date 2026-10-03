@@ -52,6 +52,14 @@ its plan satisfies all of the following:
    a human without requiring repository-wide AI search.
 8. **Do not patch around structural mistakes.** Repeated fixes are a signal to
    inspect ownership, grouping, dependencies, and available libraries first.
+9. **Public API resources are complete and singular.** Every table-backed
+   resource exposed under `/api/*` must have one canonical public resource
+   group with list, get, create, update, and delete endpoints. Do not omit CRUD
+   operations because the first-party app does not currently use them, and do
+   not duplicate the same resource under both `/api/*` and `/internal/*`.
+   App-only/session-only workflows belong under `/internal/*`; public
+   table-backed resources remain complete regardless of which operations the
+   Cliqero UI chooses to call.
 
 If a proposed implementation violates any invariant above, stop and surface the
 conflict before writing code.
@@ -611,6 +619,87 @@ DELETE /resources/{id}  -> delete
 Resource-specific reads, queries, and genuine commands may extend this surface
 where required.
 
+### Public API resource completeness and route ownership are mandatory
+
+The public HTTP API is a stable resource contract, not a mirror of whichever
+buttons the current Cliqero UI happens to expose. For every persisted,
+table-backed resource that is intentionally exposed under `/api/*`, the public
+surface must provide the complete canonical CRUD set:
+
+```text
+GET    /api/resources           -> list
+GET    /api/resources/{id}      -> get one
+POST   /api/resources           -> create
+PATCH  /api/resources/{id}      -> update
+DELETE /api/resources/{id}      -> delete
+```
+
+This five-operation resource surface is mandatory. Do not omit `POST`,
+`PATCH`, or `DELETE` because an operation seems unusual, dangerous,
+append-oriented, financially sensitive, or unused by the first-party
+application. Route completeness and caller authorization are separate concerns.
+The route exists as part of the resource contract; capabilities, scopes, domain
+validation, and server-side invariants determine whether a particular caller is
+allowed to perform the operation. A first-party UI or an external API client is
+free not to call an operation.
+
+A genuine command may extend the five CRUD operations when it represents
+behavior that cannot be expressed as ordinary resource mutation. It must never
+be used as a reason to omit the corresponding CRUD operation. Ordinary
+state/status changes remain `PATCH` updates.
+
+Public API grouping follows persisted resource ownership. One table-backed
+resource is one API/OpenAPI group. Distinct persisted resources must not be
+collapsed into an umbrella group merely because they are conceptually related.
+For example, Distributions and Earnings Entries are different resources and
+must have separate resource groups, route ownership, CRUD contracts, and
+OpenAPI tags even if both belong to finance. A shared domain may compose those
+resources internally, but it does not erase their public resource boundaries.
+
+Endpoints that are genuinely not table-backed resources, such as health checks,
+computed projections, protocol ingress, or other standalone operations, may use
+a standalone group and are exempt from the five-operation CRUD requirement.
+Do not misclassify a persisted resource as a projection merely to avoid
+completing its CRUD surface.
+
+There must be only one authoritative HTTP resource surface. If a resource is
+public under `/api/*`, Cliqero's own UI and Operator application must use that
+same canonical API. Do not create or preserve a parallel `/internal/resources`
+CRUD API for the same resource. `/internal/*` exists only for first-party
+application workflows that are intentionally not part of the external API
+contract.
+
+Internal versus public is determined by the intended client, not merely by
+whether authentication is required. Browser/session workflows may be internal
+even when they are unauthenticated at one step. In particular:
+
+- `/api/me/*` is not a public resource family. Current-session concerns such
+  as onboarding and current-user convenience/profile workflows belong under
+  `/internal/*`.
+- Password-reset UI workflows are first-party account/application concerns and
+  belong under `/internal/*`, even when the initial request is anonymous.
+- Blog preview creation/deletion is an editor/application concern and belongs
+  under `/internal/*`; preview is not a public automation resource.
+- Dashboard/overview composition is an application concern and belongs under
+  `/internal/*`, not the public API.
+- Platform/domain policy is not a `me` concern. A withdrawal policy, for
+  example, belongs to the Withdrawal/platform domain. If such a policy is a
+  public persisted resource, expose it as its own complete resource group
+  rather than nesting it beneath the current user.
+- Optional provider/module mechanics must not distort the canonical public
+  resource contract. Routes such as development-provider verification or
+  bank-transfer-specific confirmation are module/provider concerns if their
+  existence depends on that optional module. Keep the public Funding resource
+  provider-neutral and complete; ordinary Funding field/state changes use its
+  canonical CRUD update path. Provider protocol ingress or genuinely
+  module-specific workflows belong at the provider/module boundary.
+
+Do not use `/internal/*` as a second implementation of a public resource and
+do not use `/api/*` for first-party-only convenience workflows. When an
+existing route violates this distinction, migrate callers to the correct
+canonical surface and remove the duplicate/incorrect route rather than keeping
+compatibility clutter indefinitely.
+
 ## 5. Production and test code must be separated
 
 Do not clutter production directories with colocated test files.
@@ -1007,9 +1096,13 @@ Treat mutable operational resources and historical financial facts differently:
 - Append-only accounting history must correlate to a stable operation identity
   and must not require a mutable administrative Funding or Withdrawal row to
   remain forever.
-- Internal Operator HTTP calls use the session-only `/internal/*` surface.
-  There is no `/api/operator/*` namespace; `/api/*` is the canonical external
-  API surface.
+- Operator/application HTTP calls use the canonical public `/api/*`
+  resource whenever that resource is part of the external API contract. Do not
+  duplicate a public resource under `/internal/*`. Use `/internal/*` only for
+  first-party workflows that intentionally have no public resource contract,
+  such as session/current-user convenience flows, previews, dashboard
+  composition, and other app-only operations. There is no
+  `/api/operator/*` namespace.
 
 Operator Create forms live on dedicated `/new` pages rather than above
 collection tables. Financial multi-leg operations share a structured
