@@ -10,6 +10,27 @@ import {
 import { legacyRoutes } from "@/api/compat/dispatch/routes";
 import { authenticatedAccount, authenticatedPrincipal } from "@/api/http";
 
+function withdrawalMutationResult(state: string) {
+  const now = new Date().toISOString();
+  return {
+    id: "00000000-0000-4000-8000-000000000010",
+    accountId: "00000000-0000-4000-8000-000000000001",
+    amount: { minorAmount: "1000", currency: "USD" },
+    destination: {
+      savedDestinationId: "00000000-0000-4000-8000-000000000011",
+      method: "bank_transfer",
+      methodName: "Bank Transfer",
+      name: "Primary bank",
+      fields: [],
+    },
+    state,
+    idempotencyKey: "withdrawal-test-key",
+    correlationId: "00000000-0000-4000-8000-000000000012",
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 function appWith(
   principal: any = null,
   schemaAccess: { environment: string | undefined; key: string | null } = {
@@ -278,9 +299,10 @@ function appWith(
       },
       withdrawals: {
         list: async () => ({ items: [], nextCursor: null }),
-        update: async (_actorId: string, _id: string, input: unknown) => ({ input }),
-        cancel: async () => ({}),
-        complete: async (_actorId: string, id: string, input: unknown) => ({ id, input }),
+        update: async (_actorId: string, _id: string, input: { state: string }) =>
+          withdrawalMutationResult(input.state),
+        cancel: async () => withdrawalMutationResult("cancelled"),
+        complete: async () => withdrawalMutationResult("completed"),
         ...withdrawalOverrides,
       },
       fundsReservation: {
@@ -867,7 +889,7 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "mixed",
       "x-public-access": true,
       "x-required-api-scope": "accounts:manage",
-      security: [{ CliqeroApiKey: [] }],
+      security: [{}, { CliqeroApiKey: [] }],
       requestBody: expect.any(Object),
     });
     expect(paths["/api/accounts/{accountId}"]).toMatchObject({
@@ -903,7 +925,9 @@ describe("Hono API foundation", () => {
     expect(paths["/api/listings/{listingId}/restore"]).toBeUndefined();
     expect(paths["/api/listings/{listingId}/integrations"]).toBeDefined();
     expect(paths["/api/listings/{listingId}/integrations/{integrationId}/rotate"]).toBeDefined();
-    expect(paths["/api/listings/{listingId}/integrations"].get.tags).toEqual(["Integrations"]);
+    expect(paths["/api/listings/{listingId}/integrations"].get.tags).toEqual([
+      "Listing Integrations",
+    ]);
     expect(paths["/api/listings/{listingId}/integrations"].post).toBeDefined();
     const createIntegrationSchema =
       paths["/api/listings/{listingId}/integrations"].post.requestBody.content["application/json"]
@@ -1518,7 +1542,7 @@ describe("Hono API foundation", () => {
         }).fetch(request())
       ).status,
     ).toBe(403);
-    const complete = vi.fn(async (_actor: string, id: string, input: unknown) => ({ id, input }));
+    const complete = vi.fn(async () => withdrawalMutationResult("completed"));
     const allowedResponse = await appWith(
       {
         ...ordinary,
@@ -1561,7 +1585,7 @@ describe("Hono API foundation", () => {
       scopes: new Set(["withdrawals:create"]),
     };
     const path = "/api/withdrawals/00000000-0000-4000-8000-000000000010";
-    const cancelled = vi.fn(async () => ({ id: "withdrawal-1", state: "cancelled" }));
+    const cancelled = vi.fn(async () => withdrawalMutationResult("cancelled"));
     const app = appWith(
       ownerKey,
       undefined,

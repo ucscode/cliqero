@@ -11,6 +11,7 @@ import { withdrawalResponseSchema } from "@/api/compat/withdrawals/contracts";
 import { fundingDetailSchema } from "@/api/compat/wallet/fund/contracts";
 import { reviewPageSchema } from "@/api/routes/reviews/contracts";
 import { withdrawalMutationResponseSchema } from "@/api/routes/withdrawals/contracts";
+import { opaqueJsonSchema } from "@/api/shared/schemas";
 
 const document = generateOpenApiDocument(
   createApiApp({} as ApplicationContainer, { environment: "development", key: null }),
@@ -131,6 +132,31 @@ describe("public OpenAPI contract quality", () => {
       { type: "number", nullable: true },
       { type: "boolean", nullable: true },
     ]);
+
+    const opaqueFields = [
+      (document.paths["/api/payments/{paymentId}"]?.get?.responses as any)?.["200"]?.content?.[
+        "application/json"
+      ]?.schema?.properties?.conversion_snapshot,
+      (document.paths["/api/payments/{paymentId}/reconcile"]?.post?.responses as any)?.["200"]
+        ?.content?.["application/json"]?.schema?.properties?.attempt?.properties?.result,
+      (document.paths["/api/distributions/{distributionId}"]?.get?.responses as any)?.["200"]
+        ?.content?.["application/json"]?.schema?.properties?.policySnapshot,
+      (document.paths["/api/funding/{fundingId}"]?.get?.responses as any)?.["200"]?.content?.[
+        "application/json"
+      ]?.schema?.properties?.providerInitialization?.properties?.providerAccountSnapshot,
+    ];
+    for (const opaqueField of opaqueFields) {
+      expect(opaqueField.anyOf).toEqual([
+        { type: "string", nullable: true },
+        { type: "number", nullable: true },
+        { type: "boolean", nullable: true },
+        { type: "object", nullable: true, additionalProperties: true },
+        { type: "array", nullable: true, items: {} },
+      ]);
+    }
+    expect(opaqueJsonSchema.safeParse(null).success).toBe(true);
+    expect(opaqueJsonSchema.safeParse({ nested: ["opaque", 12, null] }).success).toBe(true);
+    expect(JSON.stringify(document)).not.toContain("x-cliqero-opaque-json");
     await expect(SwaggerParser.validate(structuredClone(document) as any)).resolves.toBeDefined();
   });
 

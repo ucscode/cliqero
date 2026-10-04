@@ -112,6 +112,31 @@ export function generateOpenApiDocument(app: OpenAPIHono<Env>) {
     catalogueOpenApiMetadata,
     paymentsOpenApiMetadata,
   ]);
+  expandOpaqueJsonSchemas(document);
   delete document.paths["/api/openapi.json"];
   return document;
+}
+
+/** Replace the z.unknown() marker with an accurate, nullable JSON-value schema for OAS 3.0. */
+function expandOpaqueJsonSchemas(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(expandOpaqueJsonSchemas);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+
+  const schema = value as Record<string, unknown>;
+  if (schema["x-cliqero-opaque-json"] === true) {
+    for (const key of Object.keys(schema)) delete schema[key];
+    schema.anyOf = [
+      { type: "string", nullable: true },
+      { type: "number", nullable: true },
+      { type: "boolean", nullable: true },
+      { type: "object", nullable: true, additionalProperties: true },
+      { type: "array", nullable: true, items: {} },
+    ];
+    return;
+  }
+
+  Object.values(schema).forEach(expandOpaqueJsonSchemas);
 }
