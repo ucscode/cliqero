@@ -1,6 +1,7 @@
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { formatMinorMoney, Money } from "@/modules/money/money";
 import { projectVerificationObservation, type FundingTransaction } from "@/modules/funding/funding";
+import { fundingDetailSchema } from "./contracts";
 
 export function customerFailureMessage(funding: {
   providerInitialization?: {
@@ -43,7 +44,7 @@ export async function projectFundingStatus(
       ? await container.bankTransferEvidence.findForFunding(accountId, funding.id)
       : null;
   const walletCredit = await container.walletRepository.findCreditByFunding(funding.id);
-  return {
+  return fundingDetailSchema.parse({
     id: funding.id,
     state: funding.state,
     provider: funding.providerName,
@@ -114,5 +115,5 @@ export async function projectFundingStatus(
           created_at: evidence.createdAt,
         }
       : null,
-  };
+  });
 }

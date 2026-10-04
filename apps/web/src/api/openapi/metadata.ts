@@ -24,6 +24,30 @@ export type OpenApiMetadataEntry = {
 };
 
 type JsonSchema = Record<string, unknown>;
+import { z } from "zod";
+import {
+  listingCreateSchema,
+  listingPageSchema,
+  listingPatchSchema,
+  listingWithMediaViewSchema,
+  ownerListingViewSchema,
+} from "@/api/compat/listings/contracts";
+import { withdrawalDestinationPatchSchema } from "@/api/compat/withdrawal-destinations/contracts";
+import { walletTransferResultSchema } from "@/api/compat/wallet/transfers/contracts";
+import { withdrawalResponseSchema } from "@/api/compat/withdrawals/contracts";
+import { withdrawalCreateSchema } from "@/api/compat/withdrawals/contracts";
+import {
+  checkoutCreateRequestSchema,
+  checkoutCreateSchema,
+  checkoutDetailSchema,
+  checkoutPaymentSchema,
+  checkoutQuoteSchema,
+} from "@/api/compat/checkout/contracts";
+import {
+  fundingDetailSchema,
+  fundingStatusSchema,
+  fundingStateSchema,
+} from "@/api/compat/wallet/fund/contracts";
 const scalar = (type: string, extra: Record<string, unknown> = {}): JsonSchema => ({
   type,
   ...extra,
@@ -37,38 +61,6 @@ const object = (
   properties: Record<string, JsonSchema>,
   required: string[] = Object.keys(properties),
 ): JsonSchema => scalar("object", { properties, required, additionalProperties: false });
-const page = (item: JsonSchema, cursor = "next_cursor"): JsonSchema =>
-  object({ items: list(item), [cursor]: nullable(text) });
-
-const money = object({ amount_minor: text, currency: text });
-const listingMoney = object({ minor_amount: text, currency: text });
-const fundingState = scalar("string", {
-  enum: [
-    "initialization_pending",
-    "initializing",
-    "awaiting_payment",
-    "verification_pending",
-    "confirmed",
-    "failed",
-    "blocked",
-    "cancelled",
-    "expired",
-    "reconciliation_pending",
-  ],
-});
-const checkout = object({
-  id: uuid,
-  purchase_id: uuid,
-  state: scalar("string", { enum: ["pending", "paid", "failed"] }),
-  amount_minor: text,
-  currency: text,
-});
-const checkoutPayment = object({
-  ...((checkout.properties ?? {}) as Record<string, JsonSchema>),
-  available: money,
-  pending: money,
-  shortfall: money,
-});
 const listingMedia = object({
   id: uuid,
   listing_id: uuid,
@@ -176,56 +168,6 @@ const importRecordResult = object(
   },
   ["index", "status", "retryable"],
 );
-const listing = object(
-  {
-    id: uuid,
-    managed_by: uuid,
-    title: text,
-    short_description: text,
-    long_description: text,
-    price: listingMoney,
-    compare_at_price: nullable(listingMoney),
-    visibility: scalar("string", { enum: ["public", "authenticated"] }),
-    categories: list(object({ id: uuid, name: text, slug: text })),
-    metadata: scalar("object", {
-      additionalProperties: {
-        oneOf: [text, scalar("number"), scalar("boolean"), { type: "null" }],
-      },
-    }),
-    state: scalar("string", { enum: ["draft", "published", "archived"] }),
-    featured_position: nullable(scalar("integer")),
-    media: list(
-      object({
-        id: uuid,
-        url: text,
-        mime_type: text,
-        width: scalar("integer"),
-        height: scalar("integer"),
-        position: scalar("integer"),
-        alt_text: nullable(text),
-      }),
-    ),
-    rating: nullable(object({ average: scalar("number"), count: scalar("integer") })),
-    destination: scalar("string", { format: "uri" }),
-    external_key: nullable(text),
-  },
-  [
-    "id",
-    "managed_by",
-    "title",
-    "short_description",
-    "long_description",
-    "price",
-    "compare_at_price",
-    "visibility",
-    "categories",
-    "metadata",
-    "state",
-    "featured_position",
-    "media",
-    "rating",
-  ],
-);
 const withdrawalDestinationField = object(
   {
     name: text,
@@ -246,101 +188,10 @@ const savedWithdrawalDestination = object({
   created_at: dateTime,
   updated_at: dateTime,
 });
-const review = object(
-  {
-    id: uuid,
-    listing_id: uuid,
-    rating: scalar("integer", { minimum: 1, maximum: 5 }),
-    body: nullable(text),
-    status: scalar("string", { enum: ["pending", "approved", "rejected"] }),
-    created_at: dateTime,
-    updated_at: dateTime,
-    moderated_at: nullable(dateTime),
-    reviewer: text,
-    is_mine: scalar("boolean"),
-    listing_title: text,
-  },
-  ["id", "listing_id", "rating", "body", "status", "created_at", "updated_at", "moderated_at"],
-);
-const withdrawalDomainResult = object(
-  {
-    id: uuid,
-    accountId: uuid,
-    amount: object({ minorAmount: text, currency: text }),
-    fee: object({ minorAmount: text, currency: text }),
-    netAmount: object({ minorAmount: text, currency: text }),
-    destination: object({
-      savedDestinationId: uuid,
-      method: text,
-      methodName: text,
-      name: text,
-      fields: list(
-        object(
-          {
-            name: text,
-            label: text,
-            value: text,
-            displayValue: text,
-            type: scalar("string", { enum: ["text", "select", "textarea", "fixed", "hidden"] }),
-            copyable: scalar("boolean"),
-          },
-          ["name", "label", "value", "type", "copyable"],
-        ),
-      ),
-    }),
-    state: scalar("string", {
-      enum: ["requested", "approved", "rejected", "cancelled", "completed", "failed"],
-    }),
-    idempotencyKey: text,
-    correlationId: uuid,
-    reason: nullable(text),
-    externalReference: nullable(text),
-    completionNote: nullable(text),
-    completedBy: nullable(uuid),
-    completedAt: nullable(dateTime),
-    createdAt: dateTime,
-    updatedAt: dateTime,
-  },
-  [
-    "id",
-    "accountId",
-    "amount",
-    "destination",
-    "state",
-    "idempotencyKey",
-    "correlationId",
-    "createdAt",
-    "updatedAt",
-  ],
-);
-
-/** Explicit projections for current route schemas that are intentionally opaque or incomplete. */
-const responseSchemaOverrides: Record<string, JsonSchema> = {
-  "GET /api/reviews 200": object({ items: list(review), next_cursor: nullable(text) }),
-  "PATCH /api/reviews/{reviewId} 200": object({ item: review }),
-  "PUT /api/accounts/{accountId}/capabilities 200": object({
-    accountId: uuid,
-    assignments: list(object({ capability: text, grantedAt: dateTime })),
-  }),
-  "PATCH /api/withdrawals/{withdrawalId} 200": withdrawalDomainResult,
-  "POST /api/withdrawals/{withdrawalId}/cancel 200": withdrawalDomainResult,
-  "POST /api/withdrawals/{withdrawalId}/complete 200": withdrawalDomainResult,
-};
-
-function applyResponseSchemaOverrides(document: OpenApiDocument) {
-  for (const [key, schema] of Object.entries(responseSchemaOverrides)) {
-    const [method, path, status] = key.split(" ");
-    const response = document.paths[path]?.[method.toLowerCase()]?.responses;
-    if (!response || typeof response !== "object") continue;
-    const success = (response as Record<string, unknown>)[status];
-    if (!success || typeof success !== "object") continue;
-    const content = ((success as Record<string, unknown>).content ??= {}) as Record<
-      string,
-      Record<string, unknown>
-    >;
-    const media = (content["application/json"] ??= {}) as Record<string, unknown>;
-    media.schema = schema;
-  }
+function zodSchema(schema: z.ZodType): JsonSchema {
+  const openApiSchema = z.toJSONSchema(schema, { target: "draft-7" });
+  delete openApiSchema.$schema;
+  return openApiSchema;
 }
 
 const withdrawalMethodField = {
@@ -416,79 +267,6 @@ const withdrawalMethodField = {
     ),
   ],
 };
-const fundingStatus = object({
-  id: uuid,
-  provider: text,
-  provider_display_name: text,
-  funding_reference: text,
-  provider_transaction_id: nullable(text),
-  state: fundingState,
-  amount_minor: text,
-  currency: text,
-  collection_amount_minor: text,
-  collection_currency: text,
-  created_at: nullable(dateTime),
-  confirmed_at: nullable(dateTime),
-});
-const fundingDetail = object({
-  id: uuid,
-  state: fundingState,
-  provider: text,
-  provider_display_name: text,
-  customer_action: nullable(text),
-  funding_reference: text,
-  provider_transaction_id: nullable(text),
-  amount_minor: text,
-  currency: text,
-  collection_amount_minor: text,
-  collection_currency: text,
-  conversion: nullable(
-    object({ from_currency: text, to_currency: text, rate: text, observed_at: dateTime }),
-  ),
-  provider_account_id: nullable(text),
-  provider_account_snapshot: nullable(
-    object({
-      id: text,
-      collectionCurrency: text,
-      fields: list(
-        object({
-          name: text,
-          label: text,
-          value: text,
-          displayValue: text,
-          type: scalar("string", { enum: ["text", "select", "textarea", "fixed", "hidden"] }),
-          copyable: scalar("boolean"),
-        }),
-      ),
-    }),
-  ),
-  authorization_url: nullable(text),
-  payment_address: nullable(text),
-  payment_amount: nullable(text),
-  payment_currency: nullable(text),
-  asset: nullable(text),
-  network: nullable(text),
-  instructions: nullable(text),
-  expires_at: nullable(dateTime),
-  error_code: nullable(text),
-  error_message: nullable(text),
-  verification: nullable(
-    object({ status: text, message: text, level: text, resolved: scalar("boolean") }),
-  ),
-  confirmed_at: nullable(dateTime),
-  wallet_credit_state: nullable(text),
-  evidence: nullable(
-    object({
-      id: uuid,
-      transfer_reference: nullable(text),
-      customer_note: nullable(text),
-      proof: nullable(
-        object({ original_filename: nullable(text), mime_type: text, byte_size: text }),
-      ),
-      created_at: dateTime,
-    }),
-  ),
-});
 const walletSummary = object({
   currency: text,
   available_minor: text,
@@ -528,27 +306,136 @@ const legacySuccessSchemas: Record<string, JsonSchema> = {
     ],
   },
   "GET /api/health": object({ status: scalar("string", { enum: ["ok"] }), service: text }),
-  "GET /api/checkouts": page(checkout),
-  "POST /api/checkouts": object({
-    id: uuid,
-    purchase_id: uuid,
-    state: scalar("string", { enum: ["pending", "paid", "failed"] }),
-    required: money,
-    available: money,
-    shortfall: money,
-  }),
-  "GET /api/checkouts/{checkoutId}": checkout,
-  "POST /api/checkouts/{checkoutId}/pay": checkoutPayment,
-  "GET /api/checkout-quote": object({ required: money, available: money, shortfall: money }),
+  "POST /api/checkouts": zodSchema(checkoutCreateSchema),
+  "GET /api/checkouts/{checkoutId}": zodSchema(checkoutDetailSchema),
+  "POST /api/checkouts/{checkoutId}/pay": zodSchema(checkoutPaymentSchema),
+  "GET /api/checkout-quote": zodSchema(checkoutQuoteSchema),
   "GET /api/earnings": object({
     balances: list(object({ currency: text, state: text, amount_minor: text })),
     withdrawal_currency: text,
     withdrawable_balances: list(object({ currency: text, amount_minor: text })),
   }),
-  "GET /api/listings": page(listing),
-  "GET /api/listings/{listingId}": listing,
-  "POST /api/listings": listing,
-  "PATCH /api/listings/{listingId}": listing,
+  "GET /api/me/earnings/entries": object({
+    items: list(
+      object({
+        id: uuid,
+        purchase_id: nullable(uuid),
+        entry_type: text,
+        direction: text,
+        amount_minor: text,
+        currency: text,
+        recipient_role: nullable(text),
+        balance_state: text,
+        source: text,
+        reason: nullable(text),
+        reference: nullable(text),
+        created_at: dateTime,
+      }),
+    ),
+    nextCursor: nullable(text),
+  }),
+  "GET /api/me/listings": zodSchema(listingPageSchema),
+  "GET /api/me/profile": object({ id: uuid, email: text, username: text, country: nullable(text) }),
+  "PATCH /api/me/profile": object({
+    id: uuid,
+    email: text,
+    username: text,
+    country: nullable(text),
+  }),
+  "GET /api/me/onboarding": object({ hasPassword: scalar("boolean") }),
+  "POST /api/me/onboarding": object({
+    id: uuid,
+    email: text,
+    username: text,
+    country: text,
+  }),
+  "GET /api/me/withdrawals/policy": object({
+    enabled: scalar("boolean"),
+    currency: text,
+    minimum_amount_minor: text,
+    maximum_amount_minor: nullable(text),
+    fee_enabled: scalar("boolean"),
+    fee_basis_points: text,
+    fee_maximum_amount_minor: nullable(text),
+  }),
+  "POST /api/funding/development/verify": object({ funding_id: uuid, state: text }),
+  "POST /api/password-reset/request": object({
+    status: scalar("boolean", { enum: [true] }),
+    message: text,
+  }),
+  "POST /api/password-reset": object({ status: scalar("boolean", { enum: [true] }) }),
+  "POST /api/withdrawals": zodSchema(withdrawalResponseSchema),
+  "GET /api/purchases": object({
+    items: list(
+      object({
+        id: uuid,
+        checkout_id: nullable(uuid),
+        listing_id: uuid,
+        title: text,
+        short_description: text,
+        long_description: text,
+        amount_minor: text,
+        currency: text,
+        state: text,
+        created_at: dateTime,
+        entitlement_state: nullable(text),
+        entitlement_expires_at: nullable(dateTime),
+        access_available: scalar("boolean"),
+      }),
+    ),
+    nextCursor: nullable(text),
+  }),
+  "GET /api/purchases/{purchaseId}": object({
+    id: uuid,
+    checkout_id: nullable(uuid),
+    listing_id: uuid,
+    title: text,
+    short_description: text,
+    long_description: text,
+    amount_minor: text,
+    currency: text,
+    state: text,
+    created_at: dateTime,
+    entitlement_state: nullable(text),
+    entitlement_expires_at: nullable(dateTime),
+    access_available: scalar("boolean"),
+  }),
+  "GET /api/treasury": object({
+    balance_minor: text,
+    credits_minor: text,
+    debits_minor: text,
+    currency: text,
+  }),
+  "GET /api/treasury/entries": object({
+    items: list(
+      object({
+        id: uuid,
+        direction: text,
+        amount_minor: text,
+        title: text,
+        note: nullable(text),
+        source_kind: nullable(text),
+        source_id: nullable(uuid),
+        actor_id: nullable(uuid),
+        created_at: dateTime,
+      }),
+    ),
+    next_cursor: nullable(text),
+  }),
+  "GET /api/treasury/entries/{entryId}": object({
+    id: uuid,
+    direction: text,
+    amount_minor: text,
+    title: text,
+    note: nullable(text),
+    source_kind: nullable(text),
+    source_id: nullable(uuid),
+    created_at: dateTime,
+  }),
+  "GET /api/listings": zodSchema(listingPageSchema),
+  "GET /api/listings/{listingId}": zodSchema(listingWithMediaViewSchema),
+  "POST /api/listings": zodSchema(ownerListingViewSchema),
+  "PATCH /api/listings/{listingId}": zodSchema(listingWithMediaViewSchema),
   "GET /api/listings/{listingId}/media": object({ items: list(listingMedia) }),
   "GET /api/listings/{listingId}/media/{mediaId}": listingMedia,
   "POST /api/listings/{listingId}/media": listingMedia,
@@ -683,16 +570,13 @@ const legacySuccessSchemas: Record<string, JsonSchema> = {
     net_amount_minor: text,
     currency: text,
   }),
-  "POST /api/wallet/transfers": object({
-    id: uuid,
-    from: text,
-    to: text,
+  "GET /api/wallet/transfers": object({
     gross_amount_minor: text,
     fee_minor: text,
     net_amount_minor: text,
     currency: text,
-    created_at: dateTime,
   }),
+  "POST /api/wallet/transfers": zodSchema(walletTransferResultSchema),
   "GET /api/wallet/funding/prepare": object({
     provider: text,
     amount_minor: text,
@@ -712,10 +596,10 @@ const legacySuccessSchemas: Record<string, JsonSchema> = {
     ),
   }),
   "GET /api/funding-transactions": object({
-    items: list(fundingStatus),
+    items: list(zodSchema(fundingStatusSchema)),
     next_cursor: nullable(text),
   }),
-  "GET /api/funding-transactions/{fundingId}": fundingDetail,
+  "GET /api/funding-transactions/{fundingId}": zodSchema(fundingDetailSchema),
   "POST /api/funding-transactions": object({
     id: uuid,
     state: text,
@@ -724,7 +608,7 @@ const legacySuccessSchemas: Record<string, JsonSchema> = {
     provider: text,
   }),
   "POST /api/funding-transactions/{fundingId}/cancel": object({ id: uuid, state: text }),
-  "POST /api/funding-transactions/{fundingId}/initialize": fundingDetail,
+  "POST /api/funding-transactions/{fundingId}/initialize": zodSchema(fundingDetailSchema),
   "POST /api/funding-transactions/{fundingId}/verify": object({
     id: uuid,
     state: text,
@@ -773,7 +657,11 @@ const legacySuccessSchemas: Record<string, JsonSchema> = {
 };
 
 const legacySuccessStatus: Record<string, string> = {
+  "POST /api/accounts": "201",
   "POST /api/checkouts": "201",
+  "POST /api/withdrawals": "201",
+  "POST /api/wallet/transfers": "201",
+  "POST /api/me/onboarding": "201",
   "POST /api/listings": "201",
   "POST /api/listings/{listingId}/media": "201",
   "POST /api/listings/{listingId}/integrations": "201",
@@ -782,14 +670,20 @@ const legacySuccessStatus: Record<string, string> = {
   "POST /api/bank-transfer/funding-transactions/{fundingId}/evidence": "201",
   "POST /api/direct-trc20/funding-transactions/{fundingId}/transaction": "202",
   "POST /api/withdrawal-destinations": "201",
+  "POST /api/referrals/parent": "204",
+  "POST /api/treasury/entries": "410",
+  "POST /api/treasury/expenses": "410",
   "DELETE /api/listings/{listingId}": "204",
   "DELETE /api/listings/{listingId}/media/{mediaId}": "202",
 };
 
 function response(path: string, method: string) {
-  const key = `${method.toUpperCase()} ${path}`;
+  const key = `${method.toUpperCase()} ${legacyContractPath(path, method)}`;
   const status = legacySuccessStatus[key] ?? "200";
-  if (status === "204") return { "204": { description: "Listing deleted successfully" } };
+  if (status === "410")
+    return { "410": errorResponse("This legacy write endpoint is no longer available") };
+  if (status === "204")
+    return { "204": { description: `${readableResource(path)} operation completed successfully` } };
   const schema = legacySuccessSchemas[key];
   if (!schema) throw new Error(`Missing explicit OpenAPI response contract for ${key}`);
   if (key === "GET /api/listings/export")
@@ -819,24 +713,174 @@ function response(path: string, method: string) {
   };
 }
 
-const listingWriteSchema = object(
-  {
-    title: scalar("string", { minLength: 1 }),
-    short_description: scalar("string", { maxLength: 200 }),
-    long_description: text,
-    price_minor: scalar("string", { pattern: "^\\d+$" }),
-    currency: scalar("string", { minLength: 3, maxLength: 3 }),
-    destination: scalar("string", { format: "uri" }),
-    metadata: scalar("object", { additionalProperties: scalar("string") }),
-    external_key: scalar("string", { maxLength: 128 }),
-    featured_position: nullable(scalar("integer", { minimum: 1 })),
-    state: scalar("string", { enum: ["draft", "published", "archived"] }),
-    compare_at_price_minor: nullable(scalar("string", { pattern: "^\\d+$" })),
-    visibility: scalar("string", { enum: ["public", "authenticated"] }),
-    category_ids: list(uuid),
+const representativeExamples: Record<string, unknown> = {
+  "POST /api/listings request": {
+    title: "Example listing",
+    short_description: "A useful summary",
+    long_description: "Details for the example listing.",
+    price_minor: "3100",
+    currency: "USD",
+    destination: "https://example.test/listing",
+    metadata: { featured: true, rank: 2, note: null },
   },
-  ["title", "price_minor", "currency", "destination"],
-);
+  "GET /api/listings/{listingId} response 200": {
+    id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    managed_by: "4fa85f64-5717-4562-b3fc-2c963f66afa6",
+    title: "Example listing",
+    short_description: "A useful summary",
+    long_description: "Details for the example listing.",
+    price: { minor_amount: "3100", currency: "USD" },
+    compare_at_price: null,
+    visibility: "public",
+    categories: [],
+    metadata: { featured: true, rank: 2, note: null },
+    state: "published",
+    featured_position: null,
+    media: [],
+    rating: null,
+  },
+  "POST /api/checkout request": { listing_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
+  "POST /api/checkout response 201": {
+    id: "5fa85f64-5717-4562-b3fc-2c963f66afa6",
+    purchase_id: "6fa85f64-5717-4562-b3fc-2c963f66afa6",
+    state: "pending",
+    required: { amount_minor: "3100", currency: "USD" },
+    available: { amount_minor: "2100", currency: "USD" },
+    shortfall: { amount_minor: "1000", currency: "USD" },
+  },
+  "GET /api/checkout response 200": {
+    required: { amount_minor: "3100", currency: "USD" },
+    available: { amount_minor: "2100", currency: "USD" },
+    shortfall: { amount_minor: "1000", currency: "USD" },
+  },
+  "GET /api/checkout/{checkoutId} response 200": {
+    id: "5fa85f64-5717-4562-b3fc-2c963f66afa6",
+    purchase_id: "6fa85f64-5717-4562-b3fc-2c963f66afa6",
+    state: "pending",
+    amount_minor: "3100",
+    currency: "USD",
+  },
+  "POST /api/checkout/{checkoutId}/pay response 200": {
+    id: "5fa85f64-5717-4562-b3fc-2c963f66afa6",
+    purchase_id: "6fa85f64-5717-4562-b3fc-2c963f66afa6",
+    state: "paid",
+    amount_minor: "3100",
+    currency: "USD",
+    available: { amount_minor: "0", currency: "USD" },
+    pending: { amount_minor: "0", currency: "USD" },
+    shortfall: { amount_minor: "0", currency: "USD" },
+  },
+  "GET /api/reviews response 200": {
+    items: [
+      {
+        id: "7fa85f64-5717-4562-b3fc-2c963f66afa6",
+        listing_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        rating: 5,
+        body: "Useful and clear.",
+        status: "approved",
+        created_at: "2026-10-04T00:00:00.000Z",
+        updated_at: "2026-10-04T00:00:00.000Z",
+        moderated_at: null,
+        reviewer: "example_user",
+        is_mine: false,
+        listing_title: "Example listing",
+      },
+    ],
+    next_cursor: null,
+  },
+  "POST /api/withdrawals request": {
+    amount_minor: "3100",
+    currency: "USD",
+    destination_id: "8fa85f64-5717-4562-b3fc-2c963f66afa6",
+  },
+  "POST /api/withdrawals response 201": {
+    id: "8fa85f64-5717-4562-b3fc-2c963f66afa6",
+    amount_minor: "3100",
+    fee_minor: "0",
+    net_amount_minor: "3100",
+    currency: "USD",
+    destination: { method: "bank_transfer", method_name: "Bank Transfer", name: "Primary bank" },
+    state: "requested",
+    reason: null,
+    created_at: "2026-10-04T00:00:00.000Z",
+    updated_at: "2026-10-04T00:00:00.000Z",
+  },
+  "GET /api/wallet/fund/{fundingId} response 200": {
+    id: "9fa85f64-5717-4562-b3fc-2c963f66afa6",
+    state: "awaiting_payment",
+    provider: "direct_trc20",
+    provider_display_name: "USDT TRC20",
+    customer_action: null,
+    funding_reference: "usdt-example-reference",
+    provider_transaction_id: null,
+    amount_minor: "2500",
+    currency: "USD",
+    collection_amount_minor: "2500",
+    collection_currency: "USD",
+    conversion: null,
+    provider_account_id: null,
+    provider_account_snapshot: null,
+    authorization_url: null,
+    payment_address: "TExampleWalletAddress",
+    payment_amount: "25.00",
+    payment_currency: "USDT",
+    asset: "USDT",
+    network: "TRC20",
+    instructions: "Send exactly 25.00 USDT on TRC20.",
+    expires_at: null,
+    error_code: null,
+    error_message: null,
+    verification: null,
+    confirmed_at: null,
+    wallet_credit_state: null,
+    evidence: null,
+  },
+  "POST /api/wallet/transfers response 201": {
+    id: "9fa85f64-5717-4562-b3fc-2c963f66afa6",
+    from: "funding",
+    to: "earnings",
+    grossMinor: "3100",
+    feeMinor: "0",
+    netMinor: "3100",
+  },
+  "PATCH /api/withdrawal-destinations/{destinationId} request": { name: "Primary bank" },
+  "POST /api/listings/{listingId}/media request": {
+    file: "example-image.png",
+    position: 0,
+    alt_text: "Product image",
+  },
+  "POST /api/referrals/parent request": {
+    parent_account_id: "4fa85f64-5717-4562-b3fc-2c963f66afa6",
+  },
+};
+
+function legacyContractPath(path: string, method: string) {
+  if (path === "/api/checkout")
+    return method.toUpperCase() === "GET" ? "/api/checkout-quote" : "/api/checkouts";
+  if (path === "/api/checkout/{checkoutId}") return "/api/checkouts/{checkoutId}";
+  if (path === "/api/checkout/{checkoutId}/pay") return "/api/checkouts/{checkoutId}/pay";
+  if (path === "/api/wallet/funding") return "/api/funding-transactions";
+  if (path === "/api/wallet/fund") return "/api/funding-transactions";
+  const fundingPath = path.replace(
+    "/api/wallet/fund/{fundingId}",
+    "/api/funding-transactions/{fundingId}",
+  );
+  if (fundingPath !== path) {
+    if (fundingPath.endsWith("/evidence"))
+      return fundingPath.replace(
+        "/api/funding-transactions/",
+        "/api/bank-transfer/funding-transactions/",
+      );
+    if (fundingPath.endsWith("/transaction"))
+      return fundingPath.replace(
+        "/api/funding-transactions/",
+        "/api/direct-trc20/funding-transactions/",
+      );
+    return fundingPath;
+  }
+  return path;
+}
+
 const integrationWriteSchema = object({ name: scalar("string", { minLength: 1, maxLength: 100 }) });
 const requestBodyFor = (path: string, method: string) => {
   const key = `${method.toUpperCase()} ${path}`;
@@ -844,15 +888,37 @@ const requestBodyFor = (path: string, method: string) => {
     required,
     content: { "application/json": { schema } },
   });
-  const multipart = (properties: Record<string, JsonSchema>) => ({
+  const multipart = (
+    properties: Record<string, JsonSchema>,
+    required: string[] = Object.keys(properties),
+  ) => ({
     required: true,
-    content: { "multipart/form-data": { schema: object(properties) } },
+    content: { "multipart/form-data": { schema: object(properties, required) } },
   });
   const requests: Record<string, Record<string, unknown>> = {
+    "POST /api/password-reset/request": json(
+      object(
+        {
+          email: scalar("string", { format: "email" }),
+          redirectTo: scalar("string", { format: "uri" }),
+          captchaToken: text,
+        },
+        ["email", "redirectTo"],
+      ),
+    ),
+    "POST /api/password-reset": json(object({ token: text, newPassword: text })),
+    "POST /api/withdrawals": json(zodSchema(withdrawalCreateSchema)),
+    "POST /api/funding/development/verify": json(object({ funding_id: uuid })),
+    "PATCH /api/me/profile": json(
+      object({ country: nullable(scalar("string", { pattern: "^[A-Z]{2}$" })) }, []),
+    ),
+    "POST /api/me/onboarding": json(
+      object({ username: text, country: text, password: text }, ["username", "country"]),
+    ),
     "POST /api/access/verify": json(
       object({ source: scalar("string", { minLength: 1, maxLength: 512 }) }),
     ),
-    "POST /api/checkouts": json(object({ listing_id: uuid })),
+    "POST /api/checkouts": json(zodSchema(checkoutCreateRequestSchema)),
     "POST /api/listings/{listingId}/integrations": json(integrationWriteSchema),
     "PATCH /api/listings/{listingId}/integrations/{integrationId}": json(integrationWriteSchema),
     "PATCH /api/listings/{listingId}/media/{mediaId}": json(
@@ -861,15 +927,16 @@ const requestBodyFor = (path: string, method: string) => {
         position: scalar("integer", { minimum: 0 }),
       }),
     ),
-    "POST /api/listings/{listingId}/media": multipart({
-      file: scalar("string", { format: "binary" }),
-      position: scalar("integer", { minimum: 0 }),
-      alt_text: scalar("string", { maxLength: 500 }),
-    }),
-    "POST /api/listings": json(listingWriteSchema),
-    "PATCH /api/listings/{listingId}": json(
-      object(listingWriteSchema.properties as Record<string, JsonSchema>, []),
+    "POST /api/listings/{listingId}/media": multipart(
+      {
+        file: scalar("string", { format: "binary" }),
+        position: scalar("integer", { minimum: 0 }),
+        alt_text: scalar("string", { maxLength: 500 }),
+      },
+      ["file"],
     ),
+    "POST /api/listings": json(zodSchema(listingCreateSchema)),
+    "PATCH /api/listings/{listingId}": json(zodSchema(listingPatchSchema)),
     "POST /api/listings/import": {
       required: true,
       content: {
@@ -929,15 +996,9 @@ const requestBodyFor = (path: string, method: string) => {
         values: scalar("object", { additionalProperties: text }),
       }),
     ),
-    "PATCH /api/withdrawal-destinations/{destinationId}": json({
-      oneOf: [
-        object({ status: scalar("string", { enum: ["archived"] }) }),
-        object({
-          name: scalar("string", { minLength: 1, maxLength: 100 }),
-          values: scalar("object", { additionalProperties: text }),
-        }),
-      ],
-    }),
+    "PATCH /api/withdrawal-destinations/{destinationId}": json(
+      zodSchema(withdrawalDestinationPatchSchema),
+    ),
   };
   return requests[key];
 };
@@ -1006,23 +1067,18 @@ const queryParameters: Record<string, { name: string; schema: JsonSchema; requir
         required: true,
       },
     ],
+    "GET /api/wallet/transfers": [
+      { name: "from", schema: scalar("string", { enum: ["funding", "earnings"] }), required: true },
+      {
+        name: "amount_minor",
+        schema: scalar("string", { pattern: "^[1-9][0-9]*$" }),
+        required: true,
+      },
+    ],
     "GET /api/funding-transactions": [
       {
         name: "state",
-        schema: scalar("string", {
-          enum: [
-            "initialization_pending",
-            "initializing",
-            "awaiting_payment",
-            "verification_pending",
-            "confirmed",
-            "failed",
-            "blocked",
-            "cancelled",
-            "expired",
-            "reconciliation_pending",
-          ],
-        }),
+        schema: zodSchema(fundingStateSchema),
       },
       { name: "cursor", schema: scalar("string") },
       { name: "limit", schema: scalar("integer", { minimum: 1, maximum: 50, default: 20 }) },
@@ -1132,6 +1188,12 @@ function normalizeAuthorizationResponses(document: OpenApiDocument) {
 }
 
 const domainDescriptions: Record<string, string> = {
+  "Operator Overview":
+    "A capability-scoped projection of current operator workload and catalogue state.",
+  "Current Session": "Returns the authenticated browser session's current account projection.",
+  "Account Access": "Returns access capabilities associated with the authenticated account.",
+  "Funding Verification":
+    "Development funding verification is available only in development and test environments.",
   Health: "Health checks report application availability without exposing persisted business data.",
   "Blog Posts": "Blog post operations preserve publication and editorial validation rules.",
   "Blog Categories": "Blog categories are independently managed persisted blog resources.",
@@ -1207,6 +1269,18 @@ const domainDescriptions: Record<string, string> = {
 };
 
 function domainForPath(path: string): string {
+  if (path === "/api/overview") return "Operator Overview";
+  if (path === "/api/me/session") return "Current Session";
+  if (path === "/api/me/access") return "Account Access";
+  if (path === "/api/me/listings") return "Listings";
+  if (path === "/api/me/earnings/entries") return "Earning Entries";
+  if (path === "/api/me/withdrawals/policy") return "Withdrawal Policy";
+  if (path === "/api/me/profile" || path === "/api/me/onboarding") return "Accounts";
+  if (path === "/api/package/entitlements" || path.startsWith("/api/package/entitlements/"))
+    return "Package Entitlements";
+  if (path === "/api/checkout") return "Checkout Quote";
+  if (path.startsWith("/api/checkout/")) return "Checkouts";
+  if (path === "/api/funding/development/verify") return "Funding Verification";
   if (path.startsWith("/api/withdrawal-destinations")) return "Withdrawal Destinations";
   if (path === "/api/withdrawals/policy") return "Withdrawal Policy";
   if (path === "/api/withdrawal-methods") return "Withdrawal Methods";
@@ -1221,6 +1295,7 @@ function domainForPath(path: string): string {
     return "Package Entitlements";
   const relative = path.replace(/^\/api\//, "");
   if (relative.startsWith("accounts")) return "Accounts";
+  if (relative.startsWith("password-reset")) return "Accounts";
   if (relative.includes("integrations")) return "Listing Integrations";
   if (relative.includes("/media") || relative.endsWith("/media")) return "Listing Media";
   if (relative.startsWith("catalogue/categories")) return "Catalogue Categories";
@@ -1242,6 +1317,12 @@ function domainForPath(path: string): string {
     return "Wallet Transfers";
   if (relative === "wallet/transfer-quote") return "Wallet Transfer Quote";
   if (relative === "wallet/funding/prepare") return "Funding Preparation";
+  if (
+    relative === "wallet/fund" ||
+    relative.startsWith("wallet/fund/") ||
+    relative === "wallet/funding"
+  )
+    return "Funding Transactions";
   if (relative.startsWith("bank-transfer/funding-transactions/")) return "Bank Transfer Evidence";
   if (relative.startsWith("direct-trc20/funding-transactions/")) return "Direct TRC20 Verification";
   if (relative === "funding-transactions" || relative.startsWith("funding-transactions/"))
@@ -1250,6 +1331,7 @@ function domainForPath(path: string): string {
   if (relative.startsWith("hierarchy")) return "Hierarchy";
   if (relative.startsWith("referral")) return "Referral Network";
   if (relative.startsWith("treasury/entries")) return "Treasury Entries";
+  if (relative.startsWith("treasury/expenses")) return "Treasury Entries";
   if (relative.startsWith("treasury/adjustments")) return "Treasury Adjustments";
   if (relative === "treasury") return "Treasury Summary";
   if (relative.startsWith("earnings/entries")) return "Earning Entries";
@@ -1284,7 +1366,15 @@ function readableCollection(path: string) {
 
 function operationSummary(path: string, method: string) {
   const resource = readableResource(path);
+  if (path === "/api/overview") return "Get operator overview";
   if (path === "/api/health") return "Check API health";
+  if (path === "/api/funding/development/verify") return "Verify development funding";
+  if (path === "/api/me/session") return "Get current session";
+  if (path === "/api/me/access") return "Get current account access";
+  if (path === "/api/checkout")
+    return method === "get" ? "Quote checkout wallet requirement" : "Create checkout";
+  if (path.startsWith("/api/checkout/"))
+    return path.endsWith("/pay") ? "Pay for checkout" : "Get checkout";
   if (path === "/api/wallet") return "Get wallet summary";
   if (path === "/api/access/verify") return "Verify purchase access";
   if (path === "/api/referrals/direct") return "List direct referrals";
@@ -1298,6 +1388,8 @@ function operationSummary(path: string, method: string) {
   if (path === "/api/checkout-quote") return "Quote checkout wallet requirement";
   if (path === "/api/wallet/funding/prepare") return "Prepare a funding option";
   if (path === "/api/wallet/transfer-quote") return "Quote a wallet transfer";
+  if (path === "/api/wallet/transfers")
+    return method === "get" ? "Quote a wallet transfer" : "Create a wallet transfer";
   if (path === "/api/earnings") return "Get earnings summary";
   if (path === "/api/distribution-policy") return "Get distribution policy";
   if (path === "/api/withdrawal-methods") return "List available withdrawal methods";
@@ -1394,14 +1486,16 @@ function enrichOperation(path: string, method: string, operation: OpenApiOperati
     operation.description = `${summary}. ${domainDescriptions[tag] ?? ""}`.trim();
   }
 
-  const requestContract = requestBodyFor(path, method);
+  const contractPath = legacyContractPath(path, method);
+  const operationKey = `${method.toUpperCase()} ${contractPath}`;
+  const requestContract = requestBodyFor(contractPath, method);
   if (requestContract && !operation.requestBody)
     operation.requestBody = { ...requestContract, description: `${summary} request.` };
 
   const parameters = Array.isArray(operation.parameters)
     ? (operation.parameters as Record<string, unknown>[])
     : [];
-  for (const parameter of queryParameters[`${method.toUpperCase()} ${path}`] ?? [])
+  for (const parameter of queryParameters[`${method.toUpperCase()} ${contractPath}`] ?? [])
     if (!parameters.some((current) => current.in === "query" && current.name === parameter.name))
       parameters.push({
         ...parameter,
@@ -1464,7 +1558,10 @@ function enrichOperation(path: string, method: string, operation: OpenApiOperati
         const mediaObject = media as Record<string, unknown>;
         const schema = mediaObject.schema;
         if (schema && typeof schema === "object" && !mediaObject.examples && !mediaObject.example) {
-          const example = syntheticExample(schema as Record<string, unknown>);
+          const example =
+            representativeExamples[`${method.toUpperCase()} ${path} response ${status}`] ??
+            representativeExamples[`${operationKey} response ${status}`] ??
+            syntheticExample(schema as Record<string, unknown>);
           if (example !== undefined) mediaObject.examples = { example: { value: example } };
         }
       }
@@ -1479,7 +1576,10 @@ function enrichOperation(path: string, method: string, operation: OpenApiOperati
         const mediaObject = media as Record<string, unknown>;
         const schema = mediaObject.schema;
         if (schema && typeof schema === "object" && !mediaObject.examples && !mediaObject.example) {
-          const example = syntheticExample(schema as Record<string, unknown>);
+          const example =
+            representativeExamples[`${method.toUpperCase()} ${path} request`] ??
+            representativeExamples[`${operationKey} request`] ??
+            syntheticExample(schema as Record<string, unknown>);
           if (example !== undefined) mediaObject.examples = { example: { value: example } };
         }
       }
@@ -1576,12 +1676,11 @@ export function applyOpenApiMetadata(
       }
     }
 
-  applyResponseSchemaOverrides(document);
-
   const tagNames = new Set<string>();
   for (const [path, pathItem] of Object.entries(document.paths))
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!["get", "post", "put", "patch", "delete"].includes(method)) continue;
+      if (path === "/api/openapi.json") continue;
       enrichOperation(path, method, operation);
       tagNames.add(String((operation.tags as string[])[0]));
     }

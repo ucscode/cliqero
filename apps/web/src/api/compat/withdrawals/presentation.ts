@@ -1,8 +1,9 @@
 import type { Withdrawal } from "@/modules/withdrawal/withdrawal";
 import type { FeePolicy } from "@/modules/fee/policy";
+import { withdrawalResponseSchema } from "./contracts";
 
 export function presentWithdrawal(withdrawal: Withdrawal) {
-  return {
+  return withdrawalResponseSchema.parse({
     id: withdrawal.id,
     amount_minor: withdrawal.amount.minorAmount.toString(),
     fee_minor: withdrawal.fee?.minorAmount.toString() ?? "0",
@@ -18,7 +19,7 @@ export function presentWithdrawal(withdrawal: Withdrawal) {
     reason: withdrawal.reason ?? null,
     created_at: withdrawal.createdAt.toISOString(),
     updated_at: withdrawal.updatedAt.toISOString(),
-  };
+  });
 }
 
 export function presentWithdrawalPolicy(

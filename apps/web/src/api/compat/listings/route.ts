@@ -6,39 +6,17 @@ import { loadStorefrontConfiguration } from "@/config/storefront";
 import { isAuthenticatedPrincipal } from "@/modules/identity/api/principal";
 import { apiAuthorizer } from "@/api/shared/authorization";
 import { crudMaxRows } from "@/config/crud";
+import { listingCreateSchema } from "./contracts";
 
 const sorts = ["date", "price", "title", "rating"] as const;
 const directions = ["asc", "desc"] as const;
 
-const listingSchema = z
-  .object({
-    title: z.string().min(1),
-    short_description: z.string().max(200).default(""),
-    long_description: z.string().default(""),
-    price_minor: z.string().regex(/^\d+$/),
-    currency: z.string().length(3),
-    destination: z.url(),
-    metadata: z
-      .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
-      .optional(),
-    external_key: z.string().max(128).optional(),
-    featured_position: z.number().int().positive().nullable().optional(),
-    state: z.enum(["draft", "published", "archived"]).optional(),
-    compare_at_price_minor: z.string().regex(/^\d+$/).nullable().optional(),
-    visibility: z.enum(["public", "authenticated"]).optional(),
-    category_ids: z
-      .array(z.uuid())
-      .max(30)
-      .refine((ids) => new Set(ids).size === ids.length, "Category IDs must be unique")
-      .optional(),
-  })
-  .strict();
 export async function POST(request: Request) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     await getContainer().operators.requireCapability(account.id, "catalogue.manage");
-    const body = listingSchema.parse(await request.json());
+    const body = listingCreateSchema.parse(await request.json());
     const listing = await getContainer().listingService.createCatalogue(account, {
       title: body.title,
       shortDescription: body.short_description,

@@ -3,16 +3,10 @@ import { newId } from "@/kernel/ids";
 import { apiError, authenticatedPrincipal } from "../http";
 import { getContainer } from "@/infrastructure/container";
 import { presentWithdrawal, presentWithdrawalPolicy } from "./presentation";
+import { withdrawalCreateSchema } from "./contracts";
 import { validationErrorPayload } from "@/api/error";
 import type { ApiPrincipal } from "@/modules/identity/api/principal";
 import type { ApplicationContainer } from "@/infrastructure/container";
-const schema = z
-  .object({
-    amount_minor: z.string().regex(/^\d+$/),
-    currency: z.string().length(3),
-    destination_id: z.string().uuid(),
-  })
-  .strict();
 export async function POST(request: Request) {
   const principal = await authenticatedPrincipal(request);
   if (principal.kind === "anonymous")
@@ -22,7 +16,7 @@ export async function POST(request: Request) {
   try {
     const key = request.headers.get("idempotency-key");
     if (!key) throw new Error("A valid Idempotency-Key is required");
-    const body = schema.parse(await request.json());
+    const body = withdrawalCreateSchema.parse(await request.json());
     const withdrawal = await getContainer().withdrawals.create({
       accountId: principal.accountId,
       amountMinor: BigInt(body.amount_minor),

@@ -70,7 +70,7 @@ describe("withdrawal API contract", () => {
 
   it("exposes exact minor units and only a safe destination identity", () => {
     const presented = presentWithdrawal({
-      id: "withdrawal",
+      id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
       accountId: "account",
       amount: Money.of(1250n, "USD"),
       destination: {

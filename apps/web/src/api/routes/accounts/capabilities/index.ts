@@ -3,7 +3,7 @@ import type { ApplicationContainer } from "@/infrastructure/container";
 import { requirePrincipal, requireSessionCapability, type Env } from "../../../shared/context";
 import { domainError } from "../../../shared/error";
 import { errorSchema } from "../../../shared/schemas";
-import { capabilityAdministrationSchema } from "./contracts";
+import { capabilityAdministrationSchema, capabilityReplacementSchema } from "./contracts";
 
 export function registerAccountCapabilityRoutes(
   app: OpenAPIHono<Env>,
@@ -23,7 +23,10 @@ export function registerAccountCapabilityRoutes(
         body: { content: { "application/json": { schema: capabilitySetBody } } },
       },
       responses: {
-        200: { description: "Ordinary capability selection applied" },
+        200: {
+          description: "Ordinary capability selection applied",
+          content: { "application/json": { schema: capabilityReplacementSchema } },
+        },
         401: {
           description: "Authentication required",
           content: { "application/json": { schema: errorSchema } },

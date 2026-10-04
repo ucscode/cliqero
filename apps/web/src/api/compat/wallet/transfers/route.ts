@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getContainer } from "@/infrastructure/container";
 import { authenticatedAccount, apiError } from "../../http";
+import { walletTransferResultSchema } from "./contracts";
 
 const transferSchema = z
   .object({
@@ -52,7 +53,10 @@ export async function POST(request: Request) {
       grossMinor: BigInt(body.amount_minor),
       idempotencyKey: key,
     });
-    return Response.json(result, { status: 201, headers: { "Cache-Control": "no-store" } });
+    return Response.json(walletTransferResultSchema.parse(result), {
+      status: 201,
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (error) {
     return apiError(error, request);
   }

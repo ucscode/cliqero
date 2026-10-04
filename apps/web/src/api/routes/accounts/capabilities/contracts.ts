@@ -6,3 +6,8 @@ export const capabilityAdministrationSchema = z.object({
   manageableCapabilities: z.array(z.string()),
   isSelf: z.boolean(),
 });
+
+export const capabilityReplacementSchema = z.object({
+  accountId: z.string().uuid(),
+  assignments: z.array(z.object({ capability: z.string(), grantedAt: z.string() })),
+});

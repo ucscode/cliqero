@@ -2,16 +2,9 @@ import { z } from "zod";
 import { apiError, authenticatedPrincipal } from "../../http";
 import { validationErrorPayload } from "@/api/error";
 import { getContainer } from "@/infrastructure/container";
+import { withdrawalDestinationPatchSchema } from "../contracts";
 
-const valuesSchema = z.record(z.string(), z.string());
 const paramsSchema = z.object({ destinationId: z.string().uuid() });
-const patchSchema = z.union([
-  z.object({ status: z.literal("archived") }).strict(),
-  z
-    .object({ name: z.string().min(1).max(100).optional(), values: valuesSchema.optional() })
-    .strict()
-    .refine((body) => body.name !== undefined || body.values !== undefined),
-]);
 
 export async function GET(
   request: Request,
@@ -45,7 +38,7 @@ export async function PATCH(
     return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
   try {
     const { destinationId } = paramsSchema.parse(await params);
-    const body = patchSchema.parse(await request.json());
+    const body = withdrawalDestinationPatchSchema.parse(await request.json());
     return Response.json(
       await getContainer().withdrawalDestinations.update(principal.accountId, destinationId, body),
     );

@@ -3,6 +3,7 @@ import type { ApplicationContainer } from "@/infrastructure/container";
 import { requireCapabilityScope, requirePrincipal, type Env } from "../../shared/context";
 import { reviewJson } from "./serialization";
 import { errorSchema } from "../../shared/schemas";
+import { reviewPageSchema, reviewResponseSchema } from "./contracts";
 
 export function registerReviewRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
   app.get("/api/listings/:listingId/reviews", async (c) => {
@@ -66,7 +67,7 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
           description: "Moderation queue",
           content: {
             "application/json": {
-              schema: z.object({ items: z.array(z.any()), next_cursor: z.string().nullable() }),
+              schema: reviewPageSchema,
             },
           },
         },
@@ -142,7 +143,7 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
       responses: {
         200: {
           description: "Review moderation state updated",
-          content: { "application/json": { schema: z.object({ item: z.any() }) } },
+          content: { "application/json": { schema: z.object({ item: reviewResponseSchema }) } },
         },
         400: {
           description: "Invalid moderation status",

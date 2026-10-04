@@ -1,5 +1,7 @@
+import { reviewResponseSchema } from "./contracts";
+
 export function reviewJson(review: any, options: { reviewer?: string; isMine?: boolean } = {}) {
-  return {
+  return reviewResponseSchema.parse({
     id: review.id,
     listing_id: review.listingId,
     rating: review.rating,
@@ -13,5 +15,5 @@ export function reviewJson(review: any, options: { reviewer?: string; isMine?: b
       : {}),
     ...(options.isMine ? { is_mine: true } : {}),
     ...(review.listingTitle ? { listing_title: review.listingTitle } : {}),
-  };
+  });
 }

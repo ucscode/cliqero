@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { createApiApp, generateOpenApiDocument } from "@/api/hono";
 import type { ApplicationContainer } from "@/infrastructure/container";
+import { listingCreateSchema } from "@/api/compat/listings/contracts";
+import { withdrawalDestinationPatchSchema } from "@/api/compat/withdrawal-destinations/contracts";
+import { walletTransferResultSchema } from "@/api/compat/wallet/transfers/contracts";
+import { checkoutCreateRequestSchema, checkoutCreateSchema } from "@/api/compat/checkout/contracts";
+import { listingPageSchema, listingWithMediaViewSchema } from "@/api/compat/listings/contracts";
+import { withdrawalResponseSchema } from "@/api/compat/withdrawals/contracts";
+import { fundingDetailSchema } from "@/api/compat/wallet/fund/contracts";
+import { reviewPageSchema } from "@/api/routes/reviews/contracts";
+import { withdrawalMutationResponseSchema } from "@/api/routes/withdrawals/contracts";
 
 const document = generateOpenApiDocument(
   createApiApp({} as ApplicationContainer, { environment: "development", key: null }),
@@ -10,25 +19,40 @@ const bodylessOperations = new Set([
   "POST /api/withdrawals/{withdrawalId}/cancel",
   "POST /api/payments/{paymentId}/reconcile",
   "POST /api/checkouts/{checkoutId}/pay",
+  "POST /api/checkout/{checkoutId}/pay",
   "POST /api/listings/{listingId}/integrations/{integrationId}/rotate",
   "POST /api/funding-transactions/{fundingId}/cancel",
   "POST /api/funding-transactions/{fundingId}/initialize",
   "POST /api/funding-transactions/{fundingId}/verify",
+  "POST /api/funding/{fundingId}/confirm-bank-transfer",
+  "POST /api/treasury/entries",
+  "POST /api/treasury/expenses",
+  "POST /api/wallet/fund/{fundingId}/cancel",
+  "POST /api/wallet/fund/{fundingId}/initialize",
+  "POST /api/wallet/fund/{fundingId}/verify",
 ]);
 
 const isObject = (value: unknown): value is Record<string, any> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 
-function isFreeFormTopLevel(schema: unknown) {
+function isFreeFormTopLevel(schema: unknown): boolean {
   if (!isObject(schema)) return true;
-  if ("$ref" in schema || "oneOf" in schema || "anyOf" in schema || "allOf" in schema) return false;
+  if ("$ref" in schema) return false;
+  const alternatives = [schema.oneOf, schema.anyOf, schema.allOf].filter(Array.isArray);
+  if (alternatives.length)
+    return alternatives.every((branches) =>
+      (branches as unknown[]).every((branch) => isFreeFormTopLevel(branch)),
+    );
+  if (["string", "number", "integer", "boolean"].includes(String(schema.type))) return false;
+  if (schema.type === "array") return isFreeFormTopLevel(schema.items);
+  if (schema.type !== "object") return true;
+  const hasProperties = isObject(schema.properties) && Object.keys(schema.properties).length > 0;
   return (
-    schema.type === "object" &&
-    (!isObject(schema.properties) ||
-      Object.keys(schema.properties).length === 0 ||
-      schema.additionalProperties === true)
+    !hasProperties || schema.additionalProperties === true || isObject(schema.additionalProperties)
   );
 }
+
+const noSuccessByDesign = new Set(["POST /api/treasury/entries", "POST /api/treasury/expenses"]);
 
 describe("public OpenAPI contract quality", () => {
   it("gives every current operation one appropriate tag and a meaningful summary", () => {
@@ -64,7 +88,10 @@ describe("public OpenAPI contract quality", () => {
 
         const responses = isObject(operation.responses) ? operation.responses : {};
         const successes = Object.entries(responses).filter(([status]) => /^2/.test(status));
-        if (!successes.length) issues.push(`${label}: missing success response`);
+        if (!successes.length && !noSuccessByDesign.has(label))
+          issues.push(`${label}: missing success response`);
+        if (noSuccessByDesign.has(label))
+          expect(responses["410"], `${label} documents its actual gone response`).toBeDefined();
         for (const [status, response] of successes) {
           if (!isObject(response)) {
             issues.push(`${label}: ${status} response is invalid`);
@@ -161,5 +188,112 @@ describe("public OpenAPI contract quality", () => {
       expect(resultSchema.properties.destination.properties).toHaveProperty("savedDestinationId");
       expect(resultSchema.properties).toHaveProperty("idempotencyKey");
     }
+  });
+
+  it("keeps compatibility request/response documentation aligned with runtime contracts", () => {
+    const contentSchema = (
+      path: string,
+      method: string,
+      status: string,
+      media = "application/json",
+    ) => (document.paths[path]?.[method]?.responses as any)?.[status]?.content?.[media]?.schema;
+    const requestSchema = (path: string, method: string, media = "application/json") =>
+      (document.paths[path]?.[method]?.requestBody as any)?.content?.[media]?.schema;
+    const example = (
+      path: string,
+      method: string,
+      kind: "request" | "response",
+      status?: string,
+    ) => {
+      const operation = document.paths[path]?.[method] as any;
+      const media =
+        kind === "request"
+          ? operation.requestBody.content["application/json"]
+          : operation.responses[status ?? "200"].content["application/json"];
+      return media.examples.example.value;
+    };
+
+    const listingRequest = requestSchema("/api/listings", "post");
+    const listingExample = (document.paths["/api/listings"]?.post?.requestBody as any).content[
+      "application/json"
+    ].examples.example.value;
+    expect(listingCreateSchema.safeParse(listingExample).success).toBe(true);
+    const metadataValueSchema = listingRequest.properties.metadata.additionalProperties;
+    const metadataTypes = (metadataValueSchema.oneOf ?? metadataValueSchema.anyOf).map(
+      (branch: any) => branch.type,
+    );
+    expect(metadataTypes).toEqual(expect.arrayContaining(["string", "number", "boolean", "null"]));
+
+    expect(withdrawalDestinationPatchSchema.safeParse({ name: "Primary bank" }).success).toBe(true);
+    expect(withdrawalDestinationPatchSchema.safeParse({ values: { account: "123" } }).success).toBe(
+      true,
+    );
+    const destinationRequest = requestSchema(
+      "/api/withdrawal-destinations/{destinationId}",
+      "patch",
+    );
+    const destinationExample = example(
+      "/api/withdrawal-destinations/{destinationId}",
+      "patch",
+      "request",
+    );
+    expect(withdrawalDestinationPatchSchema.safeParse(destinationExample).success).toBe(true);
+    const editableBranch = (destinationRequest.oneOf ?? destinationRequest.anyOf).find(
+      (branch: any) => branch.properties?.name,
+    );
+    const requiredFields = editableBranch.required ?? [];
+    expect(requiredFields).not.toContain("name");
+    expect(requiredFields).not.toContain("values");
+
+    const mediaRequest = requestSchema(
+      "/api/listings/{listingId}/media",
+      "post",
+      "multipart/form-data",
+    );
+    expect(mediaRequest.required).toEqual(["file"]);
+    expect(mediaRequest.properties).toHaveProperty("position");
+    expect(mediaRequest.properties).toHaveProperty("alt_text");
+
+    const parentResponse = document.paths["/api/referrals/parent"]?.post?.responses as any;
+    expect(parentResponse["204"]).toBeDefined();
+    expect(parentResponse["204"]).not.toHaveProperty("content");
+    expect(parentResponse["200"]).toBeUndefined();
+
+    const transferResponse = contentSchema("/api/wallet/transfers", "post", "201");
+    const transferExample = (document.paths["/api/wallet/transfers"]?.post?.responses as any)["201"]
+      .content["application/json"].examples.example.value;
+    expect(walletTransferResultSchema.safeParse(transferExample).success).toBe(true);
+    expect(transferResponse.properties).toHaveProperty("grossMinor");
+    expect(transferResponse.properties).not.toHaveProperty("gross_amount_minor");
+
+    expect(listingPageSchema.safeParse(example("/api/listings", "get", "response")).success).toBe(
+      true,
+    );
+    expect(
+      listingWithMediaViewSchema.safeParse(example("/api/listings/{listingId}", "get", "response"))
+        .success,
+    ).toBe(true);
+    expect(
+      checkoutCreateRequestSchema.safeParse(example("/api/checkout", "post", "request")).success,
+    ).toBe(true);
+    expect(
+      checkoutCreateSchema.safeParse(example("/api/checkout", "post", "response", "201")).success,
+    ).toBe(true);
+    expect(reviewPageSchema.safeParse(example("/api/reviews", "get", "response")).success).toBe(
+      true,
+    );
+    expect(
+      withdrawalResponseSchema.safeParse(example("/api/withdrawals", "post", "response", "201"))
+        .success,
+    ).toBe(true);
+    expect(
+      withdrawalMutationResponseSchema.safeParse(
+        example("/api/withdrawals/{withdrawalId}", "patch", "response"),
+      ).success,
+    ).toBe(true);
+    expect(
+      fundingDetailSchema.safeParse(example("/api/wallet/fund/{fundingId}", "get", "response"))
+        .success,
+    ).toBe(true);
   });
 });

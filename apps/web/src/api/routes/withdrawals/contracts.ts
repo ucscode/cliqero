@@ -57,3 +57,40 @@ export const operatorWithdrawalDetailSchema = operatorWithdrawalSchema.extend({
     ),
   }),
 });
+
+/** JSON representation returned by WithdrawalService.update/cancel/complete. */
+export const withdrawalMutationResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    accountId: z.string().uuid(),
+    amount: z.object({ minorAmount: z.string(), currency: z.string() }),
+    fee: z.object({ minorAmount: z.string(), currency: z.string() }).optional(),
+    netAmount: z.object({ minorAmount: z.string(), currency: z.string() }).optional(),
+    destination: z.object({
+      savedDestinationId: z.string().uuid(),
+      method: z.string(),
+      methodName: z.string(),
+      name: z.string(),
+      fields: z.array(
+        z.object({
+          name: z.string(),
+          label: z.string(),
+          value: z.string(),
+          displayValue: z.string().optional(),
+          type: z.enum(["text", "select", "textarea", "fixed", "hidden"]),
+          copyable: z.boolean(),
+        }),
+      ),
+    }),
+    state: operatorWithdrawalStateSchema,
+    idempotencyKey: z.string(),
+    correlationId: z.string().uuid(),
+    reason: z.string().nullable().optional(),
+    externalReference: z.string().nullable().optional(),
+    completionNote: z.string().nullable().optional(),
+    completedBy: z.string().uuid().nullable().optional(),
+    completedAt: z.string().nullable().optional(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .strict();

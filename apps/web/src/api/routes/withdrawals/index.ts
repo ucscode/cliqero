@@ -16,6 +16,7 @@ import {
   operatorWithdrawalPatchSchema,
   operatorWithdrawalSchema,
   operatorWithdrawalStateSchema,
+  withdrawalMutationResponseSchema,
 } from "./contracts";
 import { crudMaxRows } from "@/config/crud";
 import { hasCapability } from "@/modules/identity/capabilities";
@@ -158,7 +159,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       responses: {
         200: {
           description: "Withdrawal state updated",
-          content: { "application/json": { schema: z.any() } },
+          content: { "application/json": { schema: withdrawalMutationResponseSchema } },
         },
         401: {
           description: "Authentication required",
@@ -182,7 +183,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           state: body.status,
           reason: body.status === "rejected" ? body.reason : undefined,
         });
-        return c.json(jsonSafe(result), 200);
+        return c.json(withdrawalMutationResponseSchema.parse(jsonSafe(result)), 200);
       } catch (error) {
         return domainError(c, error);
       }
@@ -196,7 +197,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       responses: {
         200: {
           description: "Withdrawal cancellation recorded and reservation released",
-          content: { "application/json": { schema: z.any() } },
+          content: { "application/json": { schema: withdrawalMutationResponseSchema } },
         },
         401: {
           description: "Authentication required",
@@ -218,7 +219,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           p.accountId,
           c.req.valid("param").withdrawalId,
         );
-        return c.json(jsonSafe(result), 200);
+        return c.json(withdrawalMutationResponseSchema.parse(jsonSafe(result)), 200);
       } catch (error) {
         return domainError(c, error);
       }
@@ -237,7 +238,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       responses: {
         200: {
           description: "Approved withdrawal completion recorded",
-          content: { "application/json": { schema: z.any() } },
+          content: { "application/json": { schema: withdrawalMutationResponseSchema } },
         },
         401: {
           description: "Authentication required",
@@ -264,7 +265,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
             note: body.note,
           },
         );
-        return c.json(jsonSafe(result), 200);
+        return c.json(withdrawalMutationResponseSchema.parse(jsonSafe(result)), 200);
       } catch (error) {
         return domainError(c, error);
       }

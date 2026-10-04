@@ -1,5 +1,6 @@
 import { authenticatedAccount, apiError } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
+import { checkoutPaymentSchema } from "../../contracts";
 
 export async function POST(request: Request, context: { params: Promise<{ checkoutId: string }> }) {
   const account = await authenticatedAccount(request);
@@ -11,25 +12,27 @@ export async function POST(request: Request, context: { params: Promise<{ checko
       buyerId: account.id,
       checkoutId,
     });
-    return Response.json({
-      id: result.checkout.id,
-      purchase_id: result.checkout.purchaseId,
-      state: result.checkout.state,
-      amount_minor: result.checkout.amount.minorAmount.toString(),
-      currency: result.checkout.amount.currency,
-      available: {
-        amount_minor: result.wallet.available.minorAmount.toString(),
-        currency: result.wallet.currency,
-      },
-      pending: {
-        amount_minor: result.wallet.pending.minorAmount.toString(),
-        currency: result.wallet.currency,
-      },
-      shortfall: {
-        amount_minor: result.shortfall.minorAmount.toString(),
-        currency: result.shortfall.currency,
-      },
-    });
+    return Response.json(
+      checkoutPaymentSchema.parse({
+        id: result.checkout.id,
+        purchase_id: result.checkout.purchaseId,
+        state: result.checkout.state,
+        amount_minor: result.checkout.amount.minorAmount.toString(),
+        currency: result.checkout.amount.currency,
+        available: {
+          amount_minor: result.wallet.available.minorAmount.toString(),
+          currency: result.wallet.currency,
+        },
+        pending: {
+          amount_minor: result.wallet.pending.minorAmount.toString(),
+          currency: result.wallet.currency,
+        },
+        shortfall: {
+          amount_minor: result.shortfall.minorAmount.toString(),
+          currency: result.shortfall.currency,
+        },
+      }),
+    );
   } catch (error) {
     return apiError(error);
   }

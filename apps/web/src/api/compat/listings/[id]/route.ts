@@ -4,27 +4,7 @@ import { getContainer } from "@/infrastructure/container";
 import { listingWithMediaView } from "@/application/listing/service";
 import { apiAuthorizer } from "@/api/shared/authorization";
 import { verifyListingPreviewToken } from "@/security/listing-preview";
-
-const listingSchema = z
-  .object({
-    title: z.string().min(1),
-    short_description: z.string().max(200),
-    long_description: z.string(),
-    price_minor: z.string().regex(/^\d+$/),
-    currency: z.string().length(3),
-    destination: z.url(),
-    metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
-    compare_at_price_minor: z.string().regex(/^\d+$/).nullable(),
-    featured_position: z.number().int().positive().nullable(),
-    visibility: z.enum(["public", "authenticated"]),
-    state: z.enum(["draft", "published", "archived"]),
-    category_ids: z
-      .array(z.uuid())
-      .max(30)
-      .refine((ids) => new Set(ids).size === ids.length, "Category IDs must be unique"),
-  })
-  .partial()
-  .strict();
+import { listingPatchSchema } from "../contracts";
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ listingId: string }> },
@@ -119,7 +99,7 @@ export async function PATCH(
   try {
     const container = getContainer();
     await container.operators.requireCapability(account.id, "catalogue.manage");
-    const body = listingSchema.parse(await request.json());
+    const body = listingPatchSchema.parse(await request.json());
     const listing = await container.listingService.update(account, (await params).listingId, {
       title: body.title,
       shortDescription: body.short_description,

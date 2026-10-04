@@ -7,6 +7,8 @@ vi.mock("@/infrastructure/container", () => ({ getContainer: () => fixtures.cont
 import { GET, POST } from "@/api/compat/checkout/route";
 
 const account = { id: "00000000-0000-4000-8000-000000000001" };
+const checkoutId = "00000000-0000-4000-8000-000000000003";
+const purchaseId = "00000000-0000-4000-8000-000000000004";
 const listing = {
   id: "00000000-0000-4000-8000-000000000002",
   price: { minorAmount: 0n, currency: "USD" },
@@ -29,8 +31,8 @@ function configure() {
     },
     walletCheckout: {
       initiate: vi.fn(async () => ({
-        id: "checkout-1",
-        purchaseId: "purchase-1",
+        id: checkoutId,
+        purchaseId,
         state: "pending",
         amount: { minorAmount: 0n, currency: "USD" },
       })),
@@ -66,8 +68,8 @@ describe("free listing checkout compatibility route", () => {
     );
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({
-      id: "checkout-1",
-      purchase_id: "purchase-1",
+      id: checkoutId,
+      purchase_id: purchaseId,
       required: { amount_minor: "0", currency: "USD" },
       available: { amount_minor: "999", currency: "USD" },
       shortfall: { amount_minor: "0", currency: "USD" },
