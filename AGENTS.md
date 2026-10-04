@@ -54,12 +54,26 @@ its plan satisfies all of the following:
    inspect ownership, grouping, dependencies, and available libraries first.
 9. **Public API resources are complete and singular.** Every table-backed
    resource exposed under `/api/*` must have one canonical public resource
-   group with list, get, create, update, and delete endpoints. Do not omit CRUD
-   operations because the first-party app does not currently use them, and do
-   not duplicate the same resource under both `/api/*` and `/internal/*`.
-   App-only/session-only workflows belong under `/internal/*`; public
-   table-backed resources remain complete regardless of which operations the
-   Cliqero UI chooses to call.
+   group with list, get, create, update, and delete operations. The canonical
+   HTTP shape is collection GET/POST, item GET/PATCH, and one collection-level
+   `DELETE /api/resources/delete` accepting a JSON `ids` array for both
+   single and bulk deletion. Do not expose item DELETE routes, query-parameter
+   deletion, or separate `bulk-delete` routes. If a public resource exposes
+   POST/create, it must expose the canonical delete operation. Do not omit CRUD
+   because the first-party app does not currently use it, and do not duplicate
+   the same resource under both `/api/*` and `/internal/*`. App-only/session-
+   only workflows belong under `/internal/*`; public table-backed resources
+   remain complete regardless of which operations the Cliqero UI chooses to
+   call.
+10. **Public OpenAPI is a complete executable contract.** Every public operation
+   must have the correct resource/standalone tag, meaningful summary and
+   description, explicit parameter/request schemas where applicable, explicit
+   success-response schemas, and useful synthetic examples. Stable top-level
+   contracts must not degrade to free-form objects such as `z.any()`,
+   `z.unknown()`, unrestricted records, empty object schemas, or Swagger
+   `additionalProp1` placeholders. Genuinely opaque provider/external data may
+   be free-form only as an explicitly named nested field inside an otherwise
+   typed contract.
 
 If a proposed implementation violates any invariant above, stop and surface the
 conflict before writing code.
@@ -594,14 +608,18 @@ is the resource update endpoint, normally `PATCH /resource/{id}`, not a
 dedicated action endpoint such as `POST /resource/{id}/archive`.
 
 A UI may expose concise convenience controls such as Publish, Archive, Restore,
-Approve, or Reject. Those controls must submit through the same canonical update
-path; they are presentation shortcuts, not separate domain commands.
+Approve, Reject, Cancel, Confirm, Enable, Disable, Revoke, or Expire. Those
+controls must submit through the same canonical update path when the caller's
+intent is representable as a resource field/state change. The application
+service may perform substantial validation, accounting, reservation, audit,
+outbox, entitlement, or other domain consequences while processing that PATCH;
+those consequences alone do not turn the HTTP operation into a command.
 
-Reserve additional command-style methods/endpoints for operations whose
-semantics or side effects go beyond ordinary resource mutation, such as payment
-completion, secret rotation, money movement, ledger generation, entitlement
-creation, coordinated multi-resource workflows, or external-provider
-interaction.
+Reserve additional command-style methods/endpoints only for operations whose
+requested intent cannot honestly be represented as resource-field mutation,
+such as credential rotation or another distinct process with its own input and
+result semantics. A command may change resource state as a consequence, but
+state change alone is never sufficient justification for an action route.
 
 Do not force genuinely non-CRUD workflows into the CRUD base merely for
 uniformity. The purpose of the abstraction is to make ordinary resources
@@ -610,14 +628,25 @@ predictable and make true domain commands obvious exceptions.
 This shared service/repository contract is also the default API-alignment model:
 
 ```text
-POST   /resources       -> create
-GET    /resources/{id}  -> get
-PATCH  /resources/{id}  -> update
-DELETE /resources/{id}  -> delete
+GET    /resources           -> list
+GET    /resources/{id}      -> get
+POST   /resources           -> create
+PATCH  /resources/{id}      -> update
+DELETE /resources/delete    -> delete one or many
 ```
 
-Resource-specific reads, queries, and genuine commands may extend this surface
-where required.
+The canonical DELETE request uses a JSON body:
+
+```json
+{
+  "ids": ["resource-uuid"]
+}
+```
+
+The same endpoint handles a single ID or many IDs. IDs do not belong in delete
+query parameters, and public APIs must not add separate item-delete or
+`bulk-delete` routes. Resource-specific reads, queries, and genuine commands
+may extend this surface where required.
 
 ### Public API resource completeness and route ownership are mandatory
 
@@ -631,8 +660,14 @@ GET    /api/resources           -> list
 GET    /api/resources/{id}      -> get one
 POST   /api/resources           -> create
 PATCH  /api/resources/{id}      -> update
-DELETE /api/resources/{id}      -> delete
+DELETE /api/resources/delete    -> delete one or many
 ```
+
+The DELETE operation accepts a JSON body with a non-empty, duplicate-free,
+bounded `ids` array. A one-element array is a single deletion; a larger array
+is bulk deletion. There is no separate public bulk-delete endpoint and no
+item-delete route. If POST/create is exposed for a public resource, this DELETE
+operation must also be exposed.
 
 This five-operation resource surface is mandatory. Do not omit `POST`,
 `PATCH`, or `DELETE` because an operation seems unusual, dangerous,
@@ -699,6 +734,57 @@ do not use `/api/*` for first-party-only convenience workflows. When an
 existing route violates this distinction, migrate callers to the correct
 canonical surface and remove the duplicate/incorrect route rather than keeping
 compatibility clutter indefinitely.
+
+### Public OpenAPI contract quality is mandatory
+
+The generated OpenAPI document and Swagger UI are part of Cliqero's public API
+contract. A route is not complete merely because its method and path appear in
+Swagger.
+
+Every public operation must provide, where applicable:
+
+- exactly one correct resource or standalone-concern tag;
+- an accurate summary and description;
+- typed path/query/header parameters;
+- an explicit request-body schema;
+- an explicit successful-response schema;
+- accurate response descriptions;
+- useful synthetic request/response examples.
+
+Stable top-level public request and response contracts must not use generic
+free-form schemas such as `z.any()`, `z.unknown()`, unrestricted
+`z.record(...)`, empty object schemas, or equivalents that render in Swagger
+as `additionalProp1` placeholders. A genuinely opaque provider/external field
+may remain free-form only as a named nested field in an otherwise explicit
+resource schema.
+
+Collection responses must explicitly describe their resource items and any
+cursor, total, or summary fields. Item responses must explicitly describe the
+resource shape. POST, PATCH, and DELETE request schemas must match what handlers
+actually accept; do not document ignored fields or omit required fields.
+
+Examples must use realistic synthetic values and actual enum/state values. Do
+not expose real credentials, secrets, personal data, or production identifiers
+in examples.
+
+Copied or stale metadata is an API defect. A Checkout response must not carry an
+Access Verification description, and a Distribution Policy response must not
+inherit unrelated wording merely because a generic metadata helper was reused.
+
+Distinct persisted resources must have distinct OpenAPI tags even when they
+share a business domain. Broad catch-all tags such as `Core/System`,
+`Internal UI`, or a domain umbrella containing several persisted resources are
+not valid substitutes for resource ownership. Standalone projections, policies,
+health checks, callbacks, webhooks, and protocol operations may have fewer than
+five CRUD operations, but each still needs a narrowly accurate tag and complete
+typed documentation.
+
+Architecture tests should inspect the generated OpenAPI contract and protect
+these invariants without becoming a second router implementation. In
+particular, tests should prevent incomplete canonical CRUD, noncanonical delete
+routes, public `bulk-delete` routes, top-level free-form stable contracts,
+missing/incorrect tags, stale public app-only routes, and missing meaningful
+operation metadata.
 
 ## 5. Production and test code must be separated
 
@@ -940,11 +1026,11 @@ through the canonical resource update operation. Do not create parallel
 or action endpoints when the operation merely changes the persisted
 status/state field.
 
-Every mutable CRUD collection that supports row selection must provide a bulk
-Delete action unless code documents a concrete immutable-history reason that
-prevents it. Bulk mutations must use one browser request/server-side workflow
-and report per-record outcomes; do not implement bulk actions as one browser
-request per selected row.
+Every mutable CRUD collection that supports row selection must provide Delete
+for one or many selected resources through the same canonical server endpoint.
+The browser sends one request containing an `ids` array and the server returns
+per-record outcomes. Do not implement bulk deletion as one browser request per
+row, and do not create a separate public `bulk-delete` API.
 
 Delete controls and root-delete semantics are separate requirements. Every
 Operator table exposes row Delete and bulk Delete to `system.root`; root
