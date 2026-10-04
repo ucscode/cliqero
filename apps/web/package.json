@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@cliqero/nowpayments": "*",
     "@cliqero/paystack": "*",
     "@cliqero/tron": "*",
@@ -79,6 +80,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "^13.1.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.15.0",

@@ -1,4 +1,5 @@
-import { z } from "@hono/zod-openapi";
+import { z } from "zod";
+import { opaqueJsonSchema } from "@/api/shared/schemas";
 
 export const fundingStateSchema = z.enum([
   "initialization_pending",
@@ -61,7 +62,7 @@ export const operatorFundingDetailSchema = operatorFundingSummarySchema.extend({
     .object({
       authorizationUrl: z.string().nullable(),
       providerAccountId: z.string().optional(),
-      providerAccountSnapshot: z.unknown().optional(),
+      providerAccountSnapshot: opaqueJsonSchema.optional(),
     })
     .nullable(),
   operations: z.array(

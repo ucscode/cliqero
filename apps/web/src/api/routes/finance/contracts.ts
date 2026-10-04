@@ -1,4 +1,5 @@
-import { z } from "@hono/zod-openapi";
+import { z } from "zod";
+import { opaqueJsonSchema } from "@/api/shared/schemas";
 
 export const operatorDistributionSummarySchema = z.object({
   id: z.string().uuid(),
@@ -22,7 +23,7 @@ export const operatorDistributionDetailSchema = operatorDistributionSummarySchem
       .object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() })
       .nullable(),
   }),
-  policySnapshot: z.unknown(),
+  policySnapshot: opaqueJsonSchema,
   allocations: z.array(
     z.object({
       id: z.string().uuid(),

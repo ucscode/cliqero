@@ -1,11 +1,21 @@
-import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { z } from "zod";
 import { newId } from "@/kernel/ids";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { requireCapabilityScope, requirePrincipal, type Env } from "../../shared/context";
 import { domainError } from "../../shared/error";
-import { errorSchema } from "../../shared/schemas";
+import { errorSchema, opaqueJsonSchema } from "../../shared/schemas";
 
 const providerSchema = z.string().regex(/^[a-z0-9_-]{1,50}$/);
+const nullableStringOrNumberSchema = z
+  .union([z.string(), z.number()])
+  .nullable()
+  .openapi({
+    anyOf: [
+      { type: "string", nullable: true },
+      { type: "number", nullable: true },
+    ],
+  });
 const paymentListQuery = z.object({
   provider: providerSchema.optional(),
   state: z.string().max(40).optional(),
@@ -45,7 +55,7 @@ const providerEventSchema = z.object({
   provider: z.string(),
   event_type: z.string(),
   provider_reference: z.string().nullable(),
-  amount_minor: z.union([z.string(), z.number()]).nullable(),
+  amount_minor: nullableStringOrNumberSchema,
   currency: z.string().nullable(),
   state: z.string(),
   last_error: z.string().nullable(),
@@ -62,7 +72,7 @@ const reconciliationAttemptSchema = z.object({
   paymentId: z.string(),
   idempotencyKey: z.string(),
   state: z.enum(["started", "completed", "skipped", "mismatch", "failed"]),
-  result: z.unknown(),
+  result: opaqueJsonSchema,
   lastError: z.string().nullable(),
   actorId: z.string(),
   correlationId: z.string(),
@@ -138,7 +148,7 @@ export function registerPaymentRoutes(app: OpenAPIHono<Env>, container: Applicat
                 updated_at: z.string(),
                 fee_minor: z.string().nullable(),
                 fee_currency: z.string().nullable(),
-                conversion_snapshot: z.unknown().nullable(),
+                conversion_snapshot: opaqueJsonSchema,
               }),
             },
           },

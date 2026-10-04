@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import SwaggerParser from "@apidevtools/swagger-parser";
 import { createApiApp, generateOpenApiDocument } from "@/api/hono";
 import type { ApplicationContainer } from "@/infrastructure/container";
 import { listingCreateSchema } from "@/api/compat/listings/contracts";
@@ -54,7 +55,85 @@ function isFreeFormTopLevel(schema: unknown): boolean {
 
 const noSuccessByDesign = new Set(["POST /api/treasury/entries", "POST /api/treasury/expenses"]);
 
+function schemaObjects(documentValue: unknown): Record<string, any>[] {
+  const found: Record<string, any>[] = [];
+  const visitSchema = (value: unknown, path: string) => {
+    if (!isObject(value)) return;
+    found.push({ ...value, __testPath: path });
+    for (const key of ["properties", "patternProperties"]) {
+      if (isObject(value[key]))
+        for (const [name, child] of Object.entries(value[key]))
+          visitSchema(child, `${path}/${key}/${name}`);
+    }
+    for (const key of ["items", "additionalProperties", "not"])
+      visitSchema(value[key], `${path}/${key}`);
+    for (const key of ["allOf", "anyOf", "oneOf", "prefixItems"])
+      if (Array.isArray(value[key]))
+        value[key].forEach((child: unknown, index: number) =>
+          visitSchema(child, `${path}/${key}/${index}`),
+        );
+  };
+  const visitMedia = (media: unknown, path: string) => {
+    if (isObject(media)) visitSchema(media.schema, `${path}/schema`);
+  };
+  const openApiDocument = documentValue as typeof document;
+  for (const [path, pathItem] of Object.entries(openApiDocument.paths))
+    if (isObject(pathItem))
+      for (const [method, operation] of Object.entries(pathItem))
+        if (isObject(operation)) {
+          if (isObject(operation.requestBody) && isObject(operation.requestBody.content))
+            for (const [mediaType, media] of Object.entries(operation.requestBody.content))
+              visitMedia(media, `${method.toUpperCase()} ${path}/requestBody/${mediaType}`);
+          if (Array.isArray(operation.parameters))
+            for (const [index, parameter] of operation.parameters.entries())
+              if (isObject(parameter))
+                visitSchema(
+                  parameter.schema,
+                  `${method.toUpperCase()} ${path}/parameters/${index}`,
+                );
+          if (isObject(operation.responses))
+            for (const [status, response] of Object.entries(operation.responses))
+              if (isObject(response) && isObject(response.content))
+                for (const [mediaType, media] of Object.entries(response.content))
+                  visitMedia(
+                    media,
+                    `${method.toUpperCase()} ${path}/responses/${status}/${mediaType}`,
+                  );
+        }
+  const schemas = openApiDocument.components?.schemas;
+  if (isObject(schemas))
+    for (const [name, schema] of Object.entries(schemas))
+      visitSchema(schema, `components/schemas/${name}`);
+  return found;
+}
+
 describe("public OpenAPI contract quality", () => {
+  it("is valid OpenAPI 3.0 and uses OpenAPI-compatible nullable schemas", async () => {
+    expect(document.openapi).toMatch(/^3\.0\./);
+    const schemas = schemaObjects(document);
+    expect(schemas.some((schema) => schema.type === "null")).toBe(false);
+    expect(schemas.some((schema) => "$schema" in schema)).toBe(false);
+    expect(
+      schemas.some((schema) =>
+        ["$defs", "definitions", "prefixItems", "unevaluatedProperties"].some(
+          (key) => key in schema,
+        ),
+      ),
+    ).toBe(false);
+    const nullableSchemas = schemas.filter((schema) => schema.nullable === true);
+    expect(nullableSchemas.length).toBeGreaterThan(0);
+    expect(nullableSchemas.filter((schema) => !schema.type && !schema.$ref)).toEqual([]);
+
+    const metadataValueSchema = (document.paths["/api/listings"]?.post?.requestBody as any)
+      ?.content?.["application/json"]?.schema?.properties?.metadata?.additionalProperties;
+    expect(metadataValueSchema.anyOf).toEqual([
+      { type: "string", nullable: true },
+      { type: "number", nullable: true },
+      { type: "boolean", nullable: true },
+    ]);
+    await expect(SwaggerParser.validate(structuredClone(document) as any)).resolves.toBeDefined();
+  });
+
   it("gives every current operation one appropriate tag and a meaningful summary", () => {
     const tags = document.tags?.map(({ name }) => name) ?? [];
     expect(new Set(tags).size).toBe(tags.length);
@@ -219,10 +298,9 @@ describe("public OpenAPI contract quality", () => {
     ].examples.example.value;
     expect(listingCreateSchema.safeParse(listingExample).success).toBe(true);
     const metadataValueSchema = listingRequest.properties.metadata.additionalProperties;
-    const metadataTypes = (metadataValueSchema.oneOf ?? metadataValueSchema.anyOf).map(
-      (branch: any) => branch.type,
-    );
-    expect(metadataTypes).toEqual(expect.arrayContaining(["string", "number", "boolean", "null"]));
+    const metadataTypes = metadataValueSchema.anyOf.map((branch: any) => branch.type);
+    expect(metadataTypes).toEqual(["string", "number", "boolean"]);
+    expect(metadataValueSchema.anyOf.every((branch: any) => branch.nullable)).toBe(true);
 
     expect(withdrawalDestinationPatchSchema.safeParse({ name: "Primary bank" }).success).toBe(true);
     expect(withdrawalDestinationPatchSchema.safeParse({ values: { account: "123" } }).success).toBe(
