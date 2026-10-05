@@ -2,12 +2,19 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import { DevelopmentDistributionScenario } from "@/infrastructure/development/distribution-scenario";
 import { newId } from "@/kernel/ids";
+import { CommissionPolicy } from "@/modules/referral/commission";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
 
 suite("development distribution scenario PostgreSQL path", () => {
-  const app = createContainer(databaseUrl!);
+  const testCommissionPolicy = CommissionPolicy.fromPercentages(
+    [1, 2].map((level) => ({ level, percentage: 10 })),
+    10,
+  );
+  const app = createContainer(databaseUrl!, {
+    yamlCommissionPolicySource: { getActive: async () => testCommissionPolicy },
+  });
 
   beforeEach(async () => {
     await app.database.query(
@@ -23,7 +30,7 @@ suite("development distribution scenario PostgreSQL path", () => {
 
   afterAll(() => app.database.close());
 
-  it("performs a real exact-price funding, wallet checkout, entitlement, and YAML-backed persisted distribution", async () => {
+  it("performs a real commerce flow and deterministic test-policy distribution", async () => {
     const seller = await app.authentication.register({
       email: "distribution-seller@example.test",
       username: "dist_seller",
@@ -42,6 +49,13 @@ suite("development distribution scenario PostgreSQL path", () => {
       password: "integration-test-password",
       country: "NG",
     });
+    const grandparent = await app.authentication.register({
+      email: "distribution-grandparent@example.test",
+      username: "dist_grandparent",
+      password: "integration-test-password",
+      country: "NG",
+    });
+    await app.referralGraphService.establish(parent.id, grandparent.id);
     await app.referralGraphService.establish(buyer.id, parent.id);
     const listing = await app.listingService.create(seller, {
       state: "published",
@@ -86,14 +100,18 @@ suite("development distribution scenario PostgreSQL path", () => {
       expect(distribution?.id).toBe(report.distributionId);
       expect(entries.length).toBeGreaterThan(0);
       expect(entries.every((entry) => entry.distributionId === report.distributionId)).toBe(true);
-      // The configured platform and commission shares total 100%, so the
-      // seller's remaining share is zero and correctly has no ledger entry.
-      expect(report.entries.some((entry) => entry.username === "dist_seller")).toBe(false);
-      expect(
-        report.entries.some(
-          (entry) => entry.username === "dist_parent" && entry.label === "Level 1",
-        ),
-      ).toBe(true);
+      expect(report.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ username: "dist_seller", label: "Seller", amount: "$9.80" }),
+          expect.objectContaining({ username: "dist_parent", label: "Level 1", amount: "$1.40" }),
+          expect.objectContaining({
+            username: "dist_grandparent",
+            label: "Level 2",
+            amount: "$1.40",
+          }),
+          expect.objectContaining({ username: "Platform", label: "Platform", amount: "$1.40" }),
+        ]),
+      );
       expect(entries.reduce((sum, entry) => sum + entry.amount.minorAmount, 0n)).toBe(1400n);
 
       const repeated = await app.purchaseDistribution.process({

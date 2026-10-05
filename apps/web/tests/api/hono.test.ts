@@ -26,8 +26,8 @@ function withdrawalMutationResult(state: string) {
     state,
     idempotencyKey: "withdrawal-test-key",
     correlationId: "00000000-0000-4000-8000-000000000012",
-    createdAt: now,
-    updatedAt: now,
+    createdAt: new Date(now),
+    updatedAt: new Date(now),
   };
 }
 
@@ -43,6 +43,7 @@ function appWith(
   reviewOverrides: Record<string, unknown> = {},
   principalResolverOverride?: { resolve: (request: Request) => Promise<any> },
   withdrawalOverrides: Record<string, unknown> = {},
+  operatorWithdrawalOverrides: Record<string, unknown> = {},
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
   const resolvedPrincipal = principal ?? {
@@ -253,6 +254,7 @@ function appWith(
       operatorWithdrawals: {
         list: async () => ({ items: [], nextCursor: null }),
         get: async () => ({ items: [] }),
+        ...operatorWithdrawalOverrides,
       },
       operatorTreasury: {
         summary: async () => ({
@@ -299,6 +301,7 @@ function appWith(
       },
       withdrawals: {
         list: async () => ({ items: [], nextCursor: null }),
+        get: async () => withdrawalMutationResult("requested"),
         update: async (_actorId: string, _id: string, input: { state: string }) =>
           withdrawalMutationResult(input.state),
         cancel: async () => withdrawalMutationResult("cancelled"),
@@ -365,6 +368,7 @@ function appWith(
         }),
         deletePreview: () => {},
         delete: () => {},
+        tagService: { delete: async () => ({ deleted: true }) },
         categoryService: {
           create: (name: string) => ({
             id: "00000000-0000-4000-8000-000000000009",
@@ -963,9 +967,26 @@ describe("Hono API foundation", () => {
       "x-required-api-scope": "payments:read",
     });
     expect(paths["/api/withdrawals"].get).toMatchObject({
-      "x-authentication-mode": "account",
-      "x-required-api-scope": "withdrawals:manage",
+      "x-authentication-mode": "mixed",
+      "x-required-api-scope": "withdrawals:read",
     });
+    expect(
+      paths["/api/withdrawals"].get.responses["200"].content["application/json"].schema,
+    ).toMatchObject({
+      properties: {
+        items: expect.any(Object),
+        next_cursor: expect.any(Object),
+        wallet_summary: expect.any(Object),
+      },
+    });
+    expect(paths["/api/withdrawals/{withdrawalId}"].get).toMatchObject({
+      "x-authentication-mode": "mixed",
+      "x-required-api-scope": "withdrawals:read",
+    });
+    expect(paths["/api/blog/tags"].delete["x-required-api-scope"]).toBe("blog:manage");
+    expect(paths["/api/blog/tags"].post["x-required-api-scope"]).toBe("blog:write");
+    expect(paths["/api/blog/tags/{tagId}"].get["x-required-api-scope"]).toBe("blog:read");
+    expect(paths["/api/blog/tags/{tagId}"].patch["x-required-api-scope"]).toBe("blog:write");
     expect(paths["/api/withdrawals/{withdrawalId}"].patch).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "withdrawals:manage",
@@ -1320,14 +1341,34 @@ describe("Hono API foundation", () => {
     );
     const ownedRead = new Request("http://localhost/api/withdrawals");
     const operationalRead = new Request("http://localhost/api/withdrawals?state=all");
-    expect((await appWith(base).fetch(ownedRead)).status).toBe(200);
+    const ownedResponse = await appWith(base).fetch(ownedRead);
+    expect(ownedResponse.status).toBe(200);
+    expect(await ownedResponse.json()).toMatchObject({
+      items: [],
+      next_cursor: null,
+      wallet_summary: { available_minor: "0", reservations: [] },
+    });
+    const scopedOwner = {
+      ...base,
+      kind: "api_key" as const,
+      scopes: new Set(["withdrawals:read"]),
+    };
+    expect(
+      (await appWith(scopedOwner).fetch(new Request("http://localhost/api/withdrawals"))).status,
+    ).toBe(200);
     expect((await appWith(base).fetch(operationalRead)).status).toBe(403);
     expect(
       (await appWith({ ...base, capabilities: ["catalogue.manage"] }).fetch(operationalRead))
         .status,
     ).toBe(403);
     const operator = { ...base, capabilities: ["system.root"] };
-    expect((await appWith(operator).fetch(operationalRead)).status).toBe(200);
+    const operatorResponse = await appWith(operator).fetch(operationalRead);
+    expect(operatorResponse.status).toBe(200);
+    expect(await operatorResponse.json()).toMatchObject({
+      items: [],
+      next_cursor: null,
+      wallet_summary: null,
+    });
     expect(
       (
         await appWith({
@@ -1364,6 +1405,67 @@ describe("Hono API foundation", () => {
         }).fetch(patch())
       ).status,
     ).toBe(200);
+  });
+  it("uses the stable safe withdrawal item schema for both owner and operator reads", async () => {
+    const accountId = "00000000-0000-4000-8000-000000000001";
+    const owner = {
+      accountId,
+      account: {},
+      kind: "user_session" as const,
+      capabilities: [] as string[],
+      scopes: new Set<string>(),
+    };
+    const id = "00000000-0000-4000-8000-000000000010";
+    const ownerResponse = await appWith(owner).fetch(
+      new Request(`http://localhost/api/withdrawals/${id}`),
+    );
+    expect(ownerResponse.status).toBe(200);
+    const ownerJson = await ownerResponse.json();
+    expect(ownerJson).toMatchObject({ account: null, payout_details: null, reservation: null });
+    expect(ownerJson.destination).not.toHaveProperty("fields");
+
+    const manager = { ...owner, capabilities: ["system.root"] };
+    const adminDetail = {
+      id,
+      account: { id: accountId, username: "sample", email: "sample@example.test" },
+      amountMinor: "1000",
+      feeMinor: "25",
+      netAmountMinor: "975",
+      currency: "USD",
+      destination: {
+        method: "bank",
+        methodName: "Bank",
+        name: "Primary",
+        savedDestinationId: id,
+        fields: [{ name: "account", label: "Account", value: "123", type: "text", copyable: true }],
+      },
+      state: "requested",
+      reason: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      reservation: null,
+      externalReference: null,
+      completionNote: null,
+      completedBy: null,
+      completedAt: null,
+      payoutReturn: null,
+      attention: "review",
+    };
+    const managerResponse = await appWith(
+      manager,
+      undefined,
+      undefined,
+      {},
+      {},
+      {},
+      undefined,
+      {},
+      { get: async () => adminDetail },
+    ).fetch(new Request(`http://localhost/api/withdrawals/${id}`));
+    expect(managerResponse.status).toBe(200);
+    const managerJson = await managerResponse.json();
+    expect(Object.keys(managerJson).sort()).toEqual(Object.keys(ownerJson).sort());
+    expect(managerJson.payout_details.fields).toHaveLength(1);
   });
   it("uses PATCH for ordinary state updates without action-specific state routes", async () => {
     const owner = {
@@ -2381,5 +2483,38 @@ describe("Hono API foundation", () => {
     expect(body).toMatchObject({ code: "validation_error" });
     expect(body.fields.rating).toBe(body.error);
     expect(body.error).not.toContain('"origin"');
+  });
+  it("requires blog:manage for tag deletion and reports truthful per-ID results", async () => {
+    const accountId = "00000000-0000-4000-8000-000000000001";
+    const tagId = "00000000-0000-4000-8000-000000000010";
+    const writeKey = {
+      kind: "api_key" as const,
+      accountId,
+      account: { id: accountId },
+      capabilities: ["content.manage"],
+      scopes: new Set(["blog:write"]),
+    };
+    const manageKey = { ...writeKey, scopes: new Set(["blog:manage"]) };
+    const request = () =>
+      new Request("http://localhost/api/blog/tags", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [tagId] }),
+      });
+    const forbidden = await appWith(writeKey).fetch(request());
+    expect(forbidden.status).toBe(403);
+    const deleted = await appWith(manageKey, undefined, undefined, {
+      tagService: { delete: async () => ({ deleted: true }) },
+    }).fetch(request());
+    expect(deleted.status).toBe(200);
+    await expect(deleted.json()).resolves.toEqual({
+      results: [{ id: tagId, deleted: true, error: null }],
+    });
+    const missing = await appWith(manageKey, undefined, undefined, {
+      tagService: { delete: async () => ({ deleted: false }) },
+    }).fetch(request());
+    await expect(missing.json()).resolves.toEqual({
+      results: [{ id: tagId, deleted: false, error: "Resource could not be deleted." }],
+    });
   });
 });

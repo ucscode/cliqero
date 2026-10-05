@@ -86,6 +86,6 @@ export const blogOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     method: "delete",
     mode: "account",
     capability: "content.manage",
-    scope: "blog:write",
+    scope: "blog:manage",
   },
 ];

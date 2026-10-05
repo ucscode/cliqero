@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { PublicApplicationError } from "@/kernel/errors";
 
 const fixtures = vi.hoisted(() => ({ container: null as any }));
 
@@ -31,14 +32,21 @@ function configure() {
       })),
     },
     walletCheckout: {
-      listForBuyer: vi.fn(async () => [
-        {
-          id: "checkout-1",
-          purchaseId: "purchase-1",
-          state: "pending",
-          amount: { minorAmount: 999n, currency: "USD" },
-        },
-      ]),
+      listForBuyer: vi.fn(async (buyerId: string, input?: { limit?: number; cursor?: string }) => {
+        void buyerId;
+        void input;
+        return {
+          items: [
+            {
+              id: "checkout-1",
+              purchaseId: "purchase-1",
+              state: "pending",
+              amount: { minorAmount: 999n, currency: "USD" },
+            },
+          ],
+          nextCursor: null as string | null,
+        };
+      }),
       initiate: vi.fn(async () => ({
         id: checkoutId,
         purchaseId,
@@ -60,8 +68,39 @@ describe("free listing checkout compatibility route", () => {
       items: [{ id: "checkout-1", purchase_id: "purchase-1", amount_minor: "999" }],
       next_cursor: null,
     });
-    expect(container.walletCheckout.listForBuyer).toHaveBeenCalledWith(account.id, 5);
+    expect(container.walletCheckout.listForBuyer).toHaveBeenCalledWith(account.id, { limit: 5 });
     expect(container.wallet.summary).not.toHaveBeenCalled();
+  });
+
+  it("returns a validated opaque cursor from the buyer-scoped checkout page", async () => {
+    const container = configure();
+    container.walletCheckout.listForBuyer.mockImplementation(async (_buyerId, input = {}) => ({
+      items: [],
+      nextCursor: input.cursor ? null : "opaque-next-page",
+    }));
+    const first = await GET(new Request("http://localhost/api/checkouts?limit=1"));
+    expect(await first.json()).toMatchObject({ next_cursor: "opaque-next-page" });
+    const second = await GET(
+      new Request("http://localhost/api/checkouts?limit=1&cursor=opaque-existing"),
+    );
+    expect(container.walletCheckout.listForBuyer).toHaveBeenLastCalledWith(account.id, {
+      limit: 1,
+      cursor: "opaque-existing",
+    });
+    expect(second.status).toBe(200);
+  });
+
+  it("rejects malformed pagination parameters as a public 400", async () => {
+    const container = configure();
+    container.walletCheckout.listForBuyer.mockImplementation(async () => {
+      throw new PublicApplicationError(
+        "The checkout cursor is invalid or expired.",
+        "invalid_cursor",
+      );
+    });
+    const response = await GET(new Request("http://localhost/api/checkouts?cursor=%25"));
+    expect(response.status).toBe(400);
+    expect(container.walletCheckout.listForBuyer).toHaveBeenCalledOnce();
   });
 
   it("keeps quote projection at the separate quote endpoint", async () => {

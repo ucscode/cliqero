@@ -103,6 +103,7 @@ import { ListingReviewService } from "@/application/listing/reviews";
 import { ProfileService } from "@/application/account/profile";
 import { AccountProjectionService } from "@/infrastructure/postgres/account/projections";
 import { loadYamlCommissionPolicy } from "@/modules/referral/yaml-policy";
+import type { CommissionPolicyRepository } from "@/modules/referral/commission";
 import { PostgresTreasuryRepository } from "./postgres/treasury/treasury";
 import { TreasuryService } from "@/modules/treasury/treasury";
 import { TreasuryProcessor } from "@/processors/treasury/processor";
@@ -153,6 +154,7 @@ export type ContainerOptions = {
   lifecycleDiagnostics?: LifecycleDiagnosticWriter;
   verificationPollMilliseconds?: number;
   feePolicySource?: FeePolicySource;
+  yamlCommissionPolicySource?: CommissionPolicyRepository;
 };
 
 export function createContainer(databaseUrl: string, options: ContainerOptions = {}) {
@@ -273,6 +275,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     () => new PostgresFinancialDistributionPolicyRepository(database),
   );
   const yamlCommissionPolicy = lazy(() => {
+    if (options.yamlCommissionPolicySource) return options.yamlCommissionPolicySource;
     const policy = loadYamlCommissionPolicy();
     return { getActive: async () => policy };
   });

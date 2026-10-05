@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { withdrawalResponseSchema } from "@/api/compat/withdrawals/contracts";
 
 export const operatorWithdrawalStateSchema = z.enum([
   "requested",
@@ -90,6 +91,63 @@ export const operatorWithdrawalDetailSchema = operatorWithdrawalSchema.extend({
       }),
     ),
   }),
+});
+
+const withdrawalPayoutDetailsSchema = z.object({
+  saved_destination_id: z.string().uuid(),
+  fields: z.array(
+    z.object({
+      name: z.string(),
+      label: z.string(),
+      value: z.string(),
+      display_value: z.string().optional(),
+      type: z.enum(["text", "select", "textarea", "fixed", "hidden"]),
+      copyable: z.boolean(),
+    }),
+  ),
+});
+export const withdrawalResourceSchema = withdrawalResponseSchema.extend({
+  account: z
+    .object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() })
+    .nullable(),
+  reservation: z
+    .object({
+      amount_minor: z.string(),
+      currency: z.string(),
+      state: z.enum(["reserved", "released", "completed", "returned"]),
+    })
+    .nullable(),
+  external_reference: z.string().nullable(),
+  completion_note: z.string().nullable(),
+  completed_by: z.string().uuid().nullable(),
+  completed_at: z.string().nullable(),
+  payout_return: z
+    .object({
+      id: z.string().uuid(),
+      amount_minor: z.string(),
+      restored_minor: z.string(),
+      reason: z.string(),
+      external_reference: z.string(),
+      actor_id: z.string().uuid(),
+      correlation_id: z.string().uuid(),
+      idempotency_key: z.string(),
+      created_at: z.string(),
+    })
+    .nullable(),
+  attention: operatorWithdrawalAttentionSchema.nullable(),
+  payout_details: withdrawalPayoutDetailsSchema.nullable(),
+});
+export const withdrawalCollectionSchema = z.object({
+  items: z.array(withdrawalResourceSchema),
+  next_cursor: z.string().nullable(),
+  wallet_summary: z
+    .object({
+      available_minor: z.string(),
+      reservations: z.array(
+        z.object({ currency: z.string(), reserved_minor: z.string(), completed_minor: z.string() }),
+      ),
+    })
+    .nullable(),
 });
 
 /** JSON representation returned by WithdrawalService.update/cancel/complete. */

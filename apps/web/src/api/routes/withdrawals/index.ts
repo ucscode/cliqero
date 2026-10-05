@@ -12,18 +12,21 @@ import { jsonSafe } from "../../shared/serialization";
 import {
   operatorWithdrawalAttentionSchema,
   operatorWithdrawalCompleteSchema,
-  operatorWithdrawalDetailSchema,
   operatorWithdrawalPatchSchema,
   operatorPayoutReturnRequestSchema,
   operatorPayoutReturnResponseSchema,
-  operatorWithdrawalSchema,
+  withdrawalCollectionSchema,
+  withdrawalResourceSchema,
   operatorWithdrawalStateSchema,
   withdrawalMutationResponseSchema,
 } from "./contracts";
 import { crudMaxRows } from "@/config/crud";
 import { hasCapability } from "@/modules/identity/capabilities";
 import { listOwnedWithdrawals } from "@/api/compat/withdrawals/route";
-import { GET as getOwnedWithdrawal } from "@/api/compat/withdrawals/[id]/route";
+import {
+  presentOperatorWithdrawal,
+  presentOwnedWithdrawal,
+} from "@/api/compat/withdrawals/presentation";
 
 export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
   const maxRows = crudMaxRows();
@@ -90,9 +93,20 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
     },
   );
   const operatorWithdrawalQuery = z.object({
-    search: z.string().max(100).optional(),
-    state: operatorWithdrawalStateSchema.or(z.literal("all")).optional(),
-    attention: operatorWithdrawalAttentionSchema.optional(),
+    search: z
+      .string()
+      .max(100)
+      .optional()
+      .describe("Operator-only filter; requires withdrawals.manage capability and scope."),
+    state: operatorWithdrawalStateSchema
+      .or(z.literal("all"))
+      .optional()
+      .describe("Operator-only state filter; requires withdrawals.manage capability and scope."),
+    attention: operatorWithdrawalAttentionSchema
+      .optional()
+      .describe(
+        "Operator-only attention filter; requires withdrawals.manage capability and scope.",
+      ),
     sort: z
       .enum(["created", "amount"])
       .default("created")
@@ -108,13 +122,11 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       request: { query: operatorWithdrawalQuery },
       responses: {
         200: {
-          description: "Bounded withdrawal administration view",
+          description:
+            "Lists only the authenticated account's withdrawals by default. Accounts with the withdrawals.manage capability may query broader records; API keys must also have the withdrawals:manage scope. Operational filters require this elevated authority.",
           content: {
             "application/json": {
-              schema: z.object({
-                items: z.array(operatorWithdrawalSchema),
-                nextCursor: z.string().nullable(),
-              }),
+              schema: withdrawalCollectionSchema,
             },
           },
         },
@@ -123,7 +135,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Withdrawal management permission required",
+          description: "Withdrawal read permission or manager capability/scope required",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -139,7 +151,11 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
         c.req.query("sort") ||
         c.req.query("direction"),
       );
-      if (!requestsOperationalView) {
+      const canManage =
+        hasCapability(p.capabilities, "withdrawals.manage") &&
+        (p.kind === "user_session" || p.scopes.has("withdrawals:manage"));
+      if (!canManage) {
+        if (requestsOperationalView) return c.json({ error: "Forbidden", code: "forbidden" }, 403);
         const denied = requireScope(c, p, "withdrawals:read");
         if (denied) return denied;
         return (await listOwnedWithdrawals(c.req.raw, p, container)) as never;
@@ -147,10 +163,15 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;
       try {
+        const page = await container.operatorWithdrawals.list({
+          ...query,
+          state: query.state === "all" ? undefined : query.state,
+        });
         return c.json(
-          await container.operatorWithdrawals.list({
-            ...query,
-            state: query.state === "all" ? undefined : query.state,
+          withdrawalCollectionSchema.parse({
+            items: page.items.map(presentOperatorWithdrawal),
+            next_cursor: page.nextCursor,
+            wallet_summary: null,
           }),
           200,
         );
@@ -166,15 +187,16 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       request: { params: z.object({ withdrawalId: z.string().uuid() }) },
       responses: {
         200: {
-          description: "Safe withdrawal administration detail",
-          content: { "application/json": { schema: operatorWithdrawalDetailSchema } },
+          description:
+            "Returns only the authenticated account's withdrawal, or an operator projection for a principal with the withdrawals.manage capability and scope. Sensitive payout fields are only included for authorized managers.",
+          content: { "application/json": { schema: withdrawalResourceSchema } },
         },
         401: {
           description: "Authentication required",
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Withdrawal management permission required",
+          description: "Withdrawal read permission or manager capability/scope required",
           content: { "application/json": { schema: errorSchema } },
         },
         404: {
@@ -189,15 +211,28 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       const canManage =
         hasCapability(p.capabilities, "withdrawals.manage") &&
         (p.kind === "user_session" || p.scopes.has("withdrawals:manage"));
-      if (!canManage)
-        return (await getOwnedWithdrawal(c.req.raw, {
-          params: Promise.resolve({ withdrawalId: c.req.valid("param").withdrawalId }),
-        })) as never;
+      if (!canManage) {
+        const denied = requireScope(c, p, "withdrawals:read");
+        if (denied) return denied;
+        try {
+          const record = await container.withdrawals.get(
+            p.accountId,
+            c.req.valid("param").withdrawalId,
+          );
+          return c.json(withdrawalResourceSchema.parse(presentOwnedWithdrawal(record)), 200);
+        } catch (error) {
+          return domainError(c, error);
+        }
+      }
       const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
       if (denied) return denied;
       try {
         return c.json(
-          await container.operatorWithdrawals.get(c.req.valid("param").withdrawalId),
+          withdrawalResourceSchema.parse(
+            presentOperatorWithdrawal(
+              await container.operatorWithdrawals.get(c.req.valid("param").withdrawalId),
+            ),
+          ),
           200,
         );
       } catch (error) {

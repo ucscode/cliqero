@@ -267,7 +267,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
+      const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
       if (denied) return denied;
       const { ids } = c.req.valid("json");
       return c.json(

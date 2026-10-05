@@ -46,13 +46,13 @@ not just route presence.
 
 ## Internal concerns
 
-| Concern / class                        | Internal path family                                             | Reason                                                                                   |
-| -------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Current session/profile/onboarding (D) | `/internal/session`, `/internal/profile`, `/internal/onboarding` | first-party current-account workflow, not an externally addressable resource             |
-| Password reset (D)                     | `/internal/password-reset/**`                                    | first-party identity workflow; anti-enumeration behavior is retained                     |
-| Blog preview (D)                       | `/internal/blog/previews/**`                                     | editor preview lifecycle, not a public automation resource                               |
-| Dashboard/Operator composition (D)     | `/internal/operator/**` where retained                           | app-only view composition; persisted public resources use their canonical `/api` surface |
-| API-key management (D)                 | `/internal/api-keys/**`                                          | account's first-party credential UX; secret display is one-time                          |
+| Concern / class                        | Internal path family                                                   | Reason                                                                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Current session/profile/onboarding (D) | `/internal/session`, `/internal/me/profile`, `/internal/me/onboarding` | first-party current-account workflow, not an externally addressable resource; profile is session-only and excluded from public OpenAPI |
+| Password reset (D)                     | `/internal/password-reset/**`                                          | first-party identity workflow; anti-enumeration behavior is retained                                                                   |
+| Blog preview (D)                       | `/internal/blog/previews/**`                                           | editor preview lifecycle, not a public automation resource                                                                             |
+| Dashboard/Operator composition (D)     | `/internal/operator/**` where retained                                 | app-only view composition; persisted public resources use their canonical `/api` surface                                               |
+| API-key management (D)                 | `/internal/api-keys/**`                                                | account's first-party credential UX; secret display is one-time                                                                        |
 
 ## Monetary recovery matrix
 

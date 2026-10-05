@@ -78,10 +78,10 @@ export function WithdrawalsPanel() {
   }, [load]);
 
   const currency = policy?.currency ?? "USD";
-  const availableMinor = page?.available_minor ?? "0";
+  const availableMinor = page?.wallet_summary?.available_minor ?? "0";
   const reservedMinor =
-    page?.reservations.find((reservation) => reservation.currency === currency)?.reserved_minor ??
-    "0";
+    page?.wallet_summary?.reservations.find((reservation) => reservation.currency === currency)
+      ?.reserved_minor ?? "0";
   const withdrawalFeeMinor = (() => {
     if (!policy || !amount) return null;
     try {
@@ -392,7 +392,7 @@ export function WithdrawalsPanel() {
               </Link>
             </div>
             <WithdrawalHistoryList
-              withdrawals={page?.withdrawals ?? []}
+              withdrawals={page?.items ?? []}
               onCancel={setWithdrawalToCancel}
             />
           </Card>

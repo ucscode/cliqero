@@ -8,8 +8,10 @@ import { Purchase, type PurchaseRepository } from "@/modules/purchase/purchase";
 import type { PurchaseAttributionResolver } from "@/modules/referral/attribution";
 import type { WalletRepository, WalletSummary } from "@/modules/wallet/wallet";
 import type { EventOutbox } from "@/kernel/events";
+import { CheckoutCursor } from "./cursor";
 
 export class WalletCheckoutService {
+  private readonly cursor = new CheckoutCursor();
   constructor(
     private listings: ListingRepository,
     private checkouts: CheckoutRepository,
@@ -69,8 +71,16 @@ export class WalletCheckoutService {
     });
   }
 
-  async listForBuyer(buyerId: string, limit = 50) {
-    return this.checkouts.findForBuyer(buyerId, Math.max(1, Math.min(limit, 100)));
+  async listForBuyer(buyerId: string, input: { limit?: number; cursor?: string } = {}) {
+    const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+    const page = await this.checkouts.findForBuyer(buyerId, {
+      limit,
+      before: this.cursor.decode(input.cursor, buyerId),
+    });
+    return {
+      items: page.items,
+      nextCursor: page.nextBoundary ? this.cursor.encode(buyerId, page.nextBoundary) : null,
+    };
   }
 
   async getForBuyer(buyerId: string, checkoutId: string) {

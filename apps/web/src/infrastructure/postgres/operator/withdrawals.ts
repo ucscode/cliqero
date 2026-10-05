@@ -15,6 +15,8 @@ export type OperatorWithdrawal = {
   id: string;
   account: { id: string; username: string; email: string | null };
   amountMinor: string;
+  feeMinor: string;
+  netAmountMinor: string;
   currency: string;
   destination: { method: string; methodName: string; name: string };
   state: WithdrawalState;
@@ -58,6 +60,8 @@ function map(row: any, detail = false): OperatorWithdrawal {
     id: row.id,
     account: { id: row.account_id, username: row.username, email: row.email },
     amountMinor: String(row.amount_minor),
+    feeMinor: String(row.fee_minor ?? "0"),
+    netAmountMinor: String(row.net_amount_minor ?? row.amount_minor),
     currency: row.currency,
     destination: {
       method: row.destination_method,
@@ -100,7 +104,7 @@ function map(row: any, detail = false): OperatorWithdrawal {
 }
 
 const projection = `
-  select w.uuid as id,w.id::text cursor_id,a.uuid as account_id,a.username,a.email,w.amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) completed_by,w.completed_at,w.created_at,w.updated_at,
+  select w.uuid as id,w.id::text cursor_id,a.uuid as account_id,a.username,a.email,w.amount_minor,w.fee_minor,w.net_amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) completed_by,w.completed_at,w.created_at,w.updated_at,
     r.uuid reservation_id,r.amount_minor reservation_amount_minor,r.currency reservation_currency,
     (select e.kind from ledger_capability.withdrawal_reservation_events e where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) reservation_state,
     pr.uuid payout_return_id,pr.amount_minor payout_return_amount_minor,pr.restored_minor payout_return_restored_minor,

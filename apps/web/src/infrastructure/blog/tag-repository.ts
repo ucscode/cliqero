@@ -47,7 +47,8 @@ export class SqliteBlogTagRepository extends BlogTagRepository {
   }
 
   delete(id: string) {
-    this.db.prepare("delete from blog_tags where id=?").run(id);
+    const result = this.db.prepare("delete from blog_tags where id=?").run(id);
+    return { deleted: result.changes === 1 };
   }
 
   list() {

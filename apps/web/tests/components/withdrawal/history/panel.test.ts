@@ -31,7 +31,7 @@ describe("customer withdrawal history page", () => {
     expect(source).toContain("Keep request");
     expect(source).toContain("onCancel={setWithdrawalToCancel}");
     expect(source).toContain(
-      "<WithdrawalHistoryList\n            withdrawals={page?.withdrawals ?? []}\n            onCancel={setWithdrawalToCancel}\n          />",
+      "<WithdrawalHistoryList withdrawals={page?.items ?? []} onCancel={setWithdrawalToCancel} />",
     );
   });
 });

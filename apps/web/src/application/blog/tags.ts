@@ -17,7 +17,7 @@ export class BlogTagService extends CrudService<
   BlogTagRecord,
   BlogTagRecord | null,
   BlogTagRecord | null,
-  void
+  { deleted: boolean }
 > {
   constructor(private readonly repository: BlogTagRepository) {
     super();

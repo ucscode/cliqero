@@ -107,10 +107,7 @@ export function WithdrawalHistoryPanel() {
         {loading && !page ? (
           <Skeleton className="h-64 w-full" aria-label="Loading withdrawal history" />
         ) : (
-          <WithdrawalHistoryList
-            withdrawals={page?.withdrawals ?? []}
-            onCancel={setWithdrawalToCancel}
-          />
+          <WithdrawalHistoryList withdrawals={page?.items ?? []} onCancel={setWithdrawalToCancel} />
         )}
         <div className="mt-4 flex justify-between gap-3">
           <Button

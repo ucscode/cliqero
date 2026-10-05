@@ -25,7 +25,7 @@ describe("withdrawal request UI contract", () => {
   it("uses general available-earnings wording and safe destination identity in history", () => {
     expect(source).toContain("available earnings");
     expect(source).toContain(
-      "<WithdrawalHistoryList\n              withdrawals={page?.withdrawals ?? []}\n              onCancel={setWithdrawalToCancel}\n            />",
+      "<WithdrawalHistoryList\n              withdrawals={page?.items ?? []}\n              onCancel={setWithdrawalToCancel}\n            />",
     );
     expect(source).not.toContain("settled referral earnings");
     expect(source).not.toContain("Policy supplied by Cliqero");
@@ -129,7 +129,9 @@ describe("withdrawal request UI contract", () => {
   });
 
   it("uses the withdrawal resource's authoritative available amount", () => {
-    expect(source).toContain('const availableMinor = page?.available_minor ?? "0";');
+    expect(source).toContain(
+      'const availableMinor = page?.wallet_summary?.available_minor ?? "0";',
+    );
     expect(source).not.toContain('apiFetch<EarningsSummary>("/api/earnings")');
     expect(source).not.toContain('balance.state === "available"');
   });

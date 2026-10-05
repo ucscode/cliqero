@@ -42,6 +42,49 @@ suite("wallet-first durable commerce", () => {
     });
     return { seller, buyer, listing };
   }
+  it("paginates buyer checkouts by a stable opaque created/id boundary without leaks", async () => {
+    const { buyer, listing } = await setup();
+    const otherBuyer = await app.authentication.register({
+      email: "wallet.other@example.com",
+      username: "walletother",
+      password: "correct-horse-staple",
+      country: "NG",
+    });
+    const expected = [];
+    for (let index = 0; index < 5; index++) {
+      expected.push(
+        await app.walletCheckout.initiate({
+          buyerId: buyer.id,
+          listingId: listing.id,
+          idempotencyKey: `checkout-page-${index}`,
+        }),
+      );
+    }
+    await app.walletCheckout.initiate({
+      buyerId: otherBuyer.id,
+      listingId: listing.id,
+      idempotencyKey: "other-buyer-checkout",
+    });
+
+    const ids: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const page = await app.walletCheckout.listForBuyer(buyer.id, { limit: 2, cursor });
+      ids.push(...page.items.map((checkout) => checkout.id));
+      cursor = page.nextCursor ?? undefined;
+      pages++;
+      if (!cursor) break;
+    } while (pages < 5);
+
+    expect(pages).toBe(3);
+    expect(ids).toHaveLength(5);
+    expect(new Set(ids).size).toBe(5);
+    expect(ids).toEqual(expect.arrayContaining(expected.map((checkout) => checkout.id)));
+    const full = await app.walletCheckout.listForBuyer(buyer.id, { limit: 10 });
+    expect(ids).toEqual(full.items.map((checkout) => checkout.id));
+    expect(full.nextCursor).toBeNull();
+  });
   it("keeps funding confirmation, wallet credit, availability, checkout, entitlement and distribution as independent durable phases", async () => {
     const { seller, buyer, listing } = await setup();
     const checkout = await app.walletCheckout.initiate({

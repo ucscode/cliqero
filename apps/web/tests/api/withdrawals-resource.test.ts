@@ -67,10 +67,9 @@ describe("owner withdrawal resource mutation", () => {
       cursor: "opaque-cursor",
     });
     await expect(response.json()).resolves.toMatchObject({
-      withdrawals: [{ id: withdrawal.id }],
+      items: [{ id: withdrawal.id }],
       next_cursor: "next-cursor",
-      available_minor: "9000",
-      reservations: [],
+      wallet_summary: { available_minor: "9000", reservations: [] },
     });
   });
 

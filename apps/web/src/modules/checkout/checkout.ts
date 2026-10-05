@@ -14,6 +14,9 @@ export interface Checkout {
 export interface CheckoutRepository {
   findById(id: Id, options?: { forUpdate?: boolean }): Promise<Checkout | null>;
   findByIdempotency(buyerId: Id, key: string): Promise<Checkout | null>;
-  findForBuyer(buyerId: Id, limit: number): Promise<readonly Checkout[]>;
+  findForBuyer(
+    buyerId: Id,
+    input: { limit: number; before?: { createdAt: string; id: Id } },
+  ): Promise<{ items: readonly Checkout[]; nextBoundary: { createdAt: string; id: Id } | null }>;
   save(value: Checkout): Promise<void>;
 }

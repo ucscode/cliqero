@@ -91,8 +91,23 @@ describe("BlogService SQLite workflow", () => {
       name: "Updated Guides",
       slug: "helpful-guides",
     });
-    service.tagService.delete(tag.id);
+    expect(service.tagService.delete(tag.id)).toEqual({ deleted: true });
     expect(service.tagService.get(tag.id)).toBeNull();
+    expect(service.tagService.delete(tag.id)).toEqual({ deleted: false });
+  });
+  it("deletes tag relationships by cascade while preserving the associated post", () => {
+    const post = service.create(input({ tags: ["referrals"] }), null);
+    const tag = service.tagService.list().find((candidate) => candidate.slug === "referrals");
+    expect(tag).toBeTruthy();
+    const database = getBlogDatabase().sqlite;
+    expect(
+      database.prepare("select count(*) count from blog_post_tags where tag_id=?").get(tag!.id),
+    ).toEqual({ count: 1 });
+    expect(service.tagService.delete(tag!.id)).toEqual({ deleted: true });
+    expect(
+      database.prepare("select count(*) count from blog_post_tags where tag_id=?").get(tag!.id),
+    ).toEqual({ count: 0 });
+    expect(service.get(post.id)).toMatchObject({ id: post.id, title: "Hello Blog" });
   });
   it("paginates canonical published posts deterministically and excludes drafts", () => {
     for (let i = 0; i < 5; i++)

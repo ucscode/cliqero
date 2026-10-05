@@ -2,7 +2,7 @@ import { z } from "zod";
 import { newId } from "@/kernel/ids";
 import { apiError, authenticatedPrincipal } from "../http";
 import { getContainer } from "@/infrastructure/container";
-import { presentWithdrawal, presentWithdrawalPolicy } from "./presentation";
+import { presentOwnedWithdrawal, presentWithdrawal, presentWithdrawalPolicy } from "./presentation";
 import { withdrawalCreateSchema } from "./contracts";
 import { validationErrorPayload } from "@/api/error";
 import type { ApiPrincipal } from "@/modules/identity/api/principal";
@@ -68,14 +68,16 @@ export async function listOwnedWithdrawals(
       policy.minimumAmount.currency,
     );
     return Response.json({
-      withdrawals: withdrawals.items.map(presentWithdrawal),
+      items: withdrawals.items.map(presentOwnedWithdrawal),
       next_cursor: withdrawals.nextCursor,
-      available_minor: availableMinor.toString(),
-      reservations: reservations.map((reservation) => ({
-        currency: reservation.currency,
-        reserved_minor: reservation.reservedMinor.toString(),
-        completed_minor: reservation.completedMinor.toString(),
-      })),
+      wallet_summary: {
+        available_minor: availableMinor.toString(),
+        reservations: reservations.map((reservation) => ({
+          currency: reservation.currency,
+          reserved_minor: reservation.reservedMinor.toString(),
+          completed_minor: reservation.completedMinor.toString(),
+        })),
+      },
     });
   } catch (error) {
     return apiError(error);

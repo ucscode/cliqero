@@ -13,19 +13,35 @@ export class PostgresCheckoutRepository implements CheckoutRepository {
       [b, k],
     );
   }
-  async findForBuyer(buyerId: string, limit: number) {
+  async findForBuyer(
+    buyerId: string,
+    input: { limit: number; before?: { createdAt: string; id: string } },
+  ) {
+    const values = [
+      buyerId,
+      input.before?.createdAt ?? null,
+      input.before?.id ?? null,
+      input.limit + 1,
+    ];
     const rows = (
       await this.sql.query<any>(
-        `select c.*,c.uuid as id,a.uuid as buyer_uuid,l.uuid as listing_uuid,p.uuid as purchase_uuid
+        `select c.*,c.uuid as id,c.created_at::text as cursor_created_at,a.uuid as buyer_uuid,l.uuid as listing_uuid,p.uuid as purchase_uuid
            from checkout_capability.checkouts c
            join identity_capability.accounts a on a.id=c.buyer_id
            join listing_capability.listings l on l.id=c.listing_id
            join purchase_capability.purchases p on p.id=c.purchase_id
-          where a.uuid=$1 order by c.created_at desc,c.id desc limit $2`,
-        [buyerId, limit],
+          where a.uuid=$1 and ($2::timestamptz is null or (c.created_at,c.uuid)<($2::timestamptz,$3::uuid))
+          order by c.created_at desc,c.uuid desc limit $4`,
+        values,
       )
     ).rows;
-    return rows.map((row) => this.map(row));
+    const hasMore = rows.length > input.limit;
+    const pageRows = rows.slice(0, input.limit);
+    const last = pageRows.at(-1);
+    return {
+      items: pageRows.map((row) => this.map(row)),
+      nextBoundary: hasMore && last ? { createdAt: last.cursor_created_at, id: last.id } : null,
+    };
   }
   async save(v: Checkout) {
     await this.sql.query(

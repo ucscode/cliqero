@@ -12,6 +12,29 @@ export type Withdrawal = {
   reason: string | null;
   created_at: string;
   updated_at: string;
+  account: { id: string; username: string; email: string | null } | null;
+  reservation: {
+    amount_minor: string;
+    currency: string;
+    state: "reserved" | "released" | "completed" | "returned";
+  } | null;
+  external_reference: string | null;
+  completion_note: string | null;
+  completed_by: string | null;
+  completed_at: string | null;
+  payout_return: {
+    id: string;
+    amount_minor: string;
+    restored_minor: string;
+    reason: string;
+    external_reference: string;
+    actor_id: string;
+    correlation_id: string;
+    idempotency_key: string;
+    created_at: string;
+  } | null;
+  attention: "review" | "action_required" | "none" | null;
+  payout_details: { saved_destination_id: string; fields: WithdrawalDestinationField[] } | null;
 };
 
 export type WithdrawalPolicy = {
@@ -31,10 +54,9 @@ export type WithdrawalReservation = {
 };
 
 export type WithdrawalPage = {
-  withdrawals: Withdrawal[];
+  items: Withdrawal[];
   next_cursor: string | null;
-  available_minor: string;
-  reservations: WithdrawalReservation[];
+  wallet_summary: { available_minor: string; reservations: WithdrawalReservation[] } | null;
 };
 
 export type OperatorWithdrawalState = WithdrawalState;

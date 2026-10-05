@@ -40,11 +40,19 @@ export const compatibilityContracts = defineCompatibilityContracts({
         next_cursor: z.string().nullable(),
       }),
     ),
-    parameters: [{ name: "limit", schema: scalar("integer", { minimum: 1, maximum: 100 }) }],
+    parameters: [
+      { name: "limit", schema: scalar("integer", { minimum: 1, maximum: 100 }) },
+      { name: "cursor", schema: scalar("string", { maxLength: 512 }) },
+    ],
   },
 });
 
 export const compatibilityExamples: Record<string, unknown> = {
+  "GET /api/checkouts query": {
+    limit: 2,
+    cursor:
+      "eyJ2ZXJzaW9uIjoxLCJidXllcklkIjoiNWZhODVmNjQtNTcxNy00NTYyLWIzZmMtMmM5NjNmNjZhZmE2IiwiY3JlYXRlZEF0IjoiMjAyNi0wNC0xMCAxMToyMjozMy4xMjM0NTYrMDAiLCJpZCI6IjZmYTg1ZjY0LTU3MTctNDU2Mi1iM2ZjLTJjOTYzZjY2YWZhNiJ9",
+  },
   "GET /api/checkouts response 200": {
     items: [
       {
@@ -55,7 +63,8 @@ export const compatibilityExamples: Record<string, unknown> = {
         currency: "USD",
       },
     ],
-    next_cursor: null,
+    next_cursor:
+      "eyJ2ZXJzaW9uIjoxLCJidXllcklkIjoiNWZhODVmNjQtNTcxNy00NTYyLWIzZmMtMmM5NjNmNjZhZmE2IiwiY3JlYXRlZEF0IjoiMjAyNi0wNC0xMCAxMToyMjozMy4xMjM0NTYrMDAiLCJpZCI6IjZmYTg1ZjY0LTU3MTctNDU2Mi1iM2ZjLTJjOTYzZjY2YWZhNiJ9",
   },
   "POST /api/checkouts request": { listing_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
   "POST /api/checkouts response 201": {

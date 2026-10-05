@@ -8,20 +8,23 @@ export async function GET(request: Request) {
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const limit = Math.max(
-      1,
-      Math.min(Number(new URL(request.url).searchParams.get("limit") ?? 50) || 50, 100),
-    );
-    const items = await getContainer().walletCheckout.listForBuyer(account.id, limit);
+    const query = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+        cursor: z.string().max(512).optional(),
+      })
+      .strict()
+      .parse(Object.fromEntries(new URL(request.url).searchParams));
+    const page = await getContainer().walletCheckout.listForBuyer(account.id, query);
     return Response.json({
-      items: items.map((checkout) => ({
+      items: page.items.map((checkout) => ({
         id: checkout.id,
         purchase_id: checkout.purchaseId,
         state: checkout.state,
         amount_minor: checkout.amount.minorAmount.toString(),
         currency: checkout.amount.currency,
       })),
-      next_cursor: null,
+      next_cursor: page.nextCursor,
     });
   } catch (error) {
     return apiError(error);

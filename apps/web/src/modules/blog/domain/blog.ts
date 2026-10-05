@@ -52,7 +52,7 @@ export abstract class BlogTagRepository extends CrudRepository<
   BlogTagRecord,
   BlogTagRecord | null,
   BlogTagRecord | null,
-  void
+  { deleted: boolean }
 > {
   abstract list(): BlogTagRecord[];
 }
