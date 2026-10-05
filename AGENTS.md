@@ -56,9 +56,10 @@ its plan satisfies all of the following:
    Every persisted concern exposed under `/api/*` must have one canonical
    public owner and enough API control to keep the system correct without
    manual database edits. Mutable persisted resources use the canonical CRUD
-   shape: collection GET/POST, item GET/PATCH, and one collection-level
-   `DELETE /api/resources/delete` accepting a JSON `ids` array for both
-   single and bulk deletion. Do not expose item DELETE routes, query-parameter
+   shape: collection GET/POST/DELETE and item GET/PATCH. The collection-level
+   `DELETE /api/resources` accepts a JSON `ids` array for both single and
+   bulk deletion. The HTTP method already expresses deletion, so do not add a
+   redundant `/delete` action suffix. Do not expose item DELETE routes, query-parameter
    deletion, or separate `bulk-delete` routes. Do not invent mutable fields,
    fake PATCH behavior, or destructive DELETE semantics for append-only or
    historical facts merely to satisfy CRUD symmetry. Immutable financial or
@@ -637,7 +638,7 @@ GET    /resources           -> list
 GET    /resources/{id}      -> get
 POST   /resources           -> create
 PATCH  /resources/{id}      -> update
-DELETE /resources/delete    -> delete one or many
+DELETE /resources           -> delete one or many
 ```
 
 The canonical DELETE request uses a JSON body:
@@ -648,9 +649,13 @@ The canonical DELETE request uses a JSON body:
 }
 ```
 
-The same endpoint handles a single ID or many IDs. IDs do not belong in delete
-query parameters, and public APIs must not add separate item-delete or
-`bulk-delete` routes. Resource-specific reads, queries, and genuine commands
+The same collection endpoint handles a single ID or many IDs. The HTTP method
+already carries the delete semantics, so public CRUD routes must not add a
+`/delete` action suffix. IDs do not belong in delete query parameters, and
+public APIs must not add separate item-delete or `bulk-delete` routes. Nested
+resources follow the same rule: for example, delete listing media with
+`DELETE /listings/{listingId}/media` plus an `ids` body, not an item DELETE
+and not `/media/delete`. Resource-specific reads, queries, and genuine commands
 may extend this surface where required.
 
 ### Public API resource completeness and route ownership are mandatory
@@ -680,13 +685,13 @@ GET    /api/resources           -> list
 GET    /api/resources/{id}      -> get one
 POST   /api/resources           -> create
 PATCH  /api/resources/{id}      -> update
-DELETE /api/resources/delete    -> delete one or many
+DELETE /api/resources           -> delete one or many
 ```
 
-The DELETE operation accepts a JSON body with a non-empty, duplicate-free,
-bounded `ids` array. A one-element array is a single deletion; a larger array
-is bulk deletion. There is no separate public bulk-delete endpoint and no
-item-delete route.
+The DELETE operation is defined on the collection itself and accepts a JSON
+body with a non-empty, duplicate-free, bounded `ids` array. A one-element array
+is a single deletion; a larger array is bulk deletion. There is no separate
+`/delete` action path, public bulk-delete endpoint, or item-delete route.
 
 Do not omit a legitimate CRUD operation because the first-party UI does not
 currently use it. Route existence and caller authorization are separate
@@ -881,8 +886,9 @@ typed documentation.
 
 Architecture tests should inspect the generated OpenAPI contract and protect
 these invariants without becoming a second router implementation. In
-particular, tests should prevent incomplete canonical CRUD, noncanonical delete
-routes, public `bulk-delete` routes, top-level free-form stable contracts,
+particular, tests should prevent incomplete canonical CRUD, item DELETE routes,
+redundant collection `/delete` action paths, public `bulk-delete` routes,
+top-level free-form stable contracts,
 missing/incorrect tags, stale public app-only routes, and missing meaningful
 operation metadata.
 
@@ -1133,9 +1139,10 @@ or action endpoints when the operation merely changes the persisted
 status/state field.
 
 Every mutable CRUD collection that supports row selection must provide Delete
-for one or many selected resources through the same canonical server endpoint.
-The browser sends one request containing an `ids` array and the server returns
-per-record outcomes. Do not implement bulk deletion as one browser request per
+for one or many selected resources through the same canonical collection
+endpoint. The browser sends one `DELETE /resources` request containing an
+`ids` array and the server returns per-record outcomes. Do not add a redundant
+`/delete` suffix, do not implement bulk deletion as one browser request per
 row, and do not create a separate public `bulk-delete` API.
 
 For immutable facts, Operator actions should surface the appropriate corrective
