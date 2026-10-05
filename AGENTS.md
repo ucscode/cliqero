@@ -52,19 +52,24 @@ its plan satisfies all of the following:
    a human without requiring repository-wide AI search.
 8. **Do not patch around structural mistakes.** Repeated fixes are a signal to
    inspect ownership, grouping, dependencies, and available libraries first.
-9. **Public API resources are complete and singular.** Every table-backed
-   resource exposed under `/api/*` must have one canonical public resource
-   group with list, get, create, update, and delete operations. The canonical
-   HTTP shape is collection GET/POST, item GET/PATCH, and one collection-level
+9. **Public API resources are singular, truthful, and operationally complete.**
+   Every persisted concern exposed under `/api/*` must have one canonical
+   public owner and enough API control to keep the system correct without
+   manual database edits. Mutable persisted resources use the canonical CRUD
+   shape: collection GET/POST, item GET/PATCH, and one collection-level
    `DELETE /api/resources/delete` accepting a JSON `ids` array for both
    single and bulk deletion. Do not expose item DELETE routes, query-parameter
-   deletion, or separate `bulk-delete` routes. If a public resource exposes
-   POST/create, it must expose the canonical delete operation. Do not omit CRUD
-   because the first-party app does not currently use it, and do not duplicate
-   the same resource under both `/api/*` and `/internal/*`. App-only/session-
-   only workflows belong under `/internal/*`; public table-backed resources
-   remain complete regardless of which operations the Cliqero UI chooses to
-   call.
+   deletion, or separate `bulk-delete` routes. Do not invent mutable fields,
+   fake PATCH behavior, or destructive DELETE semantics for append-only or
+   historical facts merely to satisfy CRUD symmetry. Immutable financial or
+   evidentiary facts must instead expose the public recovery controls required
+   to repair their consequences safely: idempotent reconciliation, reversal,
+   compensation/adjustment, reprocessing, or another explicit domain workflow.
+   If an externally relevant failure can leave money, entitlement, or ownership
+   in the wrong state, the public API is incomplete until an authorized
+   operator/automation client can detect and repair that state safely and
+   audibly. Do not duplicate the same concern under both `/api/*` and
+   `/internal/*`; app-only/session-only workflows belong under `/internal/*`.
 10. **Public OpenAPI is a complete executable contract.** Every public operation
    must have the correct resource/standalone tag, meaningful summary and
    description, explicit parameter/request schemas where applicable, explicit
@@ -650,10 +655,25 @@ may extend this surface where required.
 
 ### Public API resource completeness and route ownership are mandatory
 
-The public HTTP API is a stable resource contract, not a mirror of whichever
-buttons the current Cliqero UI happens to expose. For every persisted,
-table-backed resource that is intentionally exposed under `/api/*`, the public
-surface must provide the complete canonical CRUD set:
+The public HTTP API is a stable operational contract, not a mirror of whichever
+buttons the current Cliqero UI happens to expose.
+
+Classify each public persisted concern before deciding its HTTP surface:
+
+1. **Mutable persisted resource** — an aggregate whose legitimate fields or
+   lifecycle state may change after creation.
+2. **Immutable financial/evidentiary fact** — a posted accounting fact,
+   provider event/evidence record, completed distribution fact, ledger movement,
+   transfer fact, or similar history whose original values must remain
+   trustworthy.
+3. **Standalone projection/policy/protocol/workflow** — a concern that is not an
+   ordinary persisted resource.
+4. **Internal/app-only concern** — a first-party/session workflow that is not
+   part of the external API contract.
+
+#### Mutable persisted resources use canonical CRUD
+
+For every intentionally public mutable persisted resource, expose:
 
 ```text
 GET    /api/resources           -> list
@@ -666,43 +686,128 @@ DELETE /api/resources/delete    -> delete one or many
 The DELETE operation accepts a JSON body with a non-empty, duplicate-free,
 bounded `ids` array. A one-element array is a single deletion; a larger array
 is bulk deletion. There is no separate public bulk-delete endpoint and no
-item-delete route. If POST/create is exposed for a public resource, this DELETE
-operation must also be exposed.
+item-delete route.
 
-This five-operation resource surface is mandatory. Do not omit `POST`,
-`PATCH`, or `DELETE` because an operation seems unusual, dangerous,
-append-oriented, financially sensitive, or unused by the first-party
-application. Route completeness and caller authorization are separate concerns.
-The route exists as part of the resource contract; capabilities, scopes, domain
-validation, and server-side invariants determine whether a particular caller is
-allowed to perform the operation. A first-party UI or an external API client is
-free not to call an operation.
+Do not omit a legitimate CRUD operation because the first-party UI does not
+currently use it. Route existence and caller authorization are separate
+concerns. Capabilities, API scopes, domain validation, state machines, and
+server-side invariants determine whether a particular caller may perform it.
 
-A genuine command may extend the five CRUD operations when it represents
-behavior that cannot be expressed as ordinary resource mutation. It must never
-be used as a reason to omit the corresponding CRUD operation. Ordinary
-state/status changes remain `PATCH` updates.
+PATCH must represent a real domain update. Do not invent fields such as
+`operator_note`, `correction_note`, fake status values, or no-op mutations
+merely to manufacture CRUD symmetry. DELETE must be semantically valid for the
+resource; it is not the normal mechanism for undoing posted financial effects.
 
-Public API grouping follows persisted resource ownership. One table-backed
-resource is one API/OpenAPI group. Distinct persisted resources must not be
-collapsed into an umbrella group merely because they are conceptually related.
-For example, Distributions and Earnings Entries are different resources and
-must have separate resource groups, route ownership, CRUD contracts, and
-OpenAPI tags even if both belong to finance. A shared domain may compose those
-resources internally, but it does not erase their public resource boundaries.
+#### Immutable facts require recovery controls, not fake CRUD
 
-Endpoints that are genuinely not table-backed resources, such as health checks,
-computed projections, protocol ingress, or other standalone operations, may use
-a standalone group and are exempt from the five-operation CRUD requirement.
-Do not misclassify a persisted resource as a projection merely to avoid
-completing its CRUD surface.
+An immutable fact is not exempt from API completeness. Its completeness is
+measured by whether the system can recover from real operational failures
+without rewriting history or requiring direct database access.
 
-There must be only one authoritative HTTP resource surface. If a resource is
-public under `/api/*`, Cliqero's own UI and Operator application must use that
-same canonical API. Do not create or preserve a parallel `/internal/resources`
-CRUD API for the same resource. `/internal/*` exists only for first-party
-application workflows that are intentionally not part of the external API
-contract.
+Do not add PATCH to rewrite immutable payment evidence, posted wallet transfer
+facts, ledger entries, completed distribution facts, provider events, or other
+append-only history merely because they are table-backed. Do not delete an
+original financial fact as the normal way to reverse its economic consequence.
+
+Instead expose the domain mechanisms needed to keep the system correct. Depending
+on the resource, these may include:
+
+- **reconciliation** — compare the authoritative/external fact with derived
+  internal state and idempotently create any missing effects;
+- **reversal** — record that a previously valid external or internal operation
+  was reversed and create the required compensating effects;
+- **adjustment/compensation** — append a signed corrective financial fact tied
+  to the original operation;
+- **reprocessing/retry** — safely retry worker-owned processing of existing
+  evidence without duplicating side effects;
+- **replacement/correction resource creation** — when the proper repair is a new
+  auditable record rather than mutation of the original fact.
+
+These are genuine domain operations and may be explicit command endpoints when
+the requested intent cannot honestly be represented as ordinary field mutation.
+They do not have to masquerade as PATCH.
+
+Examples of the intended model:
+
+- A distribution that omitted a beneficiary remains historical evidence; an
+  earning adjustment compensates the beneficiary and references/correlates to
+  the distribution.
+- An overpaid distribution is corrected by an opposite earning adjustment or
+  reversal record, not by rewriting the original allocation.
+- A payment/funding event that succeeded externally but failed before producing
+  its wallet credit is repaired by an idempotent reconciliation operation that
+  creates the missing credit exactly once.
+- A bank/provider payment that was credited and later reversed keeps the
+  original payment and credit history; the reversal creates a compensating
+  negative wallet/accounting movement and applies the platform's explicit
+  insufficient-balance/debt/block policy when necessary.
+- A wallet transfer is a posted accounting fact. If its economic effect needs
+  correction, create a correlated compensating transfer/adjustment rather than
+  independently editing its gross, fee, net, direction, or posted legs.
+- A provider event remains immutable ingress evidence. If processing failed,
+  expose controlled reprocessing/reconciliation instead of allowing callers to
+  rewrite provider evidence or worker-owned processing history arbitrarily.
+
+Root-only destructive cleanup may still exist where resource-aware hard deletion
+is technically necessary and can preserve referential/accounting integrity, but
+root deletion is an administrative cleanup mechanism, not the ordinary recovery
+model for financial mistakes or reversals.
+
+#### Every externally significant flow needs a deterministic recovery story
+
+For each payment, funding, wallet, distribution, earnings, Treasury, entitlement,
+and withdrawal flow, the public/operator API must answer all applicable failure
+cases without manual SQL:
+
+- What if the external operation succeeded but an internal side effect failed?
+- What if an internal side effect was applied twice?
+- What if the external operation is later reversed or charged back?
+- What if the amount or beneficiary was wrong?
+- What if a worker/process crashed after only part of the workflow completed?
+- What if an operator must repair the issue months later?
+- Can the repair be retried safely without duplicating money or entitlements?
+- Can the system prove which actor/automation performed the repair and why?
+
+If the answer to a realistic recovery case is "edit the database manually," the
+domain/API is incomplete.
+
+Local multi-record effects that live in the same database should be atomic where
+possible. External providers cannot participate in the same database
+transaction, so idempotency plus reconciliation is mandatory at that boundary.
+
+Corrective operations must preserve accountability. Where applicable they carry
+or persist actor identity, reason, source/reference to the original operation,
+correlation identity, timestamps, and idempotency protection.
+
+This requirement exists specifically so trusted external automation—including
+an operator agent/model—can inspect the system, determine the discrepancy, and
+invoke a safe API operation to restore the correct business state. Automation
+must never require direct database mutation to repair normal operational
+failures.
+
+#### Resource grouping and ownership remain singular
+
+Public API grouping follows actual resource/domain ownership. Distinct persisted
+resources must not be collapsed into an umbrella group merely because they are
+conceptually related. A shared domain may compose multiple resources internally,
+but it does not erase their public ownership boundaries.
+
+A genuine command may extend a mutable resource's CRUD surface when it represents
+behavior that cannot be expressed as ordinary field mutation. Ordinary
+state/status changes remain PATCH updates; reconciliation, compensating
+accounting, credential rotation, provider reprocessing, and similar distinct
+processes may remain explicit commands.
+
+Endpoints that are genuinely not ordinary persisted resources, such as health
+checks, computed projections, policies, protocol ingress, and standalone
+workflows, are exempt from CRUD symmetry. Do not misclassify a mutable persisted
+resource as a projection merely to avoid implementing legitimate CRUD, and do
+not misclassify an immutable financial fact as mutable merely to force PATCH.
+
+There must be only one authoritative HTTP surface for each public concern. If a
+resource or recovery workflow is public under `/api/*`, Cliqero's own UI and
+Operator application must use that same canonical API. Do not create or preserve
+a parallel `/internal/*` implementation for the same public capability.
 
 Internal versus public is determined by the intended client, not merely by
 whether authentication is required. Browser/session workflows may be internal
@@ -718,22 +823,17 @@ even when they are unauthenticated at one step. In particular:
 - Dashboard/overview composition is an application concern and belongs under
   `/internal/*`, not the public API.
 - Platform/domain policy is not a `me` concern. A withdrawal policy, for
-  example, belongs to the Withdrawal/platform domain. If such a policy is a
-  public persisted resource, expose it as its own complete resource group
-  rather than nesting it beneath the current user.
-- Optional provider/module mechanics must not distort the canonical public
-  resource contract. Routes such as development-provider verification or
-  bank-transfer-specific confirmation are module/provider concerns if their
-  existence depends on that optional module. Keep the public Funding resource
-  provider-neutral and complete; ordinary Funding field/state changes use its
-  canonical CRUD update path. Provider protocol ingress or genuinely
-  module-specific workflows belong at the provider/module boundary.
+  example, belongs to the Withdrawal/platform domain.
+- Optional provider/module mechanics must not distort the provider-neutral
+  public resource contract. Provider protocol ingress and provider-specific
+  processing remain at the provider/module boundary, but any operational
+  recovery needed by external automation must still have an authorized public
+  control path where appropriate.
 
 Do not use `/internal/*` as a second implementation of a public resource and
 do not use `/api/*` for first-party-only convenience workflows. When an
 existing route violates this distinction, migrate callers to the correct
-canonical surface and remove the duplicate/incorrect route rather than keeping
-compatibility clutter indefinitely.
+canonical surface and remove duplicate/incorrect compatibility clutter.
 
 ### Public OpenAPI contract quality is mandatory
 
@@ -1006,20 +1106,26 @@ Before claiming a substantial feature or refactor complete, report:
 A completion report that cannot answer these points should not claim the work is
 architecturally complete.
 
-# Operator CRUD invariants
+# Operator CRUD and recovery invariants
 
 Operator-managed mutable resources must provide Create, Read, Update, and
-Delete operations wherever those operations are meaningful for the resource.
+Delete operations wherever those operations are truthful for the resource.
 Archive, revoke, reject, disable, unpublish, and similar lifecycle actions are
 status changes, not substitutes for Delete. Delete should physically remove a
-mutable record when referential integrity permits it. If immutable historical
-or financial facts must be retained, preserve those facts in explicit history
-or audit storage rather than representing the mutable record as deleted.
+mutable record when referential integrity permits it.
+
+Immutable historical, financial, provider-evidence, and append-only records are
+different: do not fabricate editable fields or destructive CRUD merely to make
+their tables look symmetrical. Operator/API control is still mandatory, but it
+must be expressed through the resource's real recovery mechanisms such as
+reconciliation, reversal, compensation/adjustment, or controlled reprocessing.
+An operator or trusted automation client must be able to resolve ordinary
+production discrepancies without direct database edits.
 
 Status/state is not special in Operator CRUD. When a mutable resource has a
-status/state field, expose the supported states in its canonical Create/Edit
-form, subject to the operator's authority. System-root operators can select all
-legitimate domain states. Row controls such as Publish, Archive, Restore,
+status/state field, expose the supported states through its canonical update
+contract, subject to the operator's authority. System-root operators may select
+all legitimate domain states. Row controls such as Publish, Archive, Restore,
 Approve, Reject, or Revoke may remain as UI conveniences only when they submit
 through the canonical resource update operation. Do not create parallel
 `publish()`, `archive()`, `restore()`, or similar service/repository methods
@@ -1032,11 +1138,13 @@ The browser sends one request containing an `ids` array and the server returns
 per-record outcomes. Do not implement bulk deletion as one browser request per
 row, and do not create a separate public `bulk-delete` API.
 
-Delete controls and root-delete semantics are separate requirements. Every
-Operator table exposes row Delete and bulk Delete to `system.root`; root
-deletion resolves dependencies and performs the resource's destructive
-operation, so ordinary in-use or append-oriented restrictions do not block it.
-Ordinary roles may retain safer soft-delete, tombstone, or rejection behavior.
+For immutable facts, Operator actions should surface the appropriate corrective
+operation instead of Delete when Delete would erase the evidence needed to
+explain balances or external events. Root-only destructive cleanup may exist
+for exceptional maintenance when resource-aware cleanup preserves referential
+and accounting integrity, but it must not replace reconciliation/reversal as
+the normal operational remedy.
+
 An identity may remain as a deliberate tombstone only where required to retain
 historical financial/account references, and that canonical model must be
 explicitly documented rather than used as a generic deletion restriction.
@@ -1139,6 +1247,14 @@ Treat mutable operational resources and historical financial facts differently:
 
 - Mutable operational resources support normal Operator CRUD only where posted
   accounting and external evidence remain intact.
+- Historical financial facts remain trustworthy records of what actually
+  happened. Do not rewrite them to make the present state look correct.
+  Correct their consequences with correlated reversal, reconciliation, or
+  signed adjustment/compensation records.
+- Immutability does not excuse missing operational control. Every externally
+  significant monetary flow must expose enough authorized public API to inspect
+  discrepancies and repair missed, duplicated, reversed, or incorrect effects
+  without manual SQL.
 - `system.root` is the platform superuser. Every Operator-visible resource
   exposes Delete to `system.root`; ordinary roles may remain restricted.
   Root deletion is real deletion and uses resource-aware transactional cleanup
@@ -1152,7 +1268,12 @@ Treat mutable operational resources and historical financial facts differently:
   tombstone preserves attribution; it is not a general root-delete restriction.
 - A wallet transfer posts the source debit, destination credit/earnings
   adjustment, and any Treasury fee in one PostgreSQL transaction. Retries must
-  be idempotent and all legs share a stable correlation identity.
+  be idempotent and all legs share a stable correlation identity. Once posted,
+  the transfer and its accounting legs are historical facts; correcting a wrong
+  transfer means creating a correlated compensating transfer/adjustment, not
+  independently editing the original gross, fee, net, direction, or legs.
+  The public/operator API must expose the corresponding recovery operation so
+  trusted automation can perform that correction safely.
 - Cliqero's canonical internal accounting currency is USD. Provider collection
   currency conversion is provider-owned and does not make internal ledger
   currency configurable.
@@ -1177,8 +1298,18 @@ Treat mutable operational resources and historical financial facts differently:
 - Every authoritative balance effect must have a visible/accountable history
   entry. Mutable administrative records are metadata, not substitutes for
   append-only financial movements.
+- Missed side effects must be recoverable idempotently. If an external payment
+  succeeded but its expected wallet credit, distribution, entitlement, or
+  other internal effect is absent, reconciliation must be able to create the
+  missing effect exactly once.
+- Reversed external money must create compensating internal accounting rather
+  than deleting the original payment/credit evidence. When compensation would
+  make a spendable balance negative, apply an explicit deficit/debt/block
+  policy instead of silently abandoning the correction.
 - Money-creating financial POST operations require idempotency protection so
-  retries cannot duplicate financial effects.
+  retries cannot duplicate financial effects. Corrective/reconciliation
+  operations require the same protection when retries could duplicate their
+  effects.
 - Append-only accounting history must correlate to a stable operation identity
   and must not require a mutable administrative Funding or Withdrawal row to
   remain forever.
