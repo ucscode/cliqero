@@ -1303,9 +1303,43 @@ Treat mutable operational resources and historical financial facts differently:
   other internal effect is absent, reconciliation must be able to create the
   missing effect exactly once.
 - Reversed external money must create compensating internal accounting rather
-  than deleting the original payment/credit evidence. When compensation would
-  make a spendable balance negative, apply an explicit deficit/debt/block
-  policy instead of silently abandoning the correction.
+  than deleting the original payment/credit evidence.
+- **Cliqero uses account-level debt for unrecoverable financial reversals.**
+  Debt is canonical USD exposure owned by the account, not a negative balance
+  attached to one wallet. Funding and earnings wallets remain ordinary
+  non-negative accounting buckets; moving value between them must never allow
+  an account to escape an outstanding debt.
+- A reversal/correction first recovers value that is safely available to the
+  account without rewriting historical facts. Recovery should consume the
+  directly affected wallet first when that relationship is known, then other
+  available account value where domain rules permit. Any remaining shortfall
+  becomes explicit account debt. Reserved or already-paid-out value is not
+  silently rewritten; pending value-out work must be stopped/released through
+  its own domain workflow where still reversible.
+- While account debt is greater than zero, server-side policy blocks new
+  value-out operations that could increase Cliqero's exposure, including
+  purchases and withdrawals. User-initiated wallet transfers are also blocked
+  while debt exists because transfer fees or reclassification can reduce or
+  obscure recoverable value. Credits/inflows and corrective operations remain
+  allowed.
+- Future account inflows settle outstanding debt before becoming spendable,
+  regardless of whether the inflow originated as funding, seller/referral
+  earnings, refund/recovery, or another canonical USD credit. The debt-settled
+  portion must produce visible accounting history; only the remainder becomes
+  available in the destination wallet.
+- Account debt must itself be auditable and append-oriented: increases,
+  settlements, and write-offs are explicit correlated records with source,
+  reason, actor/system identity, timestamps, and idempotency. The current debt
+  is derived from those records and must never become negative through
+  over-settlement.
+- Unrecovered debt is a receivable owed by the account, not an automatic
+  company loss. Absorbing it requires an explicit, separately authorized,
+  auditable write-off operation. Do not silently convert a failed recovery
+  into company loss.
+- Recovery/reversal operations must be atomic across the compensating wallet,
+  earnings, Treasury, debt, reservation, entitlement, and other local effects
+  that they touch. When an external provider is involved, use idempotent
+  reconciliation around that external boundary.
 - Money-creating financial POST operations require idempotency protection so
   retries cannot duplicate financial effects. Corrective/reconciliation
   operations require the same protection when retries could duplicate their
