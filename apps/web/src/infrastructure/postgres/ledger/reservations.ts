@@ -26,6 +26,8 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
           and (entry.balance_state='available' or settlement.id is not null)),0)
       + coalesce((select sum(adjustment.amount_minor) from ledger_capability.earnings_adjustments adjustment
         where adjustment.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
+      - coalesce((select sum(debt.amount_minor) from ledger_capability.account_debt_entries debt
+        where debt.account_id=(select id from identity_capability.accounts where uuid=$1) and debt.wallet='earnings' and debt.kind='settlement'),0)
       - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
         and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
       )::bigint as minor`,
@@ -75,6 +77,8 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
           and (entry.balance_state='available' or settlement.id is not null)),0)
       + coalesce((select sum(adjustment.amount_minor) from ledger_capability.earnings_adjustments adjustment
         where adjustment.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
+      - coalesce((select sum(debt.amount_minor) from ledger_capability.account_debt_entries debt
+        where debt.account_id=(select id from identity_capability.accounts where uuid=$1) and debt.wallet='earnings' and debt.kind='settlement'),0)
       - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
         and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
       )::bigint as minor`,
@@ -117,6 +121,53 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
         row.amount_minor,
         row.currency,
         `withdrawal:${input.withdrawalId}:${input.kind}`,
+        input.correlationId,
+      ],
+    );
+  }
+  async recordPayoutReturn(input: {
+    withdrawalId: string;
+    accountId: string;
+    correlationId: string;
+    idempotencyKey: string;
+  }) {
+    await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [
+      `withdrawal:${input.accountId}`,
+    ]);
+    const reservation = (
+      await this.sql.query<{ id: string; amount_minor: string; currency: string }>(
+        `select r.uuid id,r.amount_minor,r.currency
+           from ledger_capability.withdrawal_reservations r
+          where r.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
+            and r.account_id=(select id from identity_capability.accounts where uuid=$2)
+          for update`,
+        [input.withdrawalId, input.accountId],
+      )
+    ).rows[0];
+    if (!reservation) throw new Error("Withdrawal reservation not found");
+    const latest = (
+      await this.sql.query<{ kind: string }>(
+        `select kind from ledger_capability.withdrawal_reservation_events
+          where reservation_id=(select id from ledger_capability.withdrawal_reservations where uuid=$1)
+          order by created_at desc,id desc limit 1`,
+        [reservation.id],
+      )
+    ).rows[0]?.kind;
+    if (latest !== "completed") throw new Error("Only a completed payout can be returned");
+    await this.sql.query(
+      `insert into ledger_capability.withdrawal_reservation_events
+        (uuid,reservation_id,withdrawal_id,account_id,kind,amount_minor,currency,idempotency_key,correlation_id)
+       values($1,(select id from ledger_capability.withdrawal_reservations where uuid=$2),
+         (select id from withdrawal_capability.withdrawals where uuid=$3),
+         (select id from identity_capability.accounts where uuid=$4),'returned',$5,$6,$7,$8)`,
+      [
+        newId(),
+        reservation.id,
+        input.withdrawalId,
+        input.accountId,
+        reservation.amount_minor,
+        reservation.currency,
+        input.idempotencyKey,
         input.correlationId,
       ],
     );

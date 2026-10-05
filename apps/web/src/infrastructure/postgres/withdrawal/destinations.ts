@@ -64,6 +64,15 @@ export class PostgresWithdrawalDestinationRepository implements WithdrawalDestin
     if (result.rowCount !== 1) throw new Error("Withdrawal destination not found");
   }
 
+  async delete(accountId: string, id: string) {
+    const result = await this.sql.query(
+      `delete from withdrawal_capability.destinations
+        where uuid=$1 and account_id=(select id from identity_capability.accounts where uuid=$2)`,
+      [id, accountId],
+    );
+    return (result.rowCount ?? 0) === 1;
+  }
+
   private async find(where: string, values: readonly unknown[]) {
     const row = (await this.sql.query<DestinationRow>(`${this.select()} where ${where}`, values))
       .rows[0];

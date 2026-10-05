@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { newId } from "@/kernel/ids";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import { PaystackProvider } from "@/providers/payment/paystack/provider";
@@ -172,6 +173,107 @@ suite("Paystack webhook to commerce consequence", () => {
     expect(
       (await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount,
     ).toBe(0);
+  });
+  it("reprocesses rejected immutable evidence after its reference is repaired without duplicating effects", async () => {
+    const { checkout } = await setup();
+    const event = webhook(checkout.providerReference, 2600);
+    const ingested = await ingress.ingest(event.raw, event.signature);
+    expect(ingested.accepted).toBe(true);
+    await dispatcher.runOnce();
+    const persisted = (
+      await app.database.query<{ id: string; payload: unknown; state: string }>(
+        `select id,payload,state from payment_capability.provider_events`,
+      )
+    ).rows[0];
+    expect(persisted.state).toBe("rejected");
+
+    await app.database.query(
+      `update payment_capability.payments set provider_amount_minor=2600
+        where uuid=$1`,
+      [checkout.paymentId],
+    );
+    const actor = await app.authentication.register({
+      email: `event-admin-${newId()}@example.test`,
+      username: `ea${newId().replaceAll("-", "").slice(0, 12)}`,
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [actor.id],
+    );
+    const first = await app.providerEventReprocessing.reprocess({
+      actorId: actor.id,
+      eventId: persisted.id,
+      idempotencyKey: "event-reprocess-once",
+    });
+    const retry = await app.providerEventReprocessing.reprocess({
+      actorId: actor.id,
+      eventId: persisted.id,
+      idempotencyKey: "event-reprocess-once",
+    });
+    expect(first).toMatchObject({ state: "queued", applied: true, eventId: persisted.id });
+    expect(retry).toEqual(first);
+    expect(
+      (
+        await app.database.query(`select id from kernel.outbox_events where aggregate_id=$1`, [
+          persisted.id,
+        ])
+      ).rowCount,
+    ).toBe(2);
+    await dispatcher.runOnce();
+    expect((await app.providerEvents.findById(persisted.id))?.state).toBe("processed");
+    expect(
+      (await app.database.query(`select id from payment_capability.provider_events`)).rowCount,
+    ).toBe(1);
+    expect(
+      (await app.database.query(`select id from entitlement_capability.entitlements`)).rowCount,
+    ).toBe(0);
+    expect((await app.payments.findById(checkout.paymentId))?.state).toBe("verification_pending");
+  });
+  it("repairs a missing entitlement through normal issuance exactly once", async () => {
+    const { checkout } = await setup();
+    const entitlement = await app.legacyPaymentCompletion.complete({
+      paymentId: checkout.paymentId,
+      correlationId: newId(),
+    });
+    const purchase = await app.purchases.findById(checkout.purchaseId);
+    expect(purchase).not.toBeNull();
+    await app.database.query(`delete from entitlement_capability.entitlements where uuid=$1`, [
+      entitlement.id,
+    ]);
+    const actor = await app.authentication.register({
+      email: `entitlement-admin-${newId()}@example.test`,
+      username: `ea${newId().replaceAll("-", "").slice(0, 12)}`,
+      password: "correct-horse-battery",
+      country: "NG",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [actor.id],
+    );
+    const first = await app.purchaseEntitlementReconciliation.reconcile({
+      actorId: actor.id,
+      purchaseId: purchase!.id,
+      idempotencyKey: "entitlement-repair-once",
+    });
+    const retry = await app.purchaseEntitlementReconciliation.reconcile({
+      actorId: actor.id,
+      purchaseId: purchase!.id,
+      idempotencyKey: "entitlement-repair-once",
+    });
+    expect(first).toMatchObject({ purchaseId: purchase!.id, applied: true, state: "active" });
+    expect(retry).toEqual(first);
+    expect(
+      (
+        await app.database.query(
+          `select id from entitlement_capability.entitlements where purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
+          [purchase!.id],
+        )
+      ).rowCount,
+    ).toBe(1);
   });
   it.each([
     [2600, "USD"],

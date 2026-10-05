@@ -1,6 +1,16 @@
 import { defineCompatibilityContracts, jsonBody } from "@/api/openapi/compatibility";
-import { scalar, text, uuid, dateTime, list, object, zodSchema } from "@/api/openapi/schema";
+import {
+  scalar,
+  text,
+  uuid,
+  dateTime,
+  list,
+  object,
+  nullable,
+  zodSchema,
+} from "@/api/openapi/schema";
 import { withdrawalDestinationPatchSchema } from "@/api/compat/withdrawal-destinations/contracts";
+import { resourceDeleteSchema } from "@/api/shared/resource-delete";
 
 const withdrawalDestinationField = object(
   {
@@ -24,6 +34,12 @@ const savedWithdrawalDestination = object({
 });
 
 export const compatibilityContracts = defineCompatibilityContracts({
+  "DELETE /api/withdrawal-destinations": {
+    responseSchema: object({
+      results: list(object({ id: uuid, deleted: scalar("boolean"), error: nullable(text) })),
+    }),
+    requestBody: jsonBody(zodSchema(resourceDeleteSchema())),
+  },
   "GET /api/withdrawal-destinations": {
     responseSchema: list(savedWithdrawalDestination),
   },
@@ -44,12 +60,6 @@ export const compatibilityContracts = defineCompatibilityContracts({
   "PATCH /api/withdrawal-destinations/{destinationId}": {
     responseSchema: savedWithdrawalDestination,
     requestBody: jsonBody(zodSchema(withdrawalDestinationPatchSchema)),
-  },
-  "DELETE /api/withdrawal-destinations/{destinationId}": {
-    responseSchema: object({
-      id: uuid,
-      deleted: scalar("boolean"),
-    }),
   },
 });
 

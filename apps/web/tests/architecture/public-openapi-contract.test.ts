@@ -18,6 +18,9 @@ const document = generateOpenApiDocument(
 );
 
 const bodylessOperations = new Set([
+  "POST /api/funding/{fundingId}/reconcile-credit",
+  "POST /api/payments/events/{eventId}/reprocess",
+  "POST /api/purchases/{purchaseId}/reconcile-entitlement",
   "POST /api/withdrawals/{withdrawalId}/cancel",
   "POST /api/payments/{paymentId}/reconcile",
   "POST /api/checkouts/{checkoutId}/pay",

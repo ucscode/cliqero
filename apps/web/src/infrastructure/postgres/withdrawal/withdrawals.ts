@@ -5,6 +5,7 @@ import type {
   WithdrawalState,
   DestinationField,
   WithdrawalIdempotencyMatch,
+  WithdrawalPayoutReturnRecord,
 } from "@/modules/withdrawal/withdrawal";
 import { WithdrawalRepository } from "@/modules/withdrawal/withdrawal";
 interface Row {
@@ -177,6 +178,93 @@ export class PostgresWithdrawalRepository extends WithdrawalRepository {
     );
     if (result.rowCount !== 1) throw new Error("Invalid withdrawal transition from approved");
     return result.rows[0].completed_at;
+  }
+  async recordPayoutReturn(input: {
+    id: string;
+    withdrawalId: string;
+    amountMinor: bigint;
+    restoredMinor: bigint;
+    reason: string;
+    externalReference: string;
+    actorId: string;
+    correlationId: string;
+    idempotencyKey: string;
+  }) {
+    await this.sql.query(
+      `insert into withdrawal_capability.payout_returns
+        (uuid,withdrawal_id,amount_minor,restored_minor,reason,external_reference,actor_id,correlation_id,idempotency_key)
+       values($1,(select id from withdrawal_capability.withdrawals where uuid=$2),$3,$4,$5,$6,
+         (select id from identity_capability.accounts where uuid=$7),$8,$9)`,
+      [
+        input.id,
+        input.withdrawalId,
+        input.amountMinor.toString(),
+        input.restoredMinor.toString(),
+        input.reason,
+        input.externalReference,
+        input.actorId,
+        input.correlationId,
+        input.idempotencyKey,
+      ],
+    );
+  }
+  async findPayoutReturnByIdempotencyKey(
+    key: string,
+  ): Promise<WithdrawalPayoutReturnRecord | null> {
+    return this.findPayoutReturn("r.idempotency_key=$1", [key]);
+  }
+  async findPayoutReturnByWithdrawalId(id: string): Promise<WithdrawalPayoutReturnRecord | null> {
+    return this.findPayoutReturn("w.uuid=$1", [id]);
+  }
+  async lockPayoutReturnKey(key: string) {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `payout-return:${key}`,
+    ]);
+  }
+  private async findPayoutReturn(where: string, values: readonly unknown[]) {
+    const row = (
+      await this.sql.query<{
+        id: string;
+        withdrawal_id: string;
+        amount_minor: string;
+        restored_minor: string;
+        reason: string;
+        external_reference: string;
+        actor_id: string;
+        correlation_id: string;
+        idempotency_key: string;
+      }>(
+        `select r.uuid id,w.uuid withdrawal_id,r.amount_minor,r.restored_minor,r.reason,
+                r.external_reference,a.uuid actor_id,r.correlation_id,r.idempotency_key
+           from withdrawal_capability.payout_returns r
+           join withdrawal_capability.withdrawals w on w.id=r.withdrawal_id
+           join identity_capability.accounts a on a.id=r.actor_id
+          where ${where}`,
+        values,
+      )
+    ).rows[0];
+    return row
+      ? {
+          id: row.id,
+          withdrawalId: row.withdrawal_id,
+          amountMinor: BigInt(row.amount_minor),
+          restoredMinor: BigInt(row.restored_minor),
+          reason: row.reason,
+          externalReference: row.external_reference,
+          actorId: row.actor_id,
+          correlationId: row.correlation_id,
+          idempotencyKey: row.idempotency_key,
+        }
+      : null;
+  }
+  async markPayoutReturned(id: string, reason: string) {
+    const result = await this.sql.query(
+      `update withdrawal_capability.withdrawals
+          set state='failed',reason=$2,updated_at=now()
+        where uuid=$1 and state='completed'`,
+      [id, reason],
+    );
+    if (result.rowCount !== 1) throw new Error("Only a completed withdrawal can be returned");
   }
   private async find(where: string, values: readonly unknown[], lock = false) {
     const row = (

@@ -44,19 +44,3 @@ export async function PATCH(
     return apiError(e);
   }
 }
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ listingId: string; mediaId: string }> },
-) {
-  const a = await authenticatedAccount(request);
-  if (!a) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  try {
-    const c = getContainer();
-    await c.operators.requireCapability(a.id, "catalogue.manage");
-    const p = await params,
-      v = await c.listingMedia.requestDeletionCatalogue(a, p.listingId, p.mediaId);
-    return Response.json({ id: v.id, state: v.state }, { status: 202 });
-  } catch (e) {
-    return apiError(e);
-  }
-}

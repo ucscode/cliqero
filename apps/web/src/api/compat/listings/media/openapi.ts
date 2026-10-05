@@ -1,5 +1,15 @@
 import { defineCompatibilityContracts, jsonBody, multipartBody } from "@/api/openapi/compatibility";
-import { scalar, text, uuid, dateTime, nullable, list, object } from "@/api/openapi/schema";
+import {
+  scalar,
+  text,
+  uuid,
+  dateTime,
+  nullable,
+  list,
+  object,
+  zodSchema,
+} from "@/api/openapi/schema";
+import { resourceDeleteSchema } from "@/api/shared/resource-delete";
 
 const listingMedia = object({
   id: uuid,
@@ -17,6 +27,12 @@ const listingMedia = object({
 });
 
 export const compatibilityContracts = defineCompatibilityContracts({
+  "DELETE /api/listings/{listingId}/media": {
+    requestBody: jsonBody(zodSchema(resourceDeleteSchema())),
+    responseSchema: object({
+      results: list(object({ id: uuid, deleted: scalar("boolean"), error: nullable(text) })),
+    }),
+  },
   "GET /api/listings/{listingId}/media": {
     responseSchema: object({ items: list(listingMedia) }),
   },
@@ -43,10 +59,6 @@ export const compatibilityContracts = defineCompatibilityContracts({
         position: scalar("integer", { minimum: 0 }),
       }),
     ),
-  },
-  "DELETE /api/listings/{listingId}/media/{mediaId}": {
-    responseSchema: object({ id: uuid, state: text }),
-    successStatus: "202",
   },
 });
 

@@ -17,6 +17,7 @@ import { calculateFee, type FeePolicySource } from "@/modules/fee/policy";
 import type { TreasuryRepository } from "@/modules/treasury/treasury";
 import { PublicApplicationError } from "@/kernel/errors";
 import { CrudService } from "@/kernel/crud";
+import type { AccountDebtService } from "@/application/finance/account-debt";
 
 export type WithdrawalCreateInput = {
   accountId: string;
@@ -57,6 +58,7 @@ export class WithdrawalService extends CrudService<
     private readonly feePolicy: FeePolicySource,
     private readonly treasury: TreasuryRepository,
     private readonly audit: AuditRecorder,
+    private readonly debt?: AccountDebtService,
   ) {
     super();
   }
@@ -127,6 +129,8 @@ export class WithdrawalService extends CrudService<
         input.idempotencyKey,
       );
       if (prior) return this.resolveIdempotent(prior, input, initialState, initialReason);
+      if (initialState !== "rejected")
+        await this.debt?.requireNoOutstanding(input.accountId, "withdrawal");
       const destination = await this.destinations.resolveForWithdrawal(
         input.accountId,
         input.destinationId,
@@ -337,6 +341,162 @@ export class WithdrawalService extends CrudService<
         completedAt,
         updatedAt: completedAt,
       };
+    });
+  }
+  async recordPayoutReturn(
+    actorId: string,
+    id: string,
+    input: {
+      amountMinor: string;
+      reason: string;
+      externalReference: string;
+      idempotencyKey: string;
+    },
+  ) {
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
+    if (!/^\d+$/.test(input.amountMinor) || BigInt(input.amountMinor) <= 0n)
+      throw new PublicApplicationError("Returned amount must be positive.", "invalid_amount", 400);
+    const reason = input.reason.trim();
+    const externalReference = input.externalReference.trim();
+    const idempotencyKey = input.idempotencyKey.trim();
+    if (!reason || reason.length > 1000 || !externalReference || externalReference.length > 200)
+      throw new PublicApplicationError(
+        "Reason and provider reference are required.",
+        "invalid_payout_return",
+        400,
+      );
+    if (!idempotencyKey || idempotencyKey.length > 200)
+      throw new PublicApplicationError(
+        "A valid idempotency key is required.",
+        "invalid_idempotency_key",
+        400,
+      );
+    return this.uow.transaction(async () => {
+      await this.withdrawals.lockPayoutReturnKey(idempotencyKey);
+      const previous = await this.withdrawals.findPayoutReturnByIdempotencyKey(idempotencyKey);
+      if (previous) {
+        const matches =
+          previous.withdrawalId === id &&
+          previous.amountMinor === BigInt(input.amountMinor) &&
+          previous.reason === reason &&
+          previous.externalReference === externalReference &&
+          previous.actorId === actorId;
+        if (!matches)
+          throw new PublicApplicationError(
+            "Idempotency key was used for a different payout return.",
+            "idempotency_conflict",
+            409,
+          );
+        return { payoutReturn: previous, changed: false };
+      }
+      const withdrawal = await this.withdrawals.findByIdForUpdate(id);
+      if (!withdrawal) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
+      const concurrentRetry =
+        await this.withdrawals.findPayoutReturnByIdempotencyKey(idempotencyKey);
+      if (concurrentRetry) {
+        if (
+          concurrentRetry.withdrawalId === id &&
+          concurrentRetry.amountMinor === BigInt(input.amountMinor) &&
+          concurrentRetry.reason === reason &&
+          concurrentRetry.externalReference === externalReference &&
+          concurrentRetry.actorId === actorId
+        )
+          return { payoutReturn: concurrentRetry, changed: false };
+        throw new PublicApplicationError(
+          "Idempotency key was used for a different payout return.",
+          "idempotency_conflict",
+          409,
+        );
+      }
+      const priorReturn = await this.withdrawals.findPayoutReturnByWithdrawalId(id);
+      if (priorReturn)
+        throw new PublicApplicationError(
+          "This withdrawal already has a recorded payout return.",
+          "payout_return_exists",
+          409,
+        );
+      if (withdrawal.state !== "completed")
+        throw new PublicApplicationError(
+          "Only a completed payout can be recorded as returned.",
+          "invalid_transition",
+          409,
+        );
+      const paidOutMinor = withdrawal.netAmount?.minorAmount ?? withdrawal.amount.minorAmount;
+      if (BigInt(input.amountMinor) !== paidOutMinor)
+        throw new PublicApplicationError(
+          "A payout return must match the completed net payout amount.",
+          "return_amount_mismatch",
+          409,
+        );
+      const returnId = newId();
+      const correlationId = withdrawal.correlationId;
+      await this.withdrawals.recordPayoutReturn({
+        id: returnId,
+        withdrawalId: id,
+        amountMinor: paidOutMinor,
+        restoredMinor: withdrawal.amount.minorAmount,
+        reason,
+        externalReference,
+        actorId,
+        correlationId,
+        idempotencyKey,
+      });
+      await this.funds.recordPayoutReturn({
+        withdrawalId: id,
+        accountId: withdrawal.accountId,
+        correlationId,
+        idempotencyKey: `payout-return:${idempotencyKey}`,
+      });
+      await this.debt?.settleInflow({
+        accountId: withdrawal.accountId,
+        incomingMinor: withdrawal.amount.minorAmount,
+        wallet: "earnings",
+        sourceKind: "payout_return",
+        sourceId: returnId,
+        reason: `Returned payout settled outstanding debt: ${reason}`,
+        actor: { kind: "account", id: actorId },
+        correlationId,
+        idempotencyKey: `debt-settlement:payout-return:${returnId}`,
+      });
+      await this.reconcileTreasuryFee(
+        withdrawal,
+        withdrawal.fee?.minorAmount ?? 0n,
+        0n,
+        correlationId,
+        "reversal",
+        actorId,
+      );
+      await this.withdrawals.markPayoutReturned(id, `Payout returned: ${reason}`);
+      const payoutReturn = await this.withdrawals.findPayoutReturnByIdempotencyKey(idempotencyKey);
+      if (!payoutReturn) throw new Error("Payout return evidence was not persisted");
+      await this.audit.record({
+        actorId,
+        action: "withdrawal.payout_returned",
+        subjectType: "withdrawal",
+        subjectId: id,
+        previousState: { state: "completed", outstandingDebtSettled: true },
+        newState: {
+          state: "failed",
+          payoutReturnId: returnId,
+          returnedAmountMinor: paidOutMinor.toString(),
+          restoredAmountMinor: withdrawal.amount.minorAmount.toString(),
+          externalReference,
+          reason,
+          correlationId,
+          idempotencyKey,
+        },
+      });
+      await this.outbox.append([
+        {
+          id: newId(),
+          name: "withdrawal.payout-returned",
+          aggregateId: id,
+          correlationId,
+          occurredAt: new Date(),
+          payload: { withdrawalId: id, payoutReturnId: returnId, accountId: withdrawal.accountId },
+        },
+      ]);
+      return { payoutReturn, changed: true };
     });
   }
   override async update(actorId: string, id: string, input: WithdrawalUpdateInput) {

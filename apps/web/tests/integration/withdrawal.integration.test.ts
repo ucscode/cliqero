@@ -739,4 +739,65 @@ suite("withdrawal lifecycle", () => {
       ),
     ).rejects.toThrow("not found");
   });
+  it("restores returned payout value, settles debt first, reverses the Treasury fee, and replays idempotently", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 5000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: `return-withdrawal-${newId()}`,
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await app.withdrawals.complete(seller.id, withdrawal.id, { externalReference: "payout-777" });
+    await app.accountDebt.increase({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      wallet: "earnings",
+      sourceKind: "reversal_test",
+      sourceId: withdrawal.id,
+      reason: "Existing debt must be settled before returned payout is spendable",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: withdrawal.correlationId,
+      idempotencyKey: `debt-before-return-${newId()}`,
+    });
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBe(5000n);
+    const input = {
+      amountMinor: "4750",
+      reason: "Destination bank returned the payout",
+      externalReference: "bank-return-777",
+      idempotencyKey: `payout-return-${newId()}`,
+    };
+    const first = await app.withdrawals.recordPayoutReturn(seller.id, withdrawal.id, input);
+    const replay = await app.withdrawals.recordPayoutReturn(seller.id, withdrawal.id, input);
+    expect(first.changed).toBe(true);
+    expect(replay.changed).toBe(false);
+    expect(first.payoutReturn).toMatchObject({ amountMinor: 4750n, restoredMinor: 5000n });
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBe(9000n);
+    expect(await app.accountDebt.balance(seller.id, seller.id)).toBe("0");
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(0n);
+    expect(await app.withdrawalRepository.findById(withdrawal.id)).toMatchObject({
+      state: "failed",
+    });
+    expect(
+      (await app.operatorWithdrawals.list({ limit: 10 })).items.find(
+        (item) => item.id === withdrawal.id,
+      ),
+    ).toMatchObject({
+      payoutReturn: {
+        amountMinor: "4750",
+        restoredMinor: "5000",
+        externalReference: "bank-return-777",
+        actorId: seller.id,
+      },
+    });
+    const event = await app.database.query<{ kind: string }>(
+      `select kind from ledger_capability.withdrawal_reservation_events
+        where withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
+        order by created_at desc,id desc limit 1`,
+      [withdrawal.id],
+    );
+    expect(event.rows[0]?.kind).toBe("returned");
+  });
 });

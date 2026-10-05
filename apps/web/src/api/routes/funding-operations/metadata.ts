@@ -15,4 +15,11 @@ export const fundingOperationsOpenApiMetadata: readonly OpenApiMetadataEntry[] =
     capability: "finance.read",
     scope: "payments:read",
   },
+  {
+    path: "/api/funding/{fundingId}/reconcile-credit",
+    method: "post",
+    mode: "account",
+    capability: "finance.manage",
+    scope: "payments:manage",
+  },
 ];

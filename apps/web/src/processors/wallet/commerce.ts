@@ -5,6 +5,7 @@ import type { WalletRepository } from "@/modules/wallet/wallet";
 import type { PurchaseRepository } from "@/modules/purchase/purchase";
 import { Entitlement, type EntitlementRepository } from "@/modules/entitlement/entitlement";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
+import type { AccountDebtService } from "@/application/finance/account-debt";
 
 export class WalletCreditProcessor {
   constructor(
@@ -48,9 +49,23 @@ export class WalletAvailabilityProcessor {
     private wallet: WalletRepository,
     private uow: UnitOfWork,
     private diagnostics?: LifecycleDiagnosticWriter,
+    private debt?: AccountDebtService,
   ) {}
   async process(id: string) {
     return this.uow.transaction(async () => {
+      const credit = await this.wallet.findPendingCredit(id);
+      if (!credit) return false;
+      await this.debt?.settleInflow({
+        accountId: credit.accountId,
+        incomingMinor: credit.amount.minorAmount,
+        wallet: "funding",
+        sourceKind: "wallet_funding_credit",
+        sourceId: credit.id,
+        reason: "Funding inflow settled outstanding account debt before availability",
+        actor: { kind: "system", id: "wallet-availability-processor" },
+        correlationId: credit.fundingId,
+        idempotencyKey: `debt-settlement:wallet-funding-credit:${credit.id}`,
+      });
       await this.wallet.makeCreditAvailable(id);
       this.diagnostics?.write({
         level: "info",

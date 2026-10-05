@@ -144,6 +144,7 @@ describe("WalletCheckoutPaymentService", () => {
         pending: Money.of(0n, "USD"),
       }),
       findCreditByFunding: async () => null,
+      findPendingCredit: async () => null,
       findFundingCreditWork: async () => [],
       findPendingCredits: async () => [],
       createCredit: async () => undefined,

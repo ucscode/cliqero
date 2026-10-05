@@ -14,6 +14,8 @@ import {
   operatorWithdrawalCompleteSchema,
   operatorWithdrawalDetailSchema,
   operatorWithdrawalPatchSchema,
+  operatorPayoutReturnRequestSchema,
+  operatorPayoutReturnResponseSchema,
   operatorWithdrawalSchema,
   operatorWithdrawalStateSchema,
   withdrawalMutationResponseSchema,
@@ -266,6 +268,106 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           },
         );
         return c.json(withdrawalMutationResponseSchema.parse(jsonSafe(result)), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/withdrawals/{withdrawalId}/payout-return",
+      tags: ["Withdrawals"],
+      summary: "Record a returned payout",
+      description:
+        "Records immutable evidence that a completed payout returned to Cliqero. The gross reservation is restored, outstanding account debt is settled first, and the original payout history remains unchanged.",
+      request: {
+        params: z.object({ withdrawalId: z.string().uuid() }),
+        headers: z.object({ "idempotency-key": z.string().min(1).max(200) }),
+        body: {
+          content: {
+            "application/json": {
+              schema: operatorPayoutReturnRequestSchema,
+              examples: {
+                returned: {
+                  summary: "Returned bank payout",
+                  value: {
+                    amount_minor: "4750",
+                    reason: "Receiving bank returned the payout",
+                    external_reference: "BANK-RETURN-2048",
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description:
+            "Returned payout recorded and gross value restored through the earnings ledger",
+          content: {
+            "application/json": {
+              schema: operatorPayoutReturnResponseSchema,
+              examples: {
+                restored: {
+                  summary: "Payout return recorded",
+                  value: {
+                    payoutReturn: {
+                      id: "8e48b675-f3fc-4dc9-a143-ffcc2e9b5a1e",
+                      withdrawalId: "1d21c4d2-a19b-40d4-978d-f4834906a5ed",
+                      amountMinor: "4750",
+                      restoredMinor: "5000",
+                      reason: "Receiving bank returned the payout",
+                      externalReference: "BANK-RETURN-2048",
+                      actorId: "fc1c4616-29cb-4bdb-bf12-ff86d5e740ab",
+                      correlationId: "a11bff5a-636f-42c5-8cf0-6bc0789d7475",
+                      idempotencyKey: "payout-return-2048",
+                    },
+                    changed: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Withdrawal management permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Withdrawal not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description:
+            "Withdrawal is not completed, amount does not match, or idempotency conflicts",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
+      if (denied) return denied;
+      try {
+        const body = c.req.valid("json");
+        const result = await container.withdrawals.recordPayoutReturn(
+          p.accountId,
+          c.req.valid("param").withdrawalId,
+          {
+            amountMinor: body.amount_minor,
+            reason: body.reason,
+            externalReference: body.external_reference,
+            idempotencyKey: c.req.valid("header")["idempotency-key"],
+          },
+        );
+        return c.json(operatorPayoutReturnResponseSchema.parse(jsonSafe(result)), 200);
       } catch (error) {
         return domainError(c, error);
       }

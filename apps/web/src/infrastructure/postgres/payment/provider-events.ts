@@ -52,15 +52,27 @@ export class PostgresProviderEventRepository {
     if (!existing) throw new Error("Provider event conflict could not be resolved");
     return { record: existing, created: false };
   }
-  async findById(id: string): Promise<ProviderEventRecord | null> {
+  async findById(
+    id: string,
+    options: { forUpdate?: boolean } = {},
+  ): Promise<ProviderEventRecord | null> {
     const row = (
       await this.sql.query<ProviderEventRow>(
         `select id,provider_name,event_key,event_type,provider_reference,amount_minor,currency,payload,state,last_error
-       from payment_capability.provider_events where id=$1`,
+       from payment_capability.provider_events where id=$1${options.forUpdate ? " for update" : ""}`,
         [id],
       )
     ).rows[0];
     return row ? this.map(row) : null;
+  }
+  async markForReprocessing(id: string): Promise<void> {
+    const result = await this.sql.query(
+      `update payment_capability.provider_events
+          set state='received',last_error=null,processed_at=null
+        where id=$1 and state='rejected'`,
+      [id],
+    );
+    if (result.rowCount !== 1) throw new Error("Provider event is not eligible for reprocessing");
   }
   async markProcessed(id: string): Promise<void> {
     await this.sql.query(

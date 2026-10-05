@@ -36,4 +36,11 @@ export const paymentsOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     capability: "finance.manage",
     scope: "payments:manage",
   },
+  {
+    path: "/api/payments/events/{eventId}/reprocess",
+    method: "post",
+    mode: "account",
+    capability: "finance.manage",
+    scope: "payments:manage",
+  },
 ];

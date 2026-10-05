@@ -1,6 +1,7 @@
 import { newId } from "@/kernel/ids";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { Money } from "@/modules/money/money";
+import type { AccountDebtService } from "@/application/finance/account-debt";
 import type { ListingRepository } from "@/modules/listing";
 import type { Checkout, CheckoutRepository } from "@/modules/checkout/checkout";
 import { Purchase, type PurchaseRepository } from "@/modules/purchase/purchase";
@@ -82,6 +83,7 @@ export class WalletCheckoutPaymentService {
     private purchases: PurchaseRepository,
     private uow: UnitOfWork,
     private outbox: EventOutbox,
+    private debt?: AccountDebtService,
   ) {}
 
   async pay(input: { buyerId: string; checkoutId: string }): Promise<WalletCheckoutPaymentResult> {
@@ -95,6 +97,7 @@ export class WalletCheckoutPaymentService {
       // lock and transaction keep retries/concurrent requests idempotent.
       if (checkout.amount.minorAmount === 0n) {
         if (checkout.state !== "paid") {
+          await this.debt?.requireNoOutstanding(checkout.buyerId, "purchase");
           checkout.state = "paid";
           checkout.paidAt = new Date();
           await this.checkouts.save(checkout);
@@ -137,6 +140,8 @@ export class WalletCheckoutPaymentService {
         const wallet = await this.wallet.summary(checkout.buyerId);
         return { checkout, wallet, shortfall: Money.of(0n, "USD") };
       }
+
+      await this.debt?.requireNoOutstanding(checkout.buyerId, "purchase");
 
       const wallet = await this.wallet.summary(checkout.buyerId, { forUpdate: true });
       const shortfallMinor =

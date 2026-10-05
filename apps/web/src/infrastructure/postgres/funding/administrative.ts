@@ -119,5 +119,6 @@ export class PostgresAdministrativeFundingRepository implements AdministrativeFu
         input.actorId,
       ],
     );
+    return id;
   }
 }

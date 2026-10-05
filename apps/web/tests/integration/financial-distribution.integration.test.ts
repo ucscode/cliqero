@@ -63,6 +63,44 @@ suite("purchase financial distribution", () => {
     return { seller, buyer, listing, purchaseId: checkout.purchaseId! };
   }
 
+  it("settles outstanding debt before positive earnings adjustments become available", async () => {
+    const owner = await account(`debtadj${newId().replaceAll("-", "").slice(0, 8)}`);
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'finance.manage'),
+             ((select id from identity_capability.accounts where uuid=$1),'finance.read')`,
+      [owner.id],
+    );
+    await app.accountDebt.increase({
+      accountId: owner.id,
+      amountMinor: 6_000n,
+      wallet: "account",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Known outstanding recovery fixture",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: `earnings-adjustment-debt:${newId()}`,
+    });
+
+    const adjustment = await app.earningsAdjustments.create(owner.id, {
+      accountId: owner.id,
+      amountMinor: "10000",
+      reason: "Corrective positive earning",
+      reference: newId(),
+    });
+
+    expect(await app.accountDebt.balance(owner.id, owner.id)).toBe("0");
+    expect(await app.fundsReservation.available(owner.id, "USD")).toBe(4_000n);
+    const settlements = await app.database.query<{ amount_minor: string; source_id: string }>(
+      `select amount_minor,source_id from ledger_capability.account_debt_entries
+        where account_id=(select id from identity_capability.accounts where uuid=$1)
+          and kind='settlement' and source_kind='earnings_adjustment'`,
+      [owner.id],
+    );
+    expect(settlements.rows).toEqual([{ amount_minor: "6000", source_id: adjustment.id }]);
+  });
+
   it("conserves organic gross and distributes exactly once under duplicate/concurrent delivery", async () => {
     const value = await completed();
     const correlationId = newId();

@@ -106,6 +106,19 @@ export class ListingReviewService extends CrudService<
     };
     return this.uow ? this.uow.transaction(operation) : operation();
   }
+  async updateOwn(account: Account, reviewId: Id, input: { rating: number; body?: string }) {
+    const current = await this.reviews.findById(reviewId);
+    if (!current || current.accountId !== account.id)
+      throw new PublicApplicationError("Review not found.", "not_found", 404);
+    const body = validateReviewInput(input.rating, input.body ?? current.body);
+    return this.reviews.create({
+      id: reviewId,
+      listingId: current.listingId,
+      accountId: account.id,
+      rating: input.rating,
+      body,
+    });
+  }
   override async delete(account: Account, reviewId: Id) {
     await this.operators.requireCapability(account.id, "reviews.moderate");
     const operation = async () => {

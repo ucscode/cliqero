@@ -63,52 +63,6 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
   );
   app.openapi(
     createRoute({
-      method: "delete",
-      path: "/api/distributions/{distributionId}",
-      request: { params: z.object({ distributionId: z.string().uuid() }) },
-      responses: {
-        200: {
-          description: "Distribution deleted by system root",
-          content: {
-            "application/json": {
-              schema: z.object({ id: z.string().uuid(), deleted: z.boolean() }),
-            },
-          },
-        },
-        401: {
-          description: "Authentication required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        403: {
-          description: "System root permission required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        404: {
-          description: "Distribution not found",
-          content: { "application/json": { schema: errorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "system.root", "payments:manage");
-      if (denied) return denied;
-      try {
-        return c.json(
-          await container.operatorDistributions.deleteForRoot(
-            p.accountId,
-            c.req.valid("param").distributionId,
-          ),
-          200,
-        );
-      } catch (error) {
-        return domainError(c, error);
-      }
-    },
-  );
-  app.openapi(
-    createRoute({
       method: "get",
       path: "/api/distributions/{distributionId}",
       request: { params: z.object({ distributionId: z.string().uuid() }) },
@@ -196,49 +150,6 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
       if (denied) return denied;
       try {
         return c.json(await container.operatorEarnings.list(c.req.valid("query")), 200);
-      } catch (error) {
-        return domainError(c, error);
-      }
-    },
-  );
-  app.openapi(
-    createRoute({
-      method: "delete",
-      path: "/api/earnings/entries/{entryId}",
-      request: { params: z.object({ entryId: z.string().uuid() }) },
-      responses: {
-        200: {
-          description: "Earnings entry deleted by system root",
-          content: {
-            "application/json": {
-              schema: z.object({ id: z.string().uuid(), deleted: z.boolean() }),
-            },
-          },
-        },
-        401: {
-          description: "Authentication required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        403: {
-          description: "System root permission required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        404: {
-          description: "Earnings entry not found",
-          content: { "application/json": { schema: errorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireCapabilityScope(c, p, "system.root", "payments:manage");
-      if (denied) return denied;
-      try {
-        return c.json(
-          await container.operatorEarnings.deleteForRoot(p.accountId, c.req.valid("param").entryId),
-          200,
-        );
       } catch (error) {
         return domainError(c, error);
       }

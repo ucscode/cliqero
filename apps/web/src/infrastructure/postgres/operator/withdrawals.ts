@@ -24,12 +24,23 @@ export type OperatorWithdrawal = {
   reservation: {
     amountMinor: string;
     currency: string;
-    state: "reserved" | "released" | "completed";
+    state: "reserved" | "released" | "completed" | "returned";
   } | null;
   externalReference: string | null;
   completionNote: string | null;
   completedBy: string | null;
   completedAt: string | null;
+  payoutReturn: {
+    id: string;
+    amountMinor: string;
+    restoredMinor: string;
+    reason: string;
+    externalReference: string;
+    actorId: string;
+    correlationId: string;
+    idempotencyKey: string;
+    createdAt: string;
+  } | null;
   attention: "review" | "action_required" | "none";
 };
 
@@ -62,6 +73,19 @@ function map(row: any, detail = false): OperatorWithdrawal {
     completionNote: row.completion_note ?? null,
     completedBy: row.completed_by ?? null,
     completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
+    payoutReturn: row.payout_return_id
+      ? {
+          id: row.payout_return_id,
+          amountMinor: String(row.payout_return_amount_minor),
+          restoredMinor: String(row.payout_return_restored_minor),
+          reason: row.payout_return_reason,
+          externalReference: row.payout_return_external_reference,
+          actorId: row.payout_return_actor_id,
+          correlationId: row.payout_return_correlation_id,
+          idempotencyKey: row.payout_return_idempotency_key,
+          createdAt: new Date(row.payout_return_created_at).toISOString(),
+        }
+      : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     reservation: row.reservation_id
@@ -78,10 +102,16 @@ function map(row: any, detail = false): OperatorWithdrawal {
 const projection = `
   select w.uuid as id,w.id::text cursor_id,a.uuid as account_id,a.username,a.email,w.amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) completed_by,w.completed_at,w.created_at,w.updated_at,
     r.uuid reservation_id,r.amount_minor reservation_amount_minor,r.currency reservation_currency,
-    (select e.kind from ledger_capability.withdrawal_reservation_events e where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) reservation_state
+    (select e.kind from ledger_capability.withdrawal_reservation_events e where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) reservation_state,
+    pr.uuid payout_return_id,pr.amount_minor payout_return_amount_minor,pr.restored_minor payout_return_restored_minor,
+    pr.reason payout_return_reason,pr.external_reference payout_return_external_reference,pra.uuid payout_return_actor_id,
+    pr.correlation_id payout_return_correlation_id,pr.idempotency_key payout_return_idempotency_key,
+    pr.created_at payout_return_created_at
    from withdrawal_capability.withdrawals w
    join identity_capability.account_profiles a on a.id=w.account_id
    left join ledger_capability.withdrawal_reservations r on r.withdrawal_id=w.id
+   left join withdrawal_capability.payout_returns pr on pr.withdrawal_id=w.id
+   left join identity_capability.accounts pra on pra.id=pr.actor_id
 `;
 
 export class OperatorWithdrawalService {

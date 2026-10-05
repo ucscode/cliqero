@@ -59,10 +59,21 @@ function configure(
           providerAccountSnapshot: {
             id: "account-1",
             collectionCurrency: "NGN",
-            instruction: "Use the account instruction.",
             fields: [
-              { key: "bank_name", label: "Bank", value: "Example Bank", copyable: false },
-              { key: "routing", label: "Routing", value: "ROUTE-1", copyable: true },
+              {
+                name: "bank_name",
+                label: "Bank",
+                value: "Example Bank",
+                type: "text",
+                copyable: false,
+              },
+              {
+                name: "routing",
+                label: "Routing",
+                value: "ROUTE-1",
+                type: "text",
+                copyable: true,
+              },
             ],
           },
           paymentAddress: "TReceiver",
@@ -132,10 +143,21 @@ describe("wallet funding status projection", () => {
       provider_account_snapshot: {
         id: "account-1",
         collectionCurrency: "NGN",
-        instruction: "Use the account instruction.",
         fields: [
-          { key: "bank_name", label: "Bank", value: "Example Bank", copyable: false },
-          { key: "routing", label: "Routing", value: "ROUTE-1", copyable: true },
+          {
+            name: "bank_name",
+            label: "Bank",
+            value: "Example Bank",
+            type: "text",
+            copyable: false,
+          },
+          {
+            name: "routing",
+            label: "Routing",
+            value: "ROUTE-1",
+            type: "text",
+            copyable: true,
+          },
         ],
       },
       payment_address: "TReceiver",
@@ -178,8 +200,20 @@ describe("wallet funding status projection", () => {
         id: "account-1",
         collectionCurrency: "NGN",
         fields: [
-          { key: "bank_name", label: "Bank", value: "Example Bank", copyable: false },
-          { key: "routing", label: "Routing", value: "ROUTE-1", copyable: true },
+          {
+            name: "bank_name",
+            label: "Bank",
+            value: "Example Bank",
+            type: "text",
+            copyable: false,
+          },
+          {
+            name: "routing",
+            label: "Routing",
+            value: "ROUTE-1",
+            type: "text",
+            copyable: true,
+          },
         ],
       },
     });
@@ -240,6 +274,7 @@ describe("wallet funding status projection", () => {
       id: fundingId,
       accountId: account.id,
       providerName: "development",
+      providerReference: "dev-reference",
       canonicalAmount: { minorAmount: 1250n, currency: "USD" },
       collectionAmount: { minorAmount: 1250n, currency: "USD" },
       state: "confirmed",

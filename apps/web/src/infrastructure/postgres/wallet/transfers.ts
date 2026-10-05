@@ -5,6 +5,7 @@ import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { WalletService } from "@/application/wallet/service";
 import type { LedgerFundsReservationService } from "@/modules/ledger/reservations";
+import type { AccountDebtService } from "@/application/finance/account-debt";
 
 export type WalletName = "funding" | "earnings";
 
@@ -15,6 +16,7 @@ export class PostgresWalletTransferService {
     private readonly loadFees: () => FeePolicy,
     private readonly wallet: Pick<WalletService, "summary">,
     private readonly earnings: Pick<LedgerFundsReservationService, "available">,
+    private readonly debt?: AccountDebtService,
   ) {}
 
   quote(from: WalletName, grossMinor: bigint) {
@@ -90,6 +92,8 @@ export class PostgresWalletTransferService {
           netMinor: prior.net_minor,
         };
       }
+
+      await this.debt?.requireNoOutstanding(input.accountId, "transfer");
 
       const feeOperation: FeeOperation =
         input.from === "funding" ? "funding_to_earning" : "earning_to_funding";

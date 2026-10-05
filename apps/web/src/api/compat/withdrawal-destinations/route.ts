@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiError, authenticatedPrincipal } from "../http";
 import { validationErrorPayload } from "@/api/error";
 import { getContainer } from "@/infrastructure/container";
+import { deleteResourceIds, resourceDeleteSchema } from "@/api/shared/resource-delete";
 
 const valuesSchema = z.record(z.string(), z.string());
 const createSchema = z
@@ -44,5 +45,25 @@ export async function POST(request: Request) {
     if (error instanceof z.ZodError)
       return Response.json(validationErrorPayload(error), { status: 400 });
     return apiError(error);
+  }
+}
+
+export async function DELETE(request: Request) {
+  const principal = await authenticatedPrincipal(request);
+  if (principal.kind === "anonymous")
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (principal.kind === "api_key" && !principal.scopes.has("withdrawals:create"))
+    return Response.json({ error: "Forbidden", code: "insufficient_scope" }, { status: 403 });
+  try {
+    const { ids } = resourceDeleteSchema().parse(await request.json());
+    return Response.json(
+      await deleteResourceIds(ids, (id) =>
+        getContainer().withdrawalDestinations.delete(principal.accountId, id),
+      ),
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError)
+      return Response.json(validationErrorPayload(error), { status: 400 });
+    return apiError(error, request);
   }
 }

@@ -92,7 +92,11 @@ export function OperatorReviewEditor({ reviewId }: { reviewId: string }) {
       return;
     setSaving(true);
     try {
-      await apiFetch(`/api/reviews/${reviewId}`, { method: "DELETE" });
+      await apiFetch("/api/reviews", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [reviewId] }),
+      });
       toast.success("Review deleted.");
       router.push("/operator/reviews");
     } catch (cause) {

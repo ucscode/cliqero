@@ -4,7 +4,6 @@ import {
   blogCategoryNameSchema,
   blogCategorySlugSchema,
   BlogCategoryConflictError,
-  BlogCategoryInUseError,
   BlogCategoryNotFoundError,
   blogPostInputSchema,
 } from "@/modules/blog/domain/blog";
@@ -15,6 +14,7 @@ import { domainError } from "../../shared/error";
 import { blogJson, operatorBlogJson } from "./serialization";
 import { blogPageSchema, blogPostSchema, operatorBlogPostSchema } from "./contracts";
 import { crudMaxRows } from "@/config/crud";
+import { deleteResourceIds, resourceDeleteSchema } from "../../shared/resource-delete";
 
 const blogCategorySchema = z.object({ id: z.string().uuid(), slug: z.string(), name: z.string() });
 const blogCategoryCreateSchema = z
@@ -342,28 +342,44 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   app.openapi(
     createRoute({
       method: "delete",
-      path: "/api/blog/categories/{categoryId}",
-      request: { params: z.object({ categoryId: z.string().uuid() }) },
+      path: "/api/blog/categories",
+      request: { body: { content: { "application/json": { schema: resourceDeleteSchema() } } } },
       responses: {
-        204: { description: "Unused blog category deleted" },
-        409: {
-          description: "Category is still assigned to an article",
+        200: {
+          description: "Per-category deletion results",
+          content: {
+            "application/json": {
+              schema: z.object({
+                results: z.array(
+                  z.object({
+                    id: z.string().uuid(),
+                    deleted: z.boolean(),
+                    error: z.string().nullable(),
+                  }),
+                ),
+              }),
+            },
+          },
+        },
+        400: {
+          description: "Invalid IDs",
           content: { "application/json": { schema: errorSchema } },
         },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
       },
     }),
-    (c) => {
+    async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
       if (denied) return denied;
       try {
-        container.blog.categoryService.delete(c.req.valid("param").categoryId);
-        return c.body(null, 204);
+        const { ids } = c.req.valid("json");
+        return c.json(
+          await deleteResourceIds(ids, (id) => container.blog.categoryService.delete(id)),
+          200,
+        );
       } catch (error) {
-        if (error instanceof BlogCategoryInUseError)
-          return c.json({ error: error.message, code: "category_in_use" }, 409);
         return domainError(c, error);
       }
     },
@@ -464,10 +480,29 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
   app.openapi(
     createRoute({
       method: "delete",
-      path: "/api/blog/posts/{postId}",
-      request: { params: z.object({ postId: z.string().uuid() }) },
+      path: "/api/blog/posts",
+      request: { body: { content: { "application/json": { schema: resourceDeleteSchema() } } } },
       responses: {
-        204: { description: "Blog article and its relations deleted" },
+        200: {
+          description: "Per-article deletion results",
+          content: {
+            "application/json": {
+              schema: z.object({
+                results: z.array(
+                  z.object({
+                    id: z.string().uuid(),
+                    deleted: z.boolean(),
+                    error: z.string().nullable(),
+                  }),
+                ),
+              }),
+            },
+          },
+        },
+        400: {
+          description: "Invalid IDs",
+          content: { "application/json": { schema: errorSchema } },
+        },
         403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } },
         404: {
           description: "Article not found",
@@ -475,14 +510,14 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
         },
       },
     }),
-    (c) => {
+    async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:manage");
       if (denied) return denied;
       try {
-        container.blog.delete(c.req.valid("param").postId);
-        return c.body(null, 204);
+        const { ids } = c.req.valid("json");
+        return c.json(await deleteResourceIds(ids, (id) => container.blog.delete(id)), 200);
       } catch (error) {
         return domainError(c, error);
       }

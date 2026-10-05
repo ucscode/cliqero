@@ -551,18 +551,11 @@ export function OperatorUserDetail({
     setCapabilitySaving(capability);
     setCapabilityError(null);
     try {
-      await apiFetch(
-        `/api/accounts/${accountId}/capabilities${action === "revoke" ? `/${encodeURIComponent(capability)}` : ""}`,
-        {
-          method: action === "revoke" ? "DELETE" : "POST",
-          ...(action === "grant"
-            ? {
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ capability }),
-              }
-            : {}),
-        },
-      );
+      await apiFetch(`/api/accounts/${accountId}/capabilities`, {
+        method: action === "revoke" ? "DELETE" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(action === "grant" ? { capability } : { ids: [capability] }),
+      });
       await loadCapabilities();
       toast.success("Master authority updated.");
     } catch (cause) {
@@ -617,7 +610,11 @@ export function OperatorUserDetail({
     setDeleting(true);
     setError(null);
     try {
-      await apiFetch(`/api/accounts/${account.id}`, { method: "DELETE" });
+      await apiFetch("/api/accounts", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [account.id] }),
+      });
       router.push("/operator/users?notice=account-deleted");
       router.refresh();
     } catch (cause) {

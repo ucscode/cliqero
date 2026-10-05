@@ -93,6 +93,15 @@ export class WithdrawalDestinationService {
     });
   }
 
+  async delete(accountId: string, id: string) {
+    return this.uow.transaction(async () => {
+      await this.requireAccount(accountId);
+      if (!(await this.destinations.delete(accountId, id)))
+        throw new PublicApplicationError("Withdrawal destination not found.", "not_found", 404);
+      return { id, deleted: true as const };
+    });
+  }
+
   async resolveForWithdrawal(accountId: string, id: string) {
     const account = await this.requireAccount(accountId);
     const destination = await this.destinations.findById(id);

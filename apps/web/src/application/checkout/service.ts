@@ -9,6 +9,7 @@ import type { PurchaseAttributionResolver } from "@/modules/referral/attribution
 import type { AccountReader } from "@/modules/identity/account";
 import type { ExchangeRateService } from "@/modules/money/exchange-service";
 import { ExactCurrencyConverter } from "@/modules/money/exchange";
+import type { AccountDebtService } from "@/application/finance/account-debt";
 
 export class CheckoutService {
   constructor(
@@ -21,6 +22,7 @@ export class CheckoutService {
     private uow: UnitOfWork,
     private accounts?: AccountReader,
     private exchangeRates?: ExchangeRateService,
+    private debt?: AccountDebtService,
   ) {}
   async initiate(input: {
     buyerId: Id;
@@ -51,6 +53,7 @@ export class CheckoutService {
         accessCode: existing.providerInitialization?.accessCode,
       };
     }
+    await this.debt?.requireNoOutstanding(input.buyerId, "purchase");
     const listing = await this.listings.findById(input.listingId);
     if (!listing) throw new Error("Listing not found");
     const snapshot = listing.commercialSnapshot();

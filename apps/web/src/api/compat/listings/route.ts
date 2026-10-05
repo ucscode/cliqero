@@ -7,9 +7,25 @@ import { isAuthenticatedPrincipal } from "@/modules/identity/api/principal";
 import { apiAuthorizer } from "@/api/shared/authorization";
 import { crudMaxRows } from "@/config/crud";
 import { listingCreateSchema } from "./contracts";
+import { deleteResourceIds, resourceDeleteSchema } from "@/api/shared/resource-delete";
 
 const sorts = ["date", "price", "title", "rating"] as const;
 const directions = ["asc", "desc"] as const;
+
+export async function DELETE(request: Request) {
+  const account = await authenticatedAccount(request);
+  if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const container = getContainer();
+    await container.operators.requireCapability(account.id, "catalogue.manage");
+    const { ids } = resourceDeleteSchema().parse(await request.json());
+    return Response.json(
+      await deleteResourceIds(ids, (id) => container.listingService.delete(account, id)),
+    );
+  } catch (error) {
+    return apiError(error, request);
+  }
+}
 
 export async function POST(request: Request) {
   const account = await authenticatedAccount(request);

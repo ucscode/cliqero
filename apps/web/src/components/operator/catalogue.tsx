@@ -1200,8 +1200,10 @@ function CatalogueIntegrations({ listingId }: { listingId: string }) {
     )
       return;
     try {
-      await apiFetch(`/api/listings/${listingId}/integrations/${item.id}`, {
+      await apiFetch(`/api/listings/${listingId}/integrations`, {
         method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [item.id] }),
       });
       await load();
     } catch (cause) {
@@ -1333,8 +1335,10 @@ function CatalogueMedia({
     )
       return;
     try {
-      await apiFetch(`/api/listings/${listing.id}/media/${media.id}`, {
+      await apiFetch(`/api/listings/${listing.id}/media`, {
         method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [media.id] }),
       });
       onChange({ ...listing, media: listing.media.filter((item) => item.id !== media.id) });
     } catch (cause) {

@@ -378,4 +378,95 @@ export function registerPaymentRoutes(app: OpenAPIHono<Env>, container: Applicat
       }
     },
   );
+
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/payments/events/{eventId}/reprocess",
+      tags: ["Payments"],
+      summary: "Reprocess a rejected provider event",
+      description:
+        "Queues the immutable Paystack event evidence through its existing worker handler. Reprocessing does not edit provider payloads and is safe to retry with the same idempotency key.",
+      request: {
+        params: z.object({ eventId: z.uuid() }),
+        headers: z.object({
+          "idempotency-key": z
+            .string()
+            .min(1)
+            .max(200)
+            .openapi({ example: "repair-event-2026-001" }),
+        }),
+      },
+      responses: {
+        200: {
+          description: "Idempotent event reprocessing result",
+          content: {
+            "application/json": {
+              schema: z
+                .object({
+                  event_id: z.uuid().openapi({ example: "8f1fd548-3cc9-4c15-8cf9-31c46e4d3488" }),
+                  state: z.enum(["queued", "already_processed"]).openapi({ example: "queued" }),
+                  applied: z.boolean().openapi({ example: true }),
+                  correlation_id: z
+                    .uuid()
+                    .openapi({ example: "27ddf1f8-0a69-4a56-a755-8d7b3f966a79" }),
+                })
+                .openapi({
+                  example: {
+                    event_id: "8f1fd548-3cc9-4c15-8cf9-31c46e4d3488",
+                    state: "queued",
+                    applied: true,
+                    correlation_id: "27ddf1f8-0a69-4a56-a755-8d7b3f966a79",
+                  },
+                }),
+            },
+          },
+        },
+        400: {
+          description: "Invalid event ID or idempotency key",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Finance management permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Provider event not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Provider event cannot be reprocessed or key conflicts",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const principal = requirePrincipal(c);
+      if (!(principal instanceof Object) || !("accountId" in principal)) return principal;
+      const denied = requireCapabilityScope(c, principal, "finance.manage", "payments:manage");
+      if (denied) return denied;
+      try {
+        const result = await container.providerEventReprocessing.reprocess({
+          actorId: principal.accountId,
+          eventId: c.req.valid("param").eventId,
+          idempotencyKey: c.req.header("idempotency-key")!,
+        });
+        return c.json(
+          {
+            event_id: result.eventId,
+            state: result.state,
+            applied: result.applied,
+            correlation_id: result.correlationId,
+          },
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
 }

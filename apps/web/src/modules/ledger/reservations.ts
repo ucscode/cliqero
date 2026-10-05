@@ -22,6 +22,12 @@ export interface LedgerFundsReservationService {
     kind: "released" | "completed";
     correlationId: string;
   }): Promise<void>;
+  recordPayoutReturn(input: {
+    withdrawalId: string;
+    accountId: string;
+    correlationId: string;
+    idempotencyKey: string;
+  }): Promise<void>;
   resize(input: {
     withdrawalId: string;
     accountId: string;

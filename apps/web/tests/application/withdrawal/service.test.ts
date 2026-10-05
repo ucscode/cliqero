@@ -46,6 +46,17 @@ function fixture(
   const findByIdempotencyKey = vi.fn<
     (accountId: string, key: string) => Promise<WithdrawalIdempotencyMatch | null>
   >(async () => null);
+  let payoutReturn: import("@/modules/withdrawal/withdrawal").WithdrawalPayoutReturnRecord | null =
+    null;
+  const recordPayoutReturn = vi.fn(
+    async (
+      record: Omit<NonNullable<typeof payoutReturn>, "idempotencyKey"> & { idempotencyKey: string },
+    ) => {
+      payoutReturn = record;
+    },
+  );
+  const findPayoutReturnByIdempotencyKey = vi.fn(async () => payoutReturn);
+  const settleInflow = vi.fn(async () => ({ entry: null, changed: false, settledMinor: 0n }));
   const service = new WithdrawalService(
     {
       findById: async () => withdrawal,
@@ -59,6 +70,11 @@ function fixture(
       delete: async () => undefined,
       deleteForRoot: async () => undefined,
       complete,
+      recordPayoutReturn,
+      findPayoutReturnByIdempotencyKey,
+      findPayoutReturnByWithdrawalId: async () => null,
+      lockPayoutReturnKey: async () => undefined,
+      markPayoutReturned: vi.fn(async () => undefined),
     },
     {
       getActive: async () => ({
@@ -71,6 +87,7 @@ function fixture(
       reserve,
       available: async () => 0n,
       releaseOrComplete,
+      recordPayoutReturn: vi.fn(async () => undefined),
       resize: async () => undefined,
       remove: async () => undefined,
       removeForRoot: async () => undefined,
@@ -95,6 +112,7 @@ function fixture(
     },
     { create: treasuryCreate, findByIdempotencyKey: async () => null } as any,
     { record: auditRecord },
+    { settleInflow, requireNoOutstanding: vi.fn(async () => undefined) } as any,
   );
   return {
     service,
@@ -108,6 +126,9 @@ function fixture(
     treasuryCreate,
     auditRecord,
     findByIdempotencyKey,
+    recordPayoutReturn,
+    findPayoutReturnByIdempotencyKey,
+    settleInflow,
   };
 }
 
@@ -154,6 +175,66 @@ describe("WithdrawalService idempotency intent", () => {
         idempotencyKey: "key-1",
         correlationId: "retry-correlation",
         initialReason: "different reason",
+      }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict" });
+  });
+});
+
+describe("WithdrawalService payout return recovery", () => {
+  it("restores a completed payout through reservation recovery, Treasury reversal, and debt settlement idempotently", async () => {
+    const { service, withdrawal, recordPayoutReturn, settleInflow, treasuryCreate } =
+      fixture("completed");
+    const input = {
+      amountMinor: "2375",
+      reason: "Receiving bank returned the payout",
+      externalReference: "bank-return-42",
+      idempotencyKey: "return-42",
+    };
+    const result = await service.recordPayoutReturn("operator-1", withdrawal.id, input);
+    expect(result.changed).toBe(true);
+    expect(result.payoutReturn.restoredMinor).toBe(2500n);
+    expect(recordPayoutReturn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountMinor: 2375n,
+        restoredMinor: 2500n,
+        correlationId: withdrawal.correlationId,
+      }),
+    );
+    expect(settleInflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        incomingMinor: 2500n,
+        sourceKind: "payout_return",
+        wallet: "earnings",
+      }),
+    );
+    expect(treasuryCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direction: "debit",
+        amountMinor: 125n,
+        sourceKind: "withdrawal_fee_reversal",
+      }),
+    );
+  });
+
+  it("rejects a payout return whose idempotency key is reused for different intent", async () => {
+    const { service, findPayoutReturnByIdempotencyKey } = fixture("completed");
+    findPayoutReturnByIdempotencyKey.mockResolvedValue({
+      id: "return-id",
+      withdrawalId: "other-withdrawal",
+      amountMinor: 2375n,
+      restoredMinor: 2500n,
+      reason: "other",
+      externalReference: "other-ref",
+      actorId: "operator-1",
+      correlationId: "correlation-1",
+      idempotencyKey: "return-42",
+    });
+    await expect(
+      service.recordPayoutReturn("operator-1", "withdrawal-1", {
+        amountMinor: "2375",
+        reason: "Receiving bank returned the payout",
+        externalReference: "bank-return-42",
+        idempotencyKey: "return-42",
       }),
     ).rejects.toMatchObject({ code: "idempotency_conflict" });
   });

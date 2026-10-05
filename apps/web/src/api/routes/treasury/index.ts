@@ -6,7 +6,6 @@ import { errorSchema } from "../../shared/schemas";
 import { jsonSafe } from "../../shared/serialization";
 import { operatorTreasuryEntrySchema, operatorTreasurySummarySchema } from "./contracts";
 import { crudMaxRows } from "@/config/crud";
-import { hasCapability } from "@/modules/identity/capabilities";
 
 export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
   const maxRows = crudMaxRows();
@@ -48,45 +47,6 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
       if (denied) return denied;
       try {
         return c.json(await container.operatorTreasury.summary(), 200);
-      } catch (error) {
-        return domainError(c, error);
-      }
-    },
-  );
-  app.openapi(
-    createRoute({
-      method: "delete",
-      path: "/api/treasury/entries/{entryId}",
-      request: { params: z.object({ entryId: z.string().uuid() }) },
-      responses: {
-        200: {
-          description: "Treasury entry deleted by system root",
-          content: {
-            "application/json": {
-              schema: z.object({ id: z.string().uuid(), deleted: z.literal(true) }),
-            },
-          },
-        },
-        401: {
-          description: "Authentication required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        403: {
-          description: "System-root capability required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      if (!hasCapability(p.capabilities, "system.root"))
-        return c.json({ error: "System-root capability required", code: "forbidden" }, 403);
-      try {
-        return c.json(
-          await container.operatorTreasury.deleteForRoot(p.accountId, c.req.valid("param").entryId),
-          200,
-        );
       } catch (error) {
         return domainError(c, error);
       }

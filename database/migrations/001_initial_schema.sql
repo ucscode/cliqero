@@ -1038,7 +1038,7 @@ CREATE TABLE ledger_capability.withdrawal_reservation_events (
     withdrawal_id bigint NOT NULL,
     account_id bigint NOT NULL,
     CONSTRAINT withdrawal_reservation_events_amount_positive CHECK ((amount_minor > 0)),
-    CONSTRAINT withdrawal_reservation_events_kind_valid CHECK ((kind = ANY (ARRAY['reserved'::text, 'released'::text, 'completed'::text])))
+    CONSTRAINT withdrawal_reservation_events_kind_valid CHECK ((kind = ANY (ARRAY['reserved'::text, 'released'::text, 'completed'::text, 'returned'::text])))
 );
 
 
@@ -3957,5 +3957,108 @@ CREATE TRIGGER treasury_adjustments_append_only
   FOR EACH ROW EXECUTE FUNCTION treasury_capability.prevent_entry_mutation();
 COMMENT ON TABLE treasury_capability.adjustments IS
   'Append-only signed operator Treasury adjustments; each row identifies its deterministic treasury ledger entry.';
+
+-- Account-level receivable history. Wallets stay non-negative; increases,
+-- inflow settlements, and privileged write-offs are immutable correlated facts.
+CREATE TABLE ledger_capability.account_debt_entries (
+    uuid uuid NOT NULL,
+    account_id bigint NOT NULL,
+    kind text NOT NULL,
+    amount_minor bigint NOT NULL,
+    wallet text NOT NULL,
+    source_kind text NOT NULL,
+    source_id text NOT NULL,
+    reason text NOT NULL,
+    actor_kind text NOT NULL,
+    actor_id bigint,
+    actor_system text,
+    correlation_id uuid NOT NULL,
+    idempotency_key text NOT NULL,
+    request_fingerprint text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT account_debt_kind_valid CHECK (kind IN ('increase','settlement','write_off')),
+    CONSTRAINT account_debt_amount_positive CHECK (amount_minor > 0),
+    CONSTRAINT account_debt_wallet_valid CHECK (wallet IN ('funding','earnings','account')),
+    CONSTRAINT account_debt_source_valid CHECK (length(btrim(source_kind)) > 0 AND length(btrim(source_id)) > 0),
+    CONSTRAINT account_debt_reason_nonempty CHECK (length(btrim(reason)) > 0),
+    CONSTRAINT account_debt_actor_valid CHECK (
+      (actor_kind = 'account' AND actor_id IS NOT NULL AND actor_system IS NULL) OR
+      (actor_kind = 'system' AND actor_id IS NULL AND length(btrim(actor_system)) > 0)
+    ),
+    CONSTRAINT account_debt_uuid_unique UNIQUE (uuid),
+    CONSTRAINT account_debt_idempotency_unique UNIQUE (idempotency_key)
+);
+ALTER TABLE ledger_capability.account_debt_entries
+  ADD CONSTRAINT account_debt_account_fk FOREIGN KEY (account_id)
+    REFERENCES identity_capability.accounts(id),
+  ADD CONSTRAINT account_debt_actor_fk FOREIGN KEY (actor_id)
+    REFERENCES identity_capability.accounts(id);
+CREATE INDEX account_debt_account_history_idx
+  ON ledger_capability.account_debt_entries (account_id, created_at DESC, id DESC);
+CREATE INDEX account_debt_correlation_idx
+  ON ledger_capability.account_debt_entries (correlation_id);
+CREATE TRIGGER account_debt_entries_append_only
+  BEFORE UPDATE OR DELETE ON ledger_capability.account_debt_entries
+  FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
+CREATE FUNCTION ledger_capability.prevent_account_debt_over_settlement()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  account_uuid uuid;
+  current_minor bigint;
+BEGIN
+  SELECT uuid INTO account_uuid FROM identity_capability.accounts WHERE id=NEW.account_id;
+  IF account_uuid IS NULL THEN
+    RAISE EXCEPTION 'Account debt account does not exist' USING ERRCODE='23503';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('account-debt:' || account_uuid::text, 0));
+  SELECT coalesce(sum(CASE WHEN kind='increase' THEN amount_minor ELSE -amount_minor END),0)
+    INTO current_minor
+    FROM ledger_capability.account_debt_entries
+   WHERE account_id=NEW.account_id;
+  IF NEW.kind <> 'increase' AND NEW.amount_minor > current_minor THEN
+    RAISE EXCEPTION 'Account debt cannot be settled or written off beyond its outstanding balance'
+      USING ERRCODE='23514', CONSTRAINT='account_debt_no_over_settlement';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER account_debt_no_over_settlement
+  BEFORE INSERT ON ledger_capability.account_debt_entries
+  FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_account_debt_over_settlement();
+COMMENT ON TABLE ledger_capability.account_debt_entries IS
+  'Append-only account-level USD receivable history; current debt is increases less settlements and explicit write-offs.';
+
+-- Immutable evidence that a completed payout was returned by its destination/provider.
+CREATE TABLE withdrawal_capability.payout_returns (
+    uuid uuid NOT NULL,
+    withdrawal_id bigint NOT NULL,
+    amount_minor bigint NOT NULL,
+    restored_minor bigint NOT NULL,
+    reason text NOT NULL,
+    external_reference text NOT NULL,
+    actor_id bigint NOT NULL,
+    correlation_id uuid NOT NULL,
+    idempotency_key text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT payout_returns_amount_positive CHECK (amount_minor > 0 AND restored_minor > 0),
+    CONSTRAINT payout_returns_reason_nonempty CHECK (length(btrim(reason)) > 0),
+    CONSTRAINT payout_returns_reference_nonempty CHECK (length(btrim(external_reference)) > 0),
+    CONSTRAINT payout_returns_uuid_unique UNIQUE (uuid),
+    CONSTRAINT payout_returns_withdrawal_unique UNIQUE (withdrawal_id),
+    CONSTRAINT payout_returns_idempotency_unique UNIQUE (idempotency_key),
+    CONSTRAINT payout_returns_withdrawal_fk FOREIGN KEY (withdrawal_id)
+      REFERENCES withdrawal_capability.withdrawals(id),
+    CONSTRAINT payout_returns_actor_fk FOREIGN KEY (actor_id)
+      REFERENCES identity_capability.accounts(id)
+);
+CREATE INDEX payout_returns_account_history_idx
+  ON withdrawal_capability.payout_returns (withdrawal_id, created_at DESC, id DESC);
+CREATE TRIGGER payout_returns_append_only
+  BEFORE UPDATE OR DELETE ON withdrawal_capability.payout_returns
+  FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
+COMMENT ON TABLE withdrawal_capability.payout_returns IS
+  'Append-only evidence of a returned completed payout; the reservation event restores gross earnings and debt is settled before availability.';
 
 -- End of canonical PostgreSQL baseline.

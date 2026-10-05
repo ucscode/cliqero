@@ -51,6 +51,12 @@ function fixture(configuration: unknown = { methods: [bankMethod] }) {
     update: vi.fn(async (row: SavedWithdrawalDestination) => {
       rows.set(row.id, row);
     }),
+    delete: vi.fn(async (accountId: string, id: string) => {
+      const row = rows.get(id);
+      if (!row || row.accountId !== accountId) return false;
+      rows.delete(id);
+      return true;
+    }),
   };
   const accounts = {
     exists: async (id: string) => id === "owner" || id === "other",

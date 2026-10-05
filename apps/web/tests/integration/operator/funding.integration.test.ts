@@ -130,6 +130,50 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
     ).toBe((await app.wallet.summary(customer.id)).available.minorAmount);
   });
 
+  it("settles account debt before administrative funding becomes available", async () => {
+    const { actor, customer } = await actors();
+    await app.accountDebt.increase({
+      accountId: customer.id,
+      amountMinor: 6_000n,
+      wallet: "account",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Known outstanding recovery fixture",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: `admin-funding-debt:${newId()}`,
+    });
+
+    const created = await app.operatorFunding.createAdministrative(actor.id, {
+      accountId: customer.id,
+      amountMinor: "10000",
+      state: "confirmed",
+      reason: "Verified administrative deposit",
+      reference: "debt-settlement-fixture",
+      idempotencyKey: `admin-debt-settlement:${newId()}`,
+    });
+
+    expect(await app.accountDebt.balance(actor.id, customer.id)).toBe("0");
+    expect((await app.wallet.summary(customer.id)).available.minorAmount).toBe(4_000n);
+    const rows = await app.database.query<{
+      kind: string;
+      amount_minor: string;
+      source_kind: string;
+    }>(
+      `select kind,amount_minor,source_kind from ledger_capability.account_debt_entries
+        where account_id=(select id from identity_capability.accounts where uuid=$1)
+          and kind='settlement'`,
+      [customer.id],
+    );
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]).toMatchObject({
+      kind: "settlement",
+      amount_minor: "6000",
+      source_kind: "administrative_funding_movement",
+    });
+    expect(created.state).toBe("confirmed");
+  });
+
   it("replays administrative Funding creation idempotently and conflicts on changed money", async () => {
     const { actor, customer } = await actors();
     const otherCustomer = await app.authentication.register({

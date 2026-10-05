@@ -22,6 +22,16 @@ export class PostgresWalletRepository implements WalletRepository {
            + coalesce((select sum(amount_minor) from wallet_capability.transfer_entries where wallet='funding' and direction='credit' and correlation_id in (select correlation_id from wallet_capability.transfers where account_id=(select id from identity_capability.accounts where uuid=$1))),0)
            + coalesce((select sum(amount_minor) from wallet_capability.funding_adjustments where account_id=(select id from identity_capability.accounts where uuid=$1)),0)
            - coalesce((select sum(amount_minor) from wallet_capability.debits where account_id=(select id from identity_capability.accounts where uuid=$1)),0)
+           - coalesce((select sum(debt.amount_minor) from ledger_capability.account_debt_entries debt
+            where debt.account_id=(select id from identity_capability.accounts where uuid=$1)
+              and debt.kind='settlement' and debt.wallet='funding'
+              and ((debt.source_kind='wallet_funding_credit' and exists (
+                     select 1 from wallet_capability.credits c
+                      where c.uuid::text=debt.source_id and c.account_id=debt.account_id and c.state='available'))
+                or (debt.source_kind='administrative_funding_movement' and exists (
+                     select 1 from wallet_capability.funding_adjustments adjustment
+                      where adjustment.uuid::text=debt.source_id and adjustment.account_id=debt.account_id
+                        and adjustment.amount_minor > 0)))),0)
            - coalesce((select sum(amount_minor) from wallet_capability.transfer_entries where wallet='funding' and direction='debit' and correlation_id in (select correlation_id from wallet_capability.transfers where account_id=(select id from identity_capability.accounts where uuid=$1))),0) available,
            coalesce((select sum(amount_minor) from wallet_capability.credits where account_id=(select id from identity_capability.accounts where uuid=$1) and state='pending'),0) pending`,
         [accountId],
@@ -41,6 +51,19 @@ export class PostgresWalletRepository implements WalletRepository {
       )
     ).rows[0];
     return r ? this.credit(r) : null;
+  }
+  async findPendingCredit(id: string) {
+    const row = (
+      await this.sql.query<any>(
+        `select c.*,c.uuid as id,a.uuid as account_uuid,f.uuid as funding_uuid
+           from wallet_capability.credits c
+           join identity_capability.accounts a on a.id=c.account_id
+           join funding_capability.funding_transactions f on f.id=c.funding_id
+          where c.uuid=$1 and c.state='pending' for update of c`,
+        [id],
+      )
+    ).rows[0];
+    return row ? this.credit(row) : null;
   }
   async findFundingCreditWork(limit = 50) {
     return (

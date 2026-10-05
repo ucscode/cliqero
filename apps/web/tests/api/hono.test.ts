@@ -874,7 +874,11 @@ describe("Hono API foundation", () => {
     expect(paths["/api/accounts"].post).toBeDefined();
     expect(paths["/api/accounts/{accountId}"].get).toBeDefined();
     expect(paths["/api/accounts/{accountId}"].patch).toBeDefined();
-    expect(paths["/api/accounts/{accountId}"].delete).toBeDefined();
+    expect(paths["/api/accounts/{accountId}"].delete).toBeUndefined();
+    expect(paths["/api/accounts"].delete).toBeDefined();
+    expect(
+      paths["/api/accounts"].delete.requestBody.content["application/json"].schema,
+    ).toBeDefined();
     expect(paths["/api/accounts/bulk"]).toBeUndefined();
     expect(paths["/api/payments"].get.tags).toEqual(["Payments"]);
     expect(paths["/api/payments/{paymentId}/reconcile"].post).toBeDefined();
@@ -912,9 +916,12 @@ describe("Hono API foundation", () => {
       get: expect.any(Object),
       post: expect.any(Object),
     });
-    expect(paths["/api/accounts/{accountId}/capabilities/{capability}"]).toMatchObject({
-      delete: expect.any(Object),
+    expect(paths["/api/accounts/{accountId}/capabilities"]).toMatchObject({
+      get: expect.any(Object),
+      post: expect.any(Object),
+      delete: expect.objectContaining({ requestBody: expect.any(Object) }),
     });
+    expect(paths).not.toHaveProperty("/api/accounts/{accountId}/capabilities/{capability}");
     expect(paths["/api/funding"]).toBeDefined();
     expect(paths["/api/funding/{fundingId}"]).toBeDefined();
     expect(paths["/api/funding/{fundingId}/confirm-bank-transfer"]).toBeDefined();
@@ -929,6 +936,7 @@ describe("Hono API foundation", () => {
       "Listing Integrations",
     ]);
     expect(paths["/api/listings/{listingId}/integrations"].post).toBeDefined();
+    expect(paths["/api/listings/{listingId}/integrations"].delete.requestBody).toBeDefined();
     const createIntegrationSchema =
       paths["/api/listings/{listingId}/integrations"].post.requestBody.content["application/json"]
         .schema;
@@ -941,8 +949,9 @@ describe("Hono API foundation", () => {
     expect(paths["/api/blog/posts/{postId}"]).toMatchObject({
       get: expect.any(Object),
       patch: expect.any(Object),
-      delete: expect.any(Object),
     });
+    expect(paths["/api/blog/posts/{postId}"].delete).toBeUndefined();
+    expect(paths["/api/blog/posts"].delete).toBeDefined();
     expect(paths["/api/withdrawals/{withdrawalId}"]).toMatchObject({
       get: expect.any(Object),
       patch: expect.any(Object),
@@ -1024,8 +1033,25 @@ describe("Hono API foundation", () => {
     expect(paths["/api/catalogue/categories/{categoryId}"]).toMatchObject({
       get: { "x-required-api-scope": "catalogue:manage" },
       patch: { "x-required-api-scope": "catalogue:manage" },
-      delete: { "x-required-api-scope": "catalogue:manage" },
     });
+    expect(paths["/api/catalogue/categories/{categoryId}"].delete).toBeUndefined();
+    expect(paths["/api/catalogue/categories"].delete).toMatchObject({
+      "x-required-api-scope": "catalogue:manage",
+    });
+    expect(paths["/api/blog/categories"].delete).toBeDefined();
+    expect(paths["/api/reviews"].delete).toBeDefined();
+    expect(paths["/api/withdrawal-destinations"].delete).toBeDefined();
+    expect(paths["/api/listings"].delete).toBeDefined();
+    expect(paths["/api/listings/{listingId}/media"].delete).toBeDefined();
+    for (const path of Object.keys(paths)) {
+      expect(path, `noncanonical delete path: ${path}`).not.toMatch(/\/(?:delete|bulk-delete)$/);
+      if (
+        /^\/api\/(?:accounts|blog\/posts|blog\/categories|catalogue\/categories|reviews|listings|withdrawal-destinations)\/\{[^}]+\}$/.test(
+          path,
+        )
+      )
+        expect(paths[path].delete, `item DELETE must not be exposed at ${path}`).toBeUndefined();
+    }
     expect(paths["/api/catalogue/categories/bulk"]).toBeUndefined();
     expect(paths["/api/reviews/bulk"]).toBeUndefined();
     expect(paths["/api/reviews/{reviewId}"].patch).toMatchObject({
@@ -1575,6 +1601,63 @@ describe("Hono API foundation", () => {
         )
       ).status,
     ).toBe(400);
+  });
+  it("exposes payout-return recovery only to the withdrawals management capability and scope", async () => {
+    const actor = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "api_key" as const,
+      capabilities: ["system.root"],
+      scopes: new Set<string>(),
+    };
+    const path = "/api/withdrawals/00000000-0000-4000-8000-000000000010/payout-return";
+    const request = () =>
+      new Request(`http://localhost${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": "return-123" },
+        body: JSON.stringify({
+          amount_minor: "950",
+          reason: "Receiving bank returned the payout",
+          external_reference: "BANK-RETURN-123",
+        }),
+      });
+    const recordPayoutReturn = vi.fn(async () => ({
+      payoutReturn: {
+        id: "00000000-0000-4000-8000-000000000020",
+        withdrawalId: "00000000-0000-4000-8000-000000000010",
+        amountMinor: 950n,
+        restoredMinor: 1000n,
+        reason: "Receiving bank returned the payout",
+        externalReference: "BANK-RETURN-123",
+        actorId: actor.accountId,
+        correlationId: "00000000-0000-4000-8000-000000000012",
+        idempotencyKey: "return-123",
+      },
+      changed: true,
+    }));
+
+    expect((await appWith(actor).fetch(request())).status).toBe(403);
+    const authorized = await appWith(
+      { ...actor, scopes: new Set(["withdrawals:manage"]) },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { recordPayoutReturn },
+    ).fetch(request());
+    expect(authorized.status).toBe(200);
+    expect(recordPayoutReturn).toHaveBeenCalledWith(
+      actor.accountId,
+      "00000000-0000-4000-8000-000000000010",
+      {
+        amountMinor: "950",
+        reason: "Receiving bank returned the payout",
+        externalReference: "BANK-RETURN-123",
+        idempotencyKey: "return-123",
+      },
+    );
   });
   it("exposes customer cancellation as a command, not a PATCH state", async () => {
     const ownerKey = {
@@ -2145,20 +2228,23 @@ describe("Hono API foundation", () => {
     expect(
       (
         await appWith({ ...base, capabilities: ["accounts.manage"] }).fetch(
-          new Request(`http://localhost/api/accounts/${target}`, { method: "DELETE" }),
+          new Request("http://localhost/api/accounts", {
+            method: "DELETE",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ids: [target] }),
+          }),
         )
       ).status,
-    ).toBe(204);
+    ).toBe(200);
 
     const duplicateBulkIds = await appWith({
       ...base,
       capabilities: ["accounts.manage"],
     }).fetch(
-      new Request("http://localhost/api/accounts/bulk", {
-        method: "POST",
+      new Request("http://localhost/api/accounts", {
+        method: "DELETE",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          action: "delete",
           ids: [
             "00000000-0000-4000-8000-000000000007",
             "00000000-0000-4000-8000-000000000007".toUpperCase(),
@@ -2166,9 +2252,15 @@ describe("Hono API foundation", () => {
         }),
       }),
     );
-    expect(duplicateBulkIds.status).toBe(404);
+    expect(duplicateBulkIds.status).toBe(400);
 
-    const deletePath = `http://localhost/api/accounts/${target}`;
+    const deletePath = "http://localhost/api/accounts";
+    const deleteRequest = (headers: Record<string, string> = {}) =>
+      new Request(deletePath, {
+        method: "DELETE",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ ids: [target] }),
+      });
     expect(
       (
         await appWith({
@@ -2176,7 +2268,7 @@ describe("Hono API foundation", () => {
           kind: "api_key",
           capabilities: ["system.root", "accounts.manage"],
           scopes: new Set(["payments:manage"]),
-        }).fetch(new Request(deletePath, { method: "DELETE" }))
+        }).fetch(deleteRequest())
       ).status,
     ).toBe(403);
     expect(
@@ -2186,9 +2278,9 @@ describe("Hono API foundation", () => {
           kind: "api_key",
           capabilities: ["system.root", "accounts.manage"],
           scopes: new Set(["accounts:manage"]),
-        }).fetch(new Request(deletePath, { method: "DELETE" }))
+        }).fetch(deleteRequest())
       ).status,
-    ).toBe(204);
+    ).toBe(200);
   });
   it("keeps capability administration session-only and explicit", async () => {
     const target = "00000000-0000-4000-8000-000000000002";
@@ -2219,7 +2311,11 @@ describe("Hono API foundation", () => {
     );
     expect(grant.status).toBe(200);
     const revoke = await appWith(admin).fetch(
-      new Request(`${path}/catalogue.manage`, { method: "DELETE" }),
+      new Request(path, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: ["catalogue.manage"] }),
+      }),
     );
     expect(revoke.status).toBe(200);
   });
@@ -2356,6 +2452,31 @@ describe("Hono API foundation", () => {
       ).status,
     ).toBe(403);
   });
+  it("keeps customer review submission session-only rather than treating a moderator API key as a customer", async () => {
+    const create = vi.fn(async () => ({}));
+    const apiKey = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { username: "reviewer" },
+      kind: "api_key" as const,
+      capabilities: ["reviews.moderate"],
+      scopes: new Set(["reviews:moderate"]),
+    };
+    const response = await appWith(apiKey, undefined, undefined, undefined, undefined, {
+      create,
+    }).fetch(
+      new Request("http://localhost/api/reviews", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          listing_id: "00000000-0000-4000-8000-000000000002",
+          rating: 5,
+          body: "Helpful",
+        }),
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(create).not.toHaveBeenCalled();
+  });
   it("keeps treasury facts append-only and rejects source/actor overrides", async () => {
     const principal = {
       accountId: "00000000-0000-4000-8000-000000000001",
@@ -2392,7 +2513,7 @@ describe("Hono API foundation", () => {
           ),
         )
       ).status,
-    ).toBe(403);
+    ).toBe(405);
   });
   it("serializes expected request validation as a human-readable API error", async () => {
     const principal = {

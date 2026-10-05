@@ -11,6 +11,7 @@ import {
   listingCategoryIdSchema,
   listingCategoryNameSchema,
 } from "@/modules/listing/category/category";
+import { deleteResourceIds, resourceDeleteSchema } from "../../shared/resource-delete";
 
 const categorySchema = z.object({ id: z.string().uuid(), name: z.string(), slug: z.string() });
 const createSchema = z
@@ -196,13 +197,27 @@ export function registerCatalogueCategoryRoutes(
   app.openapi(
     createRoute({
       method: "delete",
-      path: "/api/catalogue/categories/{categoryId}",
-      request: { params: categoryId },
+      path: "/api/catalogue/categories",
+      request: { body: { content: { "application/json": { schema: resourceDeleteSchema() } } } },
       responses: {
-        204: { description: "Category deleted" },
-        404: { description: "Not found", content: { "application/json": { schema: errorSchema } } },
-        409: {
-          description: "Category is assigned to listings",
+        200: {
+          description: "Per-category deletion results",
+          content: {
+            "application/json": {
+              schema: z.object({
+                results: z.array(
+                  z.object({
+                    id: z.string().uuid(),
+                    deleted: z.boolean(),
+                    error: z.string().nullable(),
+                  }),
+                ),
+              }),
+            },
+          },
+        },
+        400: {
+          description: "Invalid IDs",
           content: { "application/json": { schema: errorSchema } },
         },
         401: {
@@ -213,6 +228,14 @@ export function registerCatalogueCategoryRoutes(
           description: "Catalogue management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
+        404: {
+          description: "A category was not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "A category is still assigned",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     async (c) => {
@@ -221,8 +244,11 @@ export function registerCatalogueCategoryRoutes(
       const denied = requireCapabilityScope(c, principal, "catalogue.manage", "catalogue:manage");
       if (denied) return denied;
       try {
-        await container.listingCategories.delete(c.req.valid("param").categoryId);
-        return c.body(null, 204);
+        const { ids } = c.req.valid("json");
+        return c.json(
+          await deleteResourceIds(ids, (id) => container.listingCategories.delete(id)),
+          200,
+        );
       } catch (error) {
         return respondError(c, error);
       }

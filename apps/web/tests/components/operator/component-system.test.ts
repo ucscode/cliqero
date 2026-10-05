@@ -87,7 +87,9 @@ describe("operator component-system migration", () => {
     const source = readFileSync(resolve(operatorRoot, "users.tsx"), "utf8");
     expect(source).toContain("canDelete && onBulkDelete");
     expect(source).toContain('value: "delete"');
-    expect(source).toContain("/api/accounts/${account.id}");
+    expect(source).toContain('apiFetch("/api/accounts", {');
+    expect(source).toContain('method: "DELETE"');
+    expect(source).toContain("JSON.stringify({ ids: [account.id] })");
     expect(source).not.toContain("/api/accounts/bulk");
   });
 

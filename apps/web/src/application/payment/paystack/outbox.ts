@@ -16,12 +16,7 @@ export class PaystackChargeSucceededHandler implements OutboxEventHandler {
     if (!providerEventId) throw new Error("Paystack outbox event payload is invalid");
     const providerEvent = await this.providerEvents.findById(providerEventId);
     if (!providerEvent) throw new Error("Paystack provider event not found");
-    if (
-      providerEvent.state === "processed" ||
-      providerEvent.state === "rejected" ||
-      providerEvent.state === "ignored"
-    )
-      return;
+    if (providerEvent.state === "processed" || providerEvent.state === "ignored") return;
     if (
       !providerEvent.providerReference ||
       providerEvent.amountMinor === null ||

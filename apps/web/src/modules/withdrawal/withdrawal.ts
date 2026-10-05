@@ -50,6 +50,17 @@ export interface Withdrawal {
   createdAt: Date;
   updatedAt: Date;
 }
+export type WithdrawalPayoutReturnRecord = {
+  id: string;
+  withdrawalId: string;
+  amountMinor: bigint;
+  restoredMinor: bigint;
+  reason: string;
+  externalReference: string;
+  actorId: string;
+  correlationId: string;
+  idempotencyKey: string;
+};
 export type WithdrawalIdempotencyMatch = {
   withdrawal: Withdrawal;
   initialState: Extract<WithdrawalState, "requested" | "approved" | "rejected">;
@@ -97,6 +108,23 @@ export abstract class WithdrawalRepository extends CrudRepository<
     externalReference: string | null,
     note: string | null,
   ): Promise<Date>;
+  abstract recordPayoutReturn(input: {
+    id: string;
+    withdrawalId: string;
+    amountMinor: bigint;
+    restoredMinor: bigint;
+    reason: string;
+    externalReference: string;
+    actorId: string;
+    correlationId: string;
+    idempotencyKey: string;
+  }): Promise<void>;
+  abstract findPayoutReturnByIdempotencyKey(
+    key: string,
+  ): Promise<WithdrawalPayoutReturnRecord | null>;
+  abstract findPayoutReturnByWithdrawalId(id: string): Promise<WithdrawalPayoutReturnRecord | null>;
+  abstract lockPayoutReturnKey(key: string): Promise<void>;
+  abstract markPayoutReturned(id: string, reason: string): Promise<void>;
 }
 
 export interface WithdrawalDestinationRepository {
@@ -104,4 +132,5 @@ export interface WithdrawalDestinationRepository {
   listForAccount(accountId: string): Promise<readonly SavedWithdrawalDestination[]>;
   create(destination: SavedWithdrawalDestination): Promise<void>;
   update(destination: SavedWithdrawalDestination): Promise<void>;
+  delete(accountId: string, id: string): Promise<boolean>;
 }

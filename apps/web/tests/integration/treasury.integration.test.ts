@@ -31,10 +31,16 @@ suite("Treasury adjustment PostgreSQL persistence", () => {
       reference: "CASE-42",
       actorId: "00000000-0000-0000-0000-0000000000aa",
       idempotencyKey: newId(),
+      correlationId: newId(),
     };
     const first = await app.treasury.createAdjustment(input);
     const repeated = await app.treasury.createAdjustment(input);
     expect(repeated.id).toBe(first.id);
+    await expect(
+      app.treasury.createAdjustment({ ...input, correlationId: newId() }),
+    ).rejects.toThrow(
+      "Treasury adjustment idempotency key already used for a different adjustment",
+    );
     expect(first).toMatchObject({
       direction: "debit",
       amountMinor: 500n,

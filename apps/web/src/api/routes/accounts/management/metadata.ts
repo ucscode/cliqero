@@ -30,7 +30,7 @@ export const accountsOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     scope: "accounts:manage",
   },
   {
-    path: "/api/accounts/{accountId}",
+    path: "/api/accounts",
     method: "delete",
     mode: "account",
     capability: "accounts.manage",

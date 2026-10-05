@@ -176,16 +176,18 @@ suite("Operator catalogue editor API contract", () => {
     });
 
     const removed = await api.fetch(
-      new Request(`http://localhost/api/catalogue/categories/${explicitCategory.id}`, {
+      new Request("http://localhost/api/catalogue/categories", {
         method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [explicitCategory.id, generatedCategory.id] }),
       }),
     );
-    expect(removed.status).toBe(204);
-    const removedGenerated = await api.fetch(
-      new Request(`http://localhost/api/catalogue/categories/${generatedCategory.id}`, {
-        method: "DELETE",
-      }),
-    );
-    expect(removedGenerated.status).toBe(204);
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({
+      results: [
+        { id: explicitCategory.id, deleted: true, error: null },
+        { id: generatedCategory.id, deleted: true, error: null },
+      ],
+    });
   });
 });

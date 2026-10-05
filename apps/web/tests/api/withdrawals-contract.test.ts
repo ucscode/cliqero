@@ -63,6 +63,7 @@ describe("withdrawal API contract", () => {
       completionNote: null,
       completedBy: null,
       completedAt: null,
+      payoutReturn: null,
       attention: "review",
     });
     expect(result.destination.fields[0]).toMatchObject({ type: "hidden", value: "tron-mainnet" });

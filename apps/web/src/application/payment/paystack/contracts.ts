@@ -19,7 +19,8 @@ export interface ProviderEventStore {
   record(
     event: Omit<ProviderEventRecord, "state" | "lastError">,
   ): Promise<{ record: ProviderEventRecord; created: boolean }>;
-  findById(id: string): Promise<ProviderEventRecord | null>;
+  findById(id: string, options?: { forUpdate?: boolean }): Promise<ProviderEventRecord | null>;
+  markForReprocessing(id: string): Promise<void>;
   markProcessed(id: string): Promise<void>;
   markIgnored(id: string, reason: string): Promise<void>;
   markRejected(id: string, reason: string): Promise<void>;

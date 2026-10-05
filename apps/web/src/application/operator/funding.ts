@@ -4,6 +4,7 @@ import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import type { WalletService } from "@/application/wallet/service";
 import { newId } from "@/kernel/ids";
 import { PublicApplicationError } from "@/kernel/errors";
+import type { AccountDebtService } from "@/application/finance/account-debt";
 
 export type AdministrativeFundingState = "confirmed" | "failed" | "blocked" | "cancelled";
 
@@ -52,7 +53,7 @@ export interface AdministrativeFundingRepository {
     reason: string;
     reference: string | null;
     actorId: string;
-  }): Promise<void>;
+  }): Promise<string>;
 }
 
 export type OperatorFundingState =
@@ -192,6 +193,7 @@ export class OperatorFundingService {
       operators: OperatorAuthorizationService;
       wallet: Pick<WalletService, "summary">;
       uow: UnitOfWork;
+      debt?: AccountDebtService;
     },
   ) {}
 
@@ -259,8 +261,8 @@ export class OperatorFundingService {
         idempotencyKey,
         actorId,
       });
-      if (input.state === "confirmed")
-        await repository.recordMovement({
+      if (input.state === "confirmed") {
+        const movementId = await repository.recordMovement({
           fundingId: id,
           accountId: input.accountId,
           amountMinor,
@@ -268,6 +270,15 @@ export class OperatorFundingService {
           reference,
           actorId,
         });
+        await this.settleFundingInflow(
+          this.administration?.debt,
+          input.accountId,
+          amountMinor,
+          movementId,
+          id,
+          actorId,
+        );
+      }
       return {
         id,
         accountId: input.accountId,
@@ -309,8 +320,8 @@ export class OperatorFundingService {
           409,
         );
       await repository.update({ id, amountMinor, state: input.state, reason, reference });
-      if (delta !== 0n)
-        await repository.recordMovement({
+      if (delta !== 0n) {
+        const movementId = await repository.recordMovement({
           fundingId: id,
           accountId: current.accountId,
           amountMinor: delta,
@@ -318,6 +329,16 @@ export class OperatorFundingService {
           reference,
           actorId,
         });
+        if (delta > 0n)
+          await this.settleFundingInflow(
+            this.administration?.debt,
+            current.accountId,
+            delta,
+            movementId,
+            id,
+            actorId,
+          );
+      }
       return {
         ...current,
         amountMinor: amountMinor.toString(),
@@ -430,5 +451,29 @@ export class OperatorFundingService {
     if (reference && reference.length > 200)
       throw new Error("Reference must be 200 characters or fewer.");
     return reference;
+  }
+
+  private settleFundingInflow(
+    debt: AccountDebtService | undefined,
+    accountId: string,
+    amountMinor: bigint,
+    movementId: string,
+    fundingId: string,
+    actorId: string,
+  ) {
+    if (amountMinor <= 0n || !debt) return Promise.resolve();
+    return debt
+      .settleInflow({
+        accountId,
+        incomingMinor: amountMinor,
+        wallet: "funding",
+        sourceKind: "administrative_funding_movement",
+        sourceId: movementId,
+        reason: "Administrative funding settled outstanding account debt before availability",
+        actor: { kind: "account", id: actorId },
+        correlationId: fundingId,
+        idempotencyKey: `debt-settlement:administrative-funding:${movementId}`,
+      })
+      .then(() => undefined);
   }
 }

@@ -86,7 +86,9 @@ suite("development distribution scenario PostgreSQL path", () => {
       expect(distribution?.id).toBe(report.distributionId);
       expect(entries.length).toBeGreaterThan(0);
       expect(entries.every((entry) => entry.distributionId === report.distributionId)).toBe(true);
-      expect(report.entries.some((entry) => entry.username === "dist_seller")).toBe(true);
+      // The configured platform and commission shares total 100%, so the
+      // seller's remaining share is zero and correctly has no ledger entry.
+      expect(report.entries.some((entry) => entry.username === "dist_seller")).toBe(false);
       expect(
         report.entries.some(
           (entry) => entry.username === "dist_parent" && entry.label === "Level 1",

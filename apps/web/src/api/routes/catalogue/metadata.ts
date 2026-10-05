@@ -9,10 +9,17 @@ export const catalogueOpenApiMetadata = [
       scope: "catalogue:manage",
     }))
     .filter((item) => item.method !== "get"),
-  ...["get", "patch", "delete"].map((method) => ({
+  ...["get", "patch"].map((method) => ({
     path: "/api/catalogue/categories/{categoryId}",
     method,
     mode: "account" as const,
     scope: "catalogue:manage",
   })),
+  {
+    path: "/api/catalogue/categories",
+    method: "delete",
+    mode: "account",
+    capability: "catalogue.manage",
+    scope: "catalogue:manage",
+  },
 ] as const;

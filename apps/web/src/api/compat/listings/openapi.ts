@@ -1,5 +1,6 @@
 import { defineCompatibilityContracts, jsonBody } from "@/api/openapi/compatibility";
 import { scalar, text, uuid, list, object, nullableUnion, zodSchema } from "@/api/openapi/schema";
+import { resourceDeleteSchema } from "@/api/shared/resource-delete";
 import {
   listingCreateSchema,
   listingPageSchema,
@@ -103,6 +104,14 @@ const listingTransferOutputRecord = object(
 );
 
 export const compatibilityContracts = defineCompatibilityContracts({
+  "DELETE /api/listings": {
+    requestBody: jsonBody(zodSchema(resourceDeleteSchema())),
+    responseSchema: object({
+      results: list(
+        object({ id: uuid, deleted: scalar("boolean"), error: nullableUnion(["string"]) }),
+      ),
+    }),
+  },
   "GET /api/listings": {
     responseSchema: zodSchema(listingPageSchema),
     parameters: [
@@ -193,9 +202,6 @@ export const compatibilityContracts = defineCompatibilityContracts({
       { name: "format", schema: scalar("string", { enum: ["json", "csv", "yaml"] }) },
       { name: "mode", schema: scalar("string", { enum: ["create", "upsert"], default: "create" }) },
     ],
-  },
-  "DELETE /api/listings/{listingId}": {
-    successStatus: "204",
   },
 });
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { authenticatedAccount, apiError } from "../../../http";
 import { getContainer } from "@/infrastructure/container";
 import { mediaView } from "@/application/listing/media";
+import { deleteResourceIds, resourceDeleteSchema } from "@/api/shared/resource-delete";
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ listingId: string }> },
@@ -48,5 +49,31 @@ export async function POST(
     return Response.json(mediaView(v, c.listingMedia.publicUrl(v)), { status: 201 });
   } catch (e) {
     return apiError(e);
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ listingId: string }> },
+) {
+  const account = await authenticatedAccount(request);
+  if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const container = getContainer();
+    await container.operators.requireCapability(account.id, "catalogue.manage");
+    const listingId = z.uuid().parse((await params).listingId);
+    const { ids } = resourceDeleteSchema().parse(await request.json());
+    return Response.json(
+      await deleteResourceIds(ids, (id) =>
+        container.listingMedia.requestDeletionCatalogue(account, listingId, id),
+      ),
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError)
+      return Response.json(
+        { error: "Invalid listing media request", code: "invalid_request" },
+        { status: 400 },
+      );
+    return apiError(error, request);
   }
 }

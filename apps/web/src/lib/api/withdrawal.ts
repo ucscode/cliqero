@@ -52,7 +52,7 @@ export type OperatorWithdrawal = {
   reservation: {
     amountMinor: string;
     currency: string;
-    state: "reserved" | "released" | "completed";
+    state: "reserved" | "released" | "completed" | "returned";
   } | null;
   externalReference: string | null;
   completionNote: string | null;

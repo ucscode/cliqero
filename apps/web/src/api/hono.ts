@@ -24,6 +24,7 @@ import { registerPaymentCallbackRoutes } from "./routes/payment-callbacks";
 import { registerReviewRoutes } from "./routes/reviews";
 import { registerAccountAccessRoutes } from "./routes/account-access";
 import { registerPackageEntitlementRoutes } from "./routes/package/entitlements";
+import { registerAccountDebtRoutes } from "./routes/account-debt";
 import { accountAccessOpenApiMetadata } from "./routes/account-access/metadata";
 import { blogOpenApiMetadata } from "./routes/blog/metadata";
 import { hierarchyOpenApiMetadata } from "./routes/hierarchy/metadata";
@@ -35,6 +36,9 @@ import { withdrawalOpenApiMetadata } from "./routes/withdrawals/metadata";
 import { operatorReviewOpenApiMetadata } from "./routes/reviews/metadata";
 import { catalogueOpenApiMetadata } from "./routes/catalogue/metadata";
 import { paymentsOpenApiMetadata } from "./routes/payments/metadata";
+import { accountDebtOpenApiMetadata } from "./routes/account-debt/metadata";
+import { registerPurchaseReconciliationRoutes } from "./routes/purchases/reconciliation";
+import { purchaseRecoveryOpenApiMetadata } from "./routes/purchases/metadata";
 
 export function createApiApp(
   container: ApplicationContainer,
@@ -81,6 +85,8 @@ export function createApiApp(
   registerPaymentCallbackRoutes(app, container);
   registerAccountAccessRoutes(app, container);
   registerPackageEntitlementRoutes(app, container);
+  registerAccountDebtRoutes(app, container);
+  registerPurchaseReconciliationRoutes(app, container);
 
   // Compatibility handlers are internal adapters around the same application
   // services. This fallback keeps one authoritative HTTP router while legacy
@@ -111,6 +117,8 @@ export function generateOpenApiDocument(app: OpenAPIHono<Env>) {
     operatorReviewOpenApiMetadata,
     catalogueOpenApiMetadata,
     paymentsOpenApiMetadata,
+    accountDebtOpenApiMetadata,
+    purchaseRecoveryOpenApiMetadata,
   ]);
   expandOpaqueJsonSchemas(document);
   delete document.paths["/api/openapi.json"];

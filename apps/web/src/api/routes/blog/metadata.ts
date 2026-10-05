@@ -24,7 +24,7 @@ export const blogOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     scope: "blog:write",
   },
   {
-    path: "/api/blog/posts/{postId}",
+    path: "/api/blog/posts",
     method: "delete",
     mode: "account",
     capability: "content.manage",
@@ -67,7 +67,7 @@ export const blogOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     scope: "blog:write",
   },
   {
-    path: "/api/blog/categories/{categoryId}",
+    path: "/api/blog/categories",
     method: "delete",
     mode: "account",
     capability: "content.manage",

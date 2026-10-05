@@ -132,7 +132,11 @@ export function IntegrationSettings() {
     setBusy(item.id);
     setError(null);
     try {
-      await apiFetch(`/api/listings/${listingId}/integrations/${item.id}`, { method: "DELETE" });
+      await apiFetch(`/api/listings/${listingId}/integrations`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [item.id] }),
+      });
       await load();
     } catch (cause) {
       setError(errorMessage(cause, "We couldn’t revoke that integration."));

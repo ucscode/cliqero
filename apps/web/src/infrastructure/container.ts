@@ -25,6 +25,7 @@ import { registerDevelopmentPaymentProvider } from "@/providers/payment/developm
 import { PaystackProvider } from "@/providers/payment/paystack/provider";
 import { loadPaystackConfiguration } from "@/providers/payment/paystack/config";
 import { PaystackWebhookIngress } from "@/application/payment/paystack/webhook";
+import { PaystackProviderEventReprocessingService } from "@/application/payment/paystack/reprocess";
 import { NowPaymentsProvider } from "@/providers/payment/nowpayments/provider";
 import { loadNowPaymentsConfiguration } from "@/providers/payment/nowpayments/config";
 import { NowPaymentsExpiryProcessor } from "@/application/funding/expiry";
@@ -59,6 +60,7 @@ import { OperatorPurchaseService } from "@/application/operator/purchases";
 import { PostgresOperatorPurchaseReader } from "@/infrastructure/postgres/operator/purchases";
 import { PostgresReversalRepository } from "./postgres/purchase/reversals";
 import { PurchaseReversalProcessor } from "@/processors/purchase/reversal";
+import { PurchaseEntitlementReconciliationService } from "@/application/purchase/entitlement-reconciliation";
 import { SettlementProcessor } from "@/processors/ledger/settlement";
 import { PostgresSettlementStore } from "@/infrastructure/postgres/ledger/settlement";
 import { PostgresSettlementPolicyRepository } from "@/infrastructure/postgres/ledger/settlement-policy";
@@ -80,6 +82,7 @@ import { PostgresWalletTransferService } from "@/infrastructure/postgres/wallet/
 import { FeePolicyLoader, type FeePolicySource } from "@/modules/fee/policy";
 import { PostgresCheckoutRepository } from "./postgres/checkout/repository";
 import { FundingService } from "@/application/funding/service";
+import { FundingCreditReconciliationService } from "@/application/funding/reconciliation";
 import { FundingInitializationProcessor } from "@/application/funding/initialization";
 import { FundingVerificationProcessor } from "@/application/funding/verification";
 import { PaystackVerificationRecoveryPolicy } from "@/application/payment/paystack/recovery";
@@ -107,6 +110,8 @@ import { PostgresTreasuryDistributionStore } from "@/infrastructure/postgres/tre
 import { OperatorTreasuryService } from "@/infrastructure/postgres/operator/treasury";
 import { EarningsAdjustmentService } from "@/application/finance/earnings-adjustments";
 import { PostgresEarningsAdjustmentRepository } from "@/infrastructure/postgres/ledger/earnings-adjustments";
+import { PostgresAccountDebtRepository } from "@/infrastructure/postgres/ledger/account-debt";
+import { AccountDebtService } from "@/application/finance/account-debt";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
 import { ApiPrincipalResolver } from "@/infrastructure/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
@@ -228,6 +233,17 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const outbox = lazy(() => new PostgresOutbox(database));
   const idempotency = lazy(() => new PostgresIdempotencyRepository(database));
   const providerEvents = lazy(() => new PostgresProviderEventRepository(database));
+  const providerEventReprocessing = lazy(
+    () =>
+      new PaystackProviderEventReprocessingService(
+        providerEvents(),
+        outbox(),
+        operators(),
+        idempotency(),
+        auditRecorder(),
+        database,
+      ),
+  );
   const funding = lazy(() => new PostgresFundingRepository(database));
   const walletRepository = lazy(() => new PostgresWalletRepository(database));
   const feePolicy = lazy(() => options.feePolicySource ?? new FeePolicyLoader());
@@ -239,6 +255,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         () => feePolicy().getActive(),
         wallet(),
         fundsReservation(),
+        accountDebt(),
       ),
   );
   const checkoutRepository = lazy(() => new PostgresCheckoutRepository(database));
@@ -302,6 +319,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         feePolicy(),
         treasuryRepository(),
         auditRecorder(),
+        accountDebt(),
       ),
   );
 
@@ -432,6 +450,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         outbox(),
         database,
         yamlCommissionPolicy(),
+        accountDebt(),
       ),
   );
   const fundingInitialization = lazy(
@@ -485,10 +504,41 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     () => new WalletCreditProcessor(funding(), walletRepository(), database, lifecycleDiagnostics),
   );
   const walletAvailability = lazy(
-    () => new WalletAvailabilityProcessor(walletRepository(), database, lifecycleDiagnostics),
+    () =>
+      new WalletAvailabilityProcessor(
+        walletRepository(),
+        database,
+        lifecycleDiagnostics,
+        accountDebt(),
+      ),
+  );
+  const fundingCreditReconciliation = lazy(
+    () =>
+      new FundingCreditReconciliationService(
+        funding(),
+        walletRepository(),
+        walletCredit(),
+        walletAvailability(),
+        operators(),
+        idempotency(),
+        auditRecorder(),
+        database,
+      ),
   );
   const entitlementIssuance = lazy(
     () => new EntitlementIssuanceProcessor(purchases(), entitlements(), database),
+  );
+  const purchaseEntitlementReconciliation = lazy(
+    () =>
+      new PurchaseEntitlementReconciliationService(
+        purchases(),
+        entitlements(),
+        entitlementIssuance(),
+        operators(),
+        idempotency(),
+        auditRecorder(),
+        database,
+      ),
   );
   const betterAuth = lazy(() => new BetterAuthBoundary(database, databaseUrl));
   const authentication = lazy(() =>
@@ -541,6 +591,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
           operators: operators(),
           wallet: wallet(),
           uow: database,
+          debt: accountDebt(),
         },
       ),
   );
@@ -567,6 +618,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         database,
         accounts(),
         exchangeRates(),
+        accountDebt(),
       ),
   );
   const walletCheckout = lazy(
@@ -587,6 +639,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         purchases(),
         database,
         outbox(),
+        accountDebt(),
       ),
   );
   const referralGraphService = lazy(
@@ -646,7 +699,12 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         new PostgresEarningsAdjustmentRepository(database),
         operators(),
         database,
+        accountDebt(),
       ),
+  );
+  const accountDebt = lazy(
+    () =>
+      new AccountDebtService(new PostgresAccountDebtRepository(database), operators(), database),
   );
   const blog = lazy(() => getBlogService());
 
@@ -690,6 +748,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get providerEvents() {
       return providerEvents();
+    },
+    get providerEventReprocessing() {
+      return providerEventReprocessing();
     },
     get outbox() {
       return outbox();
@@ -793,11 +854,17 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     get walletAvailability() {
       return walletAvailability();
     },
+    get fundingCreditReconciliation() {
+      return fundingCreditReconciliation();
+    },
     get walletCheckoutPayment() {
       return walletCheckoutPayment();
     },
     get entitlementIssuance() {
       return entitlementIssuance();
+    },
+    get purchaseEntitlementReconciliation() {
+      return purchaseEntitlementReconciliation();
     },
     get referralGraphService() {
       return referralGraphService();
@@ -933,6 +1000,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get earningsAdjustments() {
       return earningsAdjustments();
+    },
+    get accountDebt() {
+      return accountDebt();
     },
     get blog() {
       return blog();

@@ -379,7 +379,11 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
     )
       return;
     try {
-      await apiFetch(`/api/blog/posts/${saved.id}`, { method: "DELETE" });
+      await apiFetch("/api/blog/posts", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [saved.id] }),
+      });
       toast.success("Post deleted.");
       router.push("/operator/blog");
     } catch (cause) {

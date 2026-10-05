@@ -13,6 +13,7 @@ import type {
   LedgerRepository,
   PurchaseDistribution,
 } from "@/modules/ledger/ledger";
+import type { AccountDebtService } from "@/application/finance/account-debt";
 
 export class PurchaseDistributionProcessor {
   constructor(
@@ -24,6 +25,7 @@ export class PurchaseDistributionProcessor {
     private readonly outbox: EventOutbox,
     private readonly uow: UnitOfWork,
     private readonly yamlCommissionPolicy?: CommissionPolicyRepository,
+    private readonly debt?: AccountDebtService,
   ) {}
 
   async process(input: {
@@ -154,6 +156,20 @@ export class PurchaseDistributionProcessor {
         correlationId: input.correlationId,
       });
       await this.ledger.append(entries);
+      for (const entry of entries) {
+        if (!entry.accountId || entry.recipientRole === "platform") continue;
+        await this.debt?.settleInflow({
+          accountId: entry.accountId,
+          incomingMinor: entry.amount.minorAmount,
+          wallet: "earnings",
+          sourceKind: "purchase_earning",
+          sourceId: entry.id,
+          reason: "Purchase earnings settled outstanding account debt before spendability",
+          actor: { kind: "system", id: "purchase-distribution-processor" },
+          correlationId: input.correlationId,
+          idempotencyKey: `debt-settlement:purchase-earning:${entry.id}`,
+        });
+      }
       await this.outbox.append([
         {
           id: newId(),

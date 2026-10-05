@@ -8,6 +8,7 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/modules/identity/pas
 import { operatorAccountDetailSchema, operatorAccountSummarySchema } from "./contracts";
 import { crudMaxRows } from "@/config/crud";
 import { registerAccount } from "@/api/compat/accounts/route";
+import { deleteResourceIds, resourceDeleteSchema } from "../../../shared/resource-delete";
 
 export function registerAccountManagementRoutes(
   app: OpenAPIHono<Env>,
@@ -319,16 +320,28 @@ export function registerAccountManagementRoutes(
   app.openapi(
     createRoute({
       method: "delete",
-      path: "/api/accounts/{accountId}",
+      path: "/api/accounts",
       tags: ["Accounts"],
-      summary: "Delete an account",
+      summary: "Delete accounts",
       description:
         "Removes authentication and personal profile data, revokes credentials, archives owned listings, detaches immediate referrals as new roots, and preserves financial and commerce history. Operators cannot delete themselves or the final system.root account.",
-      request: { params: z.object({ accountId: z.uuid() }) },
+      request: { body: { content: { "application/json": { schema: resourceDeleteSchema() } } } },
       responses: {
-        204: { description: "Account identity deleted and tombstoned" },
+        200: {
+          description:
+            "Per-account deletion results; retained history references a tombstone identity.",
+          content: {
+            "application/json": {
+              schema: z.object({
+                results: z.array(
+                  z.object({ id: z.uuid(), deleted: z.boolean(), error: z.string().nullable() }),
+                ),
+              }),
+            },
+          },
+        },
         400: {
-          description: "Invalid account ID",
+          description: "Invalid account IDs",
           content: { "application/json": { schema: errorSchema } },
         },
         401: {
@@ -339,14 +352,6 @@ export function registerAccountManagementRoutes(
           description: "Account management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
-        404: {
-          description: "Active account not found",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        409: {
-          description: "Deletion conflicts with account safety rules",
-          content: { "application/json": { schema: errorSchema } },
-        },
       },
     }),
     async (c) => {
@@ -355,11 +360,13 @@ export function registerAccountManagementRoutes(
       const denied = requireCapabilityScope(c, p, "accounts.manage", "accounts:manage");
       if (denied) return denied;
       try {
-        await container.operatorAccountManagement.delete(
-          p.accountId,
-          c.req.valid("param").accountId,
+        const { ids } = c.req.valid("json");
+        return c.json(
+          await deleteResourceIds(ids, (id) =>
+            container.operatorAccountManagement.delete(p.accountId, id),
+          ),
+          200,
         );
-        return c.body(null, 204);
       } catch (error) {
         return domainError(c, error);
       }

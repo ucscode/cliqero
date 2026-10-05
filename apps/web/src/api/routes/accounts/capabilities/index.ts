@@ -14,6 +14,15 @@ export function registerAccountCapabilityRoutes(
   const capabilitySetBody = z
     .object({ capabilities: z.array(z.string().min(1).max(64)).max(64) })
     .strict();
+  const capabilityDeleteBody = z
+    .object({
+      ids: z.array(z.string().trim().min(1).max(64)).min(1).max(64),
+    })
+    .strict()
+    .superRefine(({ ids }, context) => {
+      if (new Set(ids).size !== ids.length)
+        context.addIssue({ code: "custom", path: ["ids"], message: "IDs must be unique." });
+    });
   app.openapi(
     createRoute({
       method: "put",
@@ -165,19 +174,24 @@ export function registerAccountCapabilityRoutes(
   app.openapi(
     createRoute({
       method: "delete",
-      path: "/api/accounts/{accountId}/capabilities/{capability}",
-      request: { params: capabilityParams.extend({ capability: z.string().min(1).max(64) }) },
+      path: "/api/accounts/{accountId}/capabilities",
+      request: {
+        params: capabilityParams,
+        body: { content: { "application/json": { schema: capabilityDeleteBody } } },
+      },
       responses: {
         200: {
-          description: "Capability revoke result",
+          description: "Per-capability revoke results",
           content: {
             "application/json": {
               schema: z.object({
-                accountId: z.string().uuid(),
-                capability: z.string(),
-                changed: z.boolean(),
-                assigned: z.boolean(),
-                grantedAt: z.string().nullable(),
+                results: z.array(
+                  z.object({
+                    id: z.string(),
+                    deleted: z.boolean(),
+                    error: z.string().nullable(),
+                  }),
+                ),
               }),
             },
           },
@@ -206,14 +220,25 @@ export function registerAccountCapabilityRoutes(
       const denied = requireSessionCapability(c, p, "capabilities.manage");
       if (denied) return denied;
       try {
-        return c.json(
-          await container.capabilityAdministration.revoke(
-            p.accountId,
-            c.req.valid("param").accountId,
-            c.req.valid("param").capability,
-          ),
-          200,
-        );
+        const { ids } = c.req.valid("json");
+        const results = [];
+        for (const capability of ids) {
+          try {
+            const result = await container.capabilityAdministration.revoke(
+              p.accountId,
+              c.req.valid("param").accountId,
+              capability,
+            );
+            results.push({ id: capability, deleted: result.changed, error: null });
+          } catch (error) {
+            results.push({
+              id: capability,
+              deleted: false,
+              error: error instanceof Error ? error.message : "Capability could not be revoked.",
+            });
+          }
+        }
+        return c.json({ results }, 200);
       } catch (error) {
         return domainError(c, error);
       }

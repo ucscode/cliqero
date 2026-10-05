@@ -115,7 +115,8 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
         BigInt(existing.amount_minor) !== v.amountMinor ||
         existing.reason !== v.reason ||
         existing.reference !== v.reference ||
-        existing.actor_uuid !== v.actorId
+        existing.actor_uuid !== v.actorId ||
+        existing.correlation_id !== v.correlationId
       )
         throw new Error(
           "Treasury adjustment idempotency key already used for a different adjustment",

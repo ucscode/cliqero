@@ -19,6 +19,27 @@ export const operatorWithdrawalCompleteSchema = z
     note: z.string().trim().max(500).optional(),
   })
   .strict();
+export const operatorPayoutReturnRequestSchema = z
+  .object({
+    amount_minor: z.string().regex(/^\d+$/).describe("Returned provider payout in minor units."),
+    reason: z.string().trim().min(3).max(1000),
+    external_reference: z.string().trim().min(1).max(200),
+  })
+  .strict();
+export const operatorPayoutReturnResponseSchema = z.object({
+  payoutReturn: z.object({
+    id: z.string().uuid(),
+    withdrawalId: z.string().uuid(),
+    amountMinor: z.string(),
+    restoredMinor: z.string(),
+    reason: z.string(),
+    externalReference: z.string(),
+    actorId: z.string().uuid(),
+    correlationId: z.string().uuid(),
+    idempotencyKey: z.string(),
+  }),
+  changed: z.boolean(),
+});
 export const operatorWithdrawalSchema = z.object({
   id: z.string().uuid(),
   account: z.object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() }),
@@ -33,13 +54,26 @@ export const operatorWithdrawalSchema = z.object({
     .object({
       amountMinor: z.string(),
       currency: z.string(),
-      state: z.enum(["reserved", "released", "completed"]),
+      state: z.enum(["reserved", "released", "completed", "returned"]),
     })
     .nullable(),
   externalReference: z.string().nullable(),
   completionNote: z.string().nullable(),
   completedBy: z.string().uuid().nullable(),
   completedAt: z.string().nullable(),
+  payoutReturn: z
+    .object({
+      id: z.string().uuid(),
+      amountMinor: z.string(),
+      restoredMinor: z.string(),
+      reason: z.string(),
+      externalReference: z.string(),
+      actorId: z.string().uuid(),
+      correlationId: z.string().uuid(),
+      idempotencyKey: z.string(),
+      createdAt: z.string(),
+    })
+    .nullable(),
   attention: operatorWithdrawalAttentionSchema,
 });
 export const operatorWithdrawalDetailSchema = operatorWithdrawalSchema.extend({

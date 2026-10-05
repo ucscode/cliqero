@@ -61,7 +61,15 @@ export const fundingDetailSchema = z.object({
   error_code: z.string().nullable(),
   error_message: z.string().nullable(),
   verification: z
-    .object({ status: z.string(), message: z.string(), level: z.string(), resolved: z.boolean() })
+    .object({
+      status: z.string(),
+      message: z.string(),
+      level: z.string(),
+      resolved: z.boolean(),
+      checked_at: z.string().nullable(),
+      confirmations: z.number().int().nonnegative().optional(),
+      confirmations_required: z.number().int().nonnegative().optional(),
+    })
     .nullable(),
   confirmed_at: z.string().nullable(),
   wallet_credit_state: z.string().nullable(),
