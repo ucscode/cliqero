@@ -6,7 +6,7 @@ const source = readFileSync(resolve(process.cwd(), "src/components/onboarding-fo
 
 describe("OAuth onboarding authentication boundary", () => {
   it("keeps incomplete sessions on onboarding and invalid sessions out", () => {
-    expect(source).toContain("/api/me/onboarding");
+    expect(source).toContain("/internal/me/onboarding");
     expect(source).toContain("authClient");
     expect(source).toContain("signOut");
     expect(source).toContain('router.replace("/login")');

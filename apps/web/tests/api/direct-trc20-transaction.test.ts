@@ -22,11 +22,14 @@ function configure(submitProviderRequest: ReturnType<typeof vi.fn>) {
 }
 
 function request(body: unknown) {
-  return new Request(`http://localhost/api/wallet/fund/${fundingId}/transaction`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return new Request(
+    `http://localhost/api/direct-trc20/funding-transactions/${fundingId}/transaction`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 describe("Direct USDT TRC20 transaction submission API", () => {

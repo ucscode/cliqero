@@ -638,13 +638,17 @@ suite("Better Auth and Cliqero identity boundary", () => {
     );
     const cookie = login.headers.get("set-cookie")!.split(";")[0];
     const api = createApiApp(app as any);
-    const valid = await api.fetch(
+    const formerPublicPath = await api.fetch(
       new Request("http://localhost:3000/api/me/session", { headers: { cookie } }),
     );
-    expect(valid.status).toBe(200);
-    expect(await valid.json()).toEqual({
-      authenticated: true,
+    expect(formerPublicPath.status).toBe(404);
+    expect(
+      await app.authentication.principal(
+        new Request("http://localhost:3000/api/me/session", { headers: { cookie } }),
+      ),
+    ).toMatchObject({
       account: { id: account.id, username: account.username },
+      authLinkState: "complete",
     });
 
     await app.database.query(
@@ -654,7 +658,12 @@ suite("Better Auth and Cliqero identity boundary", () => {
     const broken = await api.fetch(
       new Request("http://localhost:3000/api/me/session", { headers: { cookie } }),
     );
-    expect(broken.status).toBe(401);
+    expect(broken.status).toBe(404);
+    expect(
+      await app.authentication.principal(
+        new Request("http://localhost:3000/api/me/session", { headers: { cookie } }),
+      ),
+    ).toMatchObject({ account: null, authLinkState: "missing" });
   });
 
   it("rejects an orphaned Better Auth session at the onboarding boundary", async () => {

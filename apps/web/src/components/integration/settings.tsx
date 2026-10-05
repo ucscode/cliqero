@@ -45,10 +45,12 @@ export function IntegrationSettings() {
     setLoading(true);
     setError(null);
     try {
-      const ownedListings = await apiFetch<ListingPage>("/api/me/listings?limit=100").catch(() => ({
-        items: [],
-        next_cursor: null,
-      }));
+      const ownedListings = await apiFetch<ListingPage>("/internal/me/listings?limit=100").catch(
+        () => ({
+          items: [],
+          next_cursor: null,
+        }),
+      );
       setListings(ownedListings.items);
       const selectedListingId = ownedListings.items.some((item) => item.id === listingId)
         ? listingId

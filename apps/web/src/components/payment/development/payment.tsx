@@ -47,7 +47,7 @@ export function DevelopmentPayment(props: PaymentProviderProps) {
     setSubmitting(true);
     try {
       const result = await apiFetch<{ state: FundingStatus["state"] }>(
-        "/api/funding/development/verify",
+        "/internal/funding/development/verify",
         {
           method: "POST",
           headers: { "content-type": "application/json" },

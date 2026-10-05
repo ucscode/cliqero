@@ -41,14 +41,14 @@ export function OperatorNetwork() {
     setError(null);
     try {
       const [profile, hierarchy] = await Promise.all([
-        apiFetch<{ id: string }>("/api/me/profile"),
+        apiFetch<{ account: { id: string } }>("/internal/me/session"),
         apiFetch<HierarchyTree>(
           rootParam
             ? `/api/hierarchy/tree?root=${encodeURIComponent(rootParam)}`
             : "/api/hierarchy/tree",
         ),
       ]);
-      setSelfId(profile.id);
+      setSelfId(profile.account.id);
       setTree(hierarchy);
     } catch (cause) {
       setError(

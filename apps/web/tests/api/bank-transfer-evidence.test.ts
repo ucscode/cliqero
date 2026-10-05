@@ -41,7 +41,7 @@ describe("bank-transfer evidence API", () => {
       }),
     );
     const response = await POST(
-      new Request(`http://localhost/api/wallet/fund/${fundingId}/evidence`, {
+      new Request(`http://localhost/api/bank-transfer/funding-transactions/${fundingId}/evidence`, {
         method: "POST",
         body,
       }),
@@ -90,7 +90,7 @@ describe("bank-transfer evidence API", () => {
     body.set("transfer_reference", "bank-ref-only");
     body.set("customer_note", "");
     const response = await POST(
-      new Request(`http://localhost/api/wallet/fund/${fundingId}/evidence`, {
+      new Request(`http://localhost/api/bank-transfer/funding-transactions/${fundingId}/evidence`, {
         method: "POST",
         body,
       }),
@@ -134,7 +134,7 @@ describe("bank-transfer evidence API", () => {
       }),
     );
     const response = await POST(
-      new Request(`http://localhost/api/wallet/fund/${fundingId}/evidence`, {
+      new Request(`http://localhost/api/bank-transfer/funding-transactions/${fundingId}/evidence`, {
         method: "POST",
         body,
       }),
@@ -164,7 +164,7 @@ describe("bank-transfer evidence API", () => {
     body.set("transfer_reference", "");
     body.set("customer_note", "Reviewer context only");
     const response = await POST(
-      new Request(`http://localhost/api/wallet/fund/${fundingId}/evidence`, {
+      new Request(`http://localhost/api/bank-transfer/funding-transactions/${fundingId}/evidence`, {
         method: "POST",
         body,
       }),

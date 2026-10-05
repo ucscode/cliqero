@@ -3,6 +3,7 @@ import slugify from "slugify";
 import { newId } from "@/kernel/ids";
 import { CrudService } from "@/kernel/crud";
 import { BlogCategoryService } from "./categories";
+import { BlogTagService } from "./tags";
 import {
   blogPostInputSchema,
   BlogCategoryNotFoundError,
@@ -31,10 +32,12 @@ export class BlogService extends CrudService<
   void
 > {
   readonly categoryService: BlogCategoryService;
+  readonly tagService: BlogTagService;
 
   constructor(private readonly repository: BlogRepository) {
     super();
     this.categoryService = new BlogCategoryService(repository.categoryRepository);
+    this.tagService = new BlogTagService(repository.tagRepository);
   }
 
   override create(

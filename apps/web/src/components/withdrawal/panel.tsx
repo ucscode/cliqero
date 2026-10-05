@@ -56,7 +56,7 @@ export function WithdrawalsPanel() {
     setError(null);
     try {
       const [nextPolicy, nextPage, nextDestinations] = await Promise.all([
-        apiFetch<WithdrawalPolicy>("/api/me/withdrawals/policy"),
+        apiFetch<WithdrawalPolicy>("/api/withdrawals/policy"),
         apiFetch<WithdrawalPage>(`/api/withdrawals?limit=${WITHDRAWAL_HISTORY_PREVIEW_SIZE}`),
         apiFetch<WithdrawalDestination[]>("/api/withdrawal-destinations"),
       ]);

@@ -42,7 +42,7 @@ describe("wallet funding foreground verification API", () => {
   it("invokes the shared verifier and returns the persisted observation", async () => {
     configure();
     const response = await POST(
-      new Request(`http://localhost/api/wallet/fund/${fundingId}/verify`),
+      new Request(`http://localhost/api/funding-transactions/${fundingId}/verify`),
       {
         params: Promise.resolve({ fundingId }),
       },
@@ -66,7 +66,7 @@ describe("wallet funding foreground verification API", () => {
   it("does not invoke provider verification for a terminal funding", async () => {
     configure("failed");
     const response = await POST(
-      new Request(`http://localhost/api/wallet/fund/${fundingId}/verify`),
+      new Request(`http://localhost/api/funding-transactions/${fundingId}/verify`),
       {
         params: Promise.resolve({ fundingId }),
       },

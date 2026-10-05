@@ -159,7 +159,7 @@ export function WalletPanel({
     if (!fundingId) return;
     setRefreshing(true);
     try {
-      const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
+      const latest = await apiFetch<FundingStatus>(`/api/funding-transactions/${fundingId}`);
       fundingStatusVersion.current += 1;
       setFunding(latest);
       setProviderError(null);
@@ -272,7 +272,7 @@ export function WalletPanel({
   useEffect(() => {
     if (!fundingId) return;
     const requestVersion = fundingStatusVersion.current;
-    void apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`)
+    void apiFetch<FundingStatus>(`/api/funding-transactions/${fundingId}`)
       .then((latest) => {
         if (isCurrentFundingStatusResponse(requestVersion, fundingStatusVersion.current)) {
           setFunding(latest);
@@ -397,7 +397,7 @@ export function WalletPanel({
         return;
       }
       const created = await apiFetch<{ id: string; state: FundingStatus["state"] }>(
-        "/api/wallet/fund",
+        "/api/funding-transactions",
         {
           method: "POST",
           headers: {
@@ -431,7 +431,7 @@ export function WalletPanel({
     setSubmitting(true);
     try {
       const result = await apiFetch<{ id: string; state: FundingStatus["state"] }>(
-        `/api/wallet/fund/${funding.id}/cancel`,
+        `/api/funding-transactions/${funding.id}/cancel`,
         { method: "POST" },
       );
       fundingStatusVersion.current += 1;

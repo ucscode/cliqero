@@ -28,7 +28,7 @@ export function PasswordResetRequest({ captcha }: { captcha: CaptchaClientConfig
       const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
       if (captcha.enabled && !captchaToken)
         throw new Error("Please complete the CAPTCHA challenge.");
-      const response = await fetch("/api/password-reset/request", {
+      const response = await fetch("/internal/password-reset/request", {
         method: "POST",
         headers: {
           "content-type": "application/json",

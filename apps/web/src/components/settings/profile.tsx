@@ -75,7 +75,7 @@ export function ProfileSettings() {
     setLoading(true);
     setError(null);
     try {
-      const value = await apiFetch<Profile>("/api/me/profile");
+      const value = await apiFetch<Profile>("/internal/me/profile");
       setProfile(value);
       setCountry(value.country ?? "");
       setEmailInput(value.email);
@@ -103,7 +103,7 @@ export function ProfileSettings() {
         country,
         emailInput,
         saveProfile: (nextCountry) =>
-          apiFetch<Profile>("/api/me/profile", {
+          apiFetch<Profile>("/internal/me/profile", {
             method: "PATCH",
             headers: {
               "content-type": "application/json",

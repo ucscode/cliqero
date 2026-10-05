@@ -37,7 +37,7 @@ export function WalletTransferForm({ onComplete }: { onComplete: () => void }) {
       return;
     }
     const timer = setTimeout(() => {
-      void apiFetch<Quote>(`/api/wallet/transfers?from=${from}&amount_minor=${amountMinor}`)
+      void apiFetch<Quote>(`/api/wallet/transfer-quote?from=${from}&amount_minor=${amountMinor}`)
         .then((nextQuote) => setKeyedQuote({ key: quoteKey, quote: nextQuote }))
         .catch(() => undefined);
     }, 300);

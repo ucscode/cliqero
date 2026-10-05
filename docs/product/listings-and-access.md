@@ -132,8 +132,8 @@ An integration uses its listing-scoped integration credential to read or update
 an entitlement:
 
 ```http
-GET /api/package/entitlements/{entitlementId}
-PATCH /api/package/entitlements/{entitlementId}
+GET /api/package-entitlements/{entitlementId}
+PATCH /api/package-entitlements/{entitlementId}
 Authorization: Bearer <integration-credential>
 ```
 

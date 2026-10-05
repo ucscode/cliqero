@@ -16,7 +16,7 @@ const otherAccount = { id: "00000000-0000-4000-8000-000000000002" };
 const fundingId = "00000000-0000-4000-8000-000000000010";
 
 function request(token = "session-token") {
-  return new Request("http://localhost/api/funding/development/verify", {
+  return new Request("http://localhost/internal/funding/development/verify", {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ funding_id: fundingId }),

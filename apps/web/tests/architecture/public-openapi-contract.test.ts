@@ -381,10 +381,10 @@ describe("public OpenAPI contract quality", () => {
         .success,
     ).toBe(true);
     expect(
-      checkoutCreateRequestSchema.safeParse(example("/api/checkout", "post", "request")).success,
+      checkoutCreateRequestSchema.safeParse(example("/api/checkouts", "post", "request")).success,
     ).toBe(true);
     expect(
-      checkoutCreateSchema.safeParse(example("/api/checkout", "post", "response", "201")).success,
+      checkoutCreateSchema.safeParse(example("/api/checkouts", "post", "response", "201")).success,
     ).toBe(true);
     expect(reviewPageSchema.safeParse(example("/api/reviews", "get", "response")).success).toBe(
       true,
@@ -399,8 +399,9 @@ describe("public OpenAPI contract quality", () => {
       ).success,
     ).toBe(true);
     expect(
-      fundingDetailSchema.safeParse(example("/api/wallet/fund/{fundingId}", "get", "response"))
-        .success,
+      fundingDetailSchema.safeParse(
+        example("/api/funding-transactions/{fundingId}", "get", "response"),
+      ).success,
     ).toBe(true);
   });
 });

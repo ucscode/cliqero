@@ -157,13 +157,13 @@ export function DashboardShell({
 
   useEffect(() => {
     if (!canonicalSession) return;
-    void apiFetch<{ username: string; email: string }>("/api/me/profile")
+    void apiFetch<{ username: string; email: string }>("/internal/me/profile")
       .then(setProfile)
       .catch((cause: unknown) => {
         if (cause instanceof ApiClientError && cause.status === 401)
           void invalidateApplicationSession();
       });
-    void apiFetch<AccountAccess>("/api/me/access")
+    void apiFetch<AccountAccess>("/internal/me/access")
       .then(setAccountAccess)
       .catch(() => undefined);
   }, [canonicalSession, invalidateApplicationSession]);

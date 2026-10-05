@@ -21,7 +21,7 @@ describe("payment status initialization", () => {
 
     await expect(initializeFundingStatus("funding-1")).resolves.toBe(status);
     expect(apiFetch).toHaveBeenCalledOnce();
-    expect(apiFetch).toHaveBeenCalledWith("/api/wallet/fund/funding-1/initialize", {
+    expect(apiFetch).toHaveBeenCalledWith("/api/funding-transactions/funding-1/initialize", {
       method: "POST",
     });
   });
@@ -37,10 +37,10 @@ describe("payment status initialization", () => {
       "provider unavailable",
     );
     expect(onRecovered).toHaveBeenCalledWith(recovered);
-    expect(apiFetch).toHaveBeenNthCalledWith(1, "/api/wallet/fund/funding-1/initialize", {
+    expect(apiFetch).toHaveBeenNthCalledWith(1, "/api/funding-transactions/funding-1/initialize", {
       method: "POST",
     });
-    expect(apiFetch).toHaveBeenNthCalledWith(2, "/api/wallet/fund/funding-1");
+    expect(apiFetch).toHaveBeenNthCalledWith(2, "/api/funding-transactions/funding-1");
   });
 
   it("preserves the initialization error when recovery GET also fails", async () => {

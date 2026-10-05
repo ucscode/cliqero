@@ -9,7 +9,6 @@ vi.mock("@/infrastructure/container", () => ({
 
 import * as withdrawalRoute from "@/api/compat/withdrawals/[id]/route";
 import * as withdrawalCollectionRoute from "@/api/compat/withdrawals/route";
-import * as withdrawalPolicyRoute from "@/api/compat/withdrawals/policy/route";
 
 const withdrawal = {
   id: "00000000-0000-4000-8000-000000000010",
@@ -72,48 +71,6 @@ describe("owner withdrawal resource mutation", () => {
       next_cursor: "next-cursor",
       available_minor: "9000",
       reservations: [],
-    });
-  });
-
-  it("serves the effective configured policy contract to authenticated callers", async () => {
-    const getActive = vi.fn(async () => ({
-      enabled: false,
-      minimumAmount: Money.of(750n, "USD"),
-      maximumAmount: Money.of(50_000n, "USD"),
-    }));
-    fixtures.container = {
-      principalResolver: {
-        resolve: vi.fn(async () => ({
-          accountId: withdrawal.accountId,
-          account: { id: withdrawal.accountId },
-          kind: "user_session",
-          capabilities: [],
-          scopes: new Set<string>(),
-        })),
-      },
-      withdrawalPolicy: { getActive },
-      feePolicy: {
-        getActive: () => ({
-          enabled: true,
-          withdrawal: { enabled: true, basisPoints: 500n, maximumMinor: 2000n },
-          funding_to_earning: { enabled: true, basisPoints: 200n, maximumMinor: 1000n },
-          earning_to_funding: { enabled: true, basisPoints: 100n, maximumMinor: 500n },
-        }),
-      },
-    };
-    const response = await withdrawalPolicyRoute.GET(
-      new Request("http://localhost/api/me/withdrawals/policy"),
-    );
-    expect(response.status).toBe(200);
-    expect(getActive).toHaveBeenCalledOnce();
-    await expect(response.json()).resolves.toEqual({
-      enabled: false,
-      minimum_amount_minor: "750",
-      maximum_amount_minor: "50000",
-      currency: "USD",
-      fee_enabled: true,
-      fee_basis_points: "500",
-      fee_maximum_amount_minor: "2000",
     });
   });
 

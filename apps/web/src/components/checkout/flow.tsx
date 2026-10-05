@@ -150,7 +150,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         active = false;
       };
     }
-    void apiFetch<CheckoutQuote>(`/api/checkout?listing_id=${encodeURIComponent(listing.id)}`)
+    void apiFetch<CheckoutQuote>(`/api/checkout-quote?listing_id=${encodeURIComponent(listing.id)}`)
       .then((quote) => {
         if (!active) return;
         const nextWallet = {
@@ -181,7 +181,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
   useEffect(() => {
     if (!checkoutId) return;
     let active = true;
-    void apiFetch<CheckoutStatus>(`/api/checkout/${checkoutId}`)
+    void apiFetch<CheckoutStatus>(`/api/checkouts/${checkoutId}`)
       .then((current) => {
         if (!active) return;
         setCheckout(current);
@@ -207,7 +207,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
       if (document.visibilityState === "hidden") return;
       attempts += 1;
       try {
-        const latest = await apiFetch<CheckoutStatus>(`/api/checkout/${checkoutId}`);
+        const latest = await apiFetch<CheckoutStatus>(`/api/checkouts/${checkoutId}`);
         const projection = await applyCheckoutPollResult(
           latest,
           {
@@ -278,7 +278,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         } catch {
           // The backend idempotency key remains authoritative if storage is unavailable.
         }
-        current = await apiFetch<CheckoutPaymentResponse>("/api/checkout", {
+        current = await apiFetch<CheckoutPaymentResponse>("/api/checkouts", {
           method: "POST",
           headers: { "content-type": "application/json", "idempotency-key": key },
           body: JSON.stringify({ listing_id: listing.id }),
@@ -286,7 +286,7 @@ export function CheckoutFlow({ listing, checkoutId }: { listing: Listing; checko
         setCheckout(current);
         setStarted(true);
       }
-      const result = await apiFetch<CheckoutPaymentResponse>(`/api/checkout/${current.id}/pay`, {
+      const result = await apiFetch<CheckoutPaymentResponse>(`/api/checkouts/${current.id}/pay`, {
         method: "POST",
       });
       setCheckout(result);

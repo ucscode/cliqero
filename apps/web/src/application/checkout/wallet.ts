@@ -68,6 +68,15 @@ export class WalletCheckoutService {
       return checkout;
     });
   }
+
+  async listForBuyer(buyerId: string, limit = 50) {
+    return this.checkouts.findForBuyer(buyerId, Math.max(1, Math.min(limit, 100)));
+  }
+
+  async getForBuyer(buyerId: string, checkoutId: string) {
+    const checkout = await this.checkouts.findById(checkoutId);
+    return checkout?.buyerId === buyerId ? checkout : null;
+  }
 }
 
 export type WalletCheckoutPaymentResult = {

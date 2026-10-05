@@ -31,7 +31,7 @@ export function registerPackageEntitlementRoutes(
   app.openapi(
     createRoute({
       method: "get",
-      path: "/api/package/entitlements/{entitlementId}",
+      path: "/api/package-entitlements/{entitlementId}",
       request: { params: entitlementParams },
       responses: {
         200: {
@@ -67,7 +67,7 @@ export function registerPackageEntitlementRoutes(
   app.openapi(
     createRoute({
       method: "patch",
-      path: "/api/package/entitlements/{entitlementId}",
+      path: "/api/package-entitlements/{entitlementId}",
       request: {
         params: entitlementParams,
         body: { content: { "application/json": { schema: entitlementPatch } } },

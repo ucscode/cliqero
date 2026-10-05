@@ -17,7 +17,6 @@ import {
   compatibilityExamples as listingMediaExamples,
 } from "@/api/compat/listings/media/openapi";
 import { compatibilityContracts as listingIntegrationContracts } from "@/api/compat/listings/integrations/openapi";
-import { compatibilityContracts as meContracts } from "@/api/compat/me/openapi";
 import { compatibilityContracts as passwordResetContracts } from "@/api/compat/password-reset/openapi";
 import { compatibilityContracts as purchaseContracts } from "@/api/compat/purchases/openapi";
 import {
@@ -59,7 +58,6 @@ export const compatibilityContracts: Record<string, CompatibilityOperationContra
   listingContracts,
   listingMediaContracts,
   listingIntegrationContracts,
-  meContracts,
   passwordResetContracts,
   purchaseContracts,
   referralContracts,

@@ -190,8 +190,8 @@ export function registerPaymentRoutes(app: OpenAPIHono<Env>, container: Applicat
   app.openapi(
     createRoute({
       method: "get",
-      path: "/api/payments/events",
-      tags: ["Payments"],
+      path: "/api/payment-events",
+      tags: ["Payment Events"],
       summary: "List provider events",
       description:
         "Inspect persisted ingress events across providers; provider may be supplied as a filter.",

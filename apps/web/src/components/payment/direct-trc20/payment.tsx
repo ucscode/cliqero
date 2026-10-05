@@ -46,7 +46,7 @@ export function DirectTrc20Payment(props: PaymentProviderProps) {
         state: FundingStatus["state"];
         provider_transaction_id: string | null;
         verification: FundingStatus["verification"];
-      }>(`/api/wallet/fund/${props.funding.id}/transaction`, {
+      }>(`/api/direct-trc20/funding-transactions/${props.funding.id}/transaction`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ transaction_hash: transactionHash }),

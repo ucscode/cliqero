@@ -54,10 +54,10 @@ export function HierarchyPanel() {
     setError(null);
     try {
       const [profile, hierarchy] = await Promise.all([
-        apiFetch<{ id: string }>("/api/me/profile"),
+        apiFetch<{ account: { id: string } }>("/internal/me/session"),
         fetchHierarchyTree(rootId, apiFetch),
       ]);
-      setSelfAccountId(profile.id);
+      setSelfAccountId(profile.account.id);
       setTree(hierarchy);
       lastSuccessfulUrlRef.current = window.location.href;
     } catch (cause) {

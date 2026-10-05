@@ -317,7 +317,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   async function clearPreview() {
     if (previewId) {
       try {
-        await apiFetch(`/api/blog/previews/${previewId}`, { method: "DELETE" });
+        await apiFetch(`/internal/blog/previews/${previewId}`, { method: "DELETE" });
       } catch {
         /* Expiry cleanup is the safe fallback. */
       } finally {
@@ -401,7 +401,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
     setPreviewing(true);
     setError(null);
     try {
-      const result = await apiFetch<{ previewId: string; url: string }>("/api/blog/previews", {
+      const result = await apiFetch<{ previewId: string; url: string }>("/internal/blog/previews", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...requestBody(), preview_id: previewId }),

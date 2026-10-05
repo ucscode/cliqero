@@ -5,6 +5,7 @@ const fixtures = vi.hoisted(() => ({ container: null as any }));
 vi.mock("@/infrastructure/container", () => ({ getContainer: () => fixtures.container }));
 
 import { GET, POST } from "@/api/compat/checkout/route";
+import { GET as getQuote } from "@/api/compat/checkout-quote/route";
 
 const account = { id: "00000000-0000-4000-8000-000000000001" };
 const checkoutId = "00000000-0000-4000-8000-000000000003";
@@ -30,6 +31,14 @@ function configure() {
       })),
     },
     walletCheckout: {
+      listForBuyer: vi.fn(async () => [
+        {
+          id: "checkout-1",
+          purchaseId: "purchase-1",
+          state: "pending",
+          amount: { minorAmount: 999n, currency: "USD" },
+        },
+      ]),
       initiate: vi.fn(async () => ({
         id: checkoutId,
         purchaseId,
@@ -43,10 +52,22 @@ function configure() {
 }
 
 describe("free listing checkout compatibility route", () => {
-  it("quotes zero required amount and shortfall while returning the actual wallet balance", async () => {
+  it("lists persisted Checkout resources rather than returning a quote", async () => {
     const container = configure();
-    const response = await GET(
-      new Request(`http://localhost/api/checkout?listing_id=${listing.id}`),
+    const response = await GET(new Request("http://localhost/api/checkouts?limit=5"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      items: [{ id: "checkout-1", purchase_id: "purchase-1", amount_minor: "999" }],
+      next_cursor: null,
+    });
+    expect(container.walletCheckout.listForBuyer).toHaveBeenCalledWith(account.id, 5);
+    expect(container.wallet.summary).not.toHaveBeenCalled();
+  });
+
+  it("keeps quote projection at the separate quote endpoint", async () => {
+    const container = configure();
+    const response = await getQuote(
+      new Request(`http://localhost/api/checkout-quote?listing_id=${listing.id}`),
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -60,7 +81,7 @@ describe("free listing checkout compatibility route", () => {
   it("creates the normal checkout/purchase response without wallet prerequisites", async () => {
     const container = configure();
     const response = await POST(
-      new Request("http://localhost/api/checkout", {
+      new Request("http://localhost/api/checkouts", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": "free-test-1" },
         body: JSON.stringify({ listing_id: listing.id }),
@@ -86,7 +107,7 @@ describe("free listing checkout compatibility route", () => {
   it("rejects client-supplied free pricing instead of initiating a checkout", async () => {
     const container = configure();
     const response = await POST(
-      new Request("http://localhost/api/checkout", {
+      new Request("http://localhost/api/checkouts", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": "free-test-2" },
         body: JSON.stringify({ listing_id: listing.id, amount_minor: "0", free: true }),

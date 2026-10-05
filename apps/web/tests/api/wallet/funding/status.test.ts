@@ -109,9 +109,12 @@ describe("wallet funding status projection", () => {
 
   it("returns persisted funding state and provider next action", async () => {
     configure();
-    const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
-      params: Promise.resolve({ fundingId }),
-    });
+    const response = await GET(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`),
+      {
+        params: Promise.resolve({ fundingId }),
+      },
+    );
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toMatchObject({
@@ -177,9 +180,12 @@ describe("wallet funding status projection", () => {
       [{ state: "available" }, "available"],
     ] as const) {
       configure(account.id, "confirmed", "development", credit);
-      const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
-        params: Promise.resolve({ fundingId }),
-      });
+      const response = await GET(
+        new Request(`http://localhost/api/funding-transactions/${fundingId}`),
+        {
+          params: Promise.resolve({ fundingId }),
+        },
+      );
       const body = await response.json();
       expect(body.wallet_credit_state).toBe(state);
       expect(body).not.toHaveProperty("wallet_credit_id");
@@ -188,9 +194,12 @@ describe("wallet funding status projection", () => {
 
   it("projects the persisted bank snapshot before provider initialization", async () => {
     configure(account.id, "initialization_pending", "bank_transfer");
-    const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
-      params: Promise.resolve({ fundingId }),
-    });
+    const response = await GET(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`),
+      {
+        params: Promise.resolve({ fundingId }),
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -241,9 +250,12 @@ describe("wallet funding status projection", () => {
       })),
     };
 
-    const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
-      params: Promise.resolve({ fundingId }),
-    });
+    const response = await GET(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`),
+      {
+        params: Promise.resolve({ fundingId }),
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -262,9 +274,12 @@ describe("wallet funding status projection", () => {
 
   it("does not disclose another account's funding", async () => {
     configure("00000000-0000-4000-8000-000000000002");
-    const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
-      params: Promise.resolve({ fundingId }),
-    });
+    const response = await GET(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`),
+      {
+        params: Promise.resolve({ fundingId }),
+      },
+    );
     expect(response.status).toBe(404);
   });
 
@@ -280,9 +295,12 @@ describe("wallet funding status projection", () => {
       state: "confirmed",
       providerInitialization: { authorizationUrl: "https://pay.example.test/continue" },
     }));
-    const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
-      params: Promise.resolve({ fundingId }),
-    });
+    const response = await GET(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`),
+      {
+        params: Promise.resolve({ fundingId }),
+      },
+    );
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       authorization_url: null,
@@ -292,9 +310,12 @@ describe("wallet funding status projection", () => {
 
   it("hides provider payment details after expiry", async () => {
     configure(account.id, "expired", "nowpayments");
-    const response = await GET(new Request(`http://localhost/api/wallet/fund/${fundingId}`), {
-      params: Promise.resolve({ fundingId }),
-    });
+    const response = await GET(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`),
+      {
+        params: Promise.resolve({ fundingId }),
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({

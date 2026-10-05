@@ -16,7 +16,7 @@ export const paymentsOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     scope: "payments:read",
   },
   {
-    path: "/api/payments/events",
+    path: "/api/payment-events",
     method: "get",
     mode: "account",
     capability: "finance.read",

@@ -5,6 +5,17 @@ resource naming. Public visitors, authenticated users, privileged operators, and
 API keys use the same canonical resources subject to operation-specific
 authorization policy.
 
+`/api/*` is the canonical external resource contract. Each public
+table-backed resource exposes collection/item `GET`, collection `POST`, item
+`PATCH`, and item `DELETE`; authorization and domain invariants decide whether
+a caller may use each operation. `/internal/*` is reserved for first-party
+session/application workflows that do not represent a public resource. When a
+resource is public, Cliqero's own UI uses that same public resource rather than
+maintaining duplicate internal CRUD. Distinct persisted resources have distinct
+OpenAPI tags. Non-table projections, configuration, health checks, and protocol
+ingress are standalone operations; genuine commands may extend CRUD but never
+replace it.
+
 The Operator dashboard is a privileged first-party client of the canonical
 Cliqero API. It does not have its own API namespace. `/api/operator/*` is not a
 registered API route family.
@@ -47,15 +58,22 @@ Use resource-oriented routes, for example:
 - Accounts: `/api/accounts` and `/api/accounts/{accountId}/capabilities`.
 - API-key administration is internal session-authenticated application traffic
   at `/internal/api-keys`, outside the external OpenAPI contract.
-- Blog: `/api/blog/posts`, `/api/blog/categories`, and session-only
-  `/api/blog/previews`.
+- Blog: `/api/blog/posts` and `/api/blog/categories`; editor previews are
+  first-party workflows under `/internal/blog/previews`.
 - Listings: `/api/listings`, `/api/catalogue/categories`, and
   `/api/listings/{listingId}/integrations`.
 - Reviews: `/api/reviews` and `/api/reviews/{reviewId}`.
-- Payments: `/api/payments`, `/api/payments/events`, and reconciliation
+- Payments: `/api/payments`; Payment Events: `/api/payment-events`; reconciliation is a separate concern
   resources. These remain provider-neutral.
-- Funding, wallet, earnings, distributions, withdrawals, treasury, hierarchy,
-  and referrals remain under their respective domain paths.
+- Funding, wallet, purchases, checkouts, earning entries, distributions,
+  withdrawals, treasury, hierarchy, and referrals remain under their respective
+  domain paths.
+
+Current-session identity context (`session`, `access`, and onboarding), custom
+password-reset wrappers, dashboard overview composition, and development-only
+provider simulation are first-party operations under `/internal/*`. Account
+profile data, owned listing collections, and owned earning entries use their
+canonical Account, Listing, and Earning Entry resource paths instead of `/api/me`.
 
 The same resource can provide public defaults and privileged filtered views.
 For example, blog post reads default to published content; `draft`/`all` status
@@ -70,9 +88,11 @@ public.
 ## OpenAPI and provider ingress
 
 `/api/openapi.json` is the single generated specification and `/docs` renders
-that exact document. Tags describe resources (`Accounts`, `Listings`, `Blog`,
-`Reviews`, `Payments`, `Funding`, `Withdrawals`, `Hierarchy`, `Referrals`, and
-`Treasury`), not caller classes. Every operation has a tag, summary, and
+that exact document. Tags describe persisted resources separately (including
+Blog Posts, Blog Categories, Catalogue Categories, Listing Media, Listing
+Integrations, Purchases, Checkouts, Distributions, Earning Entries, Funding,
+Withdrawals, and Treasury Entries), not caller classes. Standalone endpoints
+have coherent projection/protocol tags. Every operation has a tag, summary, and
 description.
 
 Provider protocol ingress remains provider-named because it implements an

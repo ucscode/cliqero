@@ -27,6 +27,68 @@ import { GET as getOwnedWithdrawal } from "@/api/compat/withdrawals/[id]/route";
 
 export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
   const maxRows = crudMaxRows();
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/withdrawals/policy",
+      tags: ["Withdrawal Policy"],
+      summary: "Get the active withdrawal policy",
+      description: "Returns current withdrawal limits and the customer-safe fee settings.",
+      responses: {
+        200: {
+          description: "Active withdrawal policy",
+          content: {
+            "application/json": {
+              schema: z.object({
+                enabled: z.boolean(),
+                minimum_amount_minor: z.string(),
+                maximum_amount_minor: z.string().nullable(),
+                currency: z.string(),
+                fee_enabled: z.boolean(),
+                fee_basis_points: z.string(),
+                fee_maximum_amount_minor: z.string().nullable(),
+              }),
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Withdrawal read permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const principal = requirePrincipal(c);
+      if (!(principal instanceof Object) || !("accountId" in principal)) return principal;
+      const denied = requireScope(c, principal, "withdrawals:read");
+      if (denied) return denied;
+      try {
+        const [policy, fees] = await Promise.all([
+          container.withdrawalPolicy.getActive(),
+          container.feePolicy.getActive(),
+        ]);
+        const fee = fees.withdrawal;
+        return c.json(
+          {
+            enabled: policy.enabled,
+            minimum_amount_minor: policy.minimumAmount.minorAmount.toString(),
+            maximum_amount_minor: policy.maximumAmount?.minorAmount.toString() ?? null,
+            currency: policy.minimumAmount.currency,
+            fee_enabled: fees.enabled && fee.enabled,
+            fee_basis_points: fee.basisPoints.toString(),
+            fee_maximum_amount_minor: fee.maximumMinor?.toString() ?? null,
+          },
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
   const operatorWithdrawalQuery = z.object({
     search: z.string().max(100).optional(),
     state: operatorWithdrawalStateSchema.or(z.literal("all")).optional(),

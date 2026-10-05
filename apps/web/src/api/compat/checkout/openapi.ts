@@ -1,5 +1,6 @@
 import { defineCompatibilityContracts, jsonBody } from "@/api/openapi/compatibility";
 import { scalar, uuid, zodSchema } from "@/api/openapi/schema";
+import { z } from "zod";
 import {
   checkoutCreateRequestSchema,
   checkoutCreateSchema,
@@ -25,13 +26,39 @@ export const compatibilityContracts = defineCompatibilityContracts({
     parameters: [{ name: "listing_id", schema: uuid, required: true }],
   },
   "GET /api/checkouts": {
+    responseSchema: zodSchema(
+      z.object({
+        items: z.array(
+          z.object({
+            id: z.uuid(),
+            purchase_id: z.uuid(),
+            state: z.string(),
+            amount_minor: z.string(),
+            currency: z.string(),
+          }),
+        ),
+        next_cursor: z.string().nullable(),
+      }),
+    ),
     parameters: [{ name: "limit", schema: scalar("integer", { minimum: 1, maximum: 100 }) }],
   },
 });
 
 export const compatibilityExamples: Record<string, unknown> = {
-  "POST /api/checkout request": { listing_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
-  "POST /api/checkout response 201": {
+  "GET /api/checkouts response 200": {
+    items: [
+      {
+        id: "5fa85f64-5717-4562-b3fc-2c963f66afa6",
+        purchase_id: "6fa85f64-5717-4562-b3fc-2c963f66afa6",
+        state: "pending",
+        amount_minor: "3100",
+        currency: "USD",
+      },
+    ],
+    next_cursor: null,
+  },
+  "POST /api/checkouts request": { listing_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
+  "POST /api/checkouts response 201": {
     id: "5fa85f64-5717-4562-b3fc-2c963f66afa6",
     purchase_id: "6fa85f64-5717-4562-b3fc-2c963f66afa6",
     state: "pending",
@@ -39,19 +66,19 @@ export const compatibilityExamples: Record<string, unknown> = {
     available: { amount_minor: "2100", currency: "USD" },
     shortfall: { amount_minor: "1000", currency: "USD" },
   },
-  "GET /api/checkout response 200": {
+  "GET /api/checkout-quote response 200": {
     required: { amount_minor: "3100", currency: "USD" },
     available: { amount_minor: "2100", currency: "USD" },
     shortfall: { amount_minor: "1000", currency: "USD" },
   },
-  "GET /api/checkout/{checkoutId} response 200": {
+  "GET /api/checkouts/{checkoutId} response 200": {
     id: "5fa85f64-5717-4562-b3fc-2c963f66afa6",
     purchase_id: "6fa85f64-5717-4562-b3fc-2c963f66afa6",
     state: "pending",
     amount_minor: "3100",
     currency: "USD",
   },
-  "POST /api/checkout/{checkoutId}/pay response 200": {
+  "POST /api/checkouts/{checkoutId}/pay response 200": {
     id: "5fa85f64-5717-4562-b3fc-2c963f66afa6",
     purchase_id: "6fa85f64-5717-4562-b3fc-2c963f66afa6",
     state: "paid",

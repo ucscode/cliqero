@@ -27,14 +27,14 @@ assigns the new account's parent through the referral application service.
 Missing, malformed, revoked, and expired attribution is treated as the normal
 parentless-registration case. The cookie is cleared after successful account
 establishment. Google-first onboarding uses the same server-side claim when
-`POST /api/me/onboarding` completes the account; ordinary login never consumes
+`POST /internal/me/onboarding` completes the account; ordinary login never consumes
 or changes referral relationships.
 
 Google is enabled when the `social.google` provider is enabled with complete
 credentials in `config/security/auth.yaml`. Better Auth's account-linking policy trusts Google only when its verified
 identity can be safely linked; a local password identity must have a verified
 email before implicit linking. A Google-first user is authenticated but has an
-incomplete Cliqero mapping until `POST /api/me/onboarding` supplies a unique
+incomplete Cliqero mapping until `POST /internal/me/onboarding` supplies a unique
 username and country. Business endpoints requiring an account reject that state.
 
 Better Auth's logical `user.name` is a display/provider-name field. Its physical

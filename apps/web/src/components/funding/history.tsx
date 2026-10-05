@@ -44,7 +44,7 @@ export function FundingHistoryPanel() {
     if (activeOnly) query.set("active", "true");
     if (cursor) query.set("cursor", cursor);
     void apiFetch<{ items: FundingHistoryItem[]; next_cursor: string | null }>(
-      `/api/wallet/funding?${query.toString()}`,
+      `/api/funding-transactions?${query.toString()}`,
     )
       .then((page) => {
         setItems((current) => (cursor ? [...current, ...page.items] : page.items));

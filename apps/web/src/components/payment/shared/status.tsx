@@ -18,12 +18,12 @@ export async function initializeFundingStatus(
   onRecovered?: (funding: FundingStatus) => void,
 ) {
   try {
-    return await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}/initialize`, {
+    return await apiFetch<FundingStatus>(`/api/funding-transactions/${fundingId}/initialize`, {
       method: "POST",
     });
   } catch (error) {
     try {
-      const latest = await apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`);
+      const latest = await apiFetch<FundingStatus>(`/api/funding-transactions/${fundingId}`);
       onRecovered?.(latest);
     } catch {
       // Preserve the initialization error when the recovery read is unavailable.
@@ -167,7 +167,7 @@ function useProviderStatusPolling({
         state: fundingState,
         wallet_credit_state: walletCreditState,
       },
-      getStatus: () => apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`),
+      getStatus: () => apiFetch<FundingStatus>(`/api/funding-transactions/${fundingId}`),
       onStatus: (latest) => {
         onStatus(latest);
         if (latest.state === "confirmed") onConfirmed();
@@ -213,7 +213,7 @@ export function FundingSettlementPolling({
       return;
     return createFundingStatusPoller({
       initialFunding: { state: fundingState, wallet_credit_state: walletCreditState },
-      getStatus: () => apiFetch<FundingStatus>(`/api/wallet/fund/${fundingId}`),
+      getStatus: () => apiFetch<FundingStatus>(`/api/funding-transactions/${fundingId}`),
       onStatus: async (latest) => {
         onStatus(latest);
         await refreshWallet();

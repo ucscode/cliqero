@@ -35,6 +35,27 @@ export const blogCategorySlugSchema = z
 
 export type BlogCategory = { id: string; slug: string; name: string };
 export type BlogTag = { slug: string; name: string };
+export type BlogTagRecord = { id: string; slug: string; name: string };
+
+export class BlogTagConflictError extends PublicApplicationError {
+  constructor(readonly field: "name" | "slug") {
+    super(`A blog tag with this ${field} already exists.`, `tag_${field}_conflict`, 409);
+    this.name = "BlogTagConflictError";
+  }
+}
+
+export abstract class BlogTagRepository extends CrudRepository<
+  [input: BlogTagRecord],
+  [id: string],
+  [id: string, input: Partial<Pick<BlogTagRecord, "slug" | "name">>],
+  [id: string],
+  BlogTagRecord,
+  BlogTagRecord | null,
+  BlogTagRecord | null,
+  void
+> {
+  abstract list(): BlogTagRecord[];
+}
 
 export abstract class BlogCategoryRepository extends CrudRepository<
   [input: { name: string; slug: string }],

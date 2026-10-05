@@ -598,7 +598,7 @@ export function OperatorFundingDetail({
     setConfirming(true);
     setError(null);
     try {
-      await apiFetch(`/api/funding/${funding.id}/confirm-bank-transfer`, {
+      await apiFetch(`/internal/funding/bank-transfer/${funding.id}/confirm`, {
         method: "POST",
       });
       await load();

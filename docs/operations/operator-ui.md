@@ -14,12 +14,12 @@ Catalogue management is documented in `docs/operations/operator-catalogue.md`. I
 existing Hono listing, media, and transfer APIs and never treats an authorized
 operator as a seller or payee.
 
-Overview data comes from `GET /api/overview`, a Hono-owned aggregate
+Overview data comes from `GET /internal/overview`, an application-only aggregate
 projection. Browser sessions use the account's direct capabilities. API keys
 must also carry a scope appropriate to the operation. A scope never elevates
 the account's capabilities.
 
-`GET /api/me/access` supplies a safe capability projection used to show the
+`GET /internal/me/access` supplies a safe capability projection used to show the
 optional Operator console link in the user dashboard. It contains no secrets or
 authorization credentials.
 

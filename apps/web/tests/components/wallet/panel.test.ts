@@ -443,7 +443,7 @@ describe("customer-facing funding presentation", () => {
     const stop = createFundingStatusPoller({
       initialFunding: { state: "confirmed", wallet_credit_state: null },
       getStatus: async () => {
-        requests.push("GET /api/wallet/fund/funding-1");
+        requests.push("GET /api/funding-transactions/funding-1");
         responseCount += 1;
         return {
           id: "funding-1",
@@ -480,7 +480,10 @@ describe("customer-facing funding presentation", () => {
     await Promise.resolve();
     expect(observed.at(-1)?.wallet_credit_state).toBe("available");
     expect(walletRefreshes).toEqual(["GET /api/wallet", "GET /api/wallet"]);
-    expect(requests).toEqual(["GET /api/wallet/fund/funding-1", "GET /api/wallet/fund/funding-1"]);
+    expect(requests).toEqual([
+      "GET /api/funding-transactions/funding-1",
+      "GET /api/funding-transactions/funding-1",
+    ]);
     expect(scheduledDelays).toHaveLength(2);
     stop();
   });
@@ -512,7 +515,7 @@ describe("customer-facing funding presentation", () => {
     const stop = createFundingStatusPoller({
       initialFunding: pending,
       getStatus: async () => {
-        requests.push("GET /api/wallet/fund/funding-1");
+        requests.push("GET /api/funding-transactions/funding-1");
         responseCount += 1;
         return (responseCount === 1 ? pending : confirmed) as FundingStatus;
       },
@@ -529,7 +532,7 @@ describe("customer-facing funding presentation", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(requests).toEqual(["GET /api/wallet/fund/funding-1"]);
+    expect(requests).toEqual(["GET /api/funding-transactions/funding-1"]);
     expect(observed).toHaveLength(1);
     expect(observed[0]?.state).toBe("verification_pending");
     expect(scheduledDelays).toEqual([
@@ -540,7 +543,10 @@ describe("customer-facing funding presentation", () => {
     callbacks.shift()?.();
     await Promise.resolve();
     await Promise.resolve();
-    expect(requests).toEqual(["GET /api/wallet/fund/funding-1", "GET /api/wallet/fund/funding-1"]);
+    expect(requests).toEqual([
+      "GET /api/funding-transactions/funding-1",
+      "GET /api/funding-transactions/funding-1",
+    ]);
     expect(observed.at(-1)?.state).toBe("confirmed");
     expect(scheduledDelays).toHaveLength(2);
     stop();
@@ -561,7 +567,7 @@ describe("customer-facing funding presentation", () => {
     const stop = createFundingStatusPoller({
       initialFunding: { state: "initializing" },
       getStatus: async () => {
-        requests.push("GET /api/wallet/fund/funding-1");
+        requests.push("GET /api/funding-transactions/funding-1");
         return {
           id: "funding-1",
           provider: "paystack",
@@ -579,7 +585,7 @@ describe("customer-facing funding presentation", () => {
     callbacks.shift()?.();
     await Promise.resolve();
     await Promise.resolve();
-    expect(requests).toEqual(["GET /api/wallet/fund/funding-1"]);
+    expect(requests).toEqual(["GET /api/funding-transactions/funding-1"]);
     expect(scheduledDelays).toEqual([
       FUNDING_STATUS_POLL_INITIAL_DELAY_MS,
       FUNDING_STATUS_POLL_AWAITING_PAYMENT_INTERVAL_MS,

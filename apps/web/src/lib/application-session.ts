@@ -23,7 +23,7 @@ export function isCanonicalApplicationSession(
 }
 
 export async function fetchCanonicalApplicationSession(): Promise<CanonicalApplicationSession> {
-  const value = await apiFetch<unknown>("/api/me/session");
+  const value = await apiFetch<unknown>("/internal/me/session");
   if (!isCanonicalApplicationSession(value))
     throw new Error("Invalid canonical application session response");
   return value;

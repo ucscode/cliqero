@@ -47,7 +47,7 @@ If an external checkout requires manual browser/customer action, stop at persist
 
 The funding UI should consume backend eligibility and funding contracts rather than hardcoding provider/country policy:
 
-`GET /api/wallet/funding-methods -> select eligible method -> POST /api/wallet/fund -> render persisted provider instructions/authorization -> observe funding status`
+`GET /api/wallet/funding-methods -> select eligible method -> POST /api/funding-transactions -> render persisted provider instructions/authorization -> observe funding status`
 
 Do not collapse asynchronous provider initialization/verification into the UI merely to make redirects easier.
 

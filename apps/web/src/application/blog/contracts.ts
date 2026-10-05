@@ -3,6 +3,7 @@ import type {
   BlogCategoryRepository,
   BlogPost,
   BlogRenderablePost,
+  BlogTagRepository,
 } from "@/modules/blog/domain/blog";
 import { CrudRepository } from "@/kernel/crud";
 
@@ -70,6 +71,7 @@ export abstract class BlogRepository extends CrudRepository<
   abstract categories(): BlogCategory[];
   abstract get categoryRepository(): BlogCategoryRepository;
   abstract tags(): unknown[];
+  abstract get tagRepository(): BlogTagRepository;
   abstract savePreview(
     id: string,
     accountId: string,

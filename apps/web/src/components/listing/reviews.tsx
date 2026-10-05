@@ -65,17 +65,14 @@ export function ListingReviews({ listingId }: { listingId: string }) {
     }
     try {
       const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
-      const result = await apiFetch<{ item: ListingReview }>(
-        `/api/listings/${listingId}/reviews/me`,
-        {
-          method: "PUT",
-          headers: {
-            "content-type": "application/json",
-            ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
-          },
-          body: JSON.stringify({ rating, body }),
+      const result = await apiFetch<{ item: ListingReview }>("/api/reviews", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : {}),
         },
-      );
+        body: JSON.stringify({ listing_id: listingId, rating, body }),
+      });
       setReviews((current) => replaceOwnReview(current, result.item));
       setRating(result.item.rating);
       setBody(result.item.body);

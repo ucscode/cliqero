@@ -3,9 +3,8 @@ import * as accounts from "@/api/compat/accounts/route";
 import * as checkout from "@/api/compat/checkout/route";
 import * as checkoutById from "@/api/compat/checkout/[id]/route";
 import * as checkoutPay from "@/api/compat/checkout/[id]/pay/route";
+import * as checkoutQuote from "@/api/compat/checkout-quote/route";
 import * as earnings from "@/api/compat/earnings/route";
-import * as earningsEntries from "@/api/compat/earnings/entries/route";
-import * as developmentFundingVerify from "@/api/compat/funding/development/verify/route";
 import * as health from "@/api/compat/health/route";
 import * as listings from "@/api/compat/listings/route";
 import * as listingById from "@/api/compat/listings/[id]/route";
@@ -18,18 +17,11 @@ import * as listingMediaById from "@/api/compat/listings/[id]/media/[mediaId]/ro
 import * as listingReferralUrl from "@/api/compat/listings/[id]/referral-url/route";
 import * as listingExport from "@/api/compat/listings/export/route";
 import * as listingImport from "@/api/compat/listings/import/route";
-import * as myListings from "@/api/compat/me/listings/route";
-import * as onboarding from "@/api/compat/me/onboarding/route";
-import * as profile from "@/api/compat/me/profile/route";
 import * as distributionPolicy from "@/api/compat/distribution-policy/route";
 import * as purchaseReverse from "@/api/compat/purchases/reverse/route";
 import * as earningsSettlement from "@/api/compat/earnings/settlement/route";
 import * as treasury from "@/api/compat/treasury/route";
-import * as treasuryEntries from "@/api/compat/treasury/entries/route";
 import * as treasuryEntry from "@/api/compat/treasury/entries/[id]/route";
-import * as treasuryExpenses from "@/api/compat/treasury/expenses/route";
-import * as passwordReset from "@/api/compat/password-reset/route";
-import * as passwordResetRequest from "@/api/compat/password-reset/request/route";
 import * as purchases from "@/api/compat/purchases/route";
 import * as purchaseById from "@/api/compat/purchases/[id]/route";
 import * as referralDirect from "@/api/compat/referrals/direct/route";
@@ -49,14 +41,15 @@ import * as walletFundingPrepare from "@/api/compat/wallet/funding/prepare/route
 import * as walletFundingHistory from "@/api/compat/wallet/funding/route";
 import * as walletTransactions from "@/api/compat/wallet/transactions/route";
 import * as walletTransfers from "@/api/compat/wallet/transfers/route";
+import * as walletTransferQuote from "@/api/compat/wallet/transfer-quote/route";
 import * as withdrawals from "@/api/compat/withdrawals/route";
 import * as withdrawalById from "@/api/compat/withdrawals/[id]/route";
-import * as withdrawalPolicy from "@/api/compat/withdrawals/policy/route";
 import * as withdrawalMethods from "@/api/compat/withdrawal-methods/route";
 import * as withdrawalDestinations from "@/api/compat/withdrawal-destinations/route";
 import * as withdrawalDestinationById from "@/api/compat/withdrawal-destinations/[id]/route";
 
 type RouteModule = Record<string, unknown>;
+const fundingTransactions = { ...walletFundingHistory, ...walletFunding };
 export type LegacyRoute = {
   pattern: string;
   module: RouteModule;
@@ -65,12 +58,11 @@ export type LegacyRoute = {
 export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/access/verify", module: accessVerify },
   { pattern: "/api/accounts", module: accounts },
-  { pattern: "/api/checkout/:checkoutId/pay", module: checkoutPay },
-  { pattern: "/api/checkout/:checkoutId", module: checkoutById },
-  { pattern: "/api/checkout", module: checkout },
-  { pattern: "/api/me/earnings/entries", module: earningsEntries },
+  { pattern: "/api/checkouts/:checkoutId/pay", module: checkoutPay },
+  { pattern: "/api/checkouts/:checkoutId", module: checkoutById },
+  { pattern: "/api/checkouts", module: checkout },
+  { pattern: "/api/checkout-quote", module: checkoutQuote },
   { pattern: "/api/earnings", module: earnings },
-  { pattern: "/api/funding/development/verify", module: developmentFundingVerify },
   { pattern: "/api/health", module: health },
   {
     pattern: "/api/listings/:listingId/integrations/:integrationId/rotate",
@@ -92,18 +84,11 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/listings/import", module: listingImport },
   { pattern: "/api/listings/:listingId", module: listingById },
   { pattern: "/api/listings", module: listings },
-  { pattern: "/api/me/listings", module: myListings },
-  { pattern: "/api/me/onboarding", module: onboarding },
-  { pattern: "/api/me/profile", module: profile },
   { pattern: "/api/distribution-policy", module: distributionPolicy },
   { pattern: "/api/purchases/reverse", module: purchaseReverse },
   { pattern: "/api/earnings/settlement", module: earningsSettlement },
   { pattern: "/api/treasury/entries/:entryId", module: treasuryEntry },
-  { pattern: "/api/treasury/entries", module: treasuryEntries },
-  { pattern: "/api/treasury/expenses", module: treasuryExpenses },
   { pattern: "/api/treasury", module: treasury },
-  { pattern: "/api/password-reset/request", module: passwordResetRequest },
-  { pattern: "/api/password-reset", module: passwordReset },
   { pattern: "/api/purchases/:purchaseId", module: purchaseById },
   { pattern: "/api/purchases", module: purchases },
   { pattern: "/api/referrals/direct", module: referralDirect },
@@ -111,19 +96,24 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/referrals/downline", module: referralDownline },
   { pattern: "/api/referrals/parent", module: referralParent },
   { pattern: "/api/referrals/uplines", module: referralUplines },
-  { pattern: "/api/wallet/fund", module: walletFunding },
-  { pattern: "/api/wallet/fund/:fundingId/cancel", module: walletFundingCancel },
-  { pattern: "/api/wallet/fund/:fundingId/evidence", module: walletFundingEvidence },
-  { pattern: "/api/wallet/fund/:fundingId/initialize", module: walletFundingInitialize },
-  { pattern: "/api/wallet/fund/:fundingId/transaction", module: walletFundingTransaction },
-  { pattern: "/api/wallet/fund/:fundingId/verify", module: walletFundingVerify },
-  { pattern: "/api/wallet/fund/:fundingId", module: walletFundingById },
+  { pattern: "/api/funding-transactions", module: fundingTransactions },
+  { pattern: "/api/funding-transactions/:fundingId/cancel", module: walletFundingCancel },
+  {
+    pattern: "/api/bank-transfer/funding-transactions/:fundingId/evidence",
+    module: walletFundingEvidence,
+  },
+  { pattern: "/api/funding-transactions/:fundingId/initialize", module: walletFundingInitialize },
+  {
+    pattern: "/api/direct-trc20/funding-transactions/:fundingId/transaction",
+    module: walletFundingTransaction,
+  },
+  { pattern: "/api/funding-transactions/:fundingId/verify", module: walletFundingVerify },
+  { pattern: "/api/funding-transactions/:fundingId", module: walletFundingById },
   { pattern: "/api/wallet/funding/prepare", module: walletFundingPrepare },
-  { pattern: "/api/wallet/funding", module: walletFundingHistory },
   { pattern: "/api/wallet/transactions", module: walletTransactions },
+  { pattern: "/api/wallet/transfer-quote", module: walletTransferQuote },
   { pattern: "/api/wallet/transfers", module: walletTransfers },
   { pattern: "/api/wallet", module: wallet },
-  { pattern: "/api/me/withdrawals/policy", module: withdrawalPolicy },
   { pattern: "/api/withdrawals/:withdrawalId", module: withdrawalById },
   { pattern: "/api/withdrawals", module: withdrawals },
   { pattern: "/api/withdrawal-methods", module: withdrawalMethods },

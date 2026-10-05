@@ -22,10 +22,8 @@ import { registerHierarchyRoutes } from "./routes/hierarchy";
 import { registerFundingRoutes } from "./routes/funding";
 import { registerPaymentCallbackRoutes } from "./routes/payment-callbacks";
 import { registerReviewRoutes } from "./routes/reviews";
-import { registerAccountAccessRoutes } from "./routes/account-access";
 import { registerPackageEntitlementRoutes } from "./routes/package/entitlements";
 import { registerAccountDebtRoutes } from "./routes/account-debt";
-import { accountAccessOpenApiMetadata } from "./routes/account-access/metadata";
 import { blogOpenApiMetadata } from "./routes/blog/metadata";
 import { hierarchyOpenApiMetadata } from "./routes/hierarchy/metadata";
 import { accountsOpenApiMetadata } from "./routes/accounts/management/metadata";
@@ -83,7 +81,6 @@ export function createApiApp(
   registerReviewRoutes(app, container);
   registerFundingRoutes(app, container);
   registerPaymentCallbackRoutes(app, container);
-  registerAccountAccessRoutes(app, container);
   registerPackageEntitlementRoutes(app, container);
   registerAccountDebtRoutes(app, container);
   registerPurchaseReconciliationRoutes(app, container);
@@ -106,7 +103,6 @@ export function generateOpenApiDocument(app: OpenAPIHono<Env>) {
     servers: [{ url: "/" }],
   }) as unknown as OpenApiDocument;
   applyOpenApiMetadata(document, legacyApiPaths, [
-    accountAccessOpenApiMetadata,
     blogOpenApiMetadata,
     hierarchyOpenApiMetadata,
     accountsOpenApiMetadata,

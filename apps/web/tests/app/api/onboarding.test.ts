@@ -59,12 +59,12 @@ describe("onboarding authentication boundary", () => {
   it("allows GET and POST only for an explicit incomplete link", async () => {
     configurePrincipal(principal("incomplete"));
 
-    const getResponse = await GET(new Request("http://localhost/api/me/onboarding"));
+    const getResponse = await GET(new Request("http://localhost/internal/me/onboarding"));
     expect(getResponse.status).toBe(200);
     await expect(getResponse.json()).resolves.toEqual({ hasPassword: true });
 
     const postResponse = await POST(
-      new Request("http://localhost/api/me/onboarding", {
+      new Request("http://localhost/internal/me/onboarding", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username: "complete_user", country: "NG" }),
@@ -78,7 +78,7 @@ describe("onboarding authentication boundary", () => {
     ["POST", POST],
   ] as const)("rejects an orphaned session on %s", async (method, handler) => {
     configurePrincipal(principal("missing"));
-    const response = await handler(new Request("http://localhost/api/me/onboarding"));
+    const response = await handler(new Request("http://localhost/internal/me/onboarding"));
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({
       error: "Invalid session",

@@ -129,7 +129,8 @@ describe("withdrawal API contract", () => {
       fee_basis_points: "500",
       fee_maximum_amount_minor: "2000",
     });
-    expect(getLegacyRouteAccess("/api/me/withdrawals/policy", "GET")).toEqual({
+    expect(getLegacyRouteAccess("/api/me/withdrawals/policy", "GET")).toBeNull();
+    expect(getLegacyRouteAccess("/api/withdrawals/policy", "GET")).toEqual({
       mode: "account",
       scope: "withdrawals:read",
     });

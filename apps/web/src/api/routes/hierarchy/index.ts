@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { ApplicationContainer } from "@/infrastructure/container";
-import { canAccessOperator, hasCapability } from "@/modules/identity/capabilities";
+import { hasCapability } from "@/modules/identity/capabilities";
 import {
   hierarchyReadOrAdmin,
   requirePrincipal,
@@ -16,42 +16,12 @@ import {
   reassignmentSchema,
   treeSchema,
 } from "./contracts";
-import { operatorOverviewSchema } from "./overview-contract";
 import {
   HIERARCHY_DESCENDANT_MAX_LEVEL,
   HIERARCHY_DESCENDANT_MAX_PAGE_SIZE,
 } from "@/application/hierarchy";
 
 export function registerHierarchyRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
-  app.openapi(
-    createRoute({
-      method: "get",
-      path: "/api/overview",
-      responses: {
-        200: {
-          description: "Capability-scoped operator overview",
-          content: { "application/json": { schema: operatorOverviewSchema } },
-        },
-        401: {
-          description: "Authentication required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        403: {
-          description: "Hierarchy management permission required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      if (!canAccessOperator(p.capabilities))
-        return c.json({ error: "Forbidden", code: "forbidden" }, 403) as never;
-      const denied = requireScope(c, p, "operations:manage");
-      if (denied) return denied;
-      return c.json(await container.operatorOverview.get(p.capabilities), 200) as never;
-    },
-  );
   const queryTree = z.object({ root: z.string().uuid().optional() });
   app.openapi(
     createRoute({

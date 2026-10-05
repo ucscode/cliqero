@@ -84,41 +84,22 @@ suite("headless API principal and hierarchy read model", () => {
       }),
     ).rejects.toThrow("Unknown API key scope");
   });
-  it("returns capability-scoped operator overview data through Hono", async () => {
+  it("keeps the first-party operator overview out of the public Hono API", async () => {
     const catalogueManager = await account("cataloguemanager"),
-      operator = await account("overviewoperator"),
-      ordinary = await account("overviewordinary");
+      operator = await account("overviewoperator");
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'catalogue.manage'),((select id from identity_capability.accounts where uuid=$2),'system.root')`,
       [catalogueManager.id, operator.id],
     );
-    const forPrincipal = (accountId: string, capabilities: string[]) =>
-      createApiApp({
-        ...app,
-        principalResolver: {
-          resolve: async () => ({
-            accountId,
-            account: capabilities.includes("system.root") ? operator : catalogueManager,
-            kind: "user_session" as const,
-            capabilities,
-            scopes: new Set<string>(),
-          }),
-        },
-      } as any);
-    const catalogueResponse = await forPrincipal(catalogueManager.id, ["catalogue.manage"]).fetch(
+    const overview = await app.operatorOverview.get(["catalogue.manage"]);
+    expect(overview.users).toBeUndefined();
+    expect(overview.catalogue).toBeDefined();
+    const privilegedOverview = await app.operatorOverview.get(["system.root"]);
+    expect(privilegedOverview.users).toEqual({ total: 2 });
+    const publicResponse = await createApiApp(app as any).fetch(
       new Request("http://localhost/api/overview"),
     );
-    expect(catalogueResponse.status).toBe(200);
-    expect((await catalogueResponse.json()).users).toBeUndefined();
-    const operatorResponse = await forPrincipal(operator.id, ["system.root"]).fetch(
-      new Request("http://localhost/api/overview"),
-    );
-    expect(operatorResponse.status).toBe(200);
-    expect((await operatorResponse.json()).users).toEqual({ total: 3 });
-    const ordinaryResponse = await forPrincipal(ordinary.id, []).fetch(
-      new Request("http://localhost/api/overview"),
-    );
-    expect(ordinaryResponse.status).toBe(403);
+    expect(publicResponse.status).toBe(404);
   });
   it("provides a bounded safe operator account projection and detail", async () => {
     const operator = await account("accountoperator");

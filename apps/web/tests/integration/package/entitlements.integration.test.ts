@@ -66,7 +66,7 @@ suite("package entitlement integration API", () => {
   }
 
   function entitlementUrl(id: string) {
-    return `/api/package/entitlements/${id}`;
+    return `/api/package-entitlements/${id}`;
   }
 
   function headers(credential?: string): Record<string, string> {

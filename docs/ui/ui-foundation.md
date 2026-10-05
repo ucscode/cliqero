@@ -14,7 +14,7 @@ second checkout on retry.
 
 `/dashboard` is an authenticated shell with real wallet and purchase sections. Wallet reads use
 `GET /api/wallet` and `GET /api/wallet/transactions`; funding is initiated with
-`POST /api/wallet/fund` and observed through `GET /api/wallet/fund/{fundingId}`. The provider's browser
+`POST /api/funding-transactions` and observed through `GET /api/funding-transactions/{fundingId}`. The provider's browser
 return is never treated as proof: the UI observes persisted funding state, and confirmed funding
 then becomes spendable only through the existing wallet-credit and availability workers.
 Funding opens at `/dashboard/wallet/fund`; the page keeps provider instructions visible after

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BlogCategoryService } from "@/application/blog/categories";
+import { BlogTagService } from "@/application/blog/tags";
 import { BlogService } from "@/application/blog/service";
 import { ListingCategoryService } from "@/application/listing/category/service";
 import { ListingReviewService } from "@/application/listing/reviews";
@@ -8,6 +9,7 @@ import { OperatorAccountManagementService } from "@/application/operator/account
 import { OperatorApiKeyService } from "@/application/operator/api-keys";
 import { WithdrawalService } from "@/application/withdrawal/service";
 import { SqliteBlogCategoryRepository } from "@/infrastructure/blog/category-repository";
+import { SqliteBlogTagRepository } from "@/infrastructure/blog/tag-repository";
 import { SqliteBlogRepository } from "@/infrastructure/blog/repository";
 import { PostgresListingCategoryRepository } from "@/infrastructure/postgres/listing/categories";
 import { PostgresListingRepository } from "@/infrastructure/postgres/listing/repository";
@@ -27,6 +29,7 @@ describe("shared CRUD contracts", () => {
       WithdrawalService,
       BlogService,
       BlogCategoryService,
+      BlogTagService,
     ];
 
     for (const service of services) expect(service.prototype).toBeInstanceOf(CrudService);
@@ -41,6 +44,7 @@ describe("shared CRUD contracts", () => {
       ApiKeyService,
       SqliteBlogRepository,
       SqliteBlogCategoryRepository,
+      SqliteBlogTagRepository,
     ];
 
     for (const repository of repositories)

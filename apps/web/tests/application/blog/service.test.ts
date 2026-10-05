@@ -16,6 +16,7 @@ describe("BlogService SQLite workflow", () => {
   });
   it("uses the shared CRUD service contract for ordinary blog categories", () => {
     expect(service.categoryService).toBeInstanceOf(CrudService);
+    expect(service.tagService).toBeInstanceOf(CrudService);
   });
   afterEach(() => {
     closeBlogDatabaseForTests();
@@ -79,6 +80,19 @@ describe("BlogService SQLite workflow", () => {
 
     expect(service.get(post.id)).toMatchObject({ id: post.id, categories: [] });
     expect(service.categories()).not.toContainEqual(category);
+  });
+  it("provides CRUD for persisted blog tags independently from categories and posts", () => {
+    const tag = service.tagService.create({ name: "Helpful Guides" });
+    expect(tag).toMatchObject({ name: "Helpful Guides", slug: "helpful-guides" });
+    expect(service.tagService.list()).toContainEqual(tag);
+    expect(service.tagService.get(tag.id)).toEqual(tag);
+    expect(service.tagService.update(tag.id, { name: "Updated Guides" })).toMatchObject({
+      id: tag.id,
+      name: "Updated Guides",
+      slug: "helpful-guides",
+    });
+    service.tagService.delete(tag.id);
+    expect(service.tagService.get(tag.id)).toBeNull();
   });
   it("paginates canonical published posts deterministically and excludes drafts", () => {
     for (let i = 0; i < 5; i++)

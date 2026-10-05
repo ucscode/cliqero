@@ -125,6 +125,7 @@ describe("WalletCheckoutPaymentService", () => {
     const checkoutRepository: CheckoutRepository = {
       findById: async () => checkout,
       findByIdempotency: async () => null,
+      findForBuyer: async () => [checkout],
       save: async (value) => {
         Object.assign(checkout, value);
       },

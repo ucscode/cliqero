@@ -27,7 +27,7 @@ export function PasswordResetForm({ token }: { token: string }) {
     setBusy(true);
     try {
       const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
-      await apiFetch("/api/password-reset", {
+      await apiFetch("/internal/password-reset", {
         method: "POST",
         headers: {
           "content-type": "application/json",

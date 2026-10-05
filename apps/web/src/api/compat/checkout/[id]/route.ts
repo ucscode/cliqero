@@ -5,9 +5,11 @@ export async function GET(request: Request, context: { params: Promise<{ checkou
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const c = await getContainer().checkoutRepository.findById((await context.params).checkoutId);
-    if (!c || c.buyerId !== account.id)
-      return Response.json({ error: "Checkout not found" }, { status: 404 });
+    const c = await getContainer().walletCheckout.getForBuyer(
+      account.id,
+      (await context.params).checkoutId,
+    );
+    if (!c) return Response.json({ error: "Checkout not found" }, { status: 404 });
     return Response.json(
       checkoutDetailSchema.parse({
         id: c.id,

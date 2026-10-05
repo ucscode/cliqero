@@ -1,6 +1,7 @@
 import type { OpenApiMetadataEntry } from "../../openapi/metadata";
 
 export const withdrawalOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
+  { path: "/api/withdrawals/policy", method: "get", mode: "account", scope: "withdrawals:read" },
   {
     path: "/api/withdrawals",
     method: "get",

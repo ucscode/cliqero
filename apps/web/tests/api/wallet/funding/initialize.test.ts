@@ -45,9 +45,12 @@ function configure(state: string, providerName = "paystack") {
 describe("wallet funding initialization endpoint", () => {
   it("initializes the persisted Paystack funding and returns saved provider facts", async () => {
     const { process } = configure("initialization_pending");
-    const response = await POST(new Request("http://localhost/api/wallet/fund/${id}/initialize"), {
-      params: Promise.resolve({ fundingId }),
-    });
+    const response = await POST(
+      new Request("http://localhost/api/funding-transactions/${id}/initialize"),
+      {
+        params: Promise.resolve({ fundingId }),
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(process).toHaveBeenCalledOnce();
@@ -64,9 +67,12 @@ describe("wallet funding initialization endpoint", () => {
 
   it("does not initialize an already initialized funding twice", async () => {
     const { process } = configure("awaiting_payment");
-    const response = await POST(new Request("http://localhost/api/wallet/fund/${id}/initialize"), {
-      params: Promise.resolve({ fundingId }),
-    });
+    const response = await POST(
+      new Request("http://localhost/api/funding-transactions/${id}/initialize"),
+      {
+        params: Promise.resolve({ fundingId }),
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(process).not.toHaveBeenCalled();
@@ -78,9 +84,12 @@ describe("wallet funding initialization endpoint", () => {
 
   it("initializes Bank Transfer funding through the initialization endpoint", async () => {
     const { process } = configure("initialization_pending", "bank_transfer");
-    const response = await POST(new Request("http://localhost/api/wallet/fund/${id}/initialize"), {
-      params: Promise.resolve({ fundingId }),
-    });
+    const response = await POST(
+      new Request("http://localhost/api/funding-transactions/${id}/initialize"),
+      {
+        params: Promise.resolve({ fundingId }),
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(process).toHaveBeenCalledOnce();

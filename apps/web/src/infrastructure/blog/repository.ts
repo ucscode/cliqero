@@ -9,6 +9,7 @@ import {
 } from "@/modules/blog/domain/blog";
 import { BlogRepository } from "@/application/blog/contracts";
 import { SqliteBlogCategoryRepository } from "./category-repository";
+import { SqliteBlogTagRepository } from "./tag-repository";
 import type { BlogListOptions, BlogPreview, BlogSaveInput } from "@/application/blog/contracts";
 import { PublicApplicationError } from "@/kernel/errors";
 
@@ -37,13 +38,18 @@ const date = (value: number | null | undefined) => (value == null ? null : new D
 
 export class SqliteBlogRepository extends BlogRepository {
   private readonly categoriesRepository: SqliteBlogCategoryRepository;
+  private readonly tagsRepository: SqliteBlogTagRepository;
 
   constructor(private readonly db: Database.Database) {
     super();
     this.categoriesRepository = new SqliteBlogCategoryRepository(db);
+    this.tagsRepository = new SqliteBlogTagRepository(db);
   }
   get categoryRepository() {
     return this.categoriesRepository;
+  }
+  get tagRepository() {
+    return this.tagsRepository;
   }
   transaction<T>(operation: () => T): T {
     return this.db.transaction(operation)();

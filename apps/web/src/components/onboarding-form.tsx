@@ -33,7 +33,7 @@ export function OnboardingForm() {
 
   useEffect(() => {
     let cancelled = false;
-    void apiFetch<{ hasPassword: boolean }>("/api/me/onboarding")
+    void apiFetch<{ hasPassword: boolean }>("/internal/me/onboarding")
       .then((value) => {
         if (!cancelled) setHasPassword(value.hasPassword);
       })
@@ -64,7 +64,7 @@ export function OnboardingForm() {
     setPasswordError(null);
     try {
       const honeypot = String(new FormData(event.currentTarget).get(HONEYPOT_FIELD_NAME) ?? "");
-      await apiFetch("/api/me/onboarding", {
+      await apiFetch("/internal/me/onboarding", {
         method: "POST",
         headers: {
           "content-type": "application/json",
