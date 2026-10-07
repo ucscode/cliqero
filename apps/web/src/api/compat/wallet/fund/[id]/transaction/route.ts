@@ -2,6 +2,7 @@ import { authenticatedAccount, apiError } from "../../../../http";
 import { getContainer } from "@/infrastructure/container";
 import { projectVerificationObservation } from "@/modules/funding/funding";
 import { PublicApplicationError } from "@/kernel/errors";
+import { z } from "zod";
 
 export async function POST(
   request: Request,
@@ -10,10 +11,27 @@ export async function POST(
   const account = await authenticatedAccount(request);
   if (!account) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const funding = await getContainer().fundingService.submitProviderRequest({
+    const container = getContainer();
+    const fundingId = (await params).fundingId;
+    if (!z.uuid().safeParse(fundingId).success)
+      return Response.json({ error: "Funding not found", code: "not_found" }, { status: 404 });
+    const persisted = await container.funding.findById(fundingId);
+    if (!persisted || persisted.accountId !== account.id)
+      return Response.json({ error: "Funding not found", code: "not_found" }, { status: 404 });
+    if (persisted.providerName !== "direct_trc20")
+      throw new PublicApplicationError(
+        "This funding provider does not accept a provider transaction identity.",
+        "unsupported_funding_operation",
+        409,
+      );
+    const body = z
+      .object({ transaction_hash: z.string().min(1).max(200) })
+      .strict()
+      .parse(await request.json());
+    const funding = await container.fundingService.submitProviderRequest({
       accountId: account.id,
-      fundingId: (await params).fundingId,
-      payload: await request.json(),
+      fundingId,
+      payload: { transaction_hash: body.transaction_hash },
     });
     if (!funding) throw new PublicApplicationError("Funding not found", "not_found", 404);
     return Response.json(

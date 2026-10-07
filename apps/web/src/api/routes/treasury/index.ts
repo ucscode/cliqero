@@ -140,7 +140,11 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/treasury/adjustments",
+      path: "/api/treasury/entries",
+      tags: ["Treasury Entries"],
+      summary: "Create a manual Treasury entry",
+      description:
+        "Posts an immutable signed Treasury accounting entry. Corrections require a new compensating entry; entries are not edited or deleted.",
       request: {
         headers: z.object({ "idempotency-key": z.string().trim().min(1).max(200) }),
         body: { content: { "application/json": { schema: treasuryAdjustmentBody } } },

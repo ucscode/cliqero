@@ -2441,7 +2441,7 @@ ALTER TABLE ONLY payment_capability.provider_operations
 --
 
 ALTER TABLE ONLY payment_capability.reconciliation_attempts
-    ADD CONSTRAINT reconciliation_attempt_identity_unique_numeric UNIQUE (payment_id, idempotency_key);
+    ADD CONSTRAINT reconciliation_attempt_idempotency_key_unique UNIQUE (idempotency_key);
 
 
 --

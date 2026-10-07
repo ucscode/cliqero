@@ -6,7 +6,6 @@ import {
 } from "@/api/compat/checkout/openapi";
 import { compatibilityContracts as distributionPolicyContracts } from "@/api/compat/distribution-policy/openapi";
 import { compatibilityContracts as earningsContracts } from "@/api/compat/earnings/openapi";
-import { compatibilityContracts as developmentFundingContracts } from "@/api/compat/funding/development/verify/openapi";
 import { compatibilityContracts as healthContracts } from "@/api/compat/health/openapi";
 import {
   compatibilityContracts as listingContracts,
@@ -23,7 +22,6 @@ import {
   compatibilityContracts as referralContracts,
   compatibilityExamples as referralExamples,
 } from "@/api/compat/referrals/openapi";
-import { compatibilityContracts as treasuryContracts } from "@/api/compat/treasury/openapi";
 import {
   compatibilityContracts as walletContracts,
   compatibilityExamples as walletExamples,
@@ -53,7 +51,6 @@ export const compatibilityContracts: Record<string, CompatibilityOperationContra
   checkoutContracts,
   distributionPolicyContracts,
   earningsContracts,
-  developmentFundingContracts,
   healthContracts,
   listingContracts,
   listingMediaContracts,
@@ -61,7 +58,6 @@ export const compatibilityContracts: Record<string, CompatibilityOperationContra
   passwordResetContracts,
   purchaseContracts,
   referralContracts,
-  treasuryContracts,
   walletContracts,
   fundingContracts,
   walletTransferContracts,

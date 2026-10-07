@@ -47,7 +47,7 @@ export function OperatorEarningsAdjustmentForm() {
     setSaving(true);
     setError(null);
     try {
-      await apiFetch<Adjustment>("/internal/earnings-adjustments", {
+      await apiFetch<Adjustment>("/api/earnings/adjustments", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -145,9 +145,7 @@ export function OperatorEarningsAdjustments({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await apiFetch<{ items: Adjustment[] }>(
-        "/internal/earnings-adjustments?limit=50",
-      );
+      const result = await apiFetch<{ items: Adjustment[] }>("/api/earnings/adjustments?limit=50");
       setItems(result.items);
       setError(null);
     } catch (cause) {
@@ -329,7 +327,7 @@ export function OperatorEarningsAdjustmentDetail({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     // Inspection reloads the immutable persisted adjustment by id.
-    void apiFetch<Adjustment>(`/internal/earnings-adjustments/${id}`)
+    void apiFetch<Adjustment>(`/api/earnings/adjustments/${id}`)
       .then(setItem)
       .catch((cause) => {
         setError(cause instanceof ApiClientError ? cause.message : "Adjustment unavailable.");

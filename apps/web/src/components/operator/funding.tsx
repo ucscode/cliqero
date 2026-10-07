@@ -84,23 +84,30 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
 
   useEffect(() => {
     let active = true;
-    void (fundingId ? apiFetch<FundingDetail>(`/api/funding/${fundingId}`) : Promise.resolve(null))
+    void (
+      fundingId
+        ? apiFetch<{ administrative: FundingDetail | null }>(
+            `/api/funding-transactions/${fundingId}`,
+          )
+        : Promise.resolve(null)
+    )
       .then((funding) => {
         if (!active) return;
         if (funding) {
-          if (funding.origin !== "administrative")
+          const detail = funding.administrative;
+          if (!detail || detail.origin !== "administrative")
             throw new Error("Provider funding is immutable.");
           setAccount({
-            ...funding.account,
+            ...detail.account,
             displayName: null,
             country: null,
             createdAt: "",
             directReferralCount: 0,
           });
-          setAmount(majorFromMinor(funding.canonicalAmountMinor));
-          setState(funding.state as AdministrativeFundingState);
-          setReason(funding.reason ?? "");
-          setReference(funding.administrativeReference ?? "");
+          setAmount(majorFromMinor(detail.canonicalAmountMinor));
+          setState(detail.state as AdministrativeFundingState);
+          setReason(detail.reason ?? "");
+          setReference(detail.administrativeReference ?? "");
         }
       })
       .catch((cause: unknown) => active && setError(errorMessage(cause)))
@@ -284,8 +291,14 @@ export function OperatorFundingList({
       params.set("sort", filters.sort);
       params.set("direction", filters.direction);
       if (cursor) params.set("cursor", cursor);
-      const result = await apiFetch<OperatorFundingPage>(`/api/funding?${params}`);
-      return { items: result.items, nextCursor: result.nextCursor };
+      const result = await apiFetch<{
+        items: Array<{ administrative: OperatorFundingPage["items"][number] | null }>;
+        next_cursor: string | null;
+      }>(`/api/funding-transactions?${params}`);
+      return {
+        items: result.items.flatMap((item) => (item.administrative ? [item.administrative] : [])),
+        nextCursor: result.next_cursor,
+      };
     },
     { search: "", state: "", provider: "", sort: "created", direction: "desc" },
   );
@@ -556,7 +569,11 @@ export function OperatorFundingDetail({
     setLoading(true);
     setError(null);
     try {
-      setFunding(await apiFetch<FundingDetail>(`/api/funding/${fundingId}`));
+      const result = await apiFetch<{ administrative: FundingDetail | null }>(
+        `/api/funding-transactions/${fundingId}`,
+      );
+      if (!result.administrative) throw new Error("Funding detail is unavailable.");
+      setFunding(result.administrative);
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {

@@ -12,6 +12,59 @@ const fundingId = "00000000-0000-4000-8000-000000000010";
 const account = { id: "00000000-0000-4000-8000-000000000001" };
 
 describe("bank-transfer evidence API", () => {
+  it("rejects evidence when the persisted funding provider is not Bank Transfer", async () => {
+    const submit = vi.fn();
+    fixtures.container = {
+      principalResolver: { resolve: vi.fn(async () => ({ account })) },
+      funding: {
+        findById: vi.fn(async () => ({
+          id: fundingId,
+          accountId: account.id,
+          providerName: "paystack",
+        })),
+      },
+      bankTransferEvidence: { submit },
+    };
+    const body = new FormData();
+    body.set("transfer_reference", "ref");
+    const response = await POST(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}/evidence`, {
+        method: "POST",
+        body,
+      }),
+      { params: Promise.resolve({ fundingId }) },
+    );
+    expect(response.status).toBe(409);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("does not let the caller select or override the persisted provider", async () => {
+    const submit = vi.fn();
+    fixtures.container = {
+      principalResolver: { resolve: vi.fn(async () => ({ account })) },
+      funding: {
+        findById: vi.fn(async () => ({
+          id: fundingId,
+          accountId: account.id,
+          providerName: "bank_transfer",
+        })),
+      },
+      bankTransferEvidence: { submit },
+    };
+    const body = new FormData();
+    body.set("transfer_reference", "ref");
+    body.set("provider", "paystack");
+    const response = await POST(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}/evidence`, {
+        method: "POST",
+        body,
+      }),
+      { params: Promise.resolve({ fundingId }) },
+    );
+    expect(response.status).toBe(400);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it("accepts reference, proof, and note and returns all safe evidence fields", async () => {
     const submit = vi.fn(async () => ({
       id: "00000000-0000-4000-8000-000000000011",
@@ -28,6 +81,13 @@ describe("bank-transfer evidence API", () => {
     }));
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
+      funding: {
+        findById: vi.fn(async () => ({
+          id: fundingId,
+          accountId: account.id,
+          providerName: "bank_transfer",
+        })),
+      },
       bankTransferEvidence: { submit },
     };
 
@@ -41,7 +101,7 @@ describe("bank-transfer evidence API", () => {
       }),
     );
     const response = await POST(
-      new Request(`http://localhost/api/bank-transfer/funding-transactions/${fundingId}/evidence`, {
+      new Request(`http://localhost/api/funding-transactions/${fundingId}/evidence`, {
         method: "POST",
         body,
       }),
@@ -83,6 +143,13 @@ describe("bank-transfer evidence API", () => {
     }));
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
+      funding: {
+        findById: vi.fn(async () => ({
+          id: fundingId,
+          accountId: account.id,
+          providerName: "bank_transfer",
+        })),
+      },
       bankTransferEvidence: { submit },
     };
 
@@ -90,7 +157,7 @@ describe("bank-transfer evidence API", () => {
     body.set("transfer_reference", "bank-ref-only");
     body.set("customer_note", "");
     const response = await POST(
-      new Request(`http://localhost/api/bank-transfer/funding-transactions/${fundingId}/evidence`, {
+      new Request(`http://localhost/api/funding-transactions/${fundingId}/evidence`, {
         method: "POST",
         body,
       }),
@@ -121,6 +188,13 @@ describe("bank-transfer evidence API", () => {
     }));
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
+      funding: {
+        findById: vi.fn(async () => ({
+          id: fundingId,
+          accountId: account.id,
+          providerName: "bank_transfer",
+        })),
+      },
       bankTransferEvidence: { submit },
     };
 
@@ -134,7 +208,7 @@ describe("bank-transfer evidence API", () => {
       }),
     );
     const response = await POST(
-      new Request(`http://localhost/api/bank-transfer/funding-transactions/${fundingId}/evidence`, {
+      new Request(`http://localhost/api/funding-transactions/${fundingId}/evidence`, {
         method: "POST",
         body,
       }),
@@ -157,6 +231,13 @@ describe("bank-transfer evidence API", () => {
     const submit = vi.fn();
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
+      funding: {
+        findById: vi.fn(async () => ({
+          id: fundingId,
+          accountId: account.id,
+          providerName: "bank_transfer",
+        })),
+      },
       bankTransferEvidence: { submit },
     };
 
@@ -164,7 +245,7 @@ describe("bank-transfer evidence API", () => {
     body.set("transfer_reference", "");
     body.set("customer_note", "Reviewer context only");
     const response = await POST(
-      new Request(`http://localhost/api/bank-transfer/funding-transactions/${fundingId}/evidence`, {
+      new Request(`http://localhost/api/funding-transactions/${fundingId}/evidence`, {
         method: "POST",
         body,
       }),

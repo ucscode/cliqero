@@ -55,25 +55,6 @@ function legacyContractPath(path: string, method: string) {
     return method.toUpperCase() === "GET" ? "/api/checkout-quote" : "/api/checkouts";
   if (path === "/api/checkout/{checkoutId}") return "/api/checkouts/{checkoutId}";
   if (path === "/api/checkout/{checkoutId}/pay") return "/api/checkouts/{checkoutId}/pay";
-  if (path === "/api/wallet/funding") return "/api/funding-transactions";
-  if (path === "/api/wallet/fund") return "/api/funding-transactions";
-  const fundingPath = path.replace(
-    "/api/wallet/fund/{fundingId}",
-    "/api/funding-transactions/{fundingId}",
-  );
-  if (fundingPath !== path) {
-    if (fundingPath.endsWith("/evidence"))
-      return fundingPath.replace(
-        "/api/funding-transactions/",
-        "/api/bank-transfer/funding-transactions/",
-      );
-    if (fundingPath.endsWith("/transaction"))
-      return fundingPath.replace(
-        "/api/funding-transactions/",
-        "/api/direct-trc20/funding-transactions/",
-      );
-    return fundingPath;
-  }
   return path;
 }
 const errorResponse = (description: string) => ({
@@ -203,9 +184,7 @@ const domainDescriptions: Record<string, string> = {
   "Earning Entries":
     "Earning entry operations preserve accounting integrity and expose persisted entries under their own resource contract.",
   "Treasury Entries":
-    "Treasury entries are persisted accounting records with audited root-only deletion.",
-  "Treasury Adjustments":
-    "Treasury adjustments use an idempotent accounting workflow and audited reconciliation.",
+    "Treasury entries are immutable accounting facts; corrections are new compensating entries.",
   "Package Entitlements":
     "Package entitlements are persisted access grants managed through their purchase and entitlement lifecycle.",
   Accounts:
@@ -218,8 +197,13 @@ const domainDescriptions: Record<string, string> = {
     "Payment resource operations expose provider-neutral records and preserve provider-owned payment facts.",
   "Payment Events":
     "Payment Event records preserve provider identity, deduplication keys, and immutable ingress evidence.",
-  "Payment Reconciliation":
-    "Payment reconciliation lists candidates and coordinates explicit verification attempts.",
+  "Payment Reconciliations":
+    "Payment reconciliation attempts are persisted, idempotent records of manual verification workflows; a key cannot be reused for another payment.",
+  "Payment Reconciliation Candidates":
+    "Candidate payments are a read-only projection of unresolved provider payments eligible for review.",
+  "Funding Options":
+    "Funding options are a read-only provider-neutral projection used before creating a funding transaction.",
+  "Earnings Adjustments": "Earnings adjustments are immutable signed accounting correction facts.",
   "Checkout Quote": "A checkout quote is a read-only price and wallet-availability projection.",
   Purchases: "Purchase operations preserve payment, ownership, and purchase lifecycle rules.",
   "Wallet Summary": "The wallet summary is a computed, account-scoped balance projection.",
@@ -229,14 +213,6 @@ const domainDescriptions: Record<string, string> = {
   "Wallet Transfer Quote": "A wallet transfer quote is a read-only fee and net-amount calculation.",
   "Funding Transactions":
     "Provider-neutral funding transactions are persisted and processed idempotently.",
-  "Administrative Funding":
-    "Administrative funding records are distinct mutable records backed by audited balance adjustments.",
-  "Funding Preparation":
-    "Funding preparation returns provider-neutral eligibility and amount projections.",
-  "Bank Transfer Evidence":
-    "Bank Transfer evidence submission is a provider-owned protocol operation tied to an existing funding transaction.",
-  "Direct TRC20 Verification":
-    "Direct TRC20 transaction submission is a provider-owned verification operation tied to an existing funding transaction.",
   Withdrawals:
     "Withdrawal operations enforce account ownership, reserved-balance, and supported management transitions.",
   "Withdrawal Policy":
@@ -271,7 +247,6 @@ function domainForPath(path: string): string {
     return "Package Entitlements";
   if (path === "/api/checkout") return "Checkout Quote";
   if (path.startsWith("/api/checkout/")) return "Checkouts";
-  if (path === "/api/funding/development/verify") return "Funding Verification";
   if (path.startsWith("/api/withdrawal-destinations")) return "Withdrawal Destinations";
   if (path === "/api/withdrawals/policy") return "Withdrawal Policy";
   if (path === "/api/withdrawal-methods") return "Withdrawal Methods";
@@ -295,27 +270,20 @@ function domainForPath(path: string): string {
   if (relative.startsWith("blog")) return "Blog Posts";
   if (relative.startsWith("reviews")) return "Reviews";
   if (relative.startsWith("payment-events")) return "Payment Events";
-  if (relative === "payments/reconcile") return "Payment Reconciliation";
   if (relative.startsWith("payments")) return "Payments";
   if (relative.startsWith("purchases")) return "Purchases";
   if (relative === "checkout-quote") return "Checkout Quote";
   if (relative === "checkouts" || relative.startsWith("checkouts/")) return "Checkouts";
-  if (relative === "funding") return "Administrative Funding";
-  if (relative.startsWith("funding/")) return "Administrative Funding";
   if (relative === "wallet") return "Wallet Summary";
   if (relative === "wallet/transactions") return "Wallet Transactions";
   if (relative === "wallet/transfers" || relative.startsWith("wallet/transfers/"))
     return "Wallet Transfers";
   if (relative === "wallet/transfer-quote") return "Wallet Transfer Quote";
-  if (relative === "wallet/funding/prepare") return "Funding Preparation";
-  if (
-    relative === "wallet/fund" ||
-    relative.startsWith("wallet/fund/") ||
-    relative === "wallet/funding"
-  )
-    return "Funding Transactions";
-  if (relative.startsWith("bank-transfer/funding-transactions/")) return "Bank Transfer Evidence";
-  if (relative.startsWith("direct-trc20/funding-transactions/")) return "Direct TRC20 Verification";
+  if (relative === "funding-options") return "Funding Options";
+  if (relative.startsWith("payment-reconciliations")) return "Payment Reconciliations";
+  if (relative === "payment-reconciliation-candidates") return "Payment Reconciliation Candidates";
+  if (relative.startsWith("payment-events")) return "Payment Events";
+  if (relative.startsWith("earnings/adjustments")) return "Earnings Adjustments";
   if (relative === "funding-transactions" || relative.startsWith("funding-transactions/"))
     return "Funding Transactions";
   if (relative.startsWith("withdrawal")) return "Withdrawals";
@@ -323,7 +291,6 @@ function domainForPath(path: string): string {
   if (relative.startsWith("referral")) return "Referral Network";
   if (relative.startsWith("treasury/entries")) return "Treasury Entries";
   if (relative.startsWith("treasury/expenses")) return "Treasury Entries";
-  if (relative.startsWith("treasury/adjustments")) return "Treasury Adjustments";
   if (relative === "treasury") return "Treasury Summary";
   if (relative.startsWith("earnings/entries")) return "Earning Entries";
   if (relative.startsWith("distributions")) return "Distributions";
@@ -359,7 +326,6 @@ function operationSummary(path: string, method: string) {
   const resource = readableResource(path);
   if (path === "/api/overview") return "Get operator overview";
   if (path === "/api/health") return "Check API health";
-  if (path === "/api/funding/development/verify") return "Verify development funding";
   if (path === "/api/me/session") return "Get current session";
   if (path === "/api/me/access") return "Get current account access";
   if (path === "/api/checkout")
@@ -377,7 +343,6 @@ function operationSummary(path: string, method: string) {
   if (path === "/api/listings/export") return "Export listings";
   if (path === "/api/listings/import") return "Import listings";
   if (path === "/api/checkout-quote") return "Quote checkout wallet requirement";
-  if (path === "/api/wallet/funding/prepare") return "Prepare a funding option";
   if (path === "/api/wallet/transfer-quote") return "Quote a wallet transfer";
   if (path === "/api/wallet/transfers")
     return method === "get" ? "Quote a wallet transfer" : "Create a wallet transfer";
@@ -397,7 +362,7 @@ function operationSummary(path: string, method: string) {
     return path.includes("/fund") ? "Verify funding" : "Verify resource status";
   if (path.endsWith("/cancel")) return "Cancel funding";
   if (path.endsWith("/pay")) return "Pay for checkout";
-  if (path.endsWith("/transaction")) return "Submit funding transaction";
+  if (path.endsWith("/provider-transaction")) return "Submit provider transaction identity";
   if (path.endsWith("/evidence")) return "Submit funding evidence";
   if (path.endsWith("/initialize")) return "Initialize funding";
   if (path.endsWith("/import")) return "Import listings";

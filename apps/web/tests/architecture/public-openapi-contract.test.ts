@@ -18,19 +18,16 @@ const document = generateOpenApiDocument(
 );
 
 const bodylessOperations = new Set([
-  "POST /api/funding/{fundingId}/reconcile-credit",
-  "POST /api/payments/events/{eventId}/reprocess",
+  "POST /api/funding-transactions/{fundingId}/reconcile-credit",
+  "POST /api/payment-events/{eventId}/reprocess",
   "POST /api/purchases/{purchaseId}/reconcile-entitlement",
   "POST /api/withdrawals/{withdrawalId}/cancel",
-  "POST /api/payments/{paymentId}/reconcile",
   "POST /api/checkouts/{checkoutId}/pay",
   "POST /api/checkout/{checkoutId}/pay",
   "POST /api/listings/{listingId}/integrations/{integrationId}/rotate",
   "POST /api/funding-transactions/{fundingId}/cancel",
   "POST /api/funding-transactions/{fundingId}/initialize",
   "POST /api/funding-transactions/{fundingId}/verify",
-  "POST /api/funding/{fundingId}/confirm-bank-transfer",
-  "POST /api/treasury/entries",
   "POST /api/treasury/expenses",
   "POST /api/wallet/fund/{fundingId}/cancel",
   "POST /api/wallet/fund/{fundingId}/initialize",
@@ -57,7 +54,7 @@ function isFreeFormTopLevel(schema: unknown): boolean {
   );
 }
 
-const noSuccessByDesign = new Set(["POST /api/treasury/entries", "POST /api/treasury/expenses"]);
+const noSuccessByDesign = new Set(["POST /api/treasury/expenses"]);
 
 function schemaObjects(documentValue: unknown): Record<string, any>[] {
   const found: Record<string, any>[] = [];
@@ -153,13 +150,14 @@ describe("public OpenAPI contract quality", () => {
       (document.paths["/api/payments/{paymentId}"]?.get?.responses as any)?.["200"]?.content?.[
         "application/json"
       ]?.schema?.properties?.conversion_snapshot,
-      (document.paths["/api/payments/{paymentId}/reconcile"]?.post?.responses as any)?.["200"]
-        ?.content?.["application/json"]?.schema?.properties?.attempt?.properties?.result,
+      (document.paths["/api/payment-reconciliations/{reconciliationId}"]?.get?.responses as any)?.[
+        "200"
+      ]?.content?.["application/json"]?.schema?.properties?.result,
       (document.paths["/api/distributions/{distributionId}"]?.get?.responses as any)?.["200"]
         ?.content?.["application/json"]?.schema?.properties?.policySnapshot,
-      (document.paths["/api/funding/{fundingId}"]?.get?.responses as any)?.["200"]?.content?.[
-        "application/json"
-      ]?.schema?.properties?.providerInitialization?.properties?.providerAccountSnapshot,
+      (document.paths["/api/funding-transactions/{fundingId}"]?.get?.responses as any)?.["200"]
+        ?.content?.["application/json"]?.schema?.properties?.administrative?.properties
+        ?.providerInitialization?.properties?.providerAccountSnapshot,
     ];
     for (const opaqueField of opaqueFields) {
       expect(opaqueField.anyOf).toEqual([

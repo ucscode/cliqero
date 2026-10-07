@@ -211,6 +211,48 @@ function appWith(
           confirmedAt: new Date().toISOString(),
         }),
       },
+      providers: {
+        displayName: (provider: string) => provider,
+        customerActionLabel: () => null,
+        availableMethodsFor: () => [],
+      },
+      funding: {
+        findById: async (id: string) => ({
+          id,
+          accountId: ordinaryId,
+          providerName: "development",
+          providerReference: "dev-reference",
+          canonicalAmount: { minorAmount: 100n, currency: "USD" },
+          collectionAmount: { minorAmount: 100n, currency: "USD" },
+          state: "confirmed",
+          createdAt: new Date(),
+          confirmedAt: new Date(),
+          providerInitialization: null,
+        }),
+        findHistoryForAccount: async () => ({ items: [], nextCursor: null }),
+      },
+      fundingService: {
+        create: async () => ({
+          id: ordinaryId,
+          state: "initialization_pending",
+          canonicalAmount: { minorAmount: 100n, currency: "USD" },
+          providerName: "development",
+        }),
+        prepare: async () => ({
+          provider: "development",
+          canonicalAmount: { minorAmount: 100n, currency: "USD" },
+          collectionAmount: { minorAmount: 100n, currency: "USD" },
+          fundingOptions: [],
+        }),
+      },
+      fundingCreditReconciliation: {
+        reconcile: async () => ({
+          fundingId: ordinaryId,
+          creditId: ordinaryId,
+          state: "available",
+          applied: true,
+        }),
+      },
       operatorPayments: {
         list: async () => ({ items: [], nextCursor: null }),
         get: async () => ({ id: ordinaryId }),
@@ -218,9 +260,46 @@ function appWith(
           { provider: input.provider ?? "paystack" },
         ],
       },
+      providerEventReprocessing: {
+        reprocess: async (input: any) => ({
+          eventId: input.eventId,
+          state: "queued",
+          applied: true,
+          correlationId: input.eventId,
+        }),
+      },
       paymentReconciliation: {
         eligible: async () => [],
-        reconcile: async (input: any) => ({ paymentId: input.paymentId, state: "completed" }),
+        reconcile: async (input: any) => ({
+          id: "00000000-0000-4000-8000-000000000098",
+          paymentId: input.paymentId,
+          idempotencyKey: input.idempotencyKey,
+          state: "completed",
+          result: { paymentState: "verified" },
+          lastError: null,
+          actorId: input.actorId,
+          correlationId: input.correlationId,
+          createdAt: "2026-10-01T00:00:00.000Z",
+          completedAt: "2026-10-01T00:01:00.000Z",
+        }),
+        list: async () => ({ items: [], nextCursor: null }),
+        get: async () => ({
+          id: ordinaryId,
+          paymentId: ordinaryId,
+          idempotencyKey: "key",
+          state: "completed",
+          result: null,
+          lastError: null,
+          actorId: ordinaryId,
+          correlationId: ordinaryId,
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        }),
+      },
+      earningsAdjustments: {
+        list: async () => ({ items: [], nextCursor: null }),
+        get: async () => ({ id: ordinaryId }),
+        create: async () => ({ id: ordinaryId }),
       },
       operatorDistributions: {
         list: async () => ({ items: [], nextCursor: null }),
@@ -520,14 +599,24 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const response = await appWith(operator).fetch(
-      new Request("http://localhost/api/payments/00000000-0000-4000-8000-000000000099/reconcile", {
+      new Request("http://localhost/api/payment-reconciliations", {
         method: "POST",
-        headers: { "idempotency-key": "manual-reconcile-test" },
+        headers: { "idempotency-key": "manual-reconcile-test", "content-type": "application/json" },
+        body: JSON.stringify({ payment_id: "00000000-0000-4000-8000-000000000099" }),
       }),
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      attempt: { paymentId: "00000000-0000-4000-8000-000000000099", state: "completed" },
+    expect(await response.json()).toEqual({
+      id: "00000000-0000-4000-8000-000000000098",
+      payment_id: "00000000-0000-4000-8000-000000000099",
+      idempotency_key: "manual-reconcile-test",
+      state: "completed",
+      result: { paymentState: "verified" },
+      last_error: null,
+      actor_id: "00000000-0000-4000-8000-000000000001",
+      correlation_id: expect.any(String),
+      created_at: "2026-10-01T00:00:00.000Z",
+      completed_at: "2026-10-01T00:01:00.000Z",
     });
 
     const apiKey = { ...operator, kind: "api_key" as const };
@@ -543,6 +632,80 @@ describe("Hono API foundation", () => {
         )
       ).status,
     ).toBe(200);
+  });
+
+  it("keeps payment collection projections and event reprocessing out of payment-ID aliases", async () => {
+    const operator = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session",
+      capabilities: ["finance.manage", "finance.read"],
+      scopes: new Set<string>(),
+    };
+    const app = appWith(operator);
+    expect((await app.fetch(new Request("http://localhost/api/payments/reconcile"))).status).toBe(
+      404,
+    );
+    expect(
+      (
+        await app.fetch(
+          new Request(
+            "http://localhost/api/payments/00000000-0000-4000-8000-000000000099/reconcile",
+            { method: "POST" },
+          ),
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await app.fetch(
+          new Request(
+            "http://localhost/api/payments/events/00000000-0000-4000-8000-000000000099/reprocess",
+            { method: "POST" },
+          ),
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (await app.fetch(new Request("http://localhost/api/payment-reconciliation-candidates")))
+        .status,
+    ).toBe(200);
+    expect(
+      (await app.fetch(new Request("http://localhost/api/payment-reconciliations"))).status,
+    ).toBe(200);
+    expect(
+      (
+        await app.fetch(
+          new Request(
+            "http://localhost/api/payment-reconciliations/00000000-0000-4000-8000-000000000099",
+          ),
+        )
+      ).status,
+    ).toBe(200);
+
+    const readerKey = { ...operator, kind: "api_key" as const, scopes: new Set(["payments:read"]) };
+    expect(
+      (await appWith(readerKey).fetch(new Request("http://localhost/api/payment-reconciliations")))
+        .status,
+    ).toBe(200);
+    const missingReadScope = { ...readerKey, scopes: new Set<string>() };
+    expect(
+      (
+        await appWith(missingReadScope).fetch(
+          new Request("http://localhost/api/payment-reconciliations"),
+        )
+      ).status,
+    ).toBe(403);
+
+    const eventId = "00000000-0000-4000-8000-000000000099";
+    const response = await app.fetch(
+      new Request(`http://localhost/api/payment-events/${eventId}/reprocess`, {
+        method: "POST",
+        headers: { "idempotency-key": "event-reprocess-test" },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ event_id: eventId, state: "queued" });
   });
 
   it("keeps catalogue category reads public and protects mutations with capability and scope", async () => {
@@ -819,16 +982,13 @@ describe("Hono API foundation", () => {
     expect(paths["/api/listings"]).toBeDefined();
     expect(paths["/api/wallet"]).toBeDefined();
     expect(paths["/api/openapi.json"]).toBeUndefined();
-    expect(
-      paths["/api/direct-trc20/funding-transactions/{fundingId}/transaction"].post,
-    ).toMatchObject({
+    expect(paths["/api/funding-transactions/{fundingId}/provider-transaction"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "wallet:fund",
       security: [{ CliqeroApiKey: [] }],
     });
     expect(
-      paths["/api/direct-trc20/funding-transactions/{fundingId}/transaction"].post.description ??
-        "",
+      paths["/api/funding-transactions/{fundingId}/provider-transaction"].post.description ?? "",
     ).not.toContain("Authentication:");
     expect(paths["/api/treasury/entries"]).toBeDefined();
     expect(paths["/api/api-keys"]).toBeUndefined();
@@ -853,8 +1013,15 @@ describe("Hono API foundation", () => {
     ).toBeDefined();
     expect(paths["/api/accounts/bulk"]).toBeUndefined();
     expect(paths["/api/payments"].get.tags).toEqual(["Payments"]);
-    expect(paths["/api/payments/{paymentId}/reconcile"].post).toBeDefined();
+    expect(paths["/api/payment-reconciliations"].get).toBeDefined();
+    expect(paths["/api/payment-reconciliations"].post).toBeDefined();
+    expect(paths["/api/payment-reconciliations/{reconciliationId}"].get).toBeDefined();
+    expect(paths["/api/payment-reconciliation-candidates"].get).toBeDefined();
+    expect(paths["/api/payments/reconcile"]).toBeUndefined();
+    expect(paths["/api/payments/{paymentId}/reconcile"]).toBeUndefined();
     expect(paths["/api/payment-events"].get).toBeDefined();
+    expect(paths["/api/payment-events/{eventId}/reprocess"].post).toBeDefined();
+    expect(paths["/api/payments/events/{eventId}/reprocess"]).toBeUndefined();
     expect(paths["/api/payments/events"]).toBeUndefined();
     expect(Object.keys(paths).filter((path) => path.startsWith("/api/operator/"))).toEqual([]);
     const internalOnlyApi = await appWith().fetch(
@@ -895,8 +1062,17 @@ describe("Hono API foundation", () => {
       delete: expect.objectContaining({ requestBody: expect.any(Object) }),
     });
     expect(paths).not.toHaveProperty("/api/accounts/{accountId}/capabilities/{capability}");
-    expect(paths["/api/funding"]).toBeDefined();
-    expect(paths["/api/funding/{fundingId}"]).toBeDefined();
+    expect(paths["/api/funding"]).toBeUndefined();
+    expect(paths["/api/funding/{fundingId}"]).toBeUndefined();
+    expect(paths["/api/funding-transactions"].get).toBeDefined();
+    expect(paths["/api/funding-transactions"].post).toBeDefined();
+    expect(paths["/api/funding-transactions/{fundingId}"].get).toBeDefined();
+    expect(paths["/api/funding-options"].get.tags).toEqual(["Funding Options"]);
+    expect(paths["/api/funding-transactions/{fundingId}/evidence"].post).toBeDefined();
+    expect(paths["/api/funding-transactions/{fundingId}/provider-transaction"].post).toBeDefined();
+    expect(paths["/api/bank-transfer/funding-transactions/{fundingId}/evidence"]).toBeUndefined();
+    expect(paths["/api/direct-trc20/funding-transactions/{fundingId}/transaction"]).toBeUndefined();
+    expect(paths["/api/wallet/funding/prepare"]).toBeUndefined();
     expect(paths["/api/funding/{fundingId}/confirm-bank-transfer"]).toBeUndefined();
     expect(paths["/api/listings"]).toBeDefined();
     expect(paths["/api/listings/{listingId}"]).toBeDefined();
@@ -953,9 +1129,9 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "account",
       "x-required-api-scope": "accounts:read",
     });
-    expect(paths["/api/funding"].get).toMatchObject({
+    expect(paths["/api/funding-transactions"].get).toMatchObject({
       "x-authentication-mode": "account",
-      "x-required-api-scope": "payments:read",
+      "x-required-api-scope": "wallet:read (owner) or payments:read (finance operator)",
     });
     expect(paths["/api/distributions"].get).toMatchObject({
       "x-authentication-mode": "account",
@@ -1012,10 +1188,14 @@ describe("Hono API foundation", () => {
       "x-required-api-scope": "treasury:read",
     });
     expect(paths["/api/treasury"].get.description ?? "").not.toContain("Authentication:");
-    expect(paths["/api/treasury/adjustments"].post).toMatchObject({
+    expect(paths["/api/treasury/entries"].post).toMatchObject({
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:manage",
     });
+    expect(paths["/api/treasury/adjustments"]).toBeUndefined();
+    expect(paths["/api/earnings/adjustments"].get).toBeDefined();
+    expect(paths["/api/earnings/adjustments"].post).toBeDefined();
+    expect(paths["/api/earnings/adjustments/{adjustmentId}"].get).toBeDefined();
     expect(paths["/api/blog/posts"]).toBeDefined();
     expect(paths["/api/catalogue/bulk"]).toBeUndefined();
     expect(paths["/api/catalogue/categories"]).toMatchObject({
@@ -1283,17 +1463,25 @@ describe("Hono API foundation", () => {
       capabilities: [],
       scopes: new Set<string>(),
     };
-    expect((await appWith().fetch(new Request("http://localhost/api/funding"))).status).toBe(401);
     expect(
-      (await appWith(ordinary).fetch(new Request("http://localhost/api/funding"))).status,
-    ).toBe(403);
+      (await appWith().fetch(new Request("http://localhost/api/funding-transactions"))).status,
+    ).toBe(401);
+    expect(
+      (await appWith(ordinary).fetch(new Request("http://localhost/api/funding-transactions")))
+        .status,
+    ).toBe(200);
     const catalogueManager = { ...ordinary, capabilities: ["catalogue.manage"] };
     expect(
-      (await appWith(catalogueManager).fetch(new Request("http://localhost/api/funding"))).status,
-    ).toBe(403);
+      (
+        await appWith(catalogueManager).fetch(
+          new Request("http://localhost/api/funding-transactions"),
+        )
+      ).status,
+    ).toBe(200);
     const operator = { ...ordinary, capabilities: ["system.root"] };
     expect(
-      (await appWith(operator).fetch(new Request("http://localhost/api/funding"))).status,
+      (await appWith(operator).fetch(new Request("http://localhost/api/funding-transactions")))
+        .status,
     ).toBe(200);
     const operatorKey = {
       ...operator,
@@ -1301,11 +1489,13 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(["payments:read"]),
     };
     expect(
-      (await appWith(operatorKey).fetch(new Request("http://localhost/api/funding"))).status,
+      (await appWith(operatorKey).fetch(new Request("http://localhost/api/funding-transactions")))
+        .status,
     ).toBe(200);
     const missingScope = { ...operator, kind: "api_key" as const, scopes: new Set<string>() };
     expect(
-      (await appWith(missingScope).fetch(new Request("http://localhost/api/funding"))).status,
+      (await appWith(missingScope).fetch(new Request("http://localhost/api/funding-transactions")))
+        .status,
     ).toBe(403);
     const elevatedCatalogue = {
       ...catalogueManager,
@@ -1313,7 +1503,11 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(["payments:read"]),
     };
     expect(
-      (await appWith(elevatedCatalogue).fetch(new Request("http://localhost/api/funding"))).status,
+      (
+        await appWith(elevatedCatalogue).fetch(
+          new Request("http://localhost/api/funding-transactions"),
+        )
+      ).status,
     ).toBe(403);
   });
   it("keeps bank-transfer confirmation out of the public API", async () => {
@@ -2403,9 +2597,16 @@ describe("Hono API foundation", () => {
         })
       ).status,
     ).toBe(200);
+    expect(
+      (
+        await appWith({ ...base, capabilities: ["system.root"] }).fetch(
+          new Request("http://localhost/api/treasury/entries/00000000-0000-4000-8000-000000000004"),
+        )
+      ).status,
+    ).toBe(200);
     const post = (principal: any) =>
       appWith(principal).fetch(
-        new Request("http://localhost/api/treasury/adjustments", {
+        new Request("http://localhost/api/treasury/entries", {
           method: "POST",
           headers: { "content-type": "application/json", "Idempotency-Key": "test-key" },
           body: JSON.stringify({ amount_minor: "100", reason: "Correction" }),
@@ -2531,7 +2732,7 @@ describe("Hono API foundation", () => {
       scopes: new Set<string>(),
     };
     const response = await appWith(principal).fetch(
-      new Request("http://localhost/api/treasury/adjustments", {
+      new Request("http://localhost/api/treasury/entries", {
         method: "POST",
         headers: { "content-type": "application/json", "Idempotency-Key": "strict-key" },
         body: JSON.stringify({
@@ -2543,6 +2744,38 @@ describe("Hono API foundation", () => {
       }),
     );
     expect(response.status).toBe(400);
+    expect(
+      (
+        await appWith(principal).fetch(
+          new Request("http://localhost/api/treasury/adjustments", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "Idempotency-Key": "old-adjustment-route",
+            },
+            body: JSON.stringify({ amount_minor: "100", reason: "obsolete route" }),
+          }),
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await appWith(principal).fetch(
+          new Request("http://localhost/api/treasury/entries", { method: "PATCH" }),
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await appWith(principal).fetch(
+          new Request("http://localhost/api/treasury/entries", {
+            method: "DELETE",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ids: ["00000000-0000-4000-8000-000000000004"] }),
+          }),
+        )
+      ).status,
+    ).toBe(404);
     const nonRoot = {
       ...principal,
       capabilities: [],
@@ -2558,7 +2791,7 @@ describe("Hono API foundation", () => {
           ),
         )
       ).status,
-    ).toBe(405);
+    ).toBe(404);
   });
   it("serializes expected request validation as a human-readable API error", async () => {
     const principal = {

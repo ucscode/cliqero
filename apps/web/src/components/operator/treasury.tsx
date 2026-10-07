@@ -72,7 +72,7 @@ export function OperatorTreasuryForm() {
     }
     setSaving(true);
     try {
-      await apiFetch<OperatorTreasuryEntry>("/api/treasury/adjustments", {
+      await apiFetch<OperatorTreasuryEntry>("/api/treasury/entries", {
         method: "POST",
         headers: {
           "content-type": "application/json",

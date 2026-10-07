@@ -161,22 +161,22 @@ await call("GET", `/api/checkout/${checkout}`, { token: seller });
 await call("GET", "/api/wallet");
 await call("GET", "/api/wallet", { token: buyer });
 await call("GET", "/api/wallet/transactions", { token: buyer });
-await call("POST", "/api/wallet/fund", {
+await call("POST", "/api/funding-transactions", {
   token: buyer,
   headers: { "idempotency-key": `bad-${suffix}` },
   body: { amount_minor: "0", provider: "development" },
 });
-const fundingResult = await call("POST", "/api/wallet/fund", {
+const fundingResult = await call("POST", "/api/funding-transactions", {
   token: buyer,
   headers: { "idempotency-key": `fund-${suffix}` },
   body: { amount_minor: "100", provider: "development" },
 });
-await call("POST", "/api/wallet/fund", {
+await call("POST", "/api/funding-transactions", {
   token: buyer,
   headers: { "idempotency-key": `fund-${suffix}` },
   body: { amount_minor: "100", provider: "development" },
 });
-await call("POST", "/api/funding/development/verify", {
+await call("POST", "/internal/funding/development/verify", {
   token: buyer,
   body: { funding_id: fundingResult.value.id },
 });

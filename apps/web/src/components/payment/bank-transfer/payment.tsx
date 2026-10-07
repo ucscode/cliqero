@@ -108,7 +108,7 @@ export function BankTransferPayment(props: PaymentProviderProps) {
       body.set("transfer_reference", reference);
       body.set("customer_note", note);
       if (proofFile) body.set("proof_file", proofFile);
-      await apiFetch(`/api/bank-transfer/funding-transactions/${props.funding.id}/evidence`, {
+      await apiFetch(`/api/funding-transactions/${props.funding.id}/evidence`, {
         method: "POST",
         body,
       });

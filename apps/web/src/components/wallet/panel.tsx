@@ -331,7 +331,7 @@ export function WalletPanel({
     });
     if (fundingOptionId) query.set("bank_account_id", fundingOptionId);
     if (paymentCurrency) query.set("payment_currency", paymentCurrency);
-    void apiFetch<FundingPreparation>(`/api/wallet/funding/prepare?${query.toString()}`)
+    void apiFetch<FundingPreparation>(`/api/funding-options?${query.toString()}`)
       .then((result) => {
         if (active) {
           setPreparation(result);

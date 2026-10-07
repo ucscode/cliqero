@@ -9,6 +9,8 @@ export interface ReconciliationAttempt {
   lastError: string | null;
   actorId: string;
   correlationId: string;
+  createdAt: string;
+  completedAt: string | null;
 }
 
 export interface ReconciliationOperations {
@@ -24,4 +26,11 @@ export interface ReconciliationOperations {
     result: unknown,
     error?: string,
   ): Promise<void>;
+  findById(id: string): Promise<ReconciliationAttempt | null>;
+  list(input: {
+    paymentId?: string;
+    state?: ReconciliationState;
+    cursor?: string;
+    limit: number;
+  }): Promise<{ items: ReconciliationAttempt[]; nextCursor: string | null }>;
 }

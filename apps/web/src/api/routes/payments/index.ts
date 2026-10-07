@@ -68,17 +68,153 @@ const providerEventSchema = z.object({
   outbox_last_error: z.string().nullable(),
 });
 const reconciliationAttemptSchema = z.object({
-  id: z.string(),
-  paymentId: z.string(),
-  idempotencyKey: z.string(),
+  id: z.uuid(),
+  payment_id: z.uuid(),
+  idempotency_key: z.string(),
   state: z.enum(["started", "completed", "skipped", "mismatch", "failed"]),
   result: opaqueJsonSchema,
-  lastError: z.string().nullable(),
-  actorId: z.string(),
-  correlationId: z.string(),
+  last_error: z.string().nullable(),
+  actor_id: z.string(),
+  correlation_id: z.string(),
+  created_at: z.string().datetime(),
+  completed_at: z.string().datetime().nullable(),
 });
 
+function presentReconciliationAttempt(
+  attempt: Awaited<ReturnType<ApplicationContainer["paymentReconciliation"]["reconcile"]>>,
+) {
+  return {
+    id: attempt.id,
+    payment_id: attempt.paymentId,
+    idempotency_key: attempt.idempotencyKey,
+    state: attempt.state,
+    result: attempt.result,
+    last_error: attempt.lastError,
+    actor_id: attempt.actorId,
+    correlation_id: attempt.correlationId,
+    created_at: attempt.createdAt,
+    completed_at: attempt.completedAt,
+  };
+}
+
 export function registerPaymentRoutes(app: OpenAPIHono<Env>, container: ApplicationContainer) {
+  // Reserve the old static noun so it cannot be interpreted as a payment ID.
+  app.get("/api/payments/reconcile", (c) => c.json({ error: "Not found", code: "not_found" }, 404));
+
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/payment-reconciliations",
+      tags: ["Payment Reconciliations"],
+      summary: "List payment reconciliation attempts",
+      description:
+        "Returns persisted payment verification/reconciliation attempts in deterministic cursor order.",
+      request: {
+        query: z.object({
+          payment_id: z.uuid().optional(),
+          state: z.enum(["started", "completed", "skipped", "mismatch", "failed"]).optional(),
+          cursor: z.string().max(512).optional(),
+          limit: z.coerce.number().int().min(1).max(100).default(50),
+        }),
+      },
+      responses: {
+        200: {
+          description: "Payment reconciliation attempts",
+          content: {
+            "application/json": {
+              schema: z.object({
+                items: z.array(reconciliationAttemptSchema),
+                next_cursor: z.string().nullable(),
+              }),
+            },
+          },
+        },
+        400: {
+          description: "Invalid filters or cursor",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Finance read permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const principal = requirePrincipal(c);
+      if (!(principal instanceof Object) || !("accountId" in principal)) return principal;
+      const denied = requireCapabilityScope(c, principal, "finance.read", "payments:read");
+      if (denied) return denied;
+      try {
+        const query = c.req.valid("query");
+        const page = await container.paymentReconciliation.list(principal.accountId, {
+          paymentId: query.payment_id,
+          state: query.state,
+          cursor: query.cursor,
+          limit: query.limit,
+        });
+        return c.json(
+          { items: page.items.map(presentReconciliationAttempt), next_cursor: page.nextCursor },
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/api/payment-reconciliations/{reconciliationId}",
+      tags: ["Payment Reconciliations"],
+      summary: "Get a payment reconciliation attempt",
+      description:
+        "Returns persisted reconciliation outcome, actor, idempotency identity, and timestamps.",
+      request: { params: z.object({ reconciliationId: z.uuid() }) },
+      responses: {
+        200: {
+          description: "Payment reconciliation attempt",
+          content: { "application/json": { schema: reconciliationAttemptSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Finance read permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Reconciliation attempt not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const principal = requirePrincipal(c);
+      if (!(principal instanceof Object) || !("accountId" in principal)) return principal;
+      const denied = requireCapabilityScope(c, principal, "finance.read", "payments:read");
+      if (denied) return denied;
+      try {
+        return c.json(
+          presentReconciliationAttempt(
+            await container.paymentReconciliation.get(
+              principal.accountId,
+              c.req.valid("param").reconciliationId,
+            ),
+          ),
+          200,
+        );
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+
   app.openapi(
     createRoute({
       method: "get",
@@ -246,8 +382,8 @@ export function registerPaymentRoutes(app: OpenAPIHono<Env>, container: Applicat
   app.openapi(
     createRoute({
       method: "get",
-      path: "/api/payments/reconcile",
-      tags: ["Payments"],
+      path: "/api/payment-reconciliation-candidates",
+      tags: ["Payment Reconciliation Candidates"],
       summary: "List reconciliation candidates",
       description:
         "Lists unresolved payments older than the requested age, optionally filtered by provider.",
@@ -321,20 +457,22 @@ export function registerPaymentRoutes(app: OpenAPIHono<Env>, container: Applicat
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/payments/{paymentId}/reconcile",
-      tags: ["Payments"],
-      summary: "Reconcile a payment",
+      path: "/api/payment-reconciliations",
+      tags: ["Payment Reconciliations"],
+      summary: "Create or retrieve a payment reconciliation attempt",
       description:
-        "Schedules verification using the provider recorded on the payment; clients do not select a provider-specific operation.",
+        "Starts provider-neutral verification for the persisted payment identified in the request. Repeated requests with the same payment and Idempotency-Key return the existing attempt; reusing that key for another payment conflicts.",
       request: {
-        params: z.object({ paymentId: z.uuid() }),
+        body: {
+          content: { "application/json": { schema: z.object({ payment_id: z.uuid() }).strict() } },
+        },
         headers: z.object({ "idempotency-key": z.string().min(1).max(200) }),
       },
       responses: {
         200: {
           description: "Idempotent reconciliation result",
           content: {
-            "application/json": { schema: z.object({ attempt: reconciliationAttemptSchema }) },
+            "application/json": { schema: reconciliationAttemptSchema },
           },
         },
         400: {
@@ -353,6 +491,10 @@ export function registerPaymentRoutes(app: OpenAPIHono<Env>, container: Applicat
           description: "Payment not found",
           content: { "application/json": { schema: errorSchema } },
         },
+        409: {
+          description: "Idempotency key was already used for a different payment",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     async (c) => {
@@ -361,16 +503,16 @@ export function registerPaymentRoutes(app: OpenAPIHono<Env>, container: Applicat
       const denied = requireCapabilityScope(c, principal, "finance.manage", "payments:manage");
       if (denied) return denied;
       try {
-        const { paymentId } = c.req.valid("param");
+        const { payment_id: paymentId } = c.req.valid("json");
         return c.json(
-          {
-            attempt: await container.paymentReconciliation.reconcile({
+          presentReconciliationAttempt(
+            await container.paymentReconciliation.reconcile({
               actorId: principal.accountId,
               paymentId,
               idempotencyKey: c.req.header("idempotency-key")!,
               correlationId: newId(),
             }),
-          },
+          ),
           200,
         );
       } catch (error) {
@@ -382,8 +524,8 @@ export function registerPaymentRoutes(app: OpenAPIHono<Env>, container: Applicat
   app.openapi(
     createRoute({
       method: "post",
-      path: "/api/payments/events/{eventId}/reprocess",
-      tags: ["Payments"],
+      path: "/api/payment-events/{eventId}/reprocess",
+      tags: ["Payment Events"],
       summary: "Reprocess a rejected provider event",
       description:
         "Queues the immutable Paystack event evidence through its existing worker handler. Reprocessing does not edit provider payloads and is safe to retry with the same idempotency key.",

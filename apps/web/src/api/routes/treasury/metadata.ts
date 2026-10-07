@@ -16,7 +16,7 @@ export const treasuryOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     scope: "treasury:read",
   },
   {
-    path: "/api/treasury/adjustments",
+    path: "/api/treasury/entries",
     method: "post",
     mode: "account",
     capability: "treasury.manage",

@@ -356,7 +356,7 @@ suite("Paystack webhook to commerce consequence", () => {
     ).toBe(0);
   });
   it("reconciles an eligible pending payment through authoritative verification and is repeat-safe", async () => {
-    const { buyer, checkout } = await setup();
+    const { buyer, listing, checkout } = await setup();
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability) values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
       [buyer.id],
@@ -370,6 +370,23 @@ suite("Paystack webhook to commerce consequence", () => {
     await expect(app.paymentReconciliation.reconcile(input)).resolves.toMatchObject({
       state: "completed",
     });
+    const secondCheckout = await app.legacyProviderCheckout.initiate({
+      buyerId: buyer.id,
+      buyerEmail: (await app.profiles.get(buyer.id)).email,
+      listingId: listing.id,
+      providerName: "paystack",
+      idempotencyKey: "paystack-checkout-second",
+    });
+    await expect(
+      app.paymentReconciliation.reconcile({
+        ...input,
+        paymentId: secondCheckout.paymentId,
+      }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict", status: 409 });
+    expect(
+      (await app.database.query(`select 1 from payment_capability.reconciliation_attempts`))
+        .rowCount,
+    ).toBe(1);
     await expect(app.paymentReconciliation.reconcile(input)).resolves.toMatchObject({
       state: "completed",
     });

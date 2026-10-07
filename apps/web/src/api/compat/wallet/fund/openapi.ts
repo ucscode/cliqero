@@ -1,60 +1,8 @@
 import { defineCompatibilityContracts, jsonBody, multipartBody } from "@/api/openapi/compatibility";
-import {
-  scalar,
-  text,
-  uuid,
-  dateTime,
-  nullable,
-  list,
-  object,
-  zodSchema,
-} from "@/api/openapi/schema";
-import {
-  fundingDetailSchema,
-  fundingStatusSchema,
-  fundingStateSchema,
-} from "@/api/compat/wallet/fund/contracts";
+import { scalar, text, uuid, dateTime, nullable, object, zodSchema } from "@/api/openapi/schema";
+import { fundingDetailSchema } from "@/api/compat/wallet/fund/contracts";
 
 export const compatibilityContracts = defineCompatibilityContracts({
-  "GET /api/funding-transactions": {
-    responseSchema: object({
-      items: list(zodSchema(fundingStatusSchema)),
-      next_cursor: nullable(text),
-    }),
-    parameters: [
-      {
-        name: "state",
-        schema: zodSchema(fundingStateSchema),
-      },
-      { name: "cursor", schema: scalar("string") },
-      { name: "limit", schema: scalar("integer", { minimum: 1, maximum: 50, default: 20 }) },
-      { name: "active", schema: scalar("boolean") },
-    ],
-  },
-  "GET /api/funding-transactions/{fundingId}": {
-    responseSchema: zodSchema(fundingDetailSchema),
-  },
-  "POST /api/funding-transactions": {
-    responseSchema: object({
-      id: uuid,
-      state: text,
-      amount_minor: text,
-      currency: text,
-      provider: text,
-    }),
-    successStatus: "201",
-    requestBody: jsonBody(
-      object(
-        {
-          amount_minor: scalar("string", { pattern: "^[1-9][0-9]*$" }),
-          provider: scalar("string", { minLength: 1 }),
-          payment_currency: scalar("string", { minLength: 1 }),
-          bank_account_id: scalar("string", { minLength: 1 }),
-        },
-        ["amount_minor", "provider"],
-      ),
-    ),
-  },
   "POST /api/funding-transactions/{fundingId}/cancel": {
     responseSchema: object({ id: uuid, state: text }),
   },
@@ -71,7 +19,7 @@ export const compatibilityContracts = defineCompatibilityContracts({
       ),
     }),
   },
-  "POST /api/bank-transfer/funding-transactions/{fundingId}/evidence": {
+  "POST /api/funding-transactions/{fundingId}/evidence": {
     responseSchema: object({
       id: uuid,
       funding_id: uuid,
@@ -90,7 +38,7 @@ export const compatibilityContracts = defineCompatibilityContracts({
       proof_file: scalar("string", { format: "binary" }),
     }),
   },
-  "POST /api/direct-trc20/funding-transactions/{fundingId}/transaction": {
+  "POST /api/funding-transactions/{fundingId}/provider-transaction": {
     responseSchema: object({
       id: uuid,
       state: text,

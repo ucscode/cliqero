@@ -52,18 +52,13 @@ export function legacyRouteAccessForPattern(pattern: string, method: string): Le
   if (pattern === "/api/wallet/transfer-quote")
     return { mode: "account", scope: "wallet:transfer" };
   if (pattern === "/api/wallet/transfers") return { mode: "account", scope: "wallet:transfer" };
-  if (pattern === "/api/wallet/funding/prepare") return { mode: "account", scope: "wallet:fund" };
-  if (pattern === "/api/funding-transactions")
-    return { mode: "account", scope: method === "GET" ? "wallet:read" : "wallet:fund" };
-  if (pattern === "/api/funding-transactions/:fundingId")
-    return { mode: "account", scope: "wallet:read" };
   if (pattern === "/api/funding-transactions/:fundingId/cancel")
     return { mode: "account", scope: "wallet:fund" };
-  if (pattern === "/api/bank-transfer/funding-transactions/:fundingId/evidence")
+  if (pattern === "/api/funding-transactions/:fundingId/evidence")
     return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/funding-transactions/:fundingId/initialize")
     return { mode: "account", scope: "wallet:fund" };
-  if (pattern === "/api/direct-trc20/funding-transactions/:fundingId/transaction")
+  if (pattern === "/api/funding-transactions/:fundingId/provider-transaction")
     return { mode: "account", scope: "wallet:fund" };
   if (pattern === "/api/funding-transactions/:fundingId/verify")
     return { mode: "account", scope: "wallet:fund" };

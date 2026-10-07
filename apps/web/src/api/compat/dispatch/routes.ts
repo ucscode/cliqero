@@ -20,8 +20,6 @@ import * as listingImport from "@/api/compat/listings/import/route";
 import * as distributionPolicy from "@/api/compat/distribution-policy/route";
 import * as purchaseReverse from "@/api/compat/purchases/reverse/route";
 import * as earningsSettlement from "@/api/compat/earnings/settlement/route";
-import * as treasury from "@/api/compat/treasury/route";
-import * as treasuryEntry from "@/api/compat/treasury/entries/[id]/route";
 import * as purchases from "@/api/compat/purchases/route";
 import * as purchaseById from "@/api/compat/purchases/[id]/route";
 import * as referralDirect from "@/api/compat/referrals/direct/route";
@@ -30,15 +28,11 @@ import * as referralDownline from "@/api/compat/referrals/downline/route";
 import * as referralParent from "@/api/compat/referrals/parent/route";
 import * as referralUplines from "@/api/compat/referrals/uplines/route";
 import * as wallet from "@/api/compat/wallet/route";
-import * as walletFunding from "@/api/compat/wallet/fund/route";
-import * as walletFundingById from "@/api/compat/wallet/fund/[id]/route";
 import * as walletFundingCancel from "@/api/compat/wallet/fund/[id]/cancel/route";
 import * as walletFundingEvidence from "@/api/compat/wallet/fund/[id]/evidence/route";
 import * as walletFundingInitialize from "@/api/compat/wallet/fund/[id]/initialize/route";
 import * as walletFundingTransaction from "@/api/compat/wallet/fund/[id]/transaction/route";
 import * as walletFundingVerify from "@/api/compat/wallet/fund/[id]/verify/route";
-import * as walletFundingPrepare from "@/api/compat/wallet/funding/prepare/route";
-import * as walletFundingHistory from "@/api/compat/wallet/funding/route";
 import * as walletTransactions from "@/api/compat/wallet/transactions/route";
 import * as walletTransfers from "@/api/compat/wallet/transfers/route";
 import * as walletTransferQuote from "@/api/compat/wallet/transfer-quote/route";
@@ -49,7 +43,6 @@ import * as withdrawalDestinations from "@/api/compat/withdrawal-destinations/ro
 import * as withdrawalDestinationById from "@/api/compat/withdrawal-destinations/[id]/route";
 
 type RouteModule = Record<string, unknown>;
-const fundingTransactions = { ...walletFundingHistory, ...walletFunding };
 export type LegacyRoute = {
   pattern: string;
   module: RouteModule;
@@ -87,8 +80,6 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/distribution-policy", module: distributionPolicy },
   { pattern: "/api/purchases/reverse", module: purchaseReverse },
   { pattern: "/api/earnings/settlement", module: earningsSettlement },
-  { pattern: "/api/treasury/entries/:entryId", module: treasuryEntry },
-  { pattern: "/api/treasury", module: treasury },
   { pattern: "/api/purchases/:purchaseId", module: purchaseById },
   { pattern: "/api/purchases", module: purchases },
   { pattern: "/api/referrals/direct", module: referralDirect },
@@ -96,20 +87,14 @@ export const legacyRoutes: LegacyRoute[] = [
   { pattern: "/api/referrals/downline", module: referralDownline },
   { pattern: "/api/referrals/parent", module: referralParent },
   { pattern: "/api/referrals/uplines", module: referralUplines },
-  { pattern: "/api/funding-transactions", module: fundingTransactions },
-  { pattern: "/api/funding-transactions/:fundingId/cancel", module: walletFundingCancel },
+  { pattern: "/api/funding-transactions/:fundingId/evidence", module: walletFundingEvidence },
   {
-    pattern: "/api/bank-transfer/funding-transactions/:fundingId/evidence",
-    module: walletFundingEvidence,
-  },
-  { pattern: "/api/funding-transactions/:fundingId/initialize", module: walletFundingInitialize },
-  {
-    pattern: "/api/direct-trc20/funding-transactions/:fundingId/transaction",
+    pattern: "/api/funding-transactions/:fundingId/provider-transaction",
     module: walletFundingTransaction,
   },
+  { pattern: "/api/funding-transactions/:fundingId/cancel", module: walletFundingCancel },
+  { pattern: "/api/funding-transactions/:fundingId/initialize", module: walletFundingInitialize },
   { pattern: "/api/funding-transactions/:fundingId/verify", module: walletFundingVerify },
-  { pattern: "/api/funding-transactions/:fundingId", module: walletFundingById },
-  { pattern: "/api/wallet/funding/prepare", module: walletFundingPrepare },
   { pattern: "/api/wallet/transactions", module: walletTransactions },
   { pattern: "/api/wallet/transfer-quote", module: walletTransferQuote },
   { pattern: "/api/wallet/transfers", module: walletTransfers },
