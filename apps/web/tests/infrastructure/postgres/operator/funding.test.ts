@@ -55,27 +55,51 @@ describe("PostgresOperatorFundingReader", () => {
     });
   });
 
-  it("uses an amount/id keyset and rejects cursor reuse under a different sort", async () => {
+  it("uses a public UUID tie-breaker and rejects cursor reuse under a different sort", async () => {
     const statements: string[] = [];
     const reader = new PostgresOperatorFundingReader({
       query: async <T extends object>(sql: string) => {
         statements.push(sql);
         return result<T>([
-          { ...baseRow, id: "funding-one", cursor_id: "11", cursor_sort_value: "1000" },
-          { ...baseRow, id: "funding-two", cursor_id: "12", cursor_sort_value: "2000" },
+          {
+            ...baseRow,
+            id: "00000000-0000-4000-8000-000000000011",
+            cursor_sort_value: "1000",
+          },
+          {
+            ...baseRow,
+            id: "00000000-0000-4000-8000-000000000012",
+            cursor_sort_value: "2000",
+          },
         ] as T[]);
       },
     });
     const first = await reader.list({ limit: 1, sort: "amount", direction: "asc" });
-    expect(statements[0]).toContain("order by q.canonical_amount_minor asc,q.cursor_id asc");
+    expect(statements[0]).toContain("order by q.canonical_amount_minor asc,q.id asc");
     expect(first.nextCursor).toBeTruthy();
     await expect(
       reader.list({ limit: 1, sort: "created", direction: "desc", cursor: first.nextCursor! }),
     ).rejects.toThrow("Invalid or stale pagination cursor");
     await reader.list({ limit: 1, sort: "amount", direction: "asc", cursor: first.nextCursor! });
-    expect(statements[1]).toContain(
-      "(q.canonical_amount_minor,q.cursor_id) > ($6::bigint,$7::bigint)",
-    );
+    expect(statements[1]).toContain("(q.canonical_amount_minor,q.id) > ($6::bigint,$7::uuid)");
+    const decoded = JSON.parse(Buffer.from(first.nextCursor!, "base64url").toString("utf8"));
+    expect(decoded.id).toBe("00000000-0000-4000-8000-000000000011");
+  });
+
+  it("returns null for an ID absent from both funding origins", async () => {
+    const reader = new PostgresOperatorFundingReader({
+      query: async <T extends object>() => result<T>([]),
+    });
+    await expect(reader.get("00000000-0000-4000-8000-000000000099")).resolves.toBeNull();
+  });
+
+  it("rejects malformed funding cursors as a public 400", async () => {
+    const reader = new PostgresOperatorFundingReader({
+      query: async <T extends object>() => result<T>([]),
+    });
+    await expect(
+      reader.list({ limit: 1, sort: "amount", direction: "asc", cursor: "not-a-cursor" }),
+    ).rejects.toMatchObject({ code: "invalid_cursor", status: 400 });
   });
 
   it("projects administrative funding movements as an available wallet effect", async () => {
@@ -149,6 +173,7 @@ describe("PostgresOperatorFundingReader", () => {
       },
     });
     const detail = await reader.get(baseRow.id);
+    if (!detail) throw new Error("Expected funding detail");
     expect(detail.providerInitialization).toEqual({
       authorizationUrl: "https://example.test/authorize",
     });
@@ -181,6 +206,7 @@ describe("PostgresOperatorFundingReader", () => {
     });
 
     const detail = await reader.get(baseRow.id);
+    if (!detail) throw new Error("Expected funding detail");
     expect(detail.evidence).toEqual({
       id: "00000000-0000-4000-8000-000000000030",
       transferReference: "bank-ref-123",

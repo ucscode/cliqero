@@ -8,8 +8,48 @@ import type {
   OperatorFundingReader,
   OperatorFundingSummary,
 } from "@/application/operator/funding";
+import { PublicApplicationError } from "@/kernel/errors";
 import { newId } from "@/kernel/ids";
-import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "./cursor";
+
+type FundingSort = "created" | "amount";
+type FundingDirection = "asc" | "desc";
+type FundingCursor = { sort: FundingSort; direction: FundingDirection; value: string; id: string };
+
+function encodeFundingCursor(cursor: FundingCursor) {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeFundingCursor(
+  token: string | undefined,
+  sort: FundingSort,
+  direction: FundingDirection,
+): FundingCursor | null {
+  if (!token) return null;
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(token, "base64url").toString("utf8"),
+    ) as Partial<FundingCursor>;
+    if (
+      decoded.sort !== sort ||
+      decoded.direction !== direction ||
+      typeof decoded.value !== "string" ||
+      !zUuid(decoded.id) ||
+      (sort === "amount" && !/^\d+$/.test(decoded.value)) ||
+      (sort === "created" && Number.isNaN(Date.parse(decoded.value)))
+    )
+      throw new Error();
+    return decoded as FundingCursor;
+  } catch {
+    throw new PublicApplicationError("Invalid or stale pagination cursor", "invalid_cursor", 400);
+  }
+}
+
+function zUuid(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
+}
 
 function summary(row: any): OperatorFundingSummary {
   return {
@@ -60,7 +100,7 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
   async list(input: OperatorFundingListInput) {
     const sort = input.sort ?? "created";
     const direction = input.direction ?? "desc";
-    const cursor = decodeOperatorSortCursor(input.cursor, sort, direction);
+    const cursor = decodeFundingCursor(input.cursor, sort, direction);
     const orderBy = sort === "amount" ? "q.canonical_amount_minor" : "q.created_at";
     const cursorType = sort === "amount" ? "bigint" : "timestamptz";
     const rawSearch = input.search?.trim() || "";
@@ -82,14 +122,14 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
     if (cursor) {
       values.push(cursor.value, cursor.id);
       conditions.push(
-        `(${orderBy},q.cursor_id) ${direction === "asc" ? ">" : "<"} ($6::${cursorType},$7::bigint)`,
+        `(${orderBy},q.id) ${direction === "asc" ? ">" : "<"} ($6::${cursorType},$7::uuid)`,
       );
     }
     values.push(input.limit + 1);
     const rows = (
       await this.sql.query<any>(
         `with q as (
-          select f.uuid id,f.id cursor_id,a.uuid account_id,a.username,a.email,
+          select f.uuid id,a.uuid account_id,a.username,a.email,
                  'provider'::text origin,f.provider_name,f.provider_reference,f.provider_transaction_id,
                  null::text reason,null::text administrative_reference,null::uuid created_by,
                  f.canonical_amount_minor,f.collection_amount_minor,f.collection_currency,
@@ -101,7 +141,7 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
             join identity_capability.account_profiles a on a.id=f.account_id
             left join wallet_capability.credits c on c.funding_id=f.id
           union all
-          select f.uuid id,f.id cursor_id,a.uuid account_id,a.username,a.email,
+          select f.uuid id,a.uuid account_id,a.username,a.email,
                  'administrative'::text origin,null::text provider_name,null::text provider_reference,
                  null::text provider_transaction_id,f.reason,f.reference administrative_reference,
                  actor.uuid created_by,f.amount_minor canonical_amount_minor,f.amount_minor collection_amount_minor,
@@ -118,7 +158,7 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
             group by f.uuid,f.id,a.uuid,a.username,a.email,actor.uuid
         ) select q.*,${orderBy}::text cursor_sort_value from q
           where ${conditions.join(" and ")}
-          order by ${orderBy} ${direction},q.cursor_id ${direction} limit $${values.length}`,
+          order by ${orderBy} ${direction},q.id ${direction} limit $${values.length}`,
         values,
       )
     ).rows;
@@ -127,17 +167,17 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
       items: visible.map(summary),
       nextCursor:
         rows.length > input.limit
-          ? encodeOperatorSortCursor({
+          ? encodeFundingCursor({
               sort,
               direction,
               value: String(visible.at(-1).cursor_sort_value),
-              id: String(visible.at(-1).cursor_id),
+              id: String(visible.at(-1).id),
             })
           : null,
     };
   }
 
-  async get(id: string): Promise<OperatorFundingDetail> {
+  async get(id: string): Promise<OperatorFundingDetail | null> {
     const row = (
       await this.sql.query<any>(
         `select f.uuid as id,a.uuid as account_id,a.username,a.email,f.provider_name,f.provider_reference,f.provider_transaction_id,
@@ -181,7 +221,7 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
           [id],
         )
       ).rows[0];
-      if (!administrative) throw new Error("Funding not found");
+      if (!administrative) return null;
       return {
         ...summary(administrative),
         conversionSnapshot: null,

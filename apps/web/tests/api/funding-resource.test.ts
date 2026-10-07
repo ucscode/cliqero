@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApiApp } from "@/api/hono";
+import { PublicApplicationError } from "@/kernel/errors";
 
 const ownerId = "00000000-0000-4000-8000-000000000001";
 const otherId = "00000000-0000-4000-8000-000000000002";
@@ -242,6 +243,40 @@ describe("canonical funding transaction resource", () => {
     ).toBe(200);
   });
 
+  it("returns stable not-found responses for missing owner, operator, and API-key reads and updates", async () => {
+    const missing = vi.fn(async () => {
+      throw new PublicApplicationError("Funding transaction not found.", "not_found", 404);
+    });
+    const cases = [
+      { principal: principal(), method: "GET" },
+      { principal: principal(["finance.read"]), method: "GET" },
+      { principal: principal(["finance.read"], "api_key", ["payments:read"]), method: "GET" },
+      { principal: principal(["finance.manage"]), method: "PATCH" },
+    ] as const;
+
+    for (const testCase of cases) {
+      const response = await createApp(testCase.principal, {
+        operatorFunding: { get: missing },
+      }).fetch(
+        new Request(`http://localhost/api/funding-transactions/${fundingId}`, {
+          method: testCase.method,
+          ...(testCase.method === "PATCH"
+            ? {
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  amount_minor: "1250",
+                  state: "confirmed",
+                  reason: "Missing-resource regression",
+                }),
+              }
+            : {}),
+        }),
+      );
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ code: "not_found" });
+    }
+  });
+
   it("creates and updates administrative funding through the canonical resource", async () => {
     const createAdministrative = vi.fn(async () => ({ id: fundingId }));
     const get = vi.fn(async () => administrativeDetail);
@@ -357,6 +392,62 @@ describe("canonical funding transaction resource", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ results: [{ id: fundingId, deleted: true }] });
     expect(deleteByOperator).toHaveBeenCalledWith(ownerId, fundingId);
+  });
+
+  it("uses canonical bounded DELETE validation including case-insensitive UUID uniqueness", async () => {
+    const app = createApp(principal(["finance.manage"]));
+    const send = (ids: unknown[]) =>
+      app.fetch(
+        new Request("http://localhost/api/funding-transactions", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ids }),
+        }),
+      );
+
+    for (const ids of [
+      [],
+      ["not-a-uuid"],
+      ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"],
+      Array.from(
+        { length: 201 },
+        (_, index) => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+      ),
+    ]) {
+      expect((await send(ids)).status).toBe(400);
+    }
+  });
+
+  it("returns per-record canonical DELETE results without leaking internal failures", async () => {
+    const failedId = "00000000-0000-4000-8000-000000000020";
+    const missingId = "00000000-0000-4000-8000-000000000021";
+    const get = vi.fn(async (id: string) => {
+      if (id === missingId)
+        throw new PublicApplicationError("Funding transaction not found.", "not_found", 404);
+      if (id === fundingId || id === failedId) return administrativeDetail;
+      return administrativeDetail;
+    });
+    const deleteByOperator = vi.fn(async (_actorId: string, id: string) => {
+      if (id === failedId) throw new Error("secret SQL details");
+      return { id, deleted: true as const };
+    });
+    const response = await createApp(principal(["finance.manage"]), {
+      operatorFunding: { get, deleteByOperator },
+    }).fetch(
+      new Request("http://localhost/api/funding-transactions", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [fundingId, failedId, missingId] }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.results).toEqual([
+      { id: fundingId, deleted: true, error: null },
+      { id: failedId, deleted: false, error: "Funding could not be deleted." },
+      { id: missingId, deleted: false, error: "Funding could not be deleted." },
+    ]);
+    expect(JSON.stringify(result)).not.toContain("secret SQL details");
   });
 
   it("does not expose duplicate internal funding CRUD routes", async () => {

@@ -104,7 +104,10 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
     expect(rows.rows[0]).toEqual({ movements: "3", net_minor: "8000" });
     await app.operatorFunding.deleteAdministrative(actor.id, created.id);
     expect((await app.wallet.summary(customer.id)).available.minorAmount).toBe(0n);
-    await expect(app.operatorFunding.get(created.id)).rejects.toThrow("Funding not found");
+    await expect(app.operatorFunding.get(created.id)).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+    });
     const finalLedger = await app.database.query<{ movements: string; net_minor: string }>(
       `select count(*)::text movements,coalesce(sum(amount_minor),0)::text net_minor
          from wallet_capability.funding_adjustments where funding_id=$1`,
@@ -315,6 +318,74 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       [providerFunding.id],
     );
     expect(adminCount.rows[0]?.count).toBe("0");
+  });
+
+  it("paginates unified provider and administrative funding with a total UUID order", async () => {
+    const { actor, customer } = await actors();
+    const amountMinor = 4321n;
+    const provider = await app.fundingService.create({
+      accountId: customer.id,
+      amountMinor,
+      providerName: "development",
+      idempotencyKey: `funding-page-provider-${newId()}`,
+    });
+    const administrative = await app.operatorFunding.createAdministrative(actor.id, {
+      accountId: customer.id,
+      amountMinor: amountMinor.toString(),
+      state: "failed",
+      reason: "Pagination tie fixture",
+      idempotencyKey: `funding-page-admin-${newId()}`,
+    });
+
+    const internalIds = await app.database.query<{
+      provider_id: string;
+      administrative_id: string;
+    }>(
+      `select
+         (select id::text from funding_capability.funding_transactions where uuid=$1) provider_id,
+         (select id::text from funding_capability.administrative_fundings where uuid=$2) administrative_id`,
+      [provider.id, administrative.id],
+    );
+    expect(internalIds.rows[0]?.provider_id).toBe(internalIds.rows[0]?.administrative_id);
+
+    await app.database.query(
+      `update funding_capability.funding_transactions
+          set created_at='2026-01-15T12:00:00Z' where uuid=$1`,
+      [provider.id],
+    );
+    await app.database.query(
+      `update funding_capability.administrative_fundings
+          set created_at='2026-01-15T12:00:00Z' where uuid=$1`,
+      [administrative.id],
+    );
+
+    for (const sort of ["amount", "created"] as const) {
+      for (const direction of ["asc", "desc"] as const) {
+        const first = await app.operatorFunding.list({ limit: 1, sort, direction });
+        expect(first.items).toHaveLength(1);
+        expect(first.nextCursor).toBeTruthy();
+        const second = await app.operatorFunding.list({
+          limit: 1,
+          sort,
+          direction,
+          cursor: first.nextCursor!,
+        });
+        const ids = [...first.items, ...second.items].map((item) => item.id);
+        expect(ids).toHaveLength(2);
+        expect(new Set(ids)).toEqual(new Set([provider.id, administrative.id]));
+        expect(second.nextCursor).toBeNull();
+      }
+    }
+  });
+
+  it("returns a deliberate not-found result for a nonexistent funding ID", async () => {
+    const id = newId();
+    const reader = new PostgresOperatorFundingReader(app.database);
+    await expect(reader.get(id)).resolves.toBeNull();
+    await expect(app.operatorFunding.get(id)).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+    });
   });
 
   it("deletes a confirmed provider funding and reverses only its aggregate credit", async () => {
@@ -606,6 +677,9 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       [FUNDING_PROOF_CLEANUP_EVENT, providerFunding.id],
     );
     expect(cleanupJobs.rows[0]?.count).toBe("0");
-    await expect(app.operatorFunding.get(providerFunding.id)).rejects.toThrow("Funding not found");
+    await expect(app.operatorFunding.get(providerFunding.id)).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+    });
   });
 });

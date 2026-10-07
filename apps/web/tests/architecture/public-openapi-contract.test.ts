@@ -135,6 +135,16 @@ describe("public OpenAPI contract quality", () => {
       ]),
     );
     const fundingDelete = document.paths["/api/funding-transactions"]?.delete as any;
+    const deleteRequestSchema = fundingDelete.requestBody.content["application/json"].schema;
+    expect(deleteRequestSchema.properties.ids.minItems).toBe(1);
+    expect(deleteRequestSchema.properties.ids.maxItems).toBeGreaterThan(0);
+    expect(deleteRequestSchema.properties.ids.maxItems).toBeLessThanOrEqual(200);
+    const deleteResultSchema = fundingDelete.responses["200"].content["application/json"].schema;
+    expect(deleteResultSchema.properties.results.items.properties).toMatchObject({
+      id: { type: "string", format: "uuid" },
+      deleted: { type: "boolean" },
+      error: { type: "string", nullable: true },
+    });
     expect(fundingDelete["x-authorization-variants"]).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -149,6 +159,12 @@ describe("public OpenAPI contract quality", () => {
         }),
       ]),
     );
+
+    for (const method of ["get", "patch"]) {
+      expect(
+        (document.paths["/api/funding-transactions/{fundingId}"]?.[method] as any).responses,
+      ).toHaveProperty("404");
+    }
 
     const scopedOperations = Object.values(document.paths).flatMap((path) =>
       Object.values(path).filter((value) => isObject(value)),

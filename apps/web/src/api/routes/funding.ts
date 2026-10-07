@@ -12,6 +12,7 @@ import { fundingDetailSchema, fundingStatusSchema } from "@/api/compat/wallet/fu
 import { domainError } from "../shared/error";
 import { errorSchema } from "../shared/schemas";
 import { PublicApplicationError } from "@/kernel/errors";
+import { deleteResourceIds, resourceDeleteSchema } from "@/api/shared/resource-delete";
 import {
   requireCapabilityScope,
   requirePrincipal,
@@ -128,16 +129,6 @@ const administrativeFundingUpdateSchema = z
     reference: z.string().trim().max(200).nullable().optional(),
   })
   .strict();
-const fundingDeleteSchema = z
-  .object({
-    ids: z
-      .array(z.uuid())
-      .min(1)
-      .max(100)
-      .refine((ids) => new Set(ids).size === ids.length, "IDs must be unique"),
-  })
-  .strict();
-
 function hasFinanceRead(p: {
   kind: string;
   capabilities: readonly string[];
@@ -429,7 +420,7 @@ export function registerFundingRoutes(app: OpenAPIHono<Env>, container: Applicat
       summary: "Delete eligible funding transactions",
       description:
         "Deletes selected administrative funding when permitted; provider funding cleanup remains root-only maintenance.",
-      request: { body: { content: { "application/json": { schema: fundingDeleteSchema } } } },
+      request: { body: { content: { "application/json": { schema: resourceDeleteSchema() } } } },
       responses: {
         200: {
           description: "Per-record funding deletion outcomes",
@@ -440,7 +431,7 @@ export function registerFundingRoutes(app: OpenAPIHono<Env>, container: Applicat
                   z.object({
                     id: z.uuid(),
                     deleted: z.boolean(),
-                    error: z.object({ code: z.string(), message: z.string() }).nullable(),
+                    error: z.string().nullable(),
                   }),
                 ),
               }),
@@ -472,32 +463,20 @@ export function registerFundingRoutes(app: OpenAPIHono<Env>, container: Applicat
       )
         return c.json({ error: "Forbidden", code: "forbidden" }, 403);
       const { ids } = c.req.valid("json");
-      const results = await Promise.all(
-        ids.map(async (id) => {
-          try {
-            const funding = await container.operatorFunding.get(id);
-            const authorized =
-              funding.origin === "administrative"
-                ? hasCapability(p.capabilities as never, "finance.manage")
-                : hasCapability(p.capabilities as never, "system.root");
-            if (!authorized)
-              return {
-                id,
-                deleted: false,
-                error: { code: "forbidden", message: "Funding could not be deleted." },
-              };
-            await container.operatorFunding.deleteByOperator(p.accountId, id);
-            return { id, deleted: true, error: null };
-          } catch {
-            return {
-              id,
-              deleted: false,
-              error: { code: "funding_delete_failed", message: "Funding could not be deleted." },
-            };
-          }
-        }),
-      );
-      return c.json({ results }, 200);
+      const result = await deleteResourceIds(ids, async (id) => {
+        try {
+          const funding = await container.operatorFunding.get(id);
+          const authorized =
+            funding.origin === "administrative"
+              ? hasCapability(p.capabilities as never, "finance.manage")
+              : hasCapability(p.capabilities as never, "system.root");
+          if (!authorized) throw new Error("Funding could not be deleted.");
+          return await container.operatorFunding.deleteByOperator(p.accountId, id);
+        } catch {
+          throw new Error("Funding could not be deleted.");
+        }
+      });
+      return c.json(result, 200);
     },
   );
 

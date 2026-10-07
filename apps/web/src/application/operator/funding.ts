@@ -182,7 +182,7 @@ export interface OperatorFundingReader {
     items: OperatorFundingSummary[];
     nextCursor: string | null;
   }>;
-  get(id: string): Promise<OperatorFundingDetail>;
+  get(id: string): Promise<OperatorFundingDetail | null>;
   deleteForRoot(id: string, actorId: string): Promise<{ id: string; deleted: true }>;
 }
 
@@ -203,12 +203,11 @@ export class OperatorFundingService {
     return this.reader.list(input);
   }
 
-  get(id: string) {
-    return this.reader.get(id).catch((error: unknown) => {
-      if (error instanceof Error && error.message === "Funding not found")
-        throw new PublicApplicationError("Funding not found", "not_found", 404);
-      throw error;
-    });
+  async get(id: string) {
+    const funding = await this.reader.get(id);
+    if (!funding)
+      throw new PublicApplicationError("Funding transaction not found.", "not_found", 404);
+    return funding;
   }
 
   confirmBankTransfer(actorId: string, fundingId: string) {
@@ -390,7 +389,7 @@ export class OperatorFundingService {
     if (!(await operators.hasCapability(actorId, "system.root")))
       return this.deleteAdministrative(actorId, id);
 
-    const current = await this.reader.get(id);
+    const current = await this.get(id);
     if (current.origin === "administrative") return this.deleteAdministrative(actorId, id);
     await operators.requireCapability(actorId, "system.root");
     return uow.transaction(() => this.reader.deleteForRoot(id, actorId));
