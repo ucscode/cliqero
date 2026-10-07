@@ -185,6 +185,68 @@ suite("listing management and media", () => {
     ).toMatchObject({ rows: [{ "?column?": 1 }] });
   });
 
+  it("root listing deletion removes final integrations and preserves shared credentials until last listing", async () => {
+    const { owner } = await accounts("rootint");
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [owner.id],
+    );
+    const createListing = (title: string) =>
+      app.listingService.create(owner, {
+        title,
+        shortDescription: title,
+        longDescription: title,
+        priceMinor: "100",
+        currency: "USD",
+        destination: `https://example.test/${title.toLowerCase().replaceAll(" ", "-")}`,
+      });
+    const listingA = await createListing("Root Integration A");
+    const listingB = await createListing("Root Integration B");
+    const dedicated = await app.integrations.create(owner.id, "Dedicated root", listingA.id);
+    const shared = await app.integrations.create(owner.id, "Shared root", listingA.id);
+    await app.database.query(
+      `insert into access_capability.integration_listings(integration_id,listing_id)
+       values((select id from access_capability.integrations where uuid=$1),
+              (select id from listing_capability.listings where uuid=$2))`,
+      [shared.id, listingB.id],
+    );
+    const workflow = new OperatorBulkWorkflow(app);
+
+    await expect(
+      workflow.execute(owner, { resource: "listings", action: "delete", ids: [listingA.id] }),
+    ).resolves.toEqual({ succeeded: [listingA.id], failed: [] });
+    expect(await app.integrations.authenticate(dedicated.credential)).toBeNull();
+    const sharedPrincipal = await app.integrations.authenticate(shared.credential);
+    expect(sharedPrincipal?.canVerifyListing(listingA.id)).toBe(false);
+    expect(sharedPrincipal?.canVerifyListing(listingB.id)).toBe(true);
+    expect(
+      await app.database.query("select 1 from access_capability.integrations where uuid=$1", [
+        dedicated.id,
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await app.database.query(
+        `select 1 from access_capability.integrations i where not exists (select 1 from access_capability.integration_listings il where il.integration_id=i.id)`,
+      ),
+    ).toMatchObject({ rowCount: 0 });
+
+    await expect(
+      workflow.execute(owner, { resource: "listings", action: "delete", ids: [listingB.id] }),
+    ).resolves.toEqual({ succeeded: [listingB.id], failed: [] });
+    expect(await app.integrations.authenticate(shared.credential)).toBeNull();
+    expect(
+      await app.database.query("select 1 from access_capability.integrations where uuid=$1", [
+        shared.id,
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await app.database.query(
+        `select 1 from access_capability.integrations i where not exists (select 1 from access_capability.integration_listings il where il.integration_id=i.id)`,
+      ),
+    ).toMatchObject({ rowCount: 0 });
+  });
+
   it("root deletion removes category assignments without deleting the listing", async () => {
     const { owner } = await accounts("root-category");
     await app.database.query(
@@ -301,7 +363,7 @@ suite("listing management and media", () => {
     ).toHaveLength(1);
   });
 
-  it("deletes managed listings with history by tombstoning, preserving snapshots, and revoking integrations", async () => {
+  it("deletes managed listings with history while detaching and cleaning up integrations", async () => {
     const { owner, other: buyer } = await accounts("delete");
     const listing = await app.listingService.create(owner, {
       state: "published",
@@ -364,6 +426,22 @@ suite("listing management and media", () => {
     const sharedPrincipal = await app.integrations.authenticate(sharedIntegration.credential);
     expect(sharedPrincipal?.canVerifyListing(listing.id)).toBe(false);
     expect(sharedPrincipal?.canVerifyListing(otherListing.id)).toBe(true);
+    expect(
+      await app.database.query("select 1 from access_capability.integrations where uuid=$1", [
+        dedicatedIntegration.id,
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await app.database.query(
+        `select l.uuid from access_capability.integration_listings il join listing_capability.listings l on l.id=il.listing_id where il.integration_id=(select id from access_capability.integrations where uuid=$1)`,
+        [sharedIntegration.id],
+      ),
+    ).toMatchObject({ rows: [{ uuid: otherListing.id }] });
+    expect(
+      await app.database.query(
+        `select 1 from access_capability.integrations i where not exists (select 1 from access_capability.integration_listings il where il.integration_id=i.id)`,
+      ),
+    ).toMatchObject({ rowCount: 0 });
     const deleted = await app.database.query<{ deleted_at: Date | null }>(
       `select deleted_at from listing_capability.listings where uuid=$1`,
       [listing.id],
@@ -374,6 +452,14 @@ suite("listing management and media", () => {
       [listing.id],
     );
     expect(audit.rows).toHaveLength(1);
+
+    await app.listingService.delete(owner, otherListing.id);
+    expect(await app.integrations.authenticate(sharedIntegration.credential)).toBeNull();
+    expect(
+      await app.database.query("select 1 from access_capability.integrations where uuid=$1", [
+        sharedIntegration.id,
+      ]),
+    ).toMatchObject({ rowCount: 0 });
   });
 
   it("stores multiple canonical categories and applies principal-aware visibility to storefront reads", async () => {
@@ -854,6 +940,21 @@ suite("listing management and media", () => {
     expect(audit[2].new_state).toMatchObject({ listing_id: listing.id, state: "revoked" });
     expect(audit[3].previous_state).toMatchObject({ listing_id: listing.id, state: "revoked" });
     expect(audit[3].new_state).toMatchObject({ listing_id: listing.id, state: "active" });
+    expect(
+      await app.database.query(
+        `select i.state,count(il.integration_id)::int as associations from access_capability.integrations i left join access_capability.integration_listings il on il.integration_id=i.id where i.uuid=$1 group by i.id`,
+        [created.id],
+      ),
+    ).toMatchObject({ rows: [{ state: "active", associations: 1 }] });
+    const revoked = await app.integrations.createManaged(owner.id, "Explicit revoke", listing.id);
+    await app.integrations.revokeForListing(owner.id, listing.id, revoked.id);
+    expect(await app.integrations.authenticate(revoked.credential)).toBeNull();
+    expect(
+      await app.database.query(
+        `select i.state,count(il.integration_id)::int as associations from access_capability.integrations i left join access_capability.integration_listings il on il.integration_id=i.id where i.uuid=$1 group by i.id`,
+        [revoked.id],
+      ),
+    ).toMatchObject({ rows: [{ state: "revoked", associations: 1 }] });
   });
 
   it("uses catalogue capability rather than legacy seller_id for management authority", async () => {

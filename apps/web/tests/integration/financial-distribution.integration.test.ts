@@ -627,6 +627,80 @@ suite("purchase financial distribution", () => {
     });
   });
 
+  it("matures historical pending earnings after policy switches to available", async () => {
+    await app.database.query(
+      `update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`,
+    );
+    const historical = await completed();
+    await grantFinanceRead(historical.seller.id);
+    await app.accountDebt.increase({
+      accountId: historical.seller.id,
+      amountMinor: 60n,
+      wallet: "account",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Debt before historical pending earning maturity",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: newId(),
+    });
+    await app.purchaseDistribution.process({
+      purchaseId: historical.purchaseId,
+      correlationId: newId(),
+    });
+    const historicalEarning = (
+      await app.ledger.findEntriesByPurchaseId(historical.purchaseId)
+    ).find((entry) => entry.recipientRole === "seller")!;
+    expect(historicalEarning.balanceState).toBe("pending");
+    expect(historicalEarning.maturityAt).toBeInstanceOf(Date);
+    expect(await app.accountDebt.balance(historical.seller.id, historical.seller.id)).toBe("60");
+    expect(await app.fundsReservation.available(historical.seller.id, "USD")).toBe(0n);
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.entry_settlements where original_entry_id=(select id from ledger_capability.entries where uuid=$1)`,
+        [historicalEarning.id],
+      ),
+    ).toMatchObject({ rowCount: 0 });
+
+    await app.database.query(
+      `update ledger_capability.distribution_policy set initial_balance_state='available'`,
+    );
+    const current = await completed();
+    await app.purchaseDistribution.process({
+      purchaseId: current.purchaseId,
+      correlationId: newId(),
+    });
+    const currentEarning = (await app.ledger.findEntriesByPurchaseId(current.purchaseId)).find(
+      (entry) => entry.recipientRole === "seller",
+    )!;
+    expect(currentEarning.balanceState).toBe("available");
+    expect(await app.fundsReservation.available(current.seller.id, "USD")).toBe(84n);
+
+    const maturity = new Date(historicalEarning.maturityAt!.getTime() + 1);
+    await expect(app.settlement.settle({ now: maturity })).resolves.toMatchObject({
+      claimed: 2,
+      settled: 2,
+    });
+    expect(await app.accountDebt.balance(historical.seller.id, historical.seller.id)).toBe("0");
+    expect(await app.fundsReservation.available(historical.seller.id, "USD")).toBe(24n);
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.entry_settlements where original_entry_id=(select id from ledger_capability.entries where uuid=$1) and from_state='pending' and to_state='available'`,
+        [historicalEarning.id],
+      ),
+    ).toMatchObject({ rowCount: 1 });
+    expect(
+      await app.database.query(
+        `select count(*)::int as count from ledger_capability.account_debt_entries where account_id=(select id from identity_capability.accounts where uuid=$1) and kind='settlement' and source_kind='purchase_earning' and source_id=$2`,
+        [historical.seller.id, historicalEarning.id],
+      ),
+    ).toMatchObject({ rows: [{ count: 1 }] });
+    await expect(app.settlement.settle({ now: maturity })).resolves.toMatchObject({
+      claimed: 0,
+      settled: 0,
+    });
+  });
+
   it("settles newly-created pre-maturity debt and caps it at the earning amount", async () => {
     await app.database.query(
       `update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`,

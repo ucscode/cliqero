@@ -1,4 +1,4 @@
-import type { SettlementPolicyRepository, SettlementResult } from "@/modules/ledger/settlement";
+import type { SettlementResult } from "@/modules/ledger/settlement";
 import type { SettlementStore } from "@/processors/ledger/contracts";
 import type { AccountDebtService } from "@/application/finance/account-debt";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
@@ -6,14 +6,11 @@ import type { UnitOfWork } from "@/kernel/unit-of-work";
 export class SettlementProcessor {
   constructor(
     private readonly store: SettlementStore,
-    private readonly policy: SettlementPolicyRepository,
     private readonly uow: UnitOfWork,
     private readonly debt: AccountDebtService,
   ) {}
 
   async settle(input: { now?: Date; batchSize?: number } = {}): Promise<SettlementResult> {
-    const policy = await this.policy.getActive();
-    if (policy.defaultBalanceState !== "pending") return { claimed: 0, settled: 0 };
     const batchSize = input.batchSize ?? 100;
     if (batchSize < 1 || batchSize > 1000) throw new Error("Invalid settlement batch size");
     const now = input.now ?? new Date();

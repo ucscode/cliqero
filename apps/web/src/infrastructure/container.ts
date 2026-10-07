@@ -203,7 +203,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         auditRecorder(),
         database,
         listingCategoryService(),
-        integrations(),
+        {
+          deleteAllForListing: (listingId: string) => integrations().deleteAllForListing(listingId),
+        },
         {
           deleteForListing: (actorId: string, listingId: string) =>
             operatorPurchases().deleteForListing(actorId, listingId),
@@ -288,13 +290,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   );
   const settlementPolicy = lazy(() => new PostgresSettlementPolicyRepository(database));
   const settlement = lazy(
-    () =>
-      new SettlementProcessor(
-        new PostgresSettlementStore(database),
-        settlementPolicy(),
-        database,
-        accountDebt(),
-      ),
+    () => new SettlementProcessor(new PostgresSettlementStore(database), database, accountDebt()),
   );
   const reversals = lazy(() => new PostgresReversalRepository(database));
   const withdrawalRepository = lazy(() => new PostgresWithdrawalRepository(database));

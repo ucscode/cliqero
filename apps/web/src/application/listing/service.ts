@@ -53,7 +53,7 @@ export class ListingService extends CrudService<
     private readonly auditRecorder?: AuditRecorder,
     private readonly uow?: UnitOfWork,
     private readonly categoryService?: ListingCategoryService,
-    private readonly integrationRevoker?: { revokeAllForListing(listingId: Id): Promise<void> },
+    private readonly integrationCleanup?: { deleteAllForListing(listingId: Id): Promise<void> },
     private readonly rootPurchaseDeleter?: {
       deleteForListing(actorId: string, listingId: Id): Promise<number>;
     },
@@ -164,7 +164,7 @@ export class ListingService extends CrudService<
       if (!listing) throw new PublicApplicationError("Listing not found.", "not_found", 404);
       const deleted = await this.listings.delete(id);
       if (!deleted) throw new PublicApplicationError("Listing not found.", "not_found", 404);
-      await this.integrationRevoker?.revokeAllForListing(id);
+      await this.integrationCleanup?.deleteAllForListing(id);
       await this.audit(
         actor.id,
         "listing.deleted",
@@ -186,7 +186,7 @@ export class ListingService extends CrudService<
     await this.rootMediaDeleter?.deleteAllForRoot(id);
     return this.catalogueMutation(async () => {
       await this.rootPurchaseDeleter?.deleteForListing(actor.id, id);
-      await this.integrationRevoker?.revokeAllForListing(id);
+      await this.integrationCleanup?.deleteAllForListing(id);
       const deleted = await this.listings.deleteForRoot(id);
       if (!deleted) throw new PublicApplicationError("Listing not found.", "not_found", 404);
       await this.audit(

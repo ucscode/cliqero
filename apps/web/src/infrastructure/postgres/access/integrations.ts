@@ -216,30 +216,42 @@ export class PostgresIntegrationService {
       return { id, deleted: true as const, integrationDeleted };
     });
   }
-  async revokeAllForListing(listingId: Id) {
-    await this.sql.query(
-      `with affected as (
-         select il.integration_id
-           from access_capability.integration_listings il
-           join listing_capability.listings l on l.id=il.listing_id
-          where l.uuid=$1
-       ), removed as (
-         delete from access_capability.integration_listings il
-          using affected
-          where il.integration_id=affected.integration_id
-            and il.listing_id=(select id from listing_capability.listings where uuid=$1)
-          returning il.integration_id
-       )
-       update access_capability.integrations i set state='revoked',updated_at=now()
-        where i.state='active'
-          and i.id in (select integration_id from removed)
-          and not exists (
-            select 1 from access_capability.integration_listings remaining
-            where remaining.integration_id=i.id
-              and remaining.listing_id<>(select id from listing_capability.listings where uuid=$1)
-          )`,
-      [listingId],
-    );
+  async deleteAllForListing(listingId: Id) {
+    return this.managedMutation(async () => {
+      const listing = (
+        await this.sql.query<{ id: string }>(
+          `select id from listing_capability.listings where uuid=$1 for update`,
+          [listingId],
+        )
+      ).rows[0];
+      if (!listing) return;
+      const integrations = await this.sql.query<{ id: string }>(
+        `select integration.id
+           from access_capability.integrations integration
+           join access_capability.integration_listings association
+             on association.integration_id=integration.id
+          where association.listing_id=$1
+          order by integration.id
+          for update of integration`,
+        [listing.id],
+      );
+      if (integrations.rowCount === 0) return;
+      const ids = integrations.rows.map(({ id }) => id);
+      await this.sql.query(
+        `delete from access_capability.integration_listings
+          where listing_id=$1 and integration_id=any($2::bigint[])`,
+        [listing.id, ids],
+      );
+      await this.sql.query(
+        `delete from access_capability.integrations integration
+          where integration.id=any($1::bigint[])
+            and not exists (
+              select 1 from access_capability.integration_listings remaining
+               where remaining.integration_id=integration.id
+            )`,
+        [ids],
+      );
+    });
   }
   async rotate(ownerId: Id, id: Id) {
     const secret = randomBytes(32).toString("base64url"),

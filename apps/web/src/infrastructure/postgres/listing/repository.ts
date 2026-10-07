@@ -262,10 +262,6 @@ export class PostgresListingRepository extends ListingRepository {
         [listingId],
       );
       await this.sql.query(
-        "delete from access_capability.integration_listings where listing_id=$1",
-        [listingId],
-      );
-      await this.sql.query(
         "delete from wallet_capability.debits where checkout_id in (select id from checkout_capability.checkouts where listing_id=$1)",
         [listingId],
       );
