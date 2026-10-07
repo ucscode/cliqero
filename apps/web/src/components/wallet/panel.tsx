@@ -296,7 +296,7 @@ export function WalletPanel({
 
   useEffect(() => {
     if (!fundOpen && !fundingPage) return;
-    void apiFetch<{ methods: FundingMethod[] }>("/api/wallet/funding-methods")
+    void apiFetch<{ methods: FundingMethod[] }>("/api/funding-methods")
       .then(({ methods }) => {
         setFundingMethods(methods);
         const first = methods[0];

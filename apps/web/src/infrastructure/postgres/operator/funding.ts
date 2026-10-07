@@ -65,16 +65,24 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
     const cursorType = sort === "amount" ? "bigint" : "timestamptz";
     const rawSearch = input.search?.trim() || "";
     const search = rawSearch ? rawSearch.replace(/[\\%_]/g, "\\$&") : null;
-    const values: unknown[] = [search, input.state ?? null, input.provider ?? null];
+    const values: unknown[] = [
+      search,
+      input.state ?? null,
+      input.provider ?? null,
+      input.accountId ?? null,
+      input.active ?? false,
+    ];
     const conditions = [
       "($1::text is null or q.id::text=$1 or coalesce(q.provider_reference,q.administrative_reference,'') ilike '%'||$1||'%' escape '\\' or coalesce(q.reason,'') ilike '%'||$1||'%' escape '\\' or q.username ilike '%'||$1||'%' escape '\\' or q.email ilike '%'||$1||'%' escape '\\')",
       "($2::text is null or q.state=$2)",
       "($3::text is null or q.provider_name=$3)",
+      "($4::uuid is null or q.account_id=$4)",
+      "(not $5::boolean or q.state in ('initialization_pending','initializing','awaiting_payment','verification_pending'))",
     ];
     if (cursor) {
       values.push(cursor.value, cursor.id);
       conditions.push(
-        `(${orderBy},q.cursor_id) ${direction === "asc" ? ">" : "<"} ($4::${cursorType},$5::bigint)`,
+        `(${orderBy},q.cursor_id) ${direction === "asc" ? ">" : "<"} ($6::${cursorType},$7::bigint)`,
       );
     }
     values.push(input.limit + 1);

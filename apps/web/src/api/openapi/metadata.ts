@@ -3,6 +3,7 @@ import {
   compatibilityExamples,
 } from "@/api/openapi/compatibility-contracts";
 import { generatedZodComponents } from "@/api/openapi/schema";
+import type { ApiScope } from "@/modules/identity/api/scopes";
 
 type OpenApiOperation = Record<string, unknown>;
 export type OpenApiDocument = {
@@ -25,7 +26,14 @@ export type OpenApiMetadataEntry = {
   path: string;
   method: string;
   mode: string;
-  scope?: string;
+  scope?: ApiScope;
+  scopeAnyOf?: readonly ApiScope[];
+  authorizationVariants?: readonly {
+    discriminator: string;
+    value: string;
+    scope: ApiScope;
+    capability?: string;
+  }[];
   capability?: string;
   apiKey?: "allow" | "reject";
 };
@@ -89,7 +97,13 @@ const accessMetadataBases = new WeakMap<OpenApiOperation, AccessMetadataBase>();
 
 function setAccess(
   operation: OpenApiOperation,
-  access: { mode: string; scope?: string; capability?: string },
+  access: {
+    mode: string;
+    scope?: string;
+    scopeAnyOf?: readonly ApiScope[];
+    authorizationVariants?: OpenApiMetadataEntry["authorizationVariants"];
+    capability?: string;
+  },
 ) {
   if (!accessMetadataBases.has(operation)) {
     accessMetadataBases.set(operation, {
@@ -105,13 +119,21 @@ function setAccess(
   else delete operation["x-session-capability"];
   if (access.scope) operation["x-required-api-scope"] = access.scope;
   else delete operation["x-required-api-scope"];
+  if (access.scopeAnyOf?.length) operation["x-required-api-scopes-any-of"] = [...access.scopeAnyOf];
+  else delete operation["x-required-api-scopes-any-of"];
+  if (access.authorizationVariants?.length)
+    operation["x-authorization-variants"] = access.authorizationVariants.map((variant) => ({
+      ...variant,
+    }));
+  else delete operation["x-authorization-variants"];
 
   if (access.mode === "mixed") {
-    operation.security = access.scope ? [{}, { CliqeroApiKey: [] }] : [{}];
+    operation.security =
+      access.scope || access.scopeAnyOf?.length ? [{}, { CliqeroApiKey: [] }] : [{}];
     return;
   }
 
-  if (access.mode !== "account" && !access.scope) {
+  if (access.mode !== "account" && !access.scope && !access.scopeAnyOf?.length) {
     if (base.security === undefined) delete operation.security;
     else operation.security = base.security;
     return;
@@ -203,6 +225,8 @@ const domainDescriptions: Record<string, string> = {
     "Candidate payments are a read-only projection of unresolved provider payments eligible for review.",
   "Funding Options":
     "Funding options are a read-only provider-neutral projection used before creating a funding transaction.",
+  "Funding Methods":
+    "Funding methods are configured provider mechanisms available to an account based on its country.",
   "Earnings Adjustments": "Earnings adjustments are immutable signed accounting correction facts.",
   "Checkout Quote": "A checkout quote is a read-only price and wallet-availability projection.",
   Purchases: "Purchase operations preserve payment, ownership, and purchase lifecycle rules.",
@@ -280,6 +304,7 @@ function domainForPath(path: string): string {
     return "Wallet Transfers";
   if (relative === "wallet/transfer-quote") return "Wallet Transfer Quote";
   if (relative === "funding-options") return "Funding Options";
+  if (relative === "funding-methods") return "Funding Methods";
   if (relative.startsWith("payment-reconciliations")) return "Payment Reconciliations";
   if (relative === "payment-reconciliation-candidates") return "Payment Reconciliation Candidates";
   if (relative.startsWith("payment-events")) return "Payment Events";
@@ -605,7 +630,7 @@ export function applyOpenApiMetadata(
     scheme: "bearer",
     bearerFormat: "Cliqero API Key",
     description:
-      "Use an existing Cliqero API key as Authorization: Bearer <key>. Operations may require different scopes; each required scope is exposed through x-required-api-scope.",
+      "Use an existing Cliqero API key as Authorization: Bearer <key>. Required scopes are exposed through x-required-api-scope or the structured x-required-api-scopes-any-of extension; conditional authorization is described in x-authorization-variants.",
   };
 
   for (const route of legacyRoutes) {

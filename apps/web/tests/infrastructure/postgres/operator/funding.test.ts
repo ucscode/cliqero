@@ -74,7 +74,7 @@ describe("PostgresOperatorFundingReader", () => {
     ).rejects.toThrow("Invalid or stale pagination cursor");
     await reader.list({ limit: 1, sort: "amount", direction: "asc", cursor: first.nextCursor! });
     expect(statements[1]).toContain(
-      "(q.canonical_amount_minor,q.cursor_id) > ($4::bigint,$5::bigint)",
+      "(q.canonical_amount_minor,q.cursor_id) > ($6::bigint,$7::bigint)",
     );
   });
 

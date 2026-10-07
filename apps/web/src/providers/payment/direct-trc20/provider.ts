@@ -33,6 +33,7 @@ export class DirectTrc20Provider extends AbstractPaymentProvider {
   readonly imageUrl: string;
   readonly description: string;
   readonly customerActionLabel = "Create payment";
+  readonly fundingCapabilities = { providerTransaction: true } as const;
   readonly collectionCurrencies = ["USD"] as const;
   constructor(
     private readonly config: DirectTrc20Configuration,

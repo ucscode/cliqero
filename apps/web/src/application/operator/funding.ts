@@ -166,6 +166,8 @@ export type OperatorFundingProofObject = {
 };
 
 export type OperatorFundingListInput = {
+  accountId?: string;
+  active?: boolean;
   search?: string;
   state?: OperatorFundingState;
   provider?: string;
@@ -202,7 +204,11 @@ export class OperatorFundingService {
   }
 
   get(id: string) {
-    return this.reader.get(id);
+    return this.reader.get(id).catch((error: unknown) => {
+      if (error instanceof Error && error.message === "Funding not found")
+        throw new PublicApplicationError("Funding not found", "not_found", 404);
+      throw error;
+    });
   }
 
   confirmBankTransfer(actorId: string, fundingId: string) {

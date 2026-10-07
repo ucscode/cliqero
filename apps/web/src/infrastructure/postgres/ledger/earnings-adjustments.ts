@@ -17,13 +17,34 @@ type Row = {
 export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentRepository {
   constructor(private readonly sql: QueryExecutor) {}
 
+  async lockIdempotencyKey(idempotencyKey: string) {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+      `earnings-adjustment:${idempotencyKey}`,
+    ]);
+  }
+
+  async findByIdempotencyKey(idempotencyKey: string) {
+    const row = (
+      await this.sql.query<Row>(
+        `select e.uuid id,a.uuid account_id,a.username,e.amount_minor,e.reason,e.reference,
+                actor.uuid created_by,e.created_at
+           from ledger_capability.earnings_adjustments e
+           join identity_capability.accounts a on a.id=e.account_id
+           join identity_capability.accounts actor on actor.id=e.created_by
+          where e.idempotency_key=$1`,
+        [idempotencyKey],
+      )
+    ).rows[0];
+    return row ? this.project(row) : null;
+  }
+
   async create(input: Parameters<EarningsAdjustmentRepository["create"]>[0]) {
     const row = (
       await this.sql.query<Row>(
         `with inserted as (
-         insert into ledger_capability.earnings_adjustments(uuid,account_id,amount_minor,reason,reference,created_by,correlation_id)
+         insert into ledger_capability.earnings_adjustments(uuid,account_id,amount_minor,reason,reference,created_by,correlation_id,idempotency_key)
          values($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,
-           (select id from identity_capability.accounts where uuid=$6),$7)
+           (select id from identity_capability.accounts where uuid=$6),$7,$8)
          returning uuid id,account_id,amount_minor,reason,reference,created_by,created_at
        ) select i.id,a.uuid account_id,a.username,i.amount_minor,i.reason,i.reference,
                 actor.uuid created_by,i.created_at
@@ -37,6 +58,7 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
           input.reference,
           input.actorId,
           input.correlationId ?? null,
+          input.idempotencyKey,
         ],
       )
     ).rows[0];

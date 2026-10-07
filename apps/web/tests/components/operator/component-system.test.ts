@@ -53,7 +53,7 @@ describe("operator component-system migration", () => {
       ["users.tsx", "runOperatorBulkAction", "users/page.tsx"],
       ["api-keys/collection.tsx", "/internal/api-keys/actions/delete", "api-keys/page.tsx"],
       ["purchases.tsx", "runOperatorBulkAction", "purchases/page.tsx"],
-      ["funding.tsx", "/internal/funding/bulk-delete", "funding/page.tsx"],
+      ["funding.tsx", "/api/funding-transactions", "funding/page.tsx"],
       ["distributions.tsx", "runOperatorBulkAction", "distributions/page.tsx"],
       ["earnings.tsx", "runOperatorBulkAction", "earnings/page.tsx"],
       ["earnings-adjustments.tsx", "runOperatorBulkAction", "earnings-adjustments/page.tsx"],

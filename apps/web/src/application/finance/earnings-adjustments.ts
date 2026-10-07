@@ -19,6 +19,7 @@ export class EarningsAdjustmentService {
       amountMinor: string;
       reason: string;
       reference?: string | null;
+      idempotencyKey: string;
     },
   ) {
     await this.operators.requireCapability(actorId, "finance.manage");
@@ -35,13 +36,39 @@ export class EarningsAdjustmentService {
         "reason_required",
         400,
       );
+    const reference = input.reference?.trim() || null;
+    const idempotencyKey = input.idempotencyKey.trim();
+    if (!idempotencyKey || idempotencyKey.length > 200)
+      throw new PublicApplicationError(
+        "A valid Idempotency-Key is required.",
+        "invalid_idempotency_key",
+        400,
+      );
     return this.uow.transaction(async () => {
+      await this.repository.lockIdempotencyKey(idempotencyKey);
+      const existing = await this.repository.findByIdempotencyKey(idempotencyKey);
+      if (existing) {
+        if (
+          existing.accountId !== input.accountId ||
+          BigInt(existing.amountMinor) !== BigInt(input.amountMinor) ||
+          existing.reason !== reason ||
+          existing.reference !== reference ||
+          existing.createdBy !== actorId
+        )
+          throw new PublicApplicationError(
+            "Idempotency-Key was already used for a different earnings adjustment.",
+            "idempotency_conflict",
+            409,
+          );
+        return { adjustment: existing, created: false };
+      }
       const adjustment = await this.repository.create({
         accountId: input.accountId,
         amountMinor: BigInt(input.amountMinor),
         reason,
-        reference: input.reference?.trim() || null,
+        reference,
         actorId,
+        idempotencyKey,
       });
       const amountMinor = BigInt(input.amountMinor);
       if (amountMinor > 0n)
@@ -56,7 +83,7 @@ export class EarningsAdjustmentService {
           correlationId: adjustment.id,
           idempotencyKey: `debt-settlement:earnings-adjustment:${adjustment.id}`,
         });
-      return adjustment;
+      return { adjustment, created: true };
     });
   }
 

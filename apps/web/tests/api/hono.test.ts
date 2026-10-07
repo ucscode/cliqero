@@ -1131,7 +1131,7 @@ describe("Hono API foundation", () => {
     });
     expect(paths["/api/funding-transactions"].get).toMatchObject({
       "x-authentication-mode": "account",
-      "x-required-api-scope": "wallet:read (owner) or payments:read (finance operator)",
+      "x-required-api-scopes-any-of": ["wallet:read", "payments:read"],
     });
     expect(paths["/api/distributions"].get).toMatchObject({
       "x-authentication-mode": "account",

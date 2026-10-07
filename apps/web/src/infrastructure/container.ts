@@ -130,6 +130,7 @@ import { OperatorFundingService } from "@/application/operator/funding";
 import { PostgresOperatorFundingReader } from "@/infrastructure/postgres/operator/funding";
 import { BankTransferConfirmationService } from "@/application/funding/bank-transfer/confirmation";
 import { BankTransferEvidenceService } from "@/application/funding/bank-transfer/evidence";
+import { FundingOperationsService } from "@/application/funding/operations";
 import { PostgresBankTransferEvidenceRepository } from "@/infrastructure/postgres/funding/bank-transfer/evidence";
 import {
   OperatorDistributionService,
@@ -609,6 +610,15 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
       bankEvidenceStorageName(),
     );
   });
+  const fundingOperations = lazy(
+    () =>
+      new FundingOperationsService(
+        funding(),
+        providers(),
+        bankTransferEvidence(),
+        fundingService(),
+      ),
+  );
   const checkout = lazy(
     () =>
       new CheckoutService(
@@ -988,6 +998,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get bankTransferEvidence() {
       return bankTransferEvidence();
+    },
+    get fundingOperations() {
+      return fundingOperations();
     },
     get operatorDistributions() {
       return operatorDistributions();

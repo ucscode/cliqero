@@ -12,6 +12,7 @@ import { fundingDetailSchema } from "@/api/compat/wallet/fund/contracts";
 import { reviewPageSchema } from "@/api/routes/reviews/contracts";
 import { withdrawalMutationResponseSchema } from "@/api/routes/withdrawals/contracts";
 import { opaqueJsonSchema } from "@/api/shared/schemas";
+import { API_SCOPES } from "@/modules/identity/api/scopes";
 
 const document = generateOpenApiDocument(
   createApiApp({} as ApplicationContainer, { environment: "development", key: null }),
@@ -109,6 +110,70 @@ function schemaObjects(documentValue: unknown): Record<string, any>[] {
 }
 
 describe("public OpenAPI contract quality", () => {
+  it("documents normalized funding scopes, methods, and adjustment idempotency", () => {
+    const fundingList = document.paths["/api/funding-transactions"]?.get as any;
+    expect(fundingList["x-required-api-scopes-any-of"]).toEqual(["wallet:read", "payments:read"]);
+    expect(fundingList).not.toHaveProperty("x-required-api-scope");
+    const fundingCreate = document.paths["/api/funding-transactions"]?.post as any;
+    expect(fundingCreate["x-required-api-scopes-any-of"]).toEqual([
+      "wallet:fund",
+      "payments:manage",
+    ]);
+    expect(fundingCreate["x-authorization-variants"]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          discriminator: "origin",
+          value: "provider",
+          scope: "wallet:fund",
+        }),
+        expect.objectContaining({
+          discriminator: "origin",
+          value: "administrative",
+          scope: "payments:manage",
+          capability: "finance.manage",
+        }),
+      ]),
+    );
+    const fundingDelete = document.paths["/api/funding-transactions"]?.delete as any;
+    expect(fundingDelete["x-authorization-variants"]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          discriminator: "stored_origin",
+          value: "provider",
+          capability: "system.root",
+        }),
+        expect.objectContaining({
+          discriminator: "stored_origin",
+          value: "administrative",
+          capability: "finance.manage",
+        }),
+      ]),
+    );
+
+    const scopedOperations = Object.values(document.paths).flatMap((path) =>
+      Object.values(path).filter((value) => isObject(value)),
+    ) as Record<string, any>[];
+    for (const operation of scopedOperations) {
+      const scopes = [
+        operation["x-required-api-scope"],
+        ...(operation["x-required-api-scopes-any-of"] ?? []),
+        ...(operation["x-authorization-variants"] ?? []).map((variant: any) => variant.scope),
+      ].filter(Boolean);
+      for (const scope of scopes) expect(API_SCOPES).toContain(scope);
+      expect(operation["x-required-api-scope"] ?? "").not.toMatch(/\s|\(|\)|\bor\b/);
+    }
+
+    expect(document.paths["/api/funding-methods"]?.get?.tags).toEqual(["Funding Methods"]);
+    expect(document.paths["/api/wallet/funding-methods"]).toBeUndefined();
+    const createAdjustment = document.paths["/api/earnings/adjustments"]?.post as any;
+    expect(createAdjustment.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "idempotency-key", in: "header", required: true }),
+      ]),
+    );
+    expect(createAdjustment.responses["409"]).toBeDefined();
+  });
+
   it("documents withdrawal GETs as authenticated with the baseline read scope", () => {
     for (const operation of [
       document.paths["/api/withdrawals"]?.get,
@@ -156,7 +221,7 @@ describe("public OpenAPI contract quality", () => {
       (document.paths["/api/distributions/{distributionId}"]?.get?.responses as any)?.["200"]
         ?.content?.["application/json"]?.schema?.properties?.policySnapshot,
       (document.paths["/api/funding-transactions/{fundingId}"]?.get?.responses as any)?.["200"]
-        ?.content?.["application/json"]?.schema?.properties?.administrative?.properties
+        ?.content?.["application/json"]?.schema?.properties?.operator_details?.properties
         ?.providerInitialization?.properties?.providerAccountSnapshot,
     ];
     for (const opaqueField of opaqueFields) {

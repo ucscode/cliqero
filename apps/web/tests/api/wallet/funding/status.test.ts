@@ -85,7 +85,13 @@ function configure(
         },
       })),
     },
-    providers: { displayName: vi.fn(() => "Development") },
+    providers: {
+      displayName: vi.fn(() => "Development"),
+      supportsFundingOperation: vi.fn(
+        (provider: string, operation: string) =>
+          provider === "bank_transfer" && operation === "evidence",
+      ),
+    },
     walletRepository: { findCreditByFunding: vi.fn(async () => walletCredit) },
   };
 }

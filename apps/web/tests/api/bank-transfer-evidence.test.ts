@@ -7,26 +7,27 @@ vi.mock("@/infrastructure/container", () => ({
 }));
 
 import { POST } from "@/api/compat/wallet/fund/[id]/evidence/route";
+import { PublicApplicationError } from "@/kernel/errors";
 
 const fundingId = "00000000-0000-4000-8000-000000000010";
 const account = { id: "00000000-0000-4000-8000-000000000001" };
 
 describe("bank-transfer evidence API", () => {
-  it("rejects evidence when the persisted funding provider is not Bank Transfer", async () => {
-    const submit = vi.fn();
+  it("returns a stable conflict when the saved provider lacks evidence capability", async () => {
+    const submitEvidence = vi.fn(async () => {
+      throw new PublicApplicationError(
+        "Evidence is unsupported",
+        "unsupported_funding_operation",
+        409,
+      );
+    });
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
-      funding: {
-        findById: vi.fn(async () => ({
-          id: fundingId,
-          accountId: account.id,
-          providerName: "paystack",
-        })),
-      },
-      bankTransferEvidence: { submit },
+      fundingOperations: { submitEvidence },
     };
     const body = new FormData();
     body.set("transfer_reference", "ref");
+    body.set("customer_note", "");
     const response = await POST(
       new Request(`http://localhost/api/funding-transactions/${fundingId}/evidence`, {
         method: "POST",
@@ -35,21 +36,14 @@ describe("bank-transfer evidence API", () => {
       { params: Promise.resolve({ fundingId }) },
     );
     expect(response.status).toBe(409);
-    expect(submit).not.toHaveBeenCalled();
+    expect(submitEvidence).toHaveBeenCalledOnce();
   });
 
   it("does not let the caller select or override the persisted provider", async () => {
-    const submit = vi.fn();
+    const submitEvidence = vi.fn();
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
-      funding: {
-        findById: vi.fn(async () => ({
-          id: fundingId,
-          accountId: account.id,
-          providerName: "bank_transfer",
-        })),
-      },
-      bankTransferEvidence: { submit },
+      fundingOperations: { submitEvidence },
     };
     const body = new FormData();
     body.set("transfer_reference", "ref");
@@ -62,11 +56,11 @@ describe("bank-transfer evidence API", () => {
       { params: Promise.resolve({ fundingId }) },
     );
     expect(response.status).toBe(400);
-    expect(submit).not.toHaveBeenCalled();
+    expect(submitEvidence).not.toHaveBeenCalled();
   });
 
   it("accepts reference, proof, and note and returns all safe evidence fields", async () => {
-    const submit = vi.fn(async () => ({
+    const submitEvidence = vi.fn(async () => ({
       id: "00000000-0000-4000-8000-000000000011",
       fundingId,
       state: "verification_pending" as const,
@@ -81,14 +75,7 @@ describe("bank-transfer evidence API", () => {
     }));
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
-      funding: {
-        findById: vi.fn(async () => ({
-          id: fundingId,
-          accountId: account.id,
-          providerName: "bank_transfer",
-        })),
-      },
-      bankTransferEvidence: { submit },
+      fundingOperations: { submitEvidence },
     };
 
     const body = new FormData();
@@ -122,7 +109,7 @@ describe("bank-transfer evidence API", () => {
         byte_size: "8",
       },
     });
-    expect(submit).toHaveBeenCalledWith(account.id, fundingId, {
+    expect(submitEvidence).toHaveBeenCalledWith(account.id, fundingId, {
       transferReference: "bank-ref-123",
       customerNote: "optional context",
       proofFile: {
@@ -134,7 +121,7 @@ describe("bank-transfer evidence API", () => {
   });
 
   it("accepts a transfer reference without a proof upload", async () => {
-    const submit = vi.fn(async () => ({
+    const submitEvidence = vi.fn(async () => ({
       id: "evidence-id",
       fundingId,
       state: "verification_pending" as const,
@@ -143,14 +130,7 @@ describe("bank-transfer evidence API", () => {
     }));
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
-      funding: {
-        findById: vi.fn(async () => ({
-          id: fundingId,
-          accountId: account.id,
-          providerName: "bank_transfer",
-        })),
-      },
-      bankTransferEvidence: { submit },
+      fundingOperations: { submitEvidence },
     };
 
     const body = new FormData();
@@ -165,7 +145,7 @@ describe("bank-transfer evidence API", () => {
     );
 
     expect(response.status).toBe(201);
-    expect(submit).toHaveBeenCalledWith(account.id, fundingId, {
+    expect(submitEvidence).toHaveBeenCalledWith(account.id, fundingId, {
       transferReference: "bank-ref-only",
       customerNote: undefined,
       proofFile: undefined,
@@ -173,7 +153,7 @@ describe("bank-transfer evidence API", () => {
   });
 
   it("accepts a proof upload without a reference or note", async () => {
-    const submit = vi.fn(async () => ({
+    const submitEvidence = vi.fn(async () => ({
       id: "evidence-id",
       fundingId,
       state: "verification_pending" as const,
@@ -188,14 +168,7 @@ describe("bank-transfer evidence API", () => {
     }));
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
-      funding: {
-        findById: vi.fn(async () => ({
-          id: fundingId,
-          accountId: account.id,
-          providerName: "bank_transfer",
-        })),
-      },
-      bankTransferEvidence: { submit },
+      fundingOperations: { submitEvidence },
     };
 
     const body = new FormData();
@@ -216,7 +189,7 @@ describe("bank-transfer evidence API", () => {
     );
 
     expect(response.status).toBe(201);
-    expect(submit).toHaveBeenCalledWith(
+    expect(submitEvidence).toHaveBeenCalledWith(
       account.id,
       fundingId,
       expect.objectContaining({
@@ -228,17 +201,10 @@ describe("bank-transfer evidence API", () => {
   });
 
   it("rejects a note-only multipart submission before creating evidence", async () => {
-    const submit = vi.fn();
+    const submitEvidence = vi.fn();
     fixtures.container = {
       principalResolver: { resolve: vi.fn(async () => ({ account })) },
-      funding: {
-        findById: vi.fn(async () => ({
-          id: fundingId,
-          accountId: account.id,
-          providerName: "bank_transfer",
-        })),
-      },
-      bankTransferEvidence: { submit },
+      fundingOperations: { submitEvidence },
     };
 
     const body = new FormData();
@@ -257,6 +223,6 @@ describe("bank-transfer evidence API", () => {
       error: "Add a transfer reference or proof file before submitting.",
       code: "evidence_required",
     });
-    expect(submit).not.toHaveBeenCalled();
+    expect(submitEvidence).not.toHaveBeenCalled();
   });
 });

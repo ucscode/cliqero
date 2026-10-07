@@ -39,7 +39,8 @@ export async function projectFundingStatus(
     "verification_pending",
   ].includes(funding.state);
   const evidence =
-    funding.providerName === "bank_transfer" &&
+    typeof container.providers?.supportsFundingOperation === "function" &&
+    container.providers.supportsFundingOperation(funding.providerName, "evidence") &&
     typeof container.bankTransferEvidence?.findForFunding === "function"
       ? await container.bankTransferEvidence.findForFunding(accountId, funding.id)
       : null;

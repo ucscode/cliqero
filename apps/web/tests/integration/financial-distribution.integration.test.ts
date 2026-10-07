@@ -88,8 +88,10 @@ suite("purchase financial distribution", () => {
       amountMinor: "10000",
       reason: "Corrective positive earning",
       reference: newId(),
+      idempotencyKey: newId(),
     });
 
+    expect(adjustment.created).toBe(true);
     expect(await app.accountDebt.balance(owner.id, owner.id)).toBe("0");
     expect(await app.fundsReservation.available(owner.id, "USD")).toBe(4_000n);
     const settlements = await app.database.query<{ amount_minor: string; source_id: string }>(
@@ -98,7 +100,83 @@ suite("purchase financial distribution", () => {
           and kind='settlement' and source_kind='earnings_adjustment'`,
       [owner.id],
     );
-    expect(settlements.rows).toEqual([{ amount_minor: "6000", source_id: adjustment.id }]);
+    expect(settlements.rows).toEqual([
+      { amount_minor: "6000", source_id: adjustment.adjustment.id },
+    ]);
+  });
+
+  it("serializes concurrent adjustment retries and settles debt only once", async () => {
+    const owner = await account(`adjretry${newId().replaceAll("-", "").slice(0, 8)}`);
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'finance.manage'),
+             ((select id from identity_capability.accounts where uuid=$1),'finance.read')`,
+      [owner.id],
+    );
+    await app.accountDebt.increase({
+      accountId: owner.id,
+      amountMinor: 250n,
+      wallet: "earnings",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Adjustment retry debt",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: `adjustment-debt:${newId()}`,
+    });
+    const key = newId();
+    const intent = {
+      accountId: owner.id,
+      amountMinor: "1000",
+      reason: "  Corrected earning  ",
+      reference: " REF-1 ",
+      idempotencyKey: key,
+    };
+    const results = await Promise.all([
+      app.earningsAdjustments.create(owner.id, intent),
+      app.earningsAdjustments.create(owner.id, {
+        ...intent,
+        amountMinor: "01000",
+        reason: "Corrected earning",
+        reference: "REF-1",
+      }),
+    ]);
+    expect(results.map((result) => result.adjustment.id)).toEqual([
+      results[0].adjustment.id,
+      results[0].adjustment.id,
+    ]);
+    expect(results.filter((result) => result.created)).toHaveLength(1);
+    expect(await app.accountDebt.balance(owner.id, owner.id)).toBe("0");
+    expect(
+      (
+        await app.database.query(
+          `select count(*)::int count from ledger_capability.earnings_adjustments where idempotency_key=$1`,
+          [key],
+        )
+      ).rows[0].count,
+    ).toBe(1);
+    expect(
+      (
+        await app.database.query(
+          `select count(*)::int count from ledger_capability.account_debt_entries
+        where account_id=(select id from identity_capability.accounts where uuid=$1) and kind='settlement' and source_kind='earnings_adjustment'`,
+          [owner.id],
+        )
+      ).rows[0].count,
+    ).toBe(1);
+    await expect(
+      app.earningsAdjustments.create(owner.id, { ...intent, amountMinor: "1001" }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict", status: 409 });
+    const other = await account(`adjother${newId().replaceAll("-", "").slice(0, 8)}`);
+    await expect(
+      app.earningsAdjustments.create(owner.id, { ...intent, accountId: other.id }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict", status: 409 });
+    await expect(
+      app.earningsAdjustments.create(owner.id, { ...intent, reason: "Different reason" }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict", status: 409 });
+    await expect(
+      app.earningsAdjustments.create(owner.id, { ...intent, reference: "Different reference" }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict", status: 409 });
   });
 
   it("conserves organic gross and distributes exactly once under duplicate/concurrent delivery", async () => {
@@ -200,28 +278,29 @@ suite("purchase financial distribution", () => {
       amountMinor: "425",
       reason: "Root-delete integration fixture",
       reference: newId(),
+      idempotencyKey: newId(),
     });
 
     const outcome = await new OperatorBulkWorkflow(app).execute(value.seller, {
       resource: "earnings-adjustments",
       action: "delete",
-      ids: [adjustment.id],
+      ids: [adjustment.adjustment.id],
     });
 
-    expect(outcome).toEqual({ succeeded: [adjustment.id], failed: [] });
+    expect(outcome).toEqual({ succeeded: [adjustment.adjustment.id], failed: [] });
     expect(
       await app.database.query(
         "select 1 from ledger_capability.earnings_adjustments where uuid=$1",
-        [adjustment.id],
+        [adjustment.adjustment.id],
       ),
     ).toMatchObject({ rows: [] });
     expect(
       await app.database.query(
         `select previous_state->>'reason' reason from kernel.audit_records
           where action='root.delete' and subject_type='earnings_adjustment' and subject_id=$1`,
-        [adjustment.id],
+        [adjustment.adjustment.id],
       ),
-    ).toMatchObject({ rows: [{ reason: adjustment.reason }] });
+    ).toMatchObject({ rows: [{ reason: adjustment.adjustment.reason }] });
   });
 
   it("system.root bulk deletion removes a generated earning and updates the ledger projection", async () => {

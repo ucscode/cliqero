@@ -55,6 +55,18 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Funding data is temporarily unavailable.";
 }
 
+async function deleteFundingRecord(fundingId: string) {
+  const response = await apiFetch<{
+    results: Array<{ id: string; deleted: boolean; error: { message: string } | null }>;
+  }>("/api/funding-transactions", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ids: [fundingId] }),
+  });
+  const result = response.results.find((item) => item.id === fundingId);
+  if (!result?.deleted) throw new Error(result?.error?.message ?? "Funding could not be deleted.");
+}
+
 type AdministrativeFundingState = "confirmed" | "failed" | "blocked" | "cancelled";
 const administrativeStates: AdministrativeFundingState[] = [
   "confirmed",
@@ -86,7 +98,7 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
     let active = true;
     void (
       fundingId
-        ? apiFetch<{ administrative: FundingDetail | null }>(
+        ? apiFetch<{ operator_details: FundingDetail | null }>(
             `/api/funding-transactions/${fundingId}`,
           )
         : Promise.resolve(null)
@@ -94,7 +106,7 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
       .then((funding) => {
         if (!active) return;
         if (funding) {
-          const detail = funding.administrative;
+          const detail = funding.operator_details;
           if (!detail || detail.origin !== "administrative")
             throw new Error("Provider funding is immutable.");
           setAccount({
@@ -130,6 +142,7 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
     setSaving(true);
     try {
       const payload = {
+        ...(!fundingId ? { origin: "administrative" as const } : {}),
         amount_minor: amountMinor,
         state,
         reason,
@@ -137,14 +150,17 @@ export function AdministrativeFundingForm({ fundingId }: { fundingId?: string })
         ...(fundingId ? {} : { account_id: account?.id }),
       };
       if (!fundingId && !createKey.current) createKey.current = crypto.randomUUID();
-      await apiFetch(fundingId ? `/internal/funding/${fundingId}` : "/internal/funding", {
-        method: fundingId ? "PATCH" : "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(!fundingId ? { "Idempotency-Key": createKey.current! } : {}),
+      await apiFetch(
+        fundingId ? `/api/funding-transactions/${fundingId}` : "/api/funding-transactions",
+        {
+          method: fundingId ? "PATCH" : "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(!fundingId ? { "Idempotency-Key": createKey.current! } : {}),
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+      );
       if (!fundingId) createKey.current = null;
       router.push("/operator/funding");
     } catch (cause) {
@@ -292,11 +308,13 @@ export function OperatorFundingList({
       params.set("direction", filters.direction);
       if (cursor) params.set("cursor", cursor);
       const result = await apiFetch<{
-        items: Array<{ administrative: OperatorFundingPage["items"][number] | null }>;
+        items: Array<{ operator_details: OperatorFundingPage["items"][number] | null }>;
         next_cursor: string | null;
       }>(`/api/funding-transactions?${params}`);
       return {
-        items: result.items.flatMap((item) => (item.administrative ? [item.administrative] : [])),
+        items: result.items.flatMap((item) =>
+          item.operator_details ? [item.operator_details] : [],
+        ),
         nextCursor: result.next_cursor,
       };
     },
@@ -386,7 +404,7 @@ export function OperatorFundingList({
                 }))
               )
                 return;
-              await apiFetch(`/internal/funding/${funding.id}`, { method: "DELETE" });
+              await deleteFundingRecord(funding.id);
               await collection.retry();
             },
           },
@@ -514,16 +532,24 @@ export function OperatorFundingList({
                   )
                     return false;
                   const response = await apiFetch<{
-                    results: Array<{ id: string; deleted: boolean; error: string | null }>;
-                  }>("/internal/funding/bulk-delete", {
-                    method: "POST",
+                    results: Array<{
+                      id: string;
+                      deleted: boolean;
+                      error: { message: string } | null;
+                    }>;
+                  }>("/api/funding-transactions", {
+                    method: "DELETE",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ ids }),
                   });
                   await collection.retry();
                   const rejected = response.results.filter((result) => !result.deleted);
                   if (rejected.length)
-                    throw new Error(rejected.map((result) => result.error).join("; "));
+                    throw new Error(
+                      rejected
+                        .map((result) => result.error?.message ?? "Funding could not be deleted.")
+                        .join("; "),
+                    );
                 },
               },
             ]
@@ -569,11 +595,11 @@ export function OperatorFundingDetail({
     setLoading(true);
     setError(null);
     try {
-      const result = await apiFetch<{ administrative: FundingDetail | null }>(
+      const result = await apiFetch<{ operator_details: FundingDetail | null }>(
         `/api/funding-transactions/${fundingId}`,
       );
-      if (!result.administrative) throw new Error("Funding detail is unavailable.");
-      setFunding(result.administrative);
+      if (!result.operator_details) throw new Error("Funding detail is unavailable.");
+      setFunding(result.operator_details);
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -640,7 +666,7 @@ export function OperatorFundingDetail({
       return;
     setError(null);
     try {
-      await apiFetch(`/internal/funding/${funding.id}`, { method: "DELETE" });
+      await deleteFundingRecord(funding.id);
       router.push("/operator/funding");
     } catch (cause) {
       setError(errorMessage(cause));

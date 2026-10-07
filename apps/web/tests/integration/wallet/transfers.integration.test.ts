@@ -118,12 +118,14 @@ suite("atomic Funding and Earnings transfers", () => {
       amountMinor: "1000",
       reason: "Gift cash",
       reference: "TICKET-123",
+      idempotencyKey: newId(),
     });
     await app.earningsAdjustments.create(user.id, {
       accountId: user.id,
       amountMinor: "-400",
       reason: "Support correction",
       reference: "TICKET-124",
+      idempotencyKey: newId(),
     });
     const earningsItems = [] as Array<{
       id: string;

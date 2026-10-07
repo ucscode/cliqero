@@ -3765,10 +3765,14 @@ CREATE TABLE ledger_capability.earnings_adjustments (
     created_at timestamptz DEFAULT now() NOT NULL,
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     correlation_id uuid,
+    idempotency_key text,
     CONSTRAINT earnings_adjustments_nonzero CHECK (amount_minor <> 0),
     CONSTRAINT earnings_adjustments_reason_nonempty CHECK (length(btrim(reason)) > 0),
     CONSTRAINT earnings_adjustments_uuid_unique UNIQUE (uuid)
 );
+CREATE UNIQUE INDEX earnings_adjustments_idempotency_key_unique
+  ON ledger_capability.earnings_adjustments (idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 CREATE INDEX earnings_adjustments_account_idx
   ON ledger_capability.earnings_adjustments (account_id, created_at DESC, id DESC);
 CREATE INDEX earnings_adjustments_correlation_idx

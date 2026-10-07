@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiClientError, apiFetch, type OperatorAccountSummary } from "@/lib/api-client";
@@ -41,22 +41,31 @@ export function OperatorEarningsAdjustmentForm() {
   const [reference, setReference] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const pendingSubmission = useRef<{ intent: string; key: string } | null>(null);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError(null);
     try {
+      const payload = {
+        account_id: account?.id,
+        amount_minor: amount.trim(),
+        reason: reason.trim(),
+        reference: reference.trim() || null,
+      };
+      const intent = JSON.stringify(payload);
+      if (!pendingSubmission.current || pendingSubmission.current.intent !== intent)
+        pendingSubmission.current = { intent, key: crypto.randomUUID() };
       await apiFetch<Adjustment>("/api/earnings/adjustments", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          account_id: account?.id,
-          amount_minor: amount.trim(),
-          reason,
-          reference: reference.trim() || null,
-        }),
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": pendingSubmission.current.key,
+        },
+        body: JSON.stringify(payload),
       });
+      pendingSubmission.current = null;
       toast.success("Earnings adjustment posted.");
       router.push("/operator/earnings-adjustments");
     } catch (cause) {

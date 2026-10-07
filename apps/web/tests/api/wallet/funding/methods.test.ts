@@ -9,7 +9,7 @@ const principal = {
   scopes: new Set<string>(),
 };
 
-describe("wallet funding-method API contract", () => {
+describe("funding methods API contract", () => {
   it("returns plural collection currencies without the legacy singular field", async () => {
     let receivedContext: unknown;
     const app = createApiApp({
@@ -36,7 +36,7 @@ describe("wallet funding-method API contract", () => {
     } as any);
 
     const response = await app.fetch(
-      new Request("http://localhost/api/wallet/funding-methods", {
+      new Request("http://localhost/api/funding-methods", {
         headers: { authorization: "Bearer test" },
       }),
     );
@@ -79,7 +79,7 @@ describe("wallet funding-method API contract", () => {
       },
     } as any);
 
-    const response = await app.fetch(new Request("http://localhost/api/wallet/funding-methods"));
+    const response = await app.fetch(new Request("http://localhost/api/funding-methods"));
     expect((await response.json()).methods[0].collection_currencies).toEqual(["USD", "NGN"]);
   });
 
@@ -104,8 +104,15 @@ describe("wallet funding-method API contract", () => {
       },
     } as any);
 
-    const response = await app.fetch(new Request("http://localhost/api/wallet/funding-methods"));
+    const response = await app.fetch(new Request("http://localhost/api/funding-methods"));
 
     expect((await response.json()).methods[0].test_only).toBe("development");
+  });
+
+  it("does not retain the wallet-nested compatibility route", async () => {
+    const app = createApiApp({ principalResolver: { resolve: async () => principal } } as any);
+    expect(
+      (await app.fetch(new Request("http://localhost/api/wallet/funding-methods"))).status,
+    ).toBe(404);
   });
 });

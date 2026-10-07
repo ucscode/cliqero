@@ -41,6 +41,7 @@ export class BankTransferProvider extends AbstractPaymentProvider {
   readonly imageUrl: string;
   readonly description: string;
   readonly customerActionLabel = "Get bank details";
+  readonly fundingCapabilities = { evidence: true } as const;
   readonly collectionCurrencies: readonly string[];
 
   constructor(

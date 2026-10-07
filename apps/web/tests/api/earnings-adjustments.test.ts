@@ -57,11 +57,15 @@ describe("public earnings adjustment resource", () => {
   });
 
   it("creates through EarningsAdjustmentService with finance.manage", async () => {
-    const methods = { list: vi.fn(), get: vi.fn(), create: vi.fn(async () => item) };
+    const methods = {
+      list: vi.fn(),
+      get: vi.fn(),
+      create: vi.fn(async () => ({ adjustment: item, created: true })),
+    };
     const response = await app(session(["finance.manage"]), methods).fetch(
       new Request("http://localhost/api/earnings/adjustments", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "Idempotency-Key": "adjustment-key" },
         body: JSON.stringify({ account_id: accountId, amount_minor: "100", reason: "Correction" }),
       }),
     );
@@ -71,7 +75,39 @@ describe("public earnings adjustment resource", () => {
       amountMinor: "100",
       reason: "Correction",
       reference: undefined,
+      idempotencyKey: "adjustment-key",
     });
+  });
+
+  it("requires Idempotency-Key for public creation", async () => {
+    const methods = { list: vi.fn(), get: vi.fn(), create: vi.fn() };
+    const response = await app(session(["finance.manage"]), methods).fetch(
+      new Request("http://localhost/api/earnings/adjustments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ account_id: accountId, amount_minor: "100", reason: "Correction" }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(methods.create).not.toHaveBeenCalled();
+  });
+
+  it("returns the existing fact as a successful replay without another creation", async () => {
+    const methods = {
+      list: vi.fn(),
+      get: vi.fn(),
+      create: vi.fn(async () => ({ adjustment: item, created: false })),
+    };
+    const response = await app(session(["finance.manage"]), methods).fetch(
+      new Request("http://localhost/api/earnings/adjustments", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": "same-adjustment" },
+        body: JSON.stringify({ account_id: accountId, amount_minor: "100", reason: "Correction" }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: adjustmentId });
+    expect(methods.create).toHaveBeenCalledOnce();
   });
 
   it("enforces API-key scopes and does not expose mutation/delete routes", async () => {

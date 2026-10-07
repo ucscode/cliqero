@@ -25,15 +25,6 @@ export async function POST(
     return Response.json({ error: "Funding not found" }, { status: 404 });
   try {
     const container = getContainer();
-    const funding = await container.funding.findById(id);
-    if (!funding || funding.accountId !== account.id)
-      return Response.json({ error: "Funding not found", code: "not_found" }, { status: 404 });
-    if (funding.providerName !== "bank_transfer")
-      throw new PublicApplicationError(
-        "This funding provider does not accept bank-transfer evidence.",
-        "unsupported_funding_operation",
-        409,
-      );
     const form = await request.formData();
     if (form.has("provider"))
       throw new PublicApplicationError(
@@ -54,7 +45,7 @@ export async function POST(
         "evidence_required",
         400,
       );
-    const evidence = await container.bankTransferEvidence.submit(account.id, id, {
+    const evidence = await container.fundingOperations.submitEvidence(account.id, id, {
       transferReference: body.transfer_reference,
       customerNote: body.customer_note,
       proofFile:

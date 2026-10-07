@@ -159,6 +159,10 @@ export interface PaymentProvider {
   readonly description: string;
   /** Short action shown before provider-specific payment details are created. */
   readonly customerActionLabel?: string;
+  readonly fundingCapabilities?: {
+    evidence?: boolean;
+    providerTransaction?: boolean;
+  };
   /** Currencies this provider collects in; this is distinct from canonical listing currency. */
   readonly collectionCurrencies?: readonly string[];
   /** Provider fallback when no customer-country preference is supported. */

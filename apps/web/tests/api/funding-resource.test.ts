@@ -40,6 +40,22 @@ const funding = {
     providerAccountSnapshot: { id: "acct", collectionCurrency: "USD", fields: [] },
   },
 };
+const administrativeSummary = {
+  ...adminSummary,
+  origin: "administrative" as const,
+  provider: null,
+  providerReference: null,
+  administrativeReference: "admin-ref",
+  reason: "Local adjustment",
+};
+const administrativeDetail = {
+  ...administrativeSummary,
+  conversionSnapshot: null,
+  providerInitialization: null,
+  operations: [],
+  events: [],
+  evidence: null,
+};
 
 function createApp(principal: any, overrides: Record<string, any> = {}) {
   return createApiApp({
@@ -64,6 +80,9 @@ function createApp(principal: any, overrides: Record<string, any> = {}) {
         events: [],
         evidence: null,
       })),
+      createAdministrative: vi.fn(async () => ({ id: fundingId })),
+      updateAdministrative: vi.fn(async () => undefined),
+      deleteByOperator: vi.fn(async () => ({ id: fundingId, deleted: true })),
     },
     fundingCreditReconciliation: {
       reconcile: vi.fn(async () => ({
@@ -94,7 +113,7 @@ describe("canonical funding transaction resource", () => {
     const response = await app.fetch(new Request("http://localhost/api/funding-transactions"));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      items: [{ id: fundingId, provider: "bank_transfer", account: null, administrative: null }],
+      items: [{ id: fundingId, provider: "bank_transfer", account: null, operator_details: null }],
     });
   });
 
@@ -110,7 +129,7 @@ describe("canonical funding transaction resource", () => {
     expect(await response.json()).toMatchObject({
       id: fundingId,
       account: null,
-      administrative: null,
+      operator_details: null,
     });
 
     const otherAccount = createApp(principal([], "user_session", []), {
@@ -126,12 +145,36 @@ describe("canonical funding transaction resource", () => {
     ).toBe(404);
   });
 
+  it("includes owner-owned administrative funding in list and detail without operator fields", async () => {
+    const list = vi.fn(async () => ({ items: [administrativeSummary], nextCursor: null }));
+    const get = vi.fn(async () => administrativeDetail);
+    const app = createApp(principal(), { operatorFunding: { list, get } });
+    const collection = await app.fetch(new Request("http://localhost/api/funding-transactions"));
+    expect(collection.status).toBe(200);
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ accountId: ownerId }));
+    expect(await collection.json()).toMatchObject({
+      items: [{ origin: "administrative", provider: null, account: null, operator_details: null }],
+    });
+    const detail = await app.fetch(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`),
+    );
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toMatchObject({
+      origin: "administrative",
+      provider: null,
+      account: null,
+      operator_details: null,
+      amount_minor: "1250",
+      funding_reference: "admin-ref",
+    });
+  });
+
   it("serves operator records through the same collection and detail family", async () => {
     const app = createApp(principal(["finance.read"]));
     const list = await app.fetch(new Request("http://localhost/api/funding-transactions"));
     expect(list.status).toBe(200);
     expect(await list.json()).toMatchObject({
-      items: [{ account: { username: "owner" }, administrative: { origin: "provider" } }],
+      items: [{ account: { username: "owner" }, operator_details: { origin: "provider" } }],
     });
     const detail = await app.fetch(
       new Request(`http://localhost/api/funding-transactions/${fundingId}`),
@@ -139,7 +182,25 @@ describe("canonical funding transaction resource", () => {
     expect(detail.status).toBe(200);
     expect(await detail.json()).toMatchObject({
       account: { username: "owner" },
-      administrative: { id: fundingId },
+      operator_details: { id: fundingId },
+    });
+  });
+
+  it("serves administrative detail to finance operators through the canonical item route", async () => {
+    const app = createApp(principal(["finance.read"]), {
+      operatorFunding: {
+        get: vi.fn(async () => administrativeDetail),
+      },
+    });
+    const response = await app.fetch(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      origin: "administrative",
+      provider: null,
+      account: { id: ownerId },
+      operator_details: { origin: "administrative" },
     });
   });
 
@@ -158,6 +219,199 @@ describe("canonical funding transaction resource", () => {
         )
       ).status,
     ).toBe(200);
+    expect(
+      (
+        await createApp(principal([], "api_key", [])).fetch(
+          new Request("http://localhost/api/funding-transactions"),
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await createApp(principal([], "api_key", ["payments:read"])).fetch(
+          new Request("http://localhost/api/funding-transactions"),
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await createApp(principal([], "api_key", ["wallet:read"])).fetch(
+          new Request("http://localhost/api/funding-transactions"),
+        )
+      ).status,
+    ).toBe(200);
+  });
+
+  it("creates and updates administrative funding through the canonical resource", async () => {
+    const createAdministrative = vi.fn(async () => ({ id: fundingId }));
+    const get = vi.fn(async () => administrativeDetail);
+    const app = createApp(principal(["finance.manage"]), {
+      operatorFunding: {
+        createAdministrative,
+        get,
+        updateAdministrative: vi.fn(async () => undefined),
+      },
+    });
+    const created = await app.fetch(
+      new Request("http://localhost/api/funding-transactions", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": "admin-funding-1" },
+        body: JSON.stringify({
+          origin: "administrative",
+          account_id: ownerId,
+          amount_minor: "1250",
+          state: "confirmed",
+          reason: "Local adjustment",
+          reference: "admin-ref",
+        }),
+      }),
+    );
+    expect(created.status).toBe(201);
+    expect(createAdministrative).toHaveBeenCalledWith(
+      ownerId,
+      expect.objectContaining({
+        accountId: ownerId,
+        idempotencyKey: "admin-funding-1",
+      }),
+    );
+    const updateAdministrative = vi.fn(async () => undefined);
+    const updateApp = createApp(principal(["finance.manage"]), {
+      operatorFunding: { get, updateAdministrative },
+    });
+    const updated = await updateApp.fetch(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ amount_minor: "1250", state: "confirmed", reason: "Corrected" }),
+      }),
+    );
+    expect(updated.status).toBe(200);
+    expect(updateAdministrative).toHaveBeenCalledWith(
+      ownerId,
+      fundingId,
+      expect.objectContaining({
+        reason: "Corrected",
+      }),
+    );
+  });
+
+  it("creates provider funding for the authenticated account through the same collection POST", async () => {
+    const create = vi.fn(async () => funding);
+    const app = createApp(principal(), { fundingService: { create } });
+    const response = await app.fetch(
+      new Request("http://localhost/api/funding-transactions", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": "provider-funding-1" },
+        body: JSON.stringify({ amount_minor: "1250", provider: "bank_transfer" }),
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ accountId: ownerId }));
+    expect((await response.json()).origin).toBe("provider");
+  });
+
+  it("requires both finance capability and payments:manage for administrative API-key writes", async () => {
+    const makeRequest = () =>
+      new Request("http://localhost/api/funding-transactions", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": "admin-key-auth" },
+        body: JSON.stringify({
+          origin: "administrative",
+          account_id: ownerId,
+          amount_minor: "1250",
+          state: "confirmed",
+          reason: "Local adjustment",
+        }),
+      });
+    const capabilityOnly = await createApp(principal(["finance.manage"], "api_key", [])).fetch(
+      makeRequest(),
+    );
+    expect(capabilityOnly.status).toBe(403);
+    const scopeOnly = await createApp(principal([], "api_key", ["payments:manage"])).fetch(
+      makeRequest(),
+    );
+    expect(scopeOnly.status).toBe(403);
+    const createAdministrative = vi.fn(async () => ({ id: fundingId }));
+    const allowed = await createApp(principal(["finance.manage"], "api_key", ["payments:manage"]), {
+      operatorFunding: { createAdministrative, get: vi.fn(async () => administrativeDetail) },
+    }).fetch(makeRequest());
+    expect(allowed.status).toBe(201);
+    expect(createAdministrative).toHaveBeenCalledOnce();
+  });
+
+  it("deletes eligible administrative funding using collection DELETE", async () => {
+    const deleteByOperator = vi.fn(async () => ({ id: fundingId, deleted: true }));
+    const app = createApp(principal(["finance.manage"]), {
+      operatorFunding: {
+        get: vi.fn(async () => administrativeDetail),
+        deleteByOperator,
+      },
+    });
+    const response = await app.fetch(
+      new Request("http://localhost/api/funding-transactions", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [fundingId] }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ results: [{ id: fundingId, deleted: true }] });
+    expect(deleteByOperator).toHaveBeenCalledWith(ownerId, fundingId);
+  });
+
+  it("does not expose duplicate internal funding CRUD routes", async () => {
+    const app = createApp(principal(["finance.manage"]));
+    const cases = [
+      ["POST", "/internal/funding"],
+      ["PATCH", `/internal/funding/${fundingId}`],
+      ["DELETE", `/internal/funding/${fundingId}`],
+      ["POST", "/internal/funding/bulk-delete"],
+    ] as const;
+    for (const [method, path] of cases) {
+      expect((await app.fetch(new Request(`http://localhost${path}`, { method }))).status).toBe(
+        404,
+      );
+    }
+  });
+
+  it("rejects provider mutation and restricts provider cleanup to root", async () => {
+    const updateAdministrative = vi.fn();
+    const ordinaryFinance = createApp(principal(["finance.manage"]), {
+      operatorFunding: { get: vi.fn(async () => adminSummary), updateAdministrative },
+    });
+    const patch = await ordinaryFinance.fetch(
+      new Request(`http://localhost/api/funding-transactions/${fundingId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ amount_minor: "1250", state: "confirmed", reason: "Correction" }),
+      }),
+    );
+    expect(patch.status).toBe(409);
+    expect(updateAdministrative).not.toHaveBeenCalled();
+
+    const nonRootDelete = await ordinaryFinance.fetch(
+      new Request("http://localhost/api/funding-transactions", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [fundingId] }),
+      }),
+    );
+    expect(nonRootDelete.status).toBe(200);
+    expect(await nonRootDelete.json()).toMatchObject({ results: [{ deleted: false }] });
+
+    const deleteByOperator = vi.fn(async () => ({ id: fundingId, deleted: true }));
+    const root = createApp(principal(["system.root"]), {
+      operatorFunding: { get: vi.fn(async () => adminSummary), deleteByOperator },
+    });
+    const rootResponse = await root.fetch(
+      new Request("http://localhost/api/funding-transactions", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [fundingId] }),
+      }),
+    );
+    expect(rootResponse.status).toBe(200);
+    expect(deleteByOperator).toHaveBeenCalledWith(ownerId, fundingId);
   });
 
   it("uses the canonical idempotent reconcile-credit route", async () => {

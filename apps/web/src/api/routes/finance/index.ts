@@ -225,8 +225,9 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
       tags: ["Earnings Adjustments"],
       summary: "Create an earnings adjustment",
       description:
-        "Posts an immutable signed earnings correction. Corrections are new accounting facts; they are not edited or deleted.",
+        "Posts an immutable signed earnings correction. Idempotency-Key makes retries safe; reusing a key for different normalized intent conflicts. Corrections are new accounting facts, not edited or deleted.",
       request: {
+        headers: z.object({ "idempotency-key": z.string().trim().min(1).max(200) }),
         body: {
           content: {
             "application/json": {
@@ -246,6 +247,10 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
         },
       },
       responses: {
+        200: {
+          description: "Previously posted adjustment returned for an idempotent retry",
+          content: { "application/json": { schema: earningsAdjustmentSchema } },
+        },
         201: {
           description: "Earnings adjustment posted",
           content: { "application/json": { schema: earningsAdjustmentSchema } },
@@ -262,6 +267,10 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
           description: "Finance management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
+        409: {
+          description: "Idempotency-Key was already used for a different adjustment",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     async (c) => {
@@ -271,13 +280,14 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
       if (denied) return denied;
       try {
         const body = c.req.valid("json");
-        const adjustment = await container.earningsAdjustments.create(p.accountId, {
+        const result = await container.earningsAdjustments.create(p.accountId, {
           accountId: body.account_id,
           amountMinor: body.amount_minor,
           reason: body.reason,
           reference: body.reference,
+          idempotencyKey: c.req.header("Idempotency-Key")!,
         });
-        return c.json(adjustment, 201);
+        return c.json(result.adjustment, result.created ? 201 : 200);
       } catch (error) {
         return domainError(c, error);
       }

@@ -118,6 +118,10 @@ export class PaymentProviderRegistry {
     return this.get(name).customerActionLabel ?? "Create funding";
   }
 
+  supportsFundingOperation(name: string, operation: "evidence" | "providerTransaction") {
+    return this.get(name).fundingCapabilities?.[operation] === true;
+  }
+
   availableFor(context: PaymentProviderEligibilityContext) {
     return this.providerNames().flatMap((name) => {
       try {
