@@ -112,6 +112,19 @@ function schemaObjects(documentValue: unknown): Record<string, any>[] {
 }
 
 describe("public OpenAPI contract quality", () => {
+  it("documents withdrawal GETs as authenticated with the baseline read scope", () => {
+    for (const operation of [
+      document.paths["/api/withdrawals"]?.get,
+      document.paths["/api/withdrawals/{withdrawalId}"]?.get,
+    ]) {
+      expect(operation?.["x-authentication-mode"]).toBe("account");
+      expect(operation?.["x-required-api-scope"]).toBe("withdrawals:read");
+      expect(operation).not.toHaveProperty("x-public-access");
+      expect(operation?.security).toEqual([{ CliqeroApiKey: [] }]);
+      expect(operation?.security).not.toContainEqual({});
+    }
+  });
+
   it("is valid OpenAPI 3.0 and uses OpenAPI-compatible nullable schemas", async () => {
     expect(document.openapi).toMatch(/^3\.0\./);
     const schemas = schemaObjects(document);

@@ -967,9 +967,12 @@ describe("Hono API foundation", () => {
       "x-required-api-scope": "payments:read",
     });
     expect(paths["/api/withdrawals"].get).toMatchObject({
-      "x-authentication-mode": "mixed",
+      "x-authentication-mode": "account",
       "x-required-api-scope": "withdrawals:read",
+      security: [{ CliqeroApiKey: [] }],
     });
+    expect(paths["/api/withdrawals"].get).not.toHaveProperty("x-public-access");
+    expect(paths["/api/withdrawals"].get.security).not.toContainEqual({});
     expect(
       paths["/api/withdrawals"].get.responses["200"].content["application/json"].schema,
     ).toMatchObject({
@@ -980,9 +983,12 @@ describe("Hono API foundation", () => {
       },
     });
     expect(paths["/api/withdrawals/{withdrawalId}"].get).toMatchObject({
-      "x-authentication-mode": "mixed",
+      "x-authentication-mode": "account",
       "x-required-api-scope": "withdrawals:read",
+      security: [{ CliqeroApiKey: [] }],
     });
+    expect(paths["/api/withdrawals/{withdrawalId}"].get).not.toHaveProperty("x-public-access");
+    expect(paths["/api/withdrawals/{withdrawalId}"].get.security).not.toContainEqual({});
     expect(paths["/api/blog/tags"].delete["x-required-api-scope"]).toBe("blog:manage");
     expect(paths["/api/blog/tags"].post["x-required-api-scope"]).toBe("blog:write");
     expect(paths["/api/blog/tags/{tagId}"].get["x-required-api-scope"]).toBe("blog:read");
@@ -1339,6 +1345,13 @@ describe("Hono API foundation", () => {
     expect((await appWith().fetch(new Request("http://localhost/api/withdrawals"))).status).toBe(
       401,
     );
+    expect(
+      (
+        await appWith().fetch(
+          new Request("http://localhost/api/withdrawals/00000000-0000-4000-8000-000000000010"),
+        )
+      ).status,
+    ).toBe(401);
     const ownedRead = new Request("http://localhost/api/withdrawals");
     const operationalRead = new Request("http://localhost/api/withdrawals?state=all");
     const ownedResponse = await appWith(base).fetch(ownedRead);
@@ -1369,6 +1382,13 @@ describe("Hono API foundation", () => {
       next_cursor: null,
       wallet_summary: null,
     });
+    const operatorKey = {
+      ...base,
+      kind: "api_key" as const,
+      capabilities: ["withdrawals.manage"],
+      scopes: new Set(["withdrawals:read", "withdrawals:manage"]),
+    };
+    expect((await appWith(operatorKey).fetch(operationalRead)).status).toBe(200);
     expect(
       (
         await appWith({
@@ -1377,14 +1397,34 @@ describe("Hono API foundation", () => {
           scopes: new Set(["withdrawals:manage"]),
         }).fetch(operationalRead)
       ).status,
-    ).toBe(200);
+    ).toBe(403);
     expect(
       (
         await appWith({
           ...base,
           kind: "api_key" as const,
+          capabilities: ["withdrawals.manage"],
           scopes: new Set(["withdrawals:manage"]),
+        }).fetch(new Request("http://localhost/api/withdrawals"))
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await appWith({
+          ...base,
+          kind: "api_key" as const,
+          scopes: new Set(["withdrawals:read", "withdrawals:manage"]),
         }).fetch(operationalRead)
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await appWith({
+          ...base,
+          kind: "api_key" as const,
+          capabilities: ["withdrawals.manage"],
+          scopes: new Set(["withdrawals:read"]),
+        }).fetch(new Request("http://localhost/api/withdrawals?state=all"))
       ).status,
     ).toBe(403);
     const patch = () =>
@@ -1423,6 +1463,29 @@ describe("Hono API foundation", () => {
     const ownerJson = await ownerResponse.json();
     expect(ownerJson).toMatchObject({ account: null, payout_details: null, reservation: null });
     expect(ownerJson.destination).not.toHaveProperty("fields");
+    const readOnlyApiKey = {
+      ...owner,
+      kind: "api_key" as const,
+      scopes: new Set(["withdrawals:read"]),
+    };
+    const apiOwnerResponse = await appWith(readOnlyApiKey).fetch(
+      new Request(`http://localhost/api/withdrawals/${id}`),
+    );
+    expect(apiOwnerResponse.status).toBe(200);
+    const apiOwnerJson = await apiOwnerResponse.json();
+    expect(apiOwnerJson).toMatchObject({ account: null, payout_details: null, reservation: null });
+    expect(apiOwnerJson.destination).not.toHaveProperty("fields");
+
+    const manageOnlyApiKey = {
+      ...owner,
+      kind: "api_key" as const,
+      capabilities: ["withdrawals.manage"],
+      scopes: new Set(["withdrawals:manage"]),
+    };
+    expect(
+      (await appWith(manageOnlyApiKey).fetch(new Request(`http://localhost/api/withdrawals/${id}`)))
+        .status,
+    ).toBe(403);
 
     const manager = { ...owner, capabilities: ["system.root"] };
     const adminDetail = {
@@ -1466,6 +1529,41 @@ describe("Hono API foundation", () => {
     const managerJson = await managerResponse.json();
     expect(Object.keys(managerJson).sort()).toEqual(Object.keys(ownerJson).sort());
     expect(managerJson.payout_details.fields).toHaveLength(1);
+
+    const managerApiKey = {
+      ...owner,
+      kind: "api_key" as const,
+      capabilities: ["withdrawals.manage"],
+      scopes: new Set(["withdrawals:read", "withdrawals:manage"]),
+    };
+    const managerApiResponse = await appWith(
+      managerApiKey,
+      undefined,
+      undefined,
+      {},
+      {},
+      {},
+      undefined,
+      {},
+      { get: async () => adminDetail },
+    ).fetch(new Request(`http://localhost/api/withdrawals/${id}`));
+    expect(managerApiResponse.status).toBe(200);
+    expect((await managerApiResponse.json()).payout_details.fields).toHaveLength(1);
+
+    const scopedNonManager = {
+      ...owner,
+      kind: "api_key" as const,
+      scopes: new Set(["withdrawals:read", "withdrawals:manage"]),
+    };
+    const nonManagerResponse = await appWith(scopedNonManager).fetch(
+      new Request(`http://localhost/api/withdrawals/${id}`),
+    );
+    expect(nonManagerResponse.status).toBe(200);
+    expect(await nonManagerResponse.json()).toMatchObject({
+      account: null,
+      payout_details: null,
+      reservation: null,
+    });
   });
   it("uses PATCH for ordinary state updates without action-specific state routes", async () => {
     const owner = {

@@ -5,13 +5,13 @@ export const withdrawalOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
   {
     path: "/api/withdrawals",
     method: "get",
-    mode: "mixed",
+    mode: "account",
     scope: "withdrawals:read",
   },
   {
     path: "/api/withdrawals/{withdrawalId}",
     method: "get",
-    mode: "mixed",
+    mode: "account",
     scope: "withdrawals:read",
   },
   {

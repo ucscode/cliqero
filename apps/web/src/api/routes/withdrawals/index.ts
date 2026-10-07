@@ -123,7 +123,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       responses: {
         200: {
           description:
-            "Lists only the authenticated account's withdrawals by default. Accounts with the withdrawals.manage capability may query broader records; API keys must also have the withdrawals:manage scope. Operational filters require this elevated authority.",
+            "Requires withdrawals:read for API keys and lists only the authenticated account's withdrawals by default. Broader records and operational filters additionally require the withdrawals.manage capability and, for API keys, the withdrawals:manage scope.",
           content: {
             "application/json": {
               schema: withdrawalCollectionSchema,
@@ -143,6 +143,8 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const readDenied = requireScope(c, p, "withdrawals:read");
+      if (readDenied) return readDenied;
       const query = c.req.valid("query");
       const requestsOperationalView = Boolean(
         query.state ||
@@ -156,8 +158,6 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
         (p.kind === "user_session" || p.scopes.has("withdrawals:manage"));
       if (!canManage) {
         if (requestsOperationalView) return c.json({ error: "Forbidden", code: "forbidden" }, 403);
-        const denied = requireScope(c, p, "withdrawals:read");
-        if (denied) return denied;
         return (await listOwnedWithdrawals(c.req.raw, p, container)) as never;
       }
       const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
@@ -188,7 +188,7 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       responses: {
         200: {
           description:
-            "Returns only the authenticated account's withdrawal, or an operator projection for a principal with the withdrawals.manage capability and scope. Sensitive payout fields are only included for authorized managers.",
+            "Requires withdrawals:read for API keys. Returns only the authenticated account's withdrawal unless the principal also has the withdrawals.manage capability and, for API keys, the withdrawals:manage scope. Sensitive payout fields are only included for authorized managers.",
           content: { "application/json": { schema: withdrawalResourceSchema } },
         },
         401: {
@@ -208,12 +208,12 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const readDenied = requireScope(c, p, "withdrawals:read");
+      if (readDenied) return readDenied;
       const canManage =
         hasCapability(p.capabilities, "withdrawals.manage") &&
         (p.kind === "user_session" || p.scopes.has("withdrawals:manage"));
       if (!canManage) {
-        const denied = requireScope(c, p, "withdrawals:read");
-        if (denied) return denied;
         try {
           const record = await container.withdrawals.get(
             p.accountId,
