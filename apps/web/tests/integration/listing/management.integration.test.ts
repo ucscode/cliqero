@@ -667,6 +667,16 @@ suite("listing management and media", () => {
       };
     app.objectStorage.register(failing);
     await app.listingMedia.requestDeletion(owner, listing.id, one.id);
+    await app.listingMedia.requestDeletion(owner, listing.id, one.id);
+    expect(await app.listingMedia.listCatalogue(owner, listing.id)).not.toContainEqual(
+      expect.objectContaining({ id: one.id }),
+    );
+    await expect(app.listingMedia.getCatalogue(owner, listing.id, one.id)).rejects.toThrow(
+      "Listing media not found",
+    );
+    await expect(
+      app.listingMedia.updateCatalogue(owner, listing.id, one.id, { altText: "hidden" }),
+    ).rejects.toThrow("Listing media not found");
     expect(
       (await app.listingMedia.list(owner, listing.id))
         .filter((x) => x.state === "active")
@@ -696,7 +706,107 @@ suite("listing management and media", () => {
     ]);
     expect(competing.flat().map((item) => item.id)).toEqual([one.id]);
     app.objectStorage.register(original);
+    const originalDelete = vi.spyOn(original, "delete");
     expect((await app.listingMediaDeletion.process(one.id))?.state).toBe("deleted");
+    expect(originalDelete).toHaveBeenCalledWith({
+      provider: one.storageProvider,
+      container: one.storageContainer,
+      key: one.objectKey,
+    });
+    originalDelete.mockRestore();
+    expect(await app.listingMediaRepository.findById(one.id)).toBeNull();
+    expect(await app.listingMedia.listCatalogue(owner, listing.id)).not.toContainEqual(
+      expect.objectContaining({ id: one.id }),
+    );
+    expect(await app.listingMediaDeletion.process(one.id)).toBeNull();
+  });
+
+  it("deletes a listing integration association and only removes the integration after its final listing", async () => {
+    const { owner } = await accounts("integration-delete");
+    const listingA = await app.listingService.create(owner, {
+      title: "Integration listing A",
+      shortDescription: "A",
+      longDescription: "A",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/a",
+    });
+    const listingB = await app.listingService.create(owner, {
+      title: "Integration listing B",
+      shortDescription: "B",
+      longDescription: "B",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/b",
+    });
+    const single = await app.integrations.createManaged(owner.id, "single", listingA.id);
+    const singleDeletion = await app.integrations.deleteForListing(
+      owner.id,
+      listingA.id,
+      single.id,
+    );
+    expect(singleDeletion).toMatchObject({
+      id: single.id,
+      deleted: true,
+      integrationDeleted: true,
+    });
+    await expect(app.integrations.find(owner.id, single.id)).rejects.toThrow(
+      "Integration not found",
+    );
+    await expect(app.integrations.authenticate(single.credential)).resolves.toBeNull();
+    expect(
+      await app.database.query("select 1 from access_capability.integrations where uuid=$1", [
+        single.id,
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await app.database.query(
+        `select 1 from kernel.audit_records where action='integration.listing_deleted' and subject_id=$1`,
+        [single.id],
+      ),
+    ).toMatchObject({ rowCount: 1 });
+
+    const shared = await app.integrations.createManaged(owner.id, "shared", listingA.id);
+    await app.database.query(
+      `insert into access_capability.integration_listings(integration_id,listing_id)
+       values((select id from access_capability.integrations where uuid=$1),
+              (select id from listing_capability.listings where uuid=$2))`,
+      [shared.id, listingB.id],
+    );
+    const sharedDeletion = await app.integrations.deleteForListing(
+      owner.id,
+      listingA.id,
+      shared.id,
+    );
+    expect(sharedDeletion).toMatchObject({
+      id: shared.id,
+      deleted: true,
+      integrationDeleted: false,
+    });
+    expect(
+      (await app.integrations.listForListing(listingA.id)).map((item) => item.id),
+    ).not.toContain(shared.id);
+    expect((await app.integrations.listForListing(listingB.id)).map((item) => item.id)).toContain(
+      shared.id,
+    );
+    const authenticated = await app.integrations.authenticate(shared.credential);
+    expect(authenticated?.canVerifyListing(listingA.id)).toBe(false);
+    expect(authenticated?.canVerifyListing(listingB.id)).toBe(true);
+    expect(
+      await app.database.query("select 1 from access_capability.integrations where uuid=$1", [
+        shared.id,
+      ]),
+    ).toMatchObject({ rowCount: 1 });
+    const deletionAudit = await app.database.query<{ new_state: Record<string, unknown> }>(
+      `select new_state from kernel.audit_records where subject_type='integration' and subject_id=$1 and action='integration.listing_deleted'`,
+      [shared.id],
+    );
+    expect(deletionAudit.rowCount).toBe(1);
+    expect(deletionAudit.rows[0]?.new_state).toMatchObject({
+      listing_id: listingA.id,
+      association_removed: true,
+      integration_deleted: false,
+    });
   });
 
   it("scopes catalogue access credentials to a listing rather than a seller", async () => {

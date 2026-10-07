@@ -121,12 +121,14 @@ export class ListingMediaService {
     return (await this.media.findById(id))!;
   }
   async requestDeletion(owner: Account, listingId: string, id: string, catalogue = false) {
-    await this.get(owner, listingId, id, catalogue);
+    await this.owned(owner, listingId, catalogue);
     let value!: ListingMedia;
     await this.uow.transaction(async () => {
       await this.media.lockListing(listingId);
       value = (await this.media.findById(id))!;
+      if (!value || value.listingId !== listingId) throw new Error("Listing media not found");
       if (value.state === "deletion_pending") return;
+      if (value.state !== "active") throw new Error("Listing media not found");
       value.state = "deletion_pending";
       value.deletionRequestedAt = new Date();
       value.deletionNextAttemptAt = value.deletionRequestedAt;
@@ -192,7 +194,7 @@ export class ListingMediaService {
   }
   private async getUnchecked(listingId: string, id: string) {
     const value = await this.media.findById(id);
-    if (!value || value.listingId !== listingId || value.state === "deleted")
+    if (!value || value.listingId !== listingId || value.state !== "active")
       throw new Error("Listing media not found");
     return value;
   }
@@ -223,9 +225,8 @@ export class ListingMediaDeletionProcessor {
         container: value.storageContainer,
         key: value.objectKey,
       });
-      value.state = "deleted";
-      value.lastDeletionError = null;
-      value.deletionNextAttemptAt = null;
+      await this.media.deleteById(value.id);
+      return { ...value, state: "deleted" as const };
     } catch (error) {
       value.lastDeletionError = safeError(error);
       value.deletionNextAttemptAt = new Date(

@@ -22,7 +22,7 @@ const listingMedia = object({
   height: scalar("integer"),
   position: scalar("integer"),
   alt_text: nullable(text),
-  state: scalar("string", { enum: ["active", "deletion_pending", "deleted"] }),
+  state: scalar("string", { enum: ["active"] }),
   created_at: dateTime,
 });
 

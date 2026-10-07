@@ -4,6 +4,7 @@ import { requirePrincipal, requireSessionCapability, type Env } from "../../../s
 import { domainError } from "../../../shared/error";
 import { errorSchema } from "../../../shared/schemas";
 import { capabilityAdministrationSchema, capabilityReplacementSchema } from "./contracts";
+import { publicErrorPayload } from "@/api/error";
 
 export function registerAccountCapabilityRoutes(
   app: OpenAPIHono<Env>,
@@ -234,7 +235,7 @@ export function registerAccountCapabilityRoutes(
             results.push({
               id: capability,
               deleted: false,
-              error: error instanceof Error ? error.message : "Capability could not be revoked.",
+              error: publicErrorPayload(error)?.payload.error ?? "Capability could not be revoked.",
             });
           }
         }

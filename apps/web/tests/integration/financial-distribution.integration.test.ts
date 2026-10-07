@@ -21,7 +21,7 @@ suite("purchase financial distribution", () => {
     entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,
     identity_capability.account_capabilities,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`);
     await app.database.query(
-      `update ledger_capability.distribution_policy set platform_rate_basis_points=1000,remainder_recipient='seller'`,
+      `update ledger_capability.distribution_policy set platform_rate_basis_points=1000,remainder_recipient='seller',initial_balance_state='available',settlement_delay_seconds=0`,
     );
     await app.database.query(
       `update referral_capability.commission_policy set rates_basis_points='{500,250}'`,
@@ -36,7 +36,16 @@ suite("purchase financial distribution", () => {
       country: "NG",
     });
   }
-  async function completed(attributionSource?: string) {
+  async function grantFinanceRead(...accountIds: string[]) {
+    for (const accountId of accountIds)
+      await app.database.query(
+        `insert into identity_capability.account_capabilities(account_id,capability)
+         values((select id from identity_capability.accounts where uuid=$1),'finance.read')
+         on conflict do nothing`,
+        [accountId],
+      );
+  }
+  async function completed(attributionSource?: string, referrerId?: string) {
     const seller = await account(`seller${newId().slice(0, 5)}`),
       buyer = await account(`buyer${newId().slice(0, 5)}`);
     const listing = await app.listingService.create(seller, {
@@ -48,19 +57,23 @@ suite("purchase financial distribution", () => {
       currency: "USD",
       destination: "https://example.test/access",
     });
+    if (referrerId) await app.referralGraphService.establish(buyer.id, referrerId);
+    const referralSource = referrerId
+      ? (await app.referralAttribution.visit(referrerId, listing.id))?.source
+      : undefined;
     const checkout = await app.legacyProviderCheckout.initiate({
       buyerId: buyer.id,
       buyerEmail: (await app.profiles.get(buyer.id)).email,
       listingId: listing.id,
       providerName: "development",
       idempotencyKey: newId(),
-      attributionSource,
+      attributionSource: referralSource ?? attributionSource,
     });
     await app.legacyPaymentCompletion.complete({
       paymentId: checkout.paymentId,
       correlationId: newId(),
     });
-    return { seller, buyer, listing, purchaseId: checkout.purchaseId! };
+    return { seller, buyer, listing, purchaseId: checkout.purchaseId!, referrerId };
   }
 
   it("settles outstanding debt before positive earnings adjustments become available", async () => {
@@ -521,6 +534,145 @@ suite("purchase financial distribution", () => {
       balanceState: "available",
       amountMinor: 84n,
     });
+  });
+
+  it("settles debt only when pending seller earnings mature, atomically and idempotently", async () => {
+    await app.database.query(
+      `update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`,
+    );
+    const referrer = await account(`pendingref${newId().slice(0, 5)}`);
+    const value = await completed(undefined, referrer.id);
+    await grantFinanceRead(value.seller.id, referrer.id);
+    await app.accountDebt.increase({
+      accountId: value.seller.id,
+      amountMinor: 60n,
+      wallet: "account",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Debt before pending earning maturity",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: newId(),
+    });
+    await app.accountDebt.increase({
+      accountId: referrer.id,
+      amountMinor: 3n,
+      wallet: "account",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Referral debt before pending earning maturity",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: newId(),
+    });
+    await app.purchaseDistribution.process({
+      purchaseId: value.purchaseId,
+      correlationId: newId(),
+    });
+    const earning = (await app.ledger.findEntriesByPurchaseId(value.purchaseId)).find(
+      (entry) => entry.recipientRole === "seller",
+    )!;
+    expect(earning.balanceState).toBe("pending");
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("60");
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(0n);
+    expect(await app.accountDebt.balance(referrer.id, referrer.id)).toBe("3");
+    expect(await app.fundsReservation.available(referrer.id, "USD")).toBe(0n);
+    await expect(
+      app.accountDebt.requireNoOutstanding(value.seller.id, "withdrawal"),
+    ).rejects.toMatchObject({
+      code: "account_debt_blocks_operation",
+    });
+
+    const maturity = new Date(Date.now() + 3_601_000);
+    const outcomes = await Promise.all([
+      app.settlement.settle({ now: maturity, batchSize: 10 }),
+      app.settlement.settle({ now: maturity, batchSize: 10 }),
+    ]);
+    expect(outcomes.reduce((sum, result) => sum + result.settled, 0)).toBe(3);
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("0");
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(24n);
+    expect(await app.accountDebt.balance(referrer.id, referrer.id)).toBe("0");
+    expect(await app.fundsReservation.available(referrer.id, "USD")).toBe(2n);
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.account_debt_entries where idempotency_key=$1`,
+        [`debt-settlement:purchase-earning:${earning.id}`],
+      ),
+    ).toMatchObject({ rowCount: 1 });
+    const referral = (await app.ledger.findEntriesByPurchaseId(value.purchaseId)).find(
+      (entry) => entry.recipientRole === "referral",
+    )!;
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.account_debt_entries where idempotency_key=$1`,
+        [`debt-settlement:purchase-earning:${referral.id}`],
+      ),
+    ).toMatchObject({ rowCount: 1 });
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.entry_settlements where original_entry_id=(select id from ledger_capability.entries where uuid=$1)`,
+        [earning.id],
+      ),
+    ).toMatchObject({ rowCount: 1 });
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.account_debt_entries debt
+          join identity_capability.accounts account on account.id=debt.account_id
+          where account.uuid=(select platform_account_uuid from ledger_capability.distribution_policy)
+            and debt.kind='settlement' and debt.source_kind='purchase_earning'`,
+      ),
+    ).toMatchObject({ rowCount: 0 });
+    expect(await app.settlement.settle({ now: maturity, batchSize: 10 })).toMatchObject({
+      settled: 0,
+    });
+  });
+
+  it("settles newly-created pre-maturity debt and caps it at the earning amount", async () => {
+    await app.database.query(
+      `update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`,
+    );
+    const value = await completed();
+    await grantFinanceRead(value.seller.id);
+    await app.purchaseDistribution.process({
+      purchaseId: value.purchaseId,
+      correlationId: newId(),
+    });
+    await app.accountDebt.increase({
+      accountId: value.seller.id,
+      amountMinor: 100n,
+      wallet: "account",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Debt created after distribution",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: newId(),
+    });
+    await app.settlement.settle({ now: new Date(Date.now() + 3_601_000), batchSize: 10 });
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("16");
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(0n);
+  });
+
+  it("settles debt immediately when purchase earnings are created available", async () => {
+    const value = await completed();
+    await grantFinanceRead(value.seller.id);
+    await app.accountDebt.increase({
+      accountId: value.seller.id,
+      amountMinor: 100n,
+      wallet: "account",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Existing debt before immediately available earning",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: newId(),
+    });
+    await app.purchaseDistribution.process({
+      purchaseId: value.purchaseId,
+      correlationId: newId(),
+    });
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("16");
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(0n);
   });
 
   it("creates historical compensating entries and revokes entitlement through outbox", async () => {

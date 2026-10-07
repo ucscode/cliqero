@@ -81,4 +81,56 @@ suite("account debt PostgreSQL ledger", () => {
       ),
     ).rejects.toThrow(/cannot be settled or written off beyond its outstanding balance/);
   });
+
+  it("pages debt history with deterministic account-bound opaque cursors", async () => {
+    const account = await app.authentication.register({
+      email: `debt-pages-${newId()}@example.test`,
+      username: `debt_pages_${newId().replaceAll("-", "").slice(0, 10)}`,
+      password: "integration-test-password",
+      country: "NG",
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [account.id],
+    );
+    for (let index = 0; index < 5; index++)
+      await app.accountDebt.increase({
+        accountId: account.id,
+        amountMinor: BigInt(index + 1),
+        wallet: "account",
+        sourceKind: "pagination_test",
+        sourceId: `source-${index}`,
+        reason: "Account debt cursor pagination fixture",
+        actor: { kind: "system", id: "integration-test" },
+        correlationId: newId(),
+        idempotencyKey: `debt-page-${index}`,
+      });
+
+    const collected: string[] = [];
+    const cursors: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await app.accountDebt.history(account.id, account.id, 2, cursor);
+      collected.push(...page.items.map((entry) => entry.id));
+      if (page.nextCursor) cursors.push(page.nextCursor);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    expect(collected).toHaveLength(5);
+    expect(new Set(collected).size).toBe(5);
+    expect(cursors.length).toBe(2);
+    const ordered = await app.database.query<{ uuid: string }>(
+      `select entry.uuid from ledger_capability.account_debt_entries entry
+        where entry.account_id=(select id from identity_capability.accounts where uuid=$1)
+        order by entry.created_at desc,entry.uuid desc`,
+      [account.id],
+    );
+    expect(collected).toEqual(ordered.rows.map((row) => row.uuid));
+    await expect(app.accountDebt.history(account.id, newId(), 2, cursors[0])).rejects.toMatchObject(
+      {
+        code: "invalid_cursor",
+        status: 400,
+      },
+    );
+  });
 });

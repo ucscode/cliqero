@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiApp } from "@/api/hono";
 import { swaggerUiResponse } from "@/api/openapi/swagger-ui";
 import { BlogCategoryConflictError } from "@/modules/blog/domain/blog";
+import { PublicApplicationError } from "@/kernel/errors";
 import {
   authorizeLegacyRequest,
   getLegacyRouteAccess,
@@ -44,6 +45,8 @@ function appWith(
   principalResolverOverride?: { resolve: (request: Request) => Promise<any> },
   withdrawalOverrides: Record<string, unknown> = {},
   operatorWithdrawalOverrides: Record<string, unknown> = {},
+  capabilityOverrides: Record<string, unknown> = {},
+  accountDebtOverrides: Record<string, unknown> = {},
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
   const resolvedPrincipal = principal ?? {
@@ -64,6 +67,11 @@ function appWith(
           country: null,
         }),
         update: async () => ({}),
+      },
+      accountDebt: {
+        balance: async () => "0",
+        history: async () => ({ items: [], nextCursor: null }),
+        ...accountDebtOverrides,
       },
       hierarchy: {
         tree: async () => ({
@@ -178,6 +186,7 @@ function appWith(
           assigned: false,
           grantedAt: null,
         }),
+        ...capabilityOverrides,
       },
       operatorFunding: {
         list: async () => ({ items: [], nextCursor: null }),
@@ -471,6 +480,45 @@ function appWith(
   );
 }
 describe("Hono API foundation", () => {
+  it("sanitizes unknown account-capability deletion failures", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session" as const,
+      capabilities: ["capabilities.manage"],
+      scopes: new Set<string>(),
+    };
+    const response = await appWith(
+      principal,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        revoke: async () => {
+          throw new Error("secret SQL constraint detail");
+        },
+      },
+    ).fetch(
+      new Request(
+        "http://localhost/api/accounts/00000000-0000-4000-8000-000000000009/capabilities",
+        {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ids: ["catalogue.manage"] }),
+        },
+      ),
+    );
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(body).toContain("Capability could not be revoked.");
+    expect(body).not.toContain("secret SQL constraint detail");
+  });
+
   it("resolves one principal per Hono request across native and compatibility routes", async () => {
     const session = {
       accountId: "00000000-0000-4000-8000-000000000001",
@@ -991,6 +1039,10 @@ describe("Hono API foundation", () => {
       paths["/api/funding-transactions/{fundingId}/provider-transaction"].post.description ?? "",
     ).not.toContain("Authentication:");
     expect(paths["/api/treasury/entries"]).toBeDefined();
+    const debtGet = paths["/api/accounts/{accountId}/debt"].get;
+    expect(debtGet.parameters.map((parameter: any) => parameter.name)).toContain("cursor");
+    expect(debtGet.parameters.map((parameter: any) => parameter.name)).not.toContain("before");
+    expect(JSON.stringify(debtGet.responses[200])).toContain("next_cursor");
     expect(paths["/api/api-keys"]).toBeUndefined();
     expect(paths["/internal/api-keys"]).toBeUndefined();
     expect(paths["/internal/api-keys/{apiKeyId}"]).toBeUndefined();
@@ -1322,6 +1374,49 @@ describe("Hono API foundation", () => {
       "Authentication required",
     );
     expect(paths["/api/access/verify"].post.responses["403"]).toBeUndefined();
+  });
+  it("returns a stable 400 for malformed Account Debt cursors", async () => {
+    const principal = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: { id: "00000000-0000-4000-8000-000000000001" },
+      kind: "user_session" as const,
+      capabilities: ["finance.read"],
+      scopes: new Set<string>(),
+    };
+    const app = appWith(
+      principal,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        history: async () => {
+          throw new PublicApplicationError(
+            "Invalid or stale account debt cursor.",
+            "invalid_cursor",
+            400,
+          );
+        },
+      },
+    );
+    const response = await app.fetch(
+      new Request(
+        "http://localhost/api/accounts/00000000-0000-4000-8000-000000000009/debt?cursor=bad",
+      ),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_cursor" });
+    const removedBefore = await app.fetch(
+      new Request(
+        "http://localhost/api/accounts/00000000-0000-4000-8000-000000000009/debt?before=123",
+      ),
+    );
+    expect(removedBefore.status).toBe(400);
   });
   it("renders the exact generated OpenAPI document in Swagger", async () => {
     const app = appWith();

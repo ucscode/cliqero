@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { Buffer } from "node:buffer";
 import { AccountDebtService } from "@/application/finance/account-debt";
 import type {
   AccountDebtDraft,
   AccountDebtEntry,
   AccountDebtRepository,
+  AccountDebtPosition,
 } from "@/modules/ledger/account-debt";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 
@@ -32,8 +34,25 @@ class MemoryAccountDebtRepository implements AccountDebtRepository {
     this.entries.push(created);
     return created;
   }
-  async list(accountId: string) {
-    return this.entries.filter((entry) => entry.accountId === accountId);
+  async list(accountId: string, limit: number, cursor?: AccountDebtPosition) {
+    const ordered = this.entries
+      .filter((entry) => entry.accountId === accountId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
+      .filter(
+        (entry) =>
+          !cursor ||
+          entry.createdAt.toISOString() < cursor.createdAt ||
+          (entry.createdAt.toISOString() === cursor.createdAt && entry.id < cursor.id),
+      );
+    const page = ordered.slice(0, limit + 1);
+    return {
+      items: page.slice(0, limit),
+      hasMore: page.length > limit,
+      nextPosition:
+        page.length > limit && page.length
+          ? { createdAt: page[limit - 1]!.createdAt.toISOString(), id: page[limit - 1]!.id }
+          : null,
+    };
   }
 }
 
@@ -130,5 +149,40 @@ describe("AccountDebtService", () => {
         code: "account_debt_blocks_operation",
         status: 409,
       });
+  });
+
+  it("uses account-bound versioned opaque cursors with deterministic pages", async () => {
+    const { service, increase } = harness();
+    for (let i = 0; i < 5; i++) await increase(BigInt(i + 1), `page-${i}`);
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await service.history("actor", "account-1", 2, cursor);
+      seen.push(...page.items.map((entry) => entry.id));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    expect(seen).toHaveLength(5);
+    expect(new Set(seen).size).toBe(5);
+    const first = await service.history("actor", "account-1", 2);
+    expect(first.nextCursor).toBeTruthy();
+    const payload = JSON.parse(Buffer.from(first.nextCursor!, "base64url").toString("utf8"));
+    expect(payload).toMatchObject({ v: 1, accountId: "account-1" });
+    expect(first.nextCursor).not.toMatch(/^\d+$/);
+    await expect(service.history("actor", "account-2", 2, first.nextCursor!)).rejects.toMatchObject(
+      {
+        code: "invalid_cursor",
+        status: 400,
+      },
+    );
+    await expect(service.history("actor", "account-1", 2, "not-a-cursor")).rejects.toMatchObject({
+      code: "invalid_cursor",
+      status: 400,
+    });
+    payload.v = 2;
+    const stale = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    await expect(service.history("actor", "account-1", 2, stale)).rejects.toMatchObject({
+      code: "invalid_cursor",
+      status: 400,
+    });
   });
 });

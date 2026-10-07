@@ -1,5 +1,14 @@
-import type { SettlementResult } from "@/modules/ledger/settlement";
+export interface MaturedLedgerEntry {
+  id: string;
+  relationalId: string;
+  accountId: string | null;
+  amountMinor: string;
+  entryType: string;
+  recipientRole: string | null;
+  correlationId: string;
+}
 
 export interface SettlementStore {
-  settleMatured(input: { now: Date; batchSize: number }): Promise<SettlementResult>;
+  claimMatured(input: { now: Date; batchSize: number }): Promise<readonly MaturedLedgerEntry[]>;
+  recordSettlements(entries: readonly MaturedLedgerEntry[], settledAt: Date): Promise<number>;
 }

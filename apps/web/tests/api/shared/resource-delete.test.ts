@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { resourceDeleteSchema, deleteResourceIds } from "@/api/shared/resource-delete";
+import { PublicApplicationError } from "@/kernel/errors";
 
 const first = "11111111-1111-4111-8111-111111111111";
 const second = "22222222-2222-4222-8222-222222222222";
@@ -21,7 +22,7 @@ describe("canonical resource deletion contract", () => {
 
   it("uses one operation path for single and multiple IDs and preserves per-record failures", async () => {
     const remove = vi.fn(async (id: string) => {
-      if (id === second) throw new Error("Still referenced");
+      if (id === second) throw new Error("secret SQL constraint detail");
       return { id, deleted: true };
     });
     await expect(deleteResourceIds([first], remove)).resolves.toEqual({
@@ -30,9 +31,32 @@ describe("canonical resource deletion contract", () => {
     await expect(deleteResourceIds([first, second], remove)).resolves.toEqual({
       results: [
         { id: first, deleted: true, error: null },
-        { id: second, deleted: false, error: "Still referenced" },
+        { id: second, deleted: false, error: "Resource could not be deleted." },
       ],
     });
     expect(remove).toHaveBeenCalledTimes(3);
+  });
+
+  it("surfaces only branded public deletion messages", async () => {
+    await expect(
+      deleteResourceIds([first], () => {
+        throw new PublicApplicationError("Still referenced.", "resource_conflict", 409);
+      }),
+    ).resolves.toEqual({
+      results: [{ id: first, deleted: false, error: "Still referenced." }],
+    });
+    const result = await deleteResourceIds(
+      [first],
+      () => {
+        throw new Error("secret SQL detail");
+      },
+      "Listing media could not be deleted.",
+    );
+    expect(result.results[0]).toEqual({
+      id: first,
+      deleted: false,
+      error: "Listing media could not be deleted.",
+    });
+    expect(JSON.stringify(result)).not.toContain("secret SQL detail");
   });
 });

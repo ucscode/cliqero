@@ -289,7 +289,12 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
   const settlementPolicy = lazy(() => new PostgresSettlementPolicyRepository(database));
   const settlement = lazy(
     () =>
-      new SettlementProcessor(new PostgresSettlementStore(database, database), settlementPolicy()),
+      new SettlementProcessor(
+        new PostgresSettlementStore(database),
+        settlementPolicy(),
+        database,
+        accountDebt(),
+      ),
   );
   const reversals = lazy(() => new PostgresReversalRepository(database));
   const withdrawalRepository = lazy(() => new PostgresWithdrawalRepository(database));

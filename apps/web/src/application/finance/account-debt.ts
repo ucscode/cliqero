@@ -1,4 +1,5 @@
 import { newId } from "@/kernel/ids";
+import { Buffer } from "node:buffer";
 import { PublicApplicationError } from "@/kernel/errors";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
@@ -9,7 +10,53 @@ import type {
   AccountDebtKind,
   AccountDebtRepository,
   AccountDebtWallet,
+  AccountDebtPosition,
 } from "@/modules/ledger/account-debt";
+
+type DebtCursorPayload = { v: 1; accountId: string; createdAt: string; id: string };
+
+export class AccountDebtCursor {
+  static encode(accountId: string, position: AccountDebtPosition) {
+    return Buffer.from(
+      JSON.stringify({
+        v: 1,
+        accountId,
+        createdAt: position.createdAt,
+        id: position.id,
+      } satisfies DebtCursorPayload),
+    ).toString("base64url");
+  }
+
+  static decode(value: string | undefined, accountId: string): AccountDebtPosition | undefined {
+    if (value === undefined) return undefined;
+    try {
+      if (value.length > 512 || !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("invalid cursor");
+      const decoded = JSON.parse(
+        Buffer.from(value, "base64url").toString("utf8"),
+      ) as Partial<DebtCursorPayload>;
+      if (
+        Object.keys(decoded).sort().join(",") !== "accountId,createdAt,id,v" ||
+        decoded.v !== 1 ||
+        decoded.accountId !== accountId ||
+        typeof decoded.createdAt !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{1,6}Z$/.test(decoded.createdAt) ||
+        !Number.isFinite(Date.parse(decoded.createdAt)) ||
+        typeof decoded.id !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          decoded.id,
+        )
+      )
+        throw new Error("invalid cursor");
+      return { createdAt: decoded.createdAt, id: decoded.id };
+    } catch {
+      throw new PublicApplicationError(
+        "Invalid or stale account debt cursor.",
+        "invalid_cursor",
+        400,
+      );
+    }
+  }
+}
 
 export class AccountDebtService {
   constructor(
@@ -33,10 +80,16 @@ export class AccountDebtService {
       );
   }
 
-  async history(actorId: string, accountId: string, limit = 50, before?: string) {
+  async history(actorId: string, accountId: string, limit = 50, cursor?: string) {
     await this.operators.requireCapability(actorId, "finance.read");
-    return (await this.repository.list(accountId, Math.max(1, Math.min(limit, 100)), before)).map(
-      (entry) => ({
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const page = await this.repository.list(
+      accountId,
+      boundedLimit,
+      AccountDebtCursor.decode(cursor, accountId),
+    );
+    return {
+      items: page.items.map((entry) => ({
         id: entry.id,
         kind: entry.kind,
         amountMinor: entry.amountMinor.toString(),
@@ -47,8 +100,12 @@ export class AccountDebtService {
         correlationId: entry.correlationId,
         idempotencyKey: entry.idempotencyKey,
         createdAt: entry.createdAt.toISOString(),
-      }),
-    );
+      })),
+      nextCursor:
+        page.hasMore && page.items.length
+          ? AccountDebtCursor.encode(accountId, page.nextPosition!)
+          : null,
+    };
   }
 
   /** Records the part of an incoming credit that must satisfy account debt first. */

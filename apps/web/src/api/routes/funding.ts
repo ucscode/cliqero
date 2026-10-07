@@ -463,19 +463,23 @@ export function registerFundingRoutes(app: OpenAPIHono<Env>, container: Applicat
       )
         return c.json({ error: "Forbidden", code: "forbidden" }, 403);
       const { ids } = c.req.valid("json");
-      const result = await deleteResourceIds(ids, async (id) => {
-        try {
-          const funding = await container.operatorFunding.get(id);
-          const authorized =
-            funding.origin === "administrative"
-              ? hasCapability(p.capabilities as never, "finance.manage")
-              : hasCapability(p.capabilities as never, "system.root");
-          if (!authorized) throw new Error("Funding could not be deleted.");
-          return await container.operatorFunding.deleteByOperator(p.accountId, id);
-        } catch {
-          throw new Error("Funding could not be deleted.");
-        }
-      });
+      const result = await deleteResourceIds(
+        ids,
+        async (id) => {
+          try {
+            const funding = await container.operatorFunding.get(id);
+            const authorized =
+              funding.origin === "administrative"
+                ? hasCapability(p.capabilities as never, "finance.manage")
+                : hasCapability(p.capabilities as never, "system.root");
+            if (!authorized) throw new Error("Funding could not be deleted.");
+            return await container.operatorFunding.deleteByOperator(p.accountId, id);
+          } catch {
+            throw new Error("Funding could not be deleted.");
+          }
+        },
+        "Funding could not be deleted.",
+      );
       return c.json(result, 200);
     },
   );

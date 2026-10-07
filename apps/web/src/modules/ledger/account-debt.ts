@@ -20,6 +20,12 @@ export type AccountDebtEntry = {
 export type AccountDebtDraft = Omit<AccountDebtEntry, "createdAt"> & {
   requestFingerprint: string;
 };
+export type AccountDebtPosition = { createdAt: string; id: string };
+export type AccountDebtPage = {
+  items: readonly AccountDebtEntry[];
+  hasMore: boolean;
+  nextPosition: AccountDebtPosition | null;
+};
 
 /** Persistence boundary for the authoritative, append-only account receivable history. */
 export interface AccountDebtRepository {
@@ -29,5 +35,5 @@ export interface AccountDebtRepository {
     key: string,
   ): Promise<(AccountDebtEntry & { requestFingerprint: string }) | null>;
   append(entry: AccountDebtDraft): Promise<AccountDebtEntry>;
-  list(accountId: string, limit: number, before?: string): Promise<readonly AccountDebtEntry[]>;
+  list(accountId: string, limit: number, cursor?: AccountDebtPosition): Promise<AccountDebtPage>;
 }

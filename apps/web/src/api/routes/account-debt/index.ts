@@ -32,10 +32,12 @@ export function registerAccountDebtRoutes(app: OpenAPIHono<Env>, container: Appl
       description: "Returns the derived outstanding USD receivable and its append-only history.",
       request: {
         params: accountParams,
-        query: z.object({
-          limit: z.coerce.number().int().min(1).max(100).default(50),
-          before: z.string().regex(/^\d+$/).optional(),
-        }),
+        query: z
+          .object({
+            limit: z.coerce.number().int().min(1).max(100).default(50),
+            cursor: z.string().optional(),
+          })
+          .strict(),
       },
       responses: {
         200: {
@@ -46,6 +48,7 @@ export function registerAccountDebtRoutes(app: OpenAPIHono<Env>, container: Appl
                 accountId: z.string().uuid(),
                 outstandingMinor: z.string(),
                 entries: z.array(debtEntrySchema),
+                next_cursor: z.string().nullable(),
               }),
             },
           },
@@ -58,6 +61,10 @@ export function registerAccountDebtRoutes(app: OpenAPIHono<Env>, container: Appl
           description: "Finance read permission required",
           content: { "application/json": { schema: errorSchema } },
         },
+        400: {
+          description: "Invalid or account-mismatched cursor",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     async (c) => {
@@ -67,12 +74,20 @@ export function registerAccountDebtRoutes(app: OpenAPIHono<Env>, container: Appl
       if (denied) return denied;
       try {
         const { accountId } = c.req.valid("param");
-        const { limit, before } = c.req.valid("query");
-        const [outstandingMinor, entries] = await Promise.all([
+        const { limit, cursor } = c.req.valid("query");
+        const [outstandingMinor, history] = await Promise.all([
           container.accountDebt.balance(principal.accountId, accountId),
-          container.accountDebt.history(principal.accountId, accountId, limit, before),
+          container.accountDebt.history(principal.accountId, accountId, limit, cursor),
         ]);
-        return c.json(jsonSafe({ accountId, outstandingMinor, entries }), 200);
+        return c.json(
+          jsonSafe({
+            accountId,
+            outstandingMinor,
+            entries: history.items,
+            next_cursor: history.nextCursor,
+          }),
+          200,
+        );
       } catch (error) {
         return domainError(c, error);
       }

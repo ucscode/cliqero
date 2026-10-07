@@ -178,6 +178,44 @@ export class PostgresIntegrationService {
       return this.listForListing(listingId);
     });
   }
+  async deleteForListing(actorId: Id, listingId: Id, id: Id) {
+    return this.managedMutation(async () => {
+      const current = (
+        await this.sql.query<{ state: "active" | "revoked"; name: string }>(
+          `select i.state,i.name from access_capability.integrations i
+            join access_capability.integration_listings il on il.integration_id=i.id
+           where i.uuid=$1 and il.listing_id=(select id from listing_capability.listings where uuid=$2)
+           for update of i`,
+          [id, listingId],
+        )
+      ).rows[0];
+      if (!current) throw new Error("Integration not found");
+      const association = await this.sql.query(
+        `delete from access_capability.integration_listings il
+          where il.integration_id=(select id from access_capability.integrations where uuid=$1)
+            and il.listing_id=(select id from listing_capability.listings where uuid=$2)`,
+        [id, listingId],
+      );
+      if (association.rowCount !== 1) throw new Error("Integration not found");
+      const remaining = await this.sql.query(
+        `select 1 from access_capability.integration_listings
+          where integration_id=(select id from access_capability.integrations where uuid=$1) limit 1`,
+        [id],
+      );
+      const integrationDeleted = remaining.rowCount === 0;
+      if (integrationDeleted)
+        await this.sql.query("delete from access_capability.integrations where uuid=$1", [id]);
+      await this.audit(
+        actorId,
+        "integration.listing_deleted",
+        id,
+        listingId,
+        { state: current.state, name: current.name },
+        { association_removed: true, integration_deleted: integrationDeleted },
+      );
+      return { id, deleted: true as const, integrationDeleted };
+    });
+  }
   async revokeAllForListing(listingId: Id) {
     await this.sql.query(
       `with affected as (

@@ -2,6 +2,7 @@ import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type {
   AccountDebtDraft,
   AccountDebtEntry,
+  AccountDebtPosition,
   AccountDebtRepository,
 } from "@/modules/ledger/account-debt";
 
@@ -21,6 +22,7 @@ type DebtRow = {
   idempotency_key: string;
   request_fingerprint: string;
   created_at: Date | string;
+  created_at_cursor?: string;
 };
 
 export class PostgresAccountDebtRepository implements AccountDebtRepository {
@@ -54,7 +56,8 @@ export class PostgresAccountDebtRepository implements AccountDebtRepository {
       await this.sql.query<DebtRow>(
         `select entry.uuid id,account.uuid account_id,entry.kind,entry.amount_minor,entry.wallet,
                 entry.source_kind,entry.source_id,entry.reason,entry.actor_kind,actor.uuid actor_id,entry.actor_system,
-                entry.correlation_id,entry.idempotency_key,entry.request_fingerprint,entry.created_at
+                entry.correlation_id,entry.idempotency_key,entry.request_fingerprint,entry.created_at,
+                to_char(entry.created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') created_at_cursor
            from ledger_capability.account_debt_entries entry
            join identity_capability.accounts account on account.id=entry.account_id
            left join identity_capability.accounts actor on actor.id=entry.actor_id
@@ -99,22 +102,36 @@ export class PostgresAccountDebtRepository implements AccountDebtRepository {
     return this.map(row);
   }
 
-  async list(accountId: string, limit: number, before?: string) {
-    if (before && !/^\d+$/.test(before)) throw new Error("Invalid account debt cursor");
+  async list(accountId: string, limit: number, cursor?: AccountDebtPosition) {
     const rows = (
       await this.sql.query<DebtRow>(
         `select entry.uuid id,account.uuid account_id,entry.kind,entry.amount_minor,entry.wallet,
                 entry.source_kind,entry.source_id,entry.reason,entry.actor_kind,actor.uuid actor_id,entry.actor_system,
-                entry.correlation_id,entry.idempotency_key,entry.request_fingerprint,entry.created_at
+                entry.correlation_id,entry.idempotency_key,entry.request_fingerprint,entry.created_at,
+                to_char(entry.created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') created_at_cursor
            from ledger_capability.account_debt_entries entry
            join identity_capability.accounts account on account.id=entry.account_id
            left join identity_capability.accounts actor on actor.id=entry.actor_id
-          where account.uuid=$1 and ($2::bigint is null or entry.id<$2::bigint)
-          order by entry.id desc limit $3`,
-        [accountId, before ?? null, Math.max(1, Math.min(limit, 100))],
+          where account.uuid=$1 and ($2::timestamptz is null or (entry.created_at,entry.uuid)<($2::timestamptz,$3::uuid))
+          order by entry.created_at desc,entry.uuid desc limit $4`,
+        [
+          accountId,
+          cursor?.createdAt ?? null,
+          cursor?.id ?? null,
+          Math.max(1, Math.min(limit, 100) + 1),
+        ],
       )
     ).rows;
-    return rows.map((row) => this.map(row));
+    const hasMore = rows.length > limit;
+    const visible = rows.slice(0, limit);
+    return {
+      items: visible.map((row) => this.map(row)),
+      hasMore,
+      nextPosition:
+        hasMore && visible.length
+          ? { createdAt: visible.at(-1)!.created_at_cursor!, id: visible.at(-1)!.id }
+          : null,
+    };
   }
 
   private map(row: DebtRow): AccountDebtEntry {

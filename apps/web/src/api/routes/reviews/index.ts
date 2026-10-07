@@ -8,6 +8,7 @@ import {
 } from "../../shared/context";
 import { reviewJson } from "./serialization";
 import { errorSchema } from "../../shared/schemas";
+import { domainError } from "../../shared/error";
 import { reviewPageSchema, reviewResponseSchema } from "./contracts";
 import { deleteResourceIds, resourceDeleteSchema } from "../../shared/resource-delete";
 
@@ -334,13 +335,7 @@ export function registerReviewRoutes(app: OpenAPIHono<Env>, container: Applicati
           200,
         );
       } catch (error) {
-        return c.json(
-          {
-            error: error instanceof Error ? error.message : "Invalid review IDs",
-            code: "invalid_request",
-          },
-          400,
-        ) as never;
+        return domainError(c, error);
       }
     },
   );

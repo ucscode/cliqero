@@ -33,7 +33,7 @@ export class PostgresListingMediaRepository implements ListingMediaRepository {
   async listByListing(listingId: string, includeDeleted = false) {
     return (
       await this.sql.query<any>(
-        `select m.*,m.uuid as id,(select uuid from listing_capability.listings where id=m.listing_id) as listing_id from listing_capability.media m where m.listing_id=(select id from listing_capability.listings where uuid=$1) ${includeDeleted ? "" : "and m.state<>'deleted'"} order by m.position,m.created_at,m.id`,
+        `select m.*,m.uuid as id,(select uuid from listing_capability.listings where id=m.listing_id) as listing_id from listing_capability.media m where m.listing_id=(select id from listing_capability.listings where uuid=$1) ${includeDeleted ? "" : "and m.state='active'"} order by m.position,m.created_at,m.id`,
         [listingId],
       )
     ).rows.map(map);
@@ -85,6 +85,9 @@ export class PostgresListingMediaRepository implements ListingMediaRepository {
       "delete from listing_capability.media where listing_id=(select id from listing_capability.listings where uuid=$1)",
       [listingId],
     );
+  }
+  async deleteById(id: string) {
+    await this.sql.query("delete from listing_capability.media where uuid=$1", [id]);
   }
   async lockListing(listingId: string) {
     await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [listingId]);

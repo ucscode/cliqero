@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { crudMaxRows } from "@/config/crud";
+import { publicErrorPayload } from "@/api/error";
 
 /** Canonical bounded request body shared by public resource DELETE operations. */
 export function resourceDeleteSchema(override?: number) {
@@ -23,6 +24,7 @@ export type ResourceDeleteResult = {
 export async function deleteResourceIds(
   ids: readonly string[],
   remove: (id: string) => Promise<unknown> | unknown,
+  fallbackMessage = "Resource could not be deleted.",
 ): Promise<ResourceDeleteResult> {
   const results: ResourceDeleteResult["results"] = [];
   for (const id of ids) {
@@ -35,13 +37,13 @@ export async function deleteResourceIds(
       results.push({
         id,
         deleted: reported === false ? false : true,
-        error: reported === false ? "Resource could not be deleted." : null,
+        error: reported === false ? fallbackMessage : null,
       });
     } catch (error) {
       results.push({
         id,
         deleted: false,
-        error: error instanceof Error ? error.message : "Resource could not be deleted.",
+        error: publicErrorPayload(error)?.payload.error ?? fallbackMessage,
       });
     }
   }

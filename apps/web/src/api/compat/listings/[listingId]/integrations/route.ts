@@ -25,19 +25,18 @@ export async function DELETE(
     if ("response" in result) return result.response;
     const { ids } = resourceDeleteSchema().parse(await request.json());
     const outcomes = await deleteResourceIds(ids, async (integrationId) => {
-      if (result.access === "manager") {
-        return result.container.integrations.revokeForListing(
+      if (result.access !== "manager") {
+        const integration = await result.container.integrations.find(
           result.principal.account.id,
-          listingId,
           integrationId,
         );
+        if (!integration.listing_ids.includes(listingId)) throw new Error("Integration not found");
       }
-      const integration = await result.container.integrations.find(
+      return result.container.integrations.deleteForListing(
         result.principal.account.id,
+        listingId,
         integrationId,
       );
-      if (!integration.listing_ids.includes(listingId)) throw new Error("Integration not found");
-      return result.container.integrations.revoke(result.principal.account.id, integrationId);
     });
     return Response.json(outcomes);
   } catch (error) {

@@ -157,7 +157,12 @@ export class PurchaseDistributionProcessor {
       });
       await this.ledger.append(entries);
       for (const entry of entries) {
-        if (!entry.accountId || entry.recipientRole === "platform") continue;
+        if (
+          !entry.accountId ||
+          entry.recipientRole === "platform" ||
+          entry.balanceState !== "available"
+        )
+          continue;
         await this.debt?.settleInflow({
           accountId: entry.accountId,
           incomingMinor: entry.amount.minorAmount,

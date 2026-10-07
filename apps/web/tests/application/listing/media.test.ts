@@ -95,8 +95,9 @@ describe("listing media storage instance selection", () => {
     };
     const registry = new ObjectStorageRegistry("legacy_filesystem").register(provider);
 
-    await new ListingMediaDeletionProcessor(
-      { findById: async () => value, save: async () => undefined } as never,
+    const deleteById = vi.fn(async () => undefined);
+    const result = await new ListingMediaDeletionProcessor(
+      { findById: async () => value, save: async () => undefined, deleteById } as never,
       registry,
     ).process(value.id);
 
@@ -105,6 +106,8 @@ describe("listing media storage instance selection", () => {
       container: "media",
       key: "listings/listing/image.png",
     });
-    expect(value.state).toBe("deleted");
+    expect(deleteById).toHaveBeenCalledWith(value.id);
+    expect(result).toMatchObject({ id: value.id, state: "deleted" });
+    expect(value.state).toBe("deletion_pending");
   });
 });
