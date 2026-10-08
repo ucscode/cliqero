@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 import { createContainer } from "@/infrastructure/container";
 import { newId } from "@/kernel/ids";
+import { verifyProductionDatabaseRole } from "@/infrastructure/postgres/runtime-security";
 import {
   OutboxDispatcher,
   OutboxHandlerRegistry,
@@ -70,6 +71,7 @@ suite("restricted PostgreSQL runtime role", () => {
         `grant execute on all functions in schema ${quoteIdentifier(schema)} to "${role}"`,
       );
     }
+    await bootstrap.database.query(`revoke all on schema public from public`);
 
     const attributes = await bootstrap.database.query<{
       rolsuper: boolean;
@@ -94,6 +96,11 @@ suite("restricted PostgreSQL runtime role", () => {
     const runtimeUrl = new URL(databaseUrl!);
     runtimeUrl.username = role;
     runtimeUrl.password = password;
+    await verifyProductionDatabaseRole({
+      NODE_ENV: "production",
+      DATABASE_URL: runtimeUrl.toString(),
+      POSTGRES_USER: new URL(databaseUrl!).username,
+    });
     const app = createContainer(runtimeUrl.toString());
     try {
       const email = `runtime-${randomUUID()}@example.test`;
@@ -173,6 +180,7 @@ suite("restricted PostgreSQL runtime role", () => {
           `alter table ledger_capability.account_debt_entries disable trigger all`,
         ),
       ).rejects.toThrow();
+      await expect(app.database.query(`set session_replication_role = replica`)).rejects.toThrow();
       const debt = await app.database.query<{ balance_minor: string }>(
         `select coalesce(sum(case when kind='increase' then amount_minor else -amount_minor end),0)::text balance_minor
            from ledger_capability.account_debt_entries where account_id=(select id from identity_capability.accounts where uuid=$1)`,

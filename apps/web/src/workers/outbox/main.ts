@@ -15,9 +15,11 @@ import {
   createDevelopmentDiagnosticWriter,
   installDevelopmentProcessDiagnostics,
 } from "@/infrastructure/development-log";
+import { verifyProductionDatabaseRole } from "@/infrastructure/postgres/runtime-security";
 
 const workerDiagnostics = createDevelopmentDiagnosticWriter("worker.log");
 installDevelopmentProcessDiagnostics();
+await verifyProductionDatabaseRole();
 const container = getContainer({ lifecycleDiagnostics: workerDiagnostics });
 const workerId = process.env.OUTBOX_WORKER_ID ?? `outbox-${randomUUID()}`;
 const logger = new JsonConsoleLogger();

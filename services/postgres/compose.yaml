@@ -1,12 +1,15 @@
 services:
   postgres:
     image: postgres:17
+    entrypoint: ["/bin/bash", "/opt/cliqero/roles/postgres-entrypoint.sh"]
+    command: ["postgres"]
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-cliqero}
-      POSTGRES_USER: ${POSTGRES_USER:-cliqero}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cliqero-local}
-      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-cliqero_runtime}
-      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-cliqero-runtime-local}
+      CLIQERO_DEPLOYMENT_MODE: production
+      POSTGRES_DB: ${POSTGRES_DB:-}
+      POSTGRES_USER: ${POSTGRES_USER:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s

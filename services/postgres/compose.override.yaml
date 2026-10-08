@@ -1,4 +1,11 @@
 services:
   postgres:
+    environment:
+      CLIQERO_DEPLOYMENT_MODE: development
+      POSTGRES_DB: ${POSTGRES_DB:-cliqero}
+      POSTGRES_USER: ${POSTGRES_USER:-cliqero}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cliqero-local}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-cliqero_runtime}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-cliqero-runtime-local}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"

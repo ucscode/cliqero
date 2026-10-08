@@ -6,9 +6,11 @@ services:
       target: worker
     environment:
       NODE_ENV: production
+      CLIQERO_DEPLOYMENT_MODE: production
+      POSTGRES_USER: ${POSTGRES_USER:-}
       APP_URL: ${APP_URL:-http://localhost:3000}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
-      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER:-}:${POSTGRES_APP_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
       OUTBOX_POLL_MS: ${OUTBOX_POLL_MS:-1000}
       OUTBOX_STALE_AFTER_MS: ${OUTBOX_STALE_AFTER_MS:-300000}

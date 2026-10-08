@@ -59,7 +59,7 @@ docker logs --tail=100 cliqero-outbox-worker-1
 just prod-build
 ```
 
-Production recipes explicitly use `docker compose -f compose.production.yaml`, so the development override is not loaded. That production-only overlay requires separate bootstrap/runtime PostgreSQL credentials and a configured Better Auth secret. The main production image is `cliqero-main-prod`; development is `cliqero-main-dev`. The distinct identities prevent cross-mode image reuse.
+The root `compose.yaml` contains only service includes and is the authoritative production configuration. Production recipes use `docker compose -f compose.yaml`, which deliberately excludes the development overrides. The main production image is `cliqero-main-prod`; development is `cliqero-main-dev`. The distinct identities prevent cross-mode image reuse.
 
 Subsequent starts can use:
 
@@ -73,12 +73,16 @@ Copy `.env.example` to `.env` and review every value before non-local deployment
 
 Do not reuse development secrets in production.
 
-Production Compose requires `BETTER_AUTH_SECRET`, `POSTGRES_APP_USER`, and
-`POSTGRES_APP_PASSWORD`; it has no Better Auth secret fallback and connects the
-web app and outbox worker with the restricted runtime login. Keep
-`POSTGRES_USER`/`POSTGRES_PASSWORD` as the separate bootstrap/schema-management
-identity. Generate runtime passwords as URL-safe strings (for example, random
-bytes encoded as hex) so the Compose-built PostgreSQL URL is unambiguous.
+Production requires `BETTER_AUTH_SECRET`, `POSTGRES_USER`, `POSTGRES_PASSWORD`,
+`POSTGRES_APP_USER`, and `POSTGRES_APP_PASSWORD`. PostgreSQL's production
+entrypoint rejects missing/weak credentials and known development role names
+before invoking the official image entrypoint. The application and worker
+receive a URL constructed only from the restricted runtime identity; startup
+checks Better Auth configuration and verifies the connected role's actual
+privileges. Keep `POSTGRES_USER`/`POSTGRES_PASSWORD` as the separate
+bootstrap/schema-management identity. Generate passwords as URL-safe strings
+(for example, random bytes encoded as hex) so the Compose-built URL is
+unambiguous. Development defaults exist only in service overrides.
 
 On a fresh PostgreSQL volume, Compose first applies the canonical
 `001_initial_schema.sql`, then provisions the runtime login and grants access
@@ -93,7 +97,7 @@ backup first, then run the mounted provisioning script explicitly as the
 bootstrap identity:
 
 ```bash
-docker compose -p cliqero-prod -f compose.production.yaml exec -T postgres \\
+docker compose -p cliqero-prod -f compose.yaml exec -T postgres \\
   bash -ec 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /opt/cliqero/roles/provision-runtime-role.sql && psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /opt/cliqero/roles/harden-runtime-triggers.sql'
 ```
 

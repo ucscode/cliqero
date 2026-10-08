@@ -91,29 +91,29 @@ dev-ps:
 dev-restart:
 	docker compose up -d --no-build --force-recreate
 
-# Start the production Compose stack using compose.yaml only
+# Start production from the canonical base without development overrides
 prod:
-	docker compose -p cliqero-prod -f compose.production.yaml up -d
+	docker compose -p cliqero-prod -f compose.yaml up -d
 
 # Rebuild and start the production Compose stack
 prod-build:
-	docker compose -p cliqero-prod -f compose.production.yaml up -d --build
+	docker compose -p cliqero-prod -f compose.yaml up -d --build
 
 # Stop the production Compose stack without deleting volumes
 prod-down:
-	docker compose -p cliqero-prod -f compose.production.yaml down
+	docker compose -p cliqero-prod -f compose.yaml down
 
 # Follow production service logs
 prod-logs:
-	docker compose -p cliqero-prod -f compose.production.yaml logs -f
+	docker compose -p cliqero-prod -f compose.yaml logs -f
 
 # Show production service status
 prod-ps:
-	docker compose -p cliqero-prod -f compose.production.yaml ps
+	docker compose -p cliqero-prod -f compose.yaml ps
 
 # Restart the production Compose stack
 prod-restart:
-	docker compose -p cliqero-prod -f compose.production.yaml restart
+	docker compose -p cliqero-prod -f compose.yaml restart
 
 # Open a shell in the development main container
 dev-shell:
@@ -211,4 +211,4 @@ dev-compose-config:
 
 # Validate compose.yaml without the development override
 prod-compose-config:
-	docker compose -p cliqero-prod -f compose.production.yaml config
+	docker compose -p cliqero-prod -f compose.yaml config

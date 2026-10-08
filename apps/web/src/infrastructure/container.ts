@@ -153,6 +153,7 @@ import { WithdrawalMethodRegistry } from "@/modules/withdrawal/methods/registry"
 import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
 import { ProviderConfigurationError, ProviderUnavailableError } from "@/kernel/provider-error";
+import { assertProductionDatabaseUrl } from "@/infrastructure/postgres/runtime-security";
 
 const defaultLifecycleDiagnostics: LifecycleDiagnosticWriter = {
   write: writeDevelopmentDiagnostic,
@@ -166,6 +167,7 @@ export type ContainerOptions = {
 };
 
 export function createContainer(databaseUrl: string, options: ContainerOptions = {}) {
+  assertProductionDatabaseUrl({ ...process.env, DATABASE_URL: databaseUrl });
   const lifecycleDiagnostics = options.lifecycleDiagnostics ?? defaultLifecycleDiagnostics;
   const verificationPollMilliseconds =
     options.verificationPollMilliseconds ??

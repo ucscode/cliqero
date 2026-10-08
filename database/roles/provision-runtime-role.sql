@@ -33,7 +33,8 @@ SELECT format('REVOKE %I FROM %I', granted.rolname, :'runtime_role')
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'runtime_role')
 \gexec
 
-REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM :"runtime_role";
 
 SELECT format('GRANT USAGE ON SCHEMA %I TO %I', namespace.nspname, :'runtime_role')
   FROM pg_namespace namespace
