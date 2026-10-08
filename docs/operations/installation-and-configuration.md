@@ -270,11 +270,19 @@ just dev-db-sync
 ```
 
 The command compares the local Compose database with a temporary database
-created from `database/migrations/001_initial_schema.sql`. It adds only missing
-nullable columns that require no data backfill, then removes its temporary
-reference database. It refuses missing tables, required columns, or other
-unsafe drift rather than guessing values. Use the explicitly destructive
-`just dev-db-reset` only when a complete PostgreSQL reset is intended.
+created from `database/migrations/001_initial_schema.sql`. It adds missing
+tables and supported columns, indexes, constraints, functions, and triggers
+without replacing existing definitions or guessing required values. It removes
+its temporary reference database and refuses unsafe or incompatible drift.
+Use the explicitly destructive `just dev-db-reset` only when a complete
+PostgreSQL reset is intended.
+
+For a database with unrelated historical schema differences, the explicit
+`node scripts/dev-database-sync.mjs --safe-additions` mode applies only missing
+canonical additions that are safe without rewriting existing records. It
+leaves existing constraint/index/function definitions unchanged and reports
+the remaining drift for deliberate review. Its DDL runs in one transaction
+and rolls back completely if an addition cannot be applied.
 
 To reset only Blog SQLite and recreate its fixtures:
 

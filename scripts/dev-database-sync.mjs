@@ -83,7 +83,12 @@ select json_build_object(
   'indexes', coalesce((select json_agg(json_build_object('schema',schemaname,'table',tablename,'name',indexname,'definition',indexdef) order by schemaname,tablename,indexname)
     from pg_indexes where schemaname not in ('pg_catalog','information_schema')), '[]'::json),
   'triggers', coalesce((select json_agg(json_build_object('schema',n.nspname,'table',c.relname,'name',t.tgname,'definition',pg_get_triggerdef(t.oid,true)) order by n.nspname,c.relname,t.tgname)
-    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where not t.tgisinternal), '[]'::json)
+    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where not t.tgisinternal), '[]'::json),
+  'functions', coalesce((select json_agg(json_build_object(
+    'schema',n.nspname,'name',p.proname,'identityArguments',pg_get_function_identity_arguments(p.oid),
+    'definition',pg_get_functiondef(p.oid)) order by n.nspname,p.proname,pg_get_function_identity_arguments(p.oid))
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.prokind in ('f','p')
+      and n.nspname not in ('pg_catalog','information_schema')), '[]'::json)
 )::text
 `;
 
@@ -189,19 +194,84 @@ function tableKey(value) {
   return `${schema}.${table}`;
 }
 
+function functionKey(schema, name, identityArguments) {
+  return `${schema}.${name}(${functionIdentityArguments(identityArguments)})`;
+}
+
+function functionIdentityArguments(declaration) {
+  return splitTopLevel(declaration)
+    .map((argument) => {
+      const withoutDefault = argument.replace(/\s+(?:DEFAULT|=)[\s\S]*$/i, "").trim();
+      const tokens = withoutDefault.split(/\s+/);
+      if (/^(?:IN|OUT|INOUT|VARIADIC)$/i.test(tokens[0])) tokens.shift();
+      if (tokens.length > 1) tokens.shift();
+      return tokens.join(" ").replaceAll('"', "").toLowerCase();
+    })
+    .join(", ");
+}
+
 function additionsFromStatements(baselineSql) {
   const tables = new Map();
   const columns = new Map();
   const constraints = new Map();
   const indexes = new Map();
   const triggers = new Map();
+  const functions = new Map();
+  const inlineConstraints = new Set();
+  const unsupported = [];
+  const unsupportedTables = new Set();
   for (const original of splitSqlStatements(baselineSql)) {
     const statement = stripLeadingComments(original);
     let match = statement.match(
       /^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w"]+\.[\w"]+)\s*\(/i,
     );
     if (match) {
-      tables.set(tableKey(match[1]), statement);
+      const key = tableKey(match[1]);
+      const body = statement.slice(statement.indexOf("(") + 1, statement.lastIndexOf(")"));
+      const createDefinitions = [];
+      for (const definition of splitTopLevel(body)) {
+        const constraint = definition.match(/^CONSTRAINT\s+([\w"]+)\s+([\s\S]+)$/i);
+        if (constraint) {
+          const constraintKey = `${key}.${constraint[1].replaceAll('"', "")}`;
+          const constraintBody = constraint[2].trimStart();
+          constraints.set(
+            constraintKey,
+            `ALTER TABLE ${match[1]} ADD CONSTRAINT ${constraint[1]} ${constraintBody};`,
+          );
+          if (/^FOREIGN\s+KEY\b/i.test(constraintBody)) continue;
+          inlineConstraints.add(constraintKey);
+          createDefinitions.push(definition);
+          continue;
+        }
+        if (/^FOREIGN\s+KEY\b/i.test(definition)) {
+          const foreignKeyName = definition.match(/\bCONSTRAINT\s+([\w"]+)/i);
+          if (!foreignKeyName) {
+            // Canonical baseline foreign keys are named. Refuse to silently
+            // omit any future unnamed key from a safe table creation.
+            unsupported.push(`${key}: unnamed inline foreign key is unsupported by additive sync`);
+            unsupportedTables.add(key);
+            continue;
+          }
+          const name = foreignKeyName[1];
+          const constraintKey = `${key}.${name.replaceAll('"', "")}`;
+          constraints.set(constraintKey, `ALTER TABLE ${match[1]} ADD ${definition};`);
+          continue;
+        }
+        const column = definition.match(/^([\w"]+)\s+([\s\S]+)$/);
+        if (column && !/^(?:PRIMARY|UNIQUE|CHECK|FOREIGN|EXCLUDE)$/i.test(column[1])) {
+          columns.set(`${key}.${column[1].replaceAll('"', "")}`, {
+            table: match[1],
+            name: column[1],
+            definition: column[2],
+          });
+          createDefinitions.push(definition);
+        } else createDefinitions.push(definition);
+      }
+      if (!unsupportedTables.has(key))
+        tables.set(
+          key,
+          `${statement.slice(0, statement.indexOf("(") + 1)}\n${createDefinitions.join(",\n")}\n);`,
+        );
       continue;
     }
     match = statement.match(/^ALTER\s+TABLE\s+(?:ONLY\s+)?([\w"]+\.[\w"]+)\s+([\s\S]*);$/i);
@@ -235,8 +305,24 @@ function additionsFromStatements(baselineSql) {
     }
     match = statement.match(/^CREATE\s+TRIGGER\s+([\w"]+)\s+[\s\S]+?\s+ON\s+([\w"]+\.[\w"]+)/i);
     if (match) triggers.set(`${tableKey(match[2])}.${match[1].replaceAll('"', "")}`, statement);
+    match = statement.match(
+      /^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([\w"]+)\.([\w"]+)\s*\(([\s\S]*?)\)\s+RETURNS\b/i,
+    );
+    if (match) {
+      const [schema, name] = targetName(`${match[1]}.${match[2]}`);
+      functions.set(functionKey(schema, name, functionIdentityArguments(match[3])), statement);
+    }
   }
-  return { tables, columns, constraints, indexes, triggers };
+  return {
+    tables,
+    columns,
+    constraints,
+    indexes,
+    triggers,
+    functions,
+    inlineConstraints,
+    unsupported,
+  };
 }
 
 function mapBy(items, keyOf) {
@@ -280,7 +366,14 @@ export function planAdditiveSync(baselineSql, canonical, current) {
     canonical.triggers,
     (item) => `${item.schema}.${item.table}.${item.name}`,
   );
+  const currentFunctions = mapBy(current.functions ?? [], (item) =>
+    functionKey(item.schema, item.name, item.identityArguments),
+  );
+  const canonicalFunctions = mapBy(canonical.functions ?? [], (item) =>
+    functionKey(item.schema, item.name, item.identityArguments),
+  );
   const unsafe = [];
+  unsafe.push(...ddl.unsupported);
   const statements = [];
   const pendingTables = new Set();
 
@@ -347,12 +440,9 @@ export function planAdditiveSync(baselineSql, canonical, current) {
       `ALTER TABLE ${addition.table} ADD COLUMN ${addition.name} ${addition.definition};`,
     );
     addedColumns.add(key);
-    if (key === "withdrawal_capability.withdrawals.net_amount_minor")
-      statements.push(
-        "UPDATE withdrawal_capability.withdrawals SET net_amount_minor=amount_minor-fee_minor;",
-      );
   }
 
+  const deferredForeignKeys = [];
   for (const [key, constraint] of canonicalConstraints) {
     const existing = currentConstraints.get(key);
     if (existing) {
@@ -362,11 +452,14 @@ export function planAdditiveSync(baselineSql, canonical, current) {
     }
     const statement = ddl.constraints.get(key);
     const [schema, table] = key.split(".");
+    if (pendingTables.has(`${schema}.${table}`) && ddl.inlineConstraints.has(key)) continue;
     if (pendingTables.has(`${schema}.${table}`) && !statement) continue;
     if (!statement)
       unsafe.push(`${key}: missing constraint has no recognized ADD CONSTRAINT statement`);
+    else if (/\bFOREIGN\s+KEY\b/i.test(statement)) deferredForeignKeys.push(statement);
     else statements.push(statement);
   }
+  statements.push(...deferredForeignKeys);
 
   for (const [key, index] of canonicalIndexes) {
     const existing = currentIndexes.get(key);
@@ -376,11 +469,24 @@ export function planAdditiveSync(baselineSql, canonical, current) {
     }
     const statement = ddl.indexes.get(key);
     const [schema, table] = key.split(".");
+    if (canonicalConstraints.has(key) && !currentConstraints.has(key)) continue;
     if (pendingTables.has(`${schema}.${table}`) && !statement && canonicalConstraints.has(key))
       continue;
     if (!statement) unsafe.push(`${key}: missing index has no recognized CREATE INDEX statement`);
     else statements.push(statement);
   }
+
+  // Function definitions are added only when absent; existing functions are
+  // never replaced by this development-only additive synchronizer.
+  const functionStatements = [];
+  for (const [key] of canonicalFunctions) {
+    if (currentFunctions.has(key)) continue;
+    const statement = ddl.functions.get(key);
+    if (!statement)
+      unsafe.push(`${key}: missing function has no recognized CREATE FUNCTION statement`);
+    else functionStatements.push(statement);
+  }
+  statements.push(...functionStatements);
 
   for (const [key, trigger] of canonicalTriggers) {
     const existing = currentTriggers.get(key);
@@ -401,7 +507,7 @@ export function planAdditiveSync(baselineSql, canonical, current) {
   }
 
   return {
-    statements: unsafe.length ? [] : statements,
+    statements,
     unsafe,
     addedColumns: unsafe.length ? [] : [...addedColumns],
     addedTables: unsafe.length ? [] : [...pendingTables],
@@ -419,7 +525,7 @@ function dropReferenceDatabase(name, developmentDatabase) {
   ]);
 }
 
-function syncDevelopmentDatabase() {
+function syncDevelopmentDatabase({ safeAdditionsOnly = false } = {}) {
   const configuration = composeConfiguration();
   const database = configuration.services?.postgres?.environment?.POSTGRES_DB;
   if (!database) throw new Error("The local Compose PostgreSQL database name is missing.");
@@ -433,27 +539,38 @@ function syncDevelopmentDatabase() {
     const canonical = readSnapshot(reference);
     const current = readSnapshot(database);
     const plan = planAdditiveSync(baseline, canonical, current);
-    if (plan.unsafe.length)
+    if (plan.unsafe.length && !safeAdditionsOnly)
       throw new Error(
         `Schema drift needs deliberate review; no changes made: ${plan.unsafe.join(", ")}`,
       );
     if (plan.statements.length) {
-      psql(database, ["-f", "-"], `BEGIN;\n${plan.statements.join("\n")}\nCOMMIT;\n`);
+      psql(
+        database,
+        ["-f", "-"],
+        `BEGIN;\nSET LOCAL check_function_bodies = false;\n${plan.statements.join("\n")}\nCOMMIT;\n`,
+      );
     }
     const remaining = planAdditiveSync(baseline, canonical, readSnapshot(database));
-    if (remaining.unsafe.length || remaining.statements.length)
+    if (remaining.statements.length || (remaining.unsafe.length && !safeAdditionsOnly))
       throw new Error(
         "Development database synchronization did not converge to the canonical baseline.",
       );
-    process.stdout.write(
-      plan.statements.length
-        ? `Applied ${plan.statements.length} additive schema change(s) to the local development database.\n`
-        : "Development database schema already matches the canonical baseline. No changes made.\n",
-    );
+    if (safeAdditionsOnly && remaining.unsafe.length)
+      process.stdout.write(
+        `Applied ${plan.statements.length} safe additive schema change(s). Existing schema differences remain unchanged: ${remaining.unsafe.join(", ")}\n`,
+      );
+    else
+      process.stdout.write(
+        plan.statements.length
+          ? `Applied ${plan.statements.length} additive schema change(s) to the local development database.\n`
+          : "Development database schema already matches the canonical baseline. No changes made.\n",
+      );
   } finally {
     if (referenceCreated) dropReferenceDatabase(reference, database);
   }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
-  syncDevelopmentDatabase();
+  syncDevelopmentDatabase({
+    safeAdditionsOnly: process.argv.includes("--safe-additions"),
+  });
