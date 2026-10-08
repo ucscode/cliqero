@@ -83,6 +83,32 @@ describe("SettlementProcessor", () => {
     expect(store.recordSettlements).not.toHaveBeenCalled();
   });
 
+  it("settles debt in stable account order while preserving claimed-entry results", async () => {
+    const first = { ...entry, id: "earning-b", accountId: "account-b" };
+    const second = { ...entry, id: "earning-a", accountId: "account-a" };
+    const store: SettlementStore = {
+      claimMatured: vi.fn(async () => [first, second]),
+      recordSettlements: vi.fn(async (claimed) => {
+        expect(claimed).toEqual([first, second]);
+        return 2;
+      }),
+    };
+    const settledAccounts: string[] = [];
+    const debt = {
+      settleInflow: vi.fn(async ({ accountId }: { accountId: string }) => {
+        settledAccounts.push(accountId);
+      }),
+    } as unknown as AccountDebtService;
+    const processor = new SettlementProcessor(
+      store,
+      { transaction: async (operation) => operation() },
+      debt,
+    );
+
+    await expect(processor.settle()).resolves.toMatchObject({ claimed: 2, settled: 2 });
+    expect(settledAccounts).toEqual(["account-a", "account-b"]);
+  });
+
   it("retains batch-size validation", async () => {
     const transaction = vi.fn(async <T>(operation: () => Promise<T>): Promise<T> => operation());
     const processor = new SettlementProcessor(

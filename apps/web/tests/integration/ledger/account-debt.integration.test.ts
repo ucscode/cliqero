@@ -69,6 +69,7 @@ suite("account debt PostgreSQL ledger", () => {
       idempotencyKey: newId(),
     });
     expect(writeOff.entry?.kind).toBe("write_off");
+    expect(writeOff.entry?.actor).toEqual({ kind: "operator", id: actor.id });
     expect(await app.accountDebt.balance(actor.id, actor.id)).toBe("0");
     await expect(
       app.database.query(

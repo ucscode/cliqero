@@ -16,7 +16,15 @@ export class SettlementProcessor {
     const now = input.now ?? new Date();
     return this.uow.transaction(async () => {
       const entries = await this.store.claimMatured({ now, batchSize });
-      for (const entry of entries) {
+      // Settlement holds all claimed earning rows until this transaction commits.
+      // Acquire account-level debt locks in a stable order to avoid deadlocks
+      // between overlapping batches that contain entries for multiple accounts.
+      const debtOrder = [...entries].sort(
+        (left, right) =>
+          (left.accountId ?? "").localeCompare(right.accountId ?? "") ||
+          left.id.localeCompare(right.id),
+      );
+      for (const entry of debtOrder) {
         if (
           entry.accountId &&
           entry.entryType === "purchase-earnings" &&

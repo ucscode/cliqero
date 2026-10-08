@@ -140,6 +140,24 @@ describe("AccountDebtService", () => {
     expect(repository.entries.filter((entry) => entry.kind === "write_off")).toHaveLength(0);
   });
 
+  it("attributes debt write-offs to the authorized operator", async () => {
+    const { service, increase, repository } = harness();
+    await increase(200n);
+
+    const result = await service.writeOff("root-1", {
+      accountId: "account-1",
+      amountMinor: 200n,
+      sourceKind: "operator_write_off",
+      sourceId: "case-2",
+      reason: "Approved unrecoverable balance write-off",
+      correlationId: "correlation-write-off",
+      idempotencyKey: "writeoff-2",
+    });
+
+    expect(result.entry?.actor).toEqual({ kind: "operator", id: "root-1" });
+    expect(repository.entries.at(-1)?.actor).toEqual({ kind: "operator", id: "root-1" });
+  });
+
   it("blocks new value-out operations while preserving the derived account balance", async () => {
     const { service, increase } = harness();
     await expect(service.requireNoOutstanding("account-1", "purchase")).resolves.toBeUndefined();

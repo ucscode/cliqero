@@ -45,7 +45,13 @@ export class EarningsCorrectionService {
     return this.uow.transaction(async () => {
       // Match the purchase reversal's aggregate lock, then the shared account lock
       // used by transfers, reservations, funding reversals, and debt settlement.
+      // Lock the earning row before the account lock: settlement already holds the
+      // earning row while acquiring the account lock, so reversing this order can
+      // deadlock settlement against a correction.
       if (!(await this.repository.lockPurchase(observed.purchaseId)))
+        throw new PublicApplicationError("Purchase earning source not found.", "not_found", 404);
+      const source = await this.repository.lockSource(input.sourceEntryId);
+      if (!source)
         throw new PublicApplicationError("Purchase earning source not found.", "not_found", 404);
       await this.repository.lockAccount(observed.accountId);
       await this.repository.lockIdempotencyKey(idempotencyKey);
@@ -66,9 +72,6 @@ export class EarningsCorrectionService {
         return { correction: prior, created: false };
       }
 
-      const source = await this.repository.lockSource(input.sourceEntryId);
-      if (!source)
-        throw new PublicApplicationError("Purchase earning source not found.", "not_found", 404);
       if (source.reversed)
         throw new PublicApplicationError(
           "A reversed purchase earning cannot be corrected separately.",

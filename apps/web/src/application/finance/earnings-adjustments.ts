@@ -86,7 +86,7 @@ export class EarningsAdjustmentService {
           sourceKind: "earnings_adjustment",
           sourceId: adjustment.id,
           reason: "Positive earnings adjustment settled account debt before availability",
-          actor: { kind: "account", id: actorId },
+          actor: { kind: "operator", id: actorId },
           correlationId: adjustment.id,
           idempotencyKey: `debt-settlement:earnings-adjustment:${adjustment.id}`,
         });

@@ -162,8 +162,12 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       kind: string;
       amount_minor: string;
       source_kind: string;
+      actor_kind: string;
+      actor_id: string;
     }>(
-      `select kind,amount_minor,source_kind from ledger_capability.account_debt_entries
+      `select kind,amount_minor,source_kind,actor_kind,actor.uuid actor_id
+         from ledger_capability.account_debt_entries debt
+         left join identity_capability.accounts actor on actor.id=debt.actor_id
         where account_id=(select id from identity_capability.accounts where uuid=$1)
           and kind='settlement'`,
       [customer.id],
@@ -173,6 +177,8 @@ suite("administrative Funding CRUD PostgreSQL accounting", () => {
       kind: "settlement",
       amount_minor: "6000",
       source_kind: "administrative_funding_movement",
+      actor_kind: "operator",
+      actor_id: actor.id,
     });
     expect(created.state).toBe("confirmed");
   });

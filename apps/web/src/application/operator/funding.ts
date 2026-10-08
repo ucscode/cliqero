@@ -475,7 +475,7 @@ export class OperatorFundingService {
         sourceKind: "administrative_funding_movement",
         sourceId: movementId,
         reason: "Administrative funding settled outstanding account debt before availability",
-        actor: { kind: "account", id: actorId },
+        actor: { kind: "operator", id: actorId },
         correlationId: fundingId,
         idempotencyKey: `debt-settlement:administrative-funding:${movementId}`,
       })

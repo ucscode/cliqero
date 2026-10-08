@@ -312,6 +312,40 @@ suite("purchase financial distribution", () => {
     ).toBe("0");
   });
 
+  it("serializes pending source correction against its concurrent maturity settlement", async () => {
+    await app.database.query(
+      `update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`,
+    );
+    const value = await completed();
+    await grantFinanceManage(value.seller.id);
+    const source = await sellerEarning(value.purchaseId);
+
+    const [settlement, correction] = await Promise.all([
+      app.settlement.settle({ now: new Date(Date.now() + 3_601_000), batchSize: 20 }),
+      app.earningsCorrections.create(value.seller.id, {
+        sourceEntryId: source.id,
+        amountMinor: "20",
+        reason: "Concurrent correction and pending settlement",
+        idempotencyKey: newId(),
+      }),
+    ]);
+
+    expect(settlement.claimed).toBeGreaterThanOrEqual(1);
+    expect(settlement.settled).toBe(settlement.claimed);
+    expect(
+      BigInt(correction.correction.pendingMinor) + BigInt(correction.correction.availableMinor),
+    ).toBe(20n);
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(
+      source.amount.minorAmount - 20n,
+    );
+    const settlementCount = await app.database.query<{ count: string }>(
+      `select count(*)::text count from ledger_capability.entry_settlements
+        where original_entry_id=(select id from ledger_capability.entries where uuid=$1)`,
+      [source.id],
+    );
+    expect(settlementCount.rows[0]?.count).toBe("1");
+  });
+
   it("settles only the uncanceled portion of a corrected pending earning against existing debt", async () => {
     await app.database.query(
       `update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`,
@@ -644,6 +678,14 @@ suite("purchase financial distribution", () => {
     expect(settlements.rows).toEqual([
       { amount_minor: "6000", source_id: adjustment.adjustment.id },
     ]);
+    const actor = await app.database.query<{ actor_kind: string; actor_id: string }>(
+      `select debt.actor_kind,actor.uuid actor_id
+         from ledger_capability.account_debt_entries debt
+         left join identity_capability.accounts actor on actor.id=debt.actor_id
+        where debt.source_kind='earnings_adjustment' and debt.source_id=$1`,
+      [adjustment.adjustment.id],
+    );
+    expect(actor.rows).toEqual([{ actor_kind: "operator", actor_id: owner.id }]);
   });
 
   it("serializes concurrent adjustment retries and settles debt only once", async () => {

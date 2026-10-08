@@ -158,7 +158,7 @@ export class AccountDebtService {
       incomingMinor: amountMinor,
       kind: "write_off",
       wallet: "account",
-      actor: { kind: "account", id: actorId },
+      actor: { kind: "operator", id: actorId },
       capByOutstanding: false,
     });
   }
