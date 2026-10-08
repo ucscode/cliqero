@@ -33,6 +33,7 @@ const fundingStatusResourceSchema = fundingStatusSchema.extend({
   customer_action: z.string().nullable(),
   account: accountSchema.nullable(),
   operator_details: operatorFundingSummarySchema.nullable(),
+  reversal: fundingStatusSchema.shape.reversal,
 });
 const fundingDetailResourceSchema = fundingDetailSchema.extend({
   origin: z.enum(["provider", "administrative"]),
@@ -60,6 +61,7 @@ const fundingDetailResourceSchema = fundingDetailSchema.extend({
   evidence: fundingDetailSchema.shape.evidence.nullable(),
   account: accountSchema.nullable(),
   operator_details: operatorFundingDetailSchema.nullable(),
+  reversal: fundingDetailSchema.shape.reversal,
 });
 const ownerQuery = z.object({
   state: fundingStateSchema.optional(),
@@ -187,27 +189,37 @@ export function registerFundingRoutes(app: OpenAPIHono<Env>, container: Applicat
           const page = await container.operatorFunding.list(query);
           return c.json(
             {
-              items: page.items.map((item) => ({
-                id: item.id,
-                origin: item.origin,
-                provider: item.provider,
-                provider_display_name: item.provider
-                  ? container.providers.displayName(item.provider)
-                  : null,
-                customer_action: null,
-                funding_reference:
-                  item.providerReference ?? item.administrativeReference ?? item.id,
-                provider_transaction_id: item.providerTransactionId,
-                state: item.state,
-                amount_minor: item.canonicalAmountMinor,
-                currency: item.canonicalCurrency,
-                collection_amount_minor: item.collectionAmountMinor,
-                collection_currency: item.collectionCurrency,
-                created_at: item.createdAt,
-                confirmed_at: item.confirmedAt,
-                account: item.account,
-                operator_details: item,
-              })),
+              items: await Promise.all(
+                page.items.map(async (item) => ({
+                  id: item.id,
+                  origin: item.origin,
+                  provider: item.provider,
+                  provider_display_name: item.provider
+                    ? container.providers.displayName(item.provider)
+                    : null,
+                  customer_action: null,
+                  funding_reference:
+                    item.providerReference ?? item.administrativeReference ?? item.id,
+                  provider_transaction_id: item.providerTransactionId,
+                  state: item.state,
+                  amount_minor: item.canonicalAmountMinor,
+                  currency: item.canonicalCurrency,
+                  collection_amount_minor: item.collectionAmountMinor,
+                  collection_currency: item.collectionCurrency,
+                  created_at: item.createdAt,
+                  confirmed_at: item.confirmedAt,
+                  account: item.account,
+                  operator_details: {
+                    ...item,
+                    reversal: projectOperatorReversalSummary(
+                      await container.fundingReversals.summary(item.id),
+                    ),
+                  },
+                  reversal: projectReversalSummary(
+                    await container.fundingReversals.summary(item.id),
+                  ),
+                })),
+              ),
               next_cursor: page.nextCursor,
             },
             200,
@@ -227,28 +239,31 @@ export function registerFundingRoutes(app: OpenAPIHono<Env>, container: Applicat
         });
         return c.json(
           {
-            items: page.items.map((item) => ({
-              id: item.id,
-              origin: item.origin,
-              provider: item.provider,
-              provider_display_name: item.provider
-                ? container.providers.displayName(item.provider)
-                : null,
-              customer_action: item.provider
-                ? container.providers.customerActionLabel(item.provider)
-                : null,
-              funding_reference: item.providerReference ?? item.administrativeReference,
-              provider_transaction_id: item.providerTransactionId,
-              state: item.state,
-              amount_minor: item.canonicalAmountMinor,
-              currency: item.canonicalCurrency,
-              collection_amount_minor: item.collectionAmountMinor,
-              collection_currency: item.collectionCurrency,
-              created_at: item.createdAt,
-              confirmed_at: item.confirmedAt,
-              account: null,
-              operator_details: null,
-            })),
+            items: await Promise.all(
+              page.items.map(async (item) => ({
+                id: item.id,
+                origin: item.origin,
+                provider: item.provider,
+                provider_display_name: item.provider
+                  ? container.providers.displayName(item.provider)
+                  : null,
+                customer_action: item.provider
+                  ? container.providers.customerActionLabel(item.provider)
+                  : null,
+                funding_reference: item.providerReference ?? item.administrativeReference,
+                provider_transaction_id: item.providerTransactionId,
+                state: item.state,
+                amount_minor: item.canonicalAmountMinor,
+                currency: item.canonicalCurrency,
+                collection_amount_minor: item.collectionAmountMinor,
+                collection_currency: item.collectionCurrency,
+                created_at: item.createdAt,
+                confirmed_at: item.confirmedAt,
+                account: null,
+                operator_details: null,
+                reversal: projectReversalSummary(await container.fundingReversals.summary(item.id)),
+              })),
+            ),
             next_cursor: page.nextCursor,
           },
           200,
@@ -530,7 +545,12 @@ export function registerFundingRoutes(app: OpenAPIHono<Env>, container: Applicat
               origin: "provider" as const,
               ...(await projectFundingStatus(container, funding.accountId, funding)),
               account: admin.account,
-              operator_details: admin,
+              operator_details: {
+                ...admin,
+                reversal: projectOperatorReversalSummary(
+                  await container.fundingReversals.summary(id),
+                ),
+              },
             },
             200,
           );
@@ -789,9 +809,35 @@ function administrativeDetailProjection(
     verification: null,
     confirmed_at: funding.confirmedAt,
     wallet_credit_state: funding.walletCredit?.state ?? null,
+    reversal: { state: "none" as const, reversed_amount_minor: "0", remaining_amount_minor: "0" },
     evidence: null,
     created_at: funding.createdAt,
     account: operator ? funding.account : null,
-    operator_details: operator ? funding : null,
+    operator_details: operator
+      ? {
+          ...funding,
+          reversal: { state: "none" as const, reversedAmountMinor: "0", remainingAmountMinor: "0" },
+        }
+      : null,
+  };
+}
+
+function projectReversalSummary(
+  value: Awaited<ReturnType<ApplicationContainer["fundingReversals"]["summary"]>>,
+) {
+  return {
+    state: value.state,
+    reversed_amount_minor: value.reversedAmountMinor,
+    remaining_amount_minor: value.remainingAmountMinor,
+  };
+}
+
+function projectOperatorReversalSummary(
+  value: Awaited<ReturnType<ApplicationContainer["fundingReversals"]["summary"]>>,
+) {
+  return {
+    state: value.state,
+    reversedAmountMinor: value.reversedAmountMinor,
+    remainingAmountMinor: value.remainingAmountMinor,
   };
 }

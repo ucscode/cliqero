@@ -29,9 +29,15 @@ describe("FundingCreditReconciliationService", () => {
     };
     const resultCredit = { id: creditId, state: "pending" };
     const funding = {
-      findById: vi.fn(async () => ({ id: fundingId, state: "confirmed" })),
+      findById: vi.fn(async () => ({
+        id: fundingId,
+        state: "confirmed",
+        canonicalAmount: { minorAmount: 100n, currency: "USD" },
+      })),
     };
     const wallet = {
+      lockAccount: vi.fn(async () => undefined),
+      reversedAmountForFunding: vi.fn(async () => 0n),
       findCreditByFunding: vi
         .fn()
         .mockResolvedValueOnce(null)

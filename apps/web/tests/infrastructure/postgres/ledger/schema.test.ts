@@ -9,9 +9,9 @@ describe("canonical finance ledger schema", () => {
   );
 
   it("defines signed, append-only USD earnings adjustments with actor and account audit", () => {
-    const table = schema.slice(
-      schema.indexOf("CREATE TABLE ledger_capability.earnings_adjustments"),
-    );
+    const start = schema.indexOf("CREATE TABLE ledger_capability.earnings_adjustments");
+    const end = schema.indexOf("CREATE TABLE ", start + 1);
+    const table = schema.slice(start, end);
     expect(table).toContain("amount_minor bigint NOT NULL");
     expect(table).toContain("reason text NOT NULL");
     expect(table).toContain("reference text");

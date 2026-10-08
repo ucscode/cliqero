@@ -1661,7 +1661,7 @@ CREATE TABLE wallet_capability.credits (
     account_id bigint NOT NULL,
     funding_id bigint NOT NULL,
     CONSTRAINT wallet_credit_positive CHECK ((amount_minor > 0)),
-    CONSTRAINT wallet_credit_state_valid CHECK ((state = ANY (ARRAY['pending'::text, 'available'::text]))),
+    CONSTRAINT wallet_credit_state_valid CHECK ((state = ANY (ARRAY['pending'::text, 'available'::text, 'cancelled'::text]))),
     CONSTRAINT wallet_credit_usd CHECK ((currency = 'USD'::text))
 );
 
@@ -4064,5 +4064,68 @@ CREATE TRIGGER payout_returns_append_only
   FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
 COMMENT ON TABLE withdrawal_capability.payout_returns IS
   'Append-only evidence of a returned completed payout; the reservation event restores gross earnings and debt is settled before availability.';
+
+-- Provider funding reversals are immutable external evidence plus their exact
+-- account recovery allocation. Pending-credit value is neutralized before
+-- available wallet balances are reclaimed.
+CREATE TABLE funding_capability.funding_reversals (
+    uuid uuid NOT NULL,
+    funding_id bigint NOT NULL,
+    account_id bigint NOT NULL,
+    amount_minor bigint NOT NULL,
+    currency text NOT NULL DEFAULT 'USD',
+    source text NOT NULL,
+    reason text NOT NULL,
+    provider_reference text,
+    provider_event_id uuid,
+    idempotency_key text NOT NULL,
+    request_fingerprint text NOT NULL,
+    correlation_id uuid NOT NULL,
+    created_by bigint,
+    actor_system text,
+    pending_credit_minor bigint NOT NULL DEFAULT 0,
+    funding_wallet_minor bigint NOT NULL DEFAULT 0,
+    earnings_wallet_minor bigint NOT NULL DEFAULT 0,
+    debt_minor bigint NOT NULL DEFAULT 0,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT funding_reversals_positive CHECK (amount_minor > 0),
+    CONSTRAINT funding_reversals_usd CHECK (currency = 'USD'),
+    CONSTRAINT funding_reversals_source_valid CHECK (source IN ('operator','provider_event')),
+    CONSTRAINT funding_reversals_reason_nonempty CHECK (length(btrim(reason)) > 0),
+    CONSTRAINT funding_reversals_allocation_nonnegative CHECK (
+      pending_credit_minor >= 0 AND funding_wallet_minor >= 0 AND
+      earnings_wallet_minor >= 0 AND debt_minor >= 0
+    ),
+    CONSTRAINT funding_reversals_allocation_sum CHECK (
+      pending_credit_minor + funding_wallet_minor + earnings_wallet_minor + debt_minor = amount_minor
+    ),
+    CONSTRAINT funding_reversals_actor_valid CHECK (
+      (source='operator' AND created_by IS NOT NULL AND actor_system IS NULL AND provider_event_id IS NULL) OR
+      (source='provider_event' AND created_by IS NULL AND length(btrim(actor_system)) > 0 AND provider_event_id IS NOT NULL)
+    ),
+    CONSTRAINT funding_reversals_uuid_unique UNIQUE (uuid),
+    CONSTRAINT funding_reversals_idempotency_unique UNIQUE (idempotency_key),
+    CONSTRAINT funding_reversals_provider_event_unique UNIQUE (provider_event_id),
+    CONSTRAINT funding_reversals_funding_fk FOREIGN KEY (funding_id)
+      REFERENCES funding_capability.funding_transactions(id),
+    CONSTRAINT funding_reversals_account_fk FOREIGN KEY (account_id)
+      REFERENCES identity_capability.accounts(id),
+    CONSTRAINT funding_reversals_event_fk FOREIGN KEY (provider_event_id)
+      REFERENCES payment_capability.provider_events(id),
+    CONSTRAINT funding_reversals_actor_fk FOREIGN KEY (created_by)
+      REFERENCES identity_capability.accounts(id)
+);
+CREATE INDEX funding_reversals_history_idx
+  ON funding_capability.funding_reversals (created_at DESC, uuid DESC);
+CREATE INDEX funding_reversals_funding_idx
+  ON funding_capability.funding_reversals (funding_id, created_at DESC, id DESC);
+CREATE INDEX funding_reversals_account_idx
+  ON funding_capability.funding_reversals (account_id, created_at DESC, id DESC);
+CREATE TRIGGER funding_reversals_append_only
+  BEFORE UPDATE OR DELETE ON funding_capability.funding_reversals
+  FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
+COMMENT ON TABLE funding_capability.funding_reversals IS
+  'Immutable provider-funding reversal evidence and allocation across pending credit, Funding, Earnings, and account debt.';
 
 -- End of canonical PostgreSQL baseline.

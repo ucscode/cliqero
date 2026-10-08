@@ -93,6 +93,13 @@ function configure(
       ),
     },
     walletRepository: { findCreditByFunding: vi.fn(async () => walletCredit) },
+    fundingReversals: {
+      summary: vi.fn(async () => ({
+        state: "none",
+        reversedAmountMinor: "0",
+        remainingAmountMinor: "1250",
+      })),
+    },
   };
 }
 

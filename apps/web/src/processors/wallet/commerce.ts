@@ -1,4 +1,5 @@
 import { newId } from "@/kernel/ids";
+import { Money } from "@/modules/money/money";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { FundingRepository } from "@/modules/funding/funding";
 import type { WalletRepository } from "@/modules/wallet/wallet";
@@ -16,15 +17,21 @@ export class WalletCreditProcessor {
   ) {}
   async process(id: string) {
     return this.uow.transaction(async () => {
+      const owner = await this.funding.findById(id);
+      if (!owner) return null;
+      await this.wallet.lockAccount(owner.accountId);
       const f = await this.funding.findById(id, { forUpdate: true });
       if (!f || f.state !== "confirmed") return null;
       const existing = await this.wallet.findCreditByFunding(f.id);
       if (existing) return existing;
+      const unreversed =
+        f.canonicalAmount.minorAmount - (await this.wallet.reversedAmountForFunding(f.id));
+      if (unreversed <= 0n) return null;
       const credit = {
         id: newId(),
         accountId: f.accountId,
         fundingId: f.id,
-        amount: f.canonicalAmount,
+        amount: Money.of(unreversed, "USD"),
         state: "pending" as const,
       };
       await this.wallet.createCredit(credit);
@@ -53,7 +60,10 @@ export class WalletAvailabilityProcessor {
   ) {}
   async process(id: string) {
     return this.uow.transaction(async () => {
-      const credit = await this.wallet.findPendingCredit(id);
+      const initial = await this.wallet.findPendingCredit(id);
+      if (!initial) return false;
+      await this.wallet.lockAccount(initial.accountId);
+      const credit = await this.wallet.findPendingCreditForUpdate(id);
       if (!credit) return false;
       await this.debt?.settleInflow({
         accountId: credit.accountId,

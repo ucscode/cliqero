@@ -40,6 +40,8 @@ if (container.paystack) {
       container.payments,
       container.purchases,
       container.purchaseReversal,
+      container.funding,
+      container.fundingReversals,
     ),
   );
 }

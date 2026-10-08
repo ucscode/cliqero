@@ -13,7 +13,7 @@ export interface WalletCredit {
   accountId: Id;
   fundingId: Id;
   amount: Money;
-  state: "pending" | "available";
+  state: "pending" | "available" | "cancelled";
   createdAt?: Date;
   availableAt?: Date;
 }
@@ -25,7 +25,12 @@ export interface WalletDebit {
   createdAt?: Date;
 }
 export type WalletTransaction = {
-  kind: "funding_credit" | "purchase_debit" | "funding_adjustment" | "funding_transfer";
+  kind:
+    | "funding_credit"
+    | "purchase_debit"
+    | "funding_adjustment"
+    | "funding_transfer"
+    | "funding_reversal";
   id: Id;
   sourceId: Id;
   historyId: string;
@@ -45,7 +50,9 @@ export type WalletTransactionPage = {
 export interface WalletRepository {
   summary(accountId: Id, options?: { forUpdate?: boolean }): Promise<WalletSummary>;
   findCreditByFunding(fundingId: Id): Promise<WalletCredit | null>;
+  reversedAmountForFunding(fundingId: Id): Promise<bigint>;
   findPendingCredit(id: Id): Promise<WalletCredit | null>;
+  findPendingCreditForUpdate(id: Id): Promise<WalletCredit | null>;
   findFundingCreditWork(limit?: number): Promise<readonly { id: Id }[]>;
   findPendingCredits(limit?: number): Promise<readonly WalletCredit[]>;
   createCredit(credit: WalletCredit): Promise<void>;

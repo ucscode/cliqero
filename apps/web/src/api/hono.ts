@@ -20,6 +20,7 @@ import { registerTreasuryRoutes } from "./routes/treasury";
 import { registerPaymentRoutes } from "./routes/payments";
 import { registerHierarchyRoutes } from "./routes/hierarchy";
 import { registerFundingRoutes } from "./routes/funding";
+import { registerFundingReversalRoutes } from "./routes/funding-reversals";
 import { registerPaymentCallbackRoutes } from "./routes/payment-callbacks";
 import { registerReviewRoutes } from "./routes/reviews";
 import { registerPackageEntitlementRoutes } from "./routes/package/entitlements";
@@ -37,6 +38,7 @@ import { paymentsOpenApiMetadata } from "./routes/payments/metadata";
 import { accountDebtOpenApiMetadata } from "./routes/account-debt/metadata";
 import { registerPurchaseReconciliationRoutes } from "./routes/purchases/reconciliation";
 import { purchaseRecoveryOpenApiMetadata } from "./routes/purchases/metadata";
+import { fundingReversalOpenApiMetadata } from "./routes/funding-reversals/metadata";
 
 export function createApiApp(
   container: ApplicationContainer,
@@ -80,6 +82,7 @@ export function createApiApp(
   registerHierarchyRoutes(app, container);
   registerReviewRoutes(app, container);
   registerFundingRoutes(app, container);
+  registerFundingReversalRoutes(app, container);
   registerPaymentCallbackRoutes(app, container);
   registerPackageEntitlementRoutes(app, container);
   registerAccountDebtRoutes(app, container);
@@ -108,6 +111,7 @@ export function generateOpenApiDocument(app: OpenAPIHono<Env>) {
     accountsOpenApiMetadata,
     financeOpenApiMetadata,
     fundingOperationsOpenApiMetadata,
+    fundingReversalOpenApiMetadata,
     treasuryOpenApiMetadata,
     withdrawalOpenApiMetadata,
     operatorReviewOpenApiMetadata,

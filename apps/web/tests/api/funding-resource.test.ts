@@ -93,6 +93,13 @@ function createApp(principal: any, overrides: Record<string, any> = {}) {
         applied: true,
       })),
     },
+    fundingReversals: {
+      summary: vi.fn(async () => ({
+        state: "none",
+        reversedAmountMinor: "0",
+        remainingAmountMinor: "0",
+      })),
+    },
     ...overrides,
   } as any);
 }

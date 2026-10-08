@@ -50,12 +50,17 @@ export type FundingPreparation = {
 
 export type WalletTransaction = {
   id: string;
-  type: "funding_credit" | "purchase_debit" | "funding_adjustment" | "funding_transfer";
+  type:
+    | "funding_credit"
+    | "purchase_debit"
+    | "funding_adjustment"
+    | "funding_transfer"
+    | "funding_reversal";
   direction: "credit" | "debit";
   label: string;
   reference: string | null;
   source_id: string;
-  state: "pending" | "available" | "complete";
+  state: "pending" | "available" | "cancelled" | "complete";
   amount_minor: string;
   currency: string;
   created_at: string;
@@ -81,7 +86,7 @@ export type FundingStatus = {
     | "cancelled"
     | "expired"
     | "reconciliation_pending";
-  wallet_credit_state: "pending" | "available" | null;
+  wallet_credit_state: "pending" | "available" | "cancelled" | null;
   provider: string;
   provider_display_name: string;
   customer_action: string | null;

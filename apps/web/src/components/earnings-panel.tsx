@@ -28,6 +28,7 @@ export function customerEarningLabel(
   entry: Pick<EarningsEntry, "entry_type" | "direction" | "recipient_role" | "reason">,
 ) {
   if (entry.entry_type === "earnings-adjustment") return entry.reason || "Earnings adjustment";
+  if (entry.entry_type === "funding-reversal") return entry.reason || "Provider funding reversal";
   if (entry.entry_type === "purchase-earnings" && entry.direction === "credit") {
     if (entry.recipient_role === "referral") return "Referral commission";
     if (entry.recipient_role === "seller") return "Sale proceeds";

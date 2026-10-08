@@ -83,6 +83,8 @@ import { FeePolicyLoader, type FeePolicySource } from "@/modules/fee/policy";
 import { PostgresCheckoutRepository } from "./postgres/checkout/repository";
 import { FundingService } from "@/application/funding/service";
 import { FundingCreditReconciliationService } from "@/application/funding/reconciliation";
+import { FundingReversalService } from "@/application/funding/reversals";
+import { PostgresFundingReversalRepository } from "@/infrastructure/postgres/funding/reversals";
 import { FundingInitializationProcessor } from "@/application/funding/initialization";
 import { FundingVerificationProcessor } from "@/application/funding/verification";
 import { PaystackVerificationRecoveryPolicy } from "@/application/payment/paystack/recovery";
@@ -113,6 +115,7 @@ import { EarningsAdjustmentService } from "@/application/finance/earnings-adjust
 import { PostgresEarningsAdjustmentRepository } from "@/infrastructure/postgres/ledger/earnings-adjustments";
 import { PostgresAccountDebtRepository } from "@/infrastructure/postgres/ledger/account-debt";
 import { AccountDebtService } from "@/application/finance/account-debt";
+import { AccountValueRecoveryService } from "@/application/finance/account-value-recovery";
 import { PostgresApiKeyRepository, ApiKeyService } from "./postgres/api-keys";
 import { ApiPrincipalResolver } from "@/infrastructure/identity/api-principal";
 import { HierarchyService } from "@/application/hierarchy";
@@ -720,6 +723,24 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     () =>
       new AccountDebtService(new PostgresAccountDebtRepository(database), operators(), database),
   );
+  const accountValueRecovery = lazy(
+    () =>
+      new AccountValueRecoveryService(
+        new PostgresFundingReversalRepository(database),
+        accountDebt(),
+      ),
+  );
+  const fundingReversals = lazy(
+    () =>
+      new FundingReversalService(
+        new PostgresFundingReversalRepository(database),
+        funding(),
+        accountValueRecovery(),
+        operators(),
+        auditRecorder(),
+        database,
+      ),
+  );
   const blog = lazy(() => getBlogService());
 
   return {
@@ -870,6 +891,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get fundingCreditReconciliation() {
       return fundingCreditReconciliation();
+    },
+    get fundingReversals() {
+      return fundingReversals();
     },
     get walletCheckoutPayment() {
       return walletCheckoutPayment();

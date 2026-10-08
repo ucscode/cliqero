@@ -237,6 +237,8 @@ const domainDescriptions: Record<string, string> = {
   "Wallet Transfer Quote": "A wallet transfer quote is a read-only fee and net-amount calculation.",
   "Funding Transactions":
     "Provider-neutral funding transactions are persisted and processed idempotently.",
+  "Funding Reversals":
+    "Funding reversals preserve confirmed provider evidence and expose immutable, auditable recovery allocations.",
   Withdrawals:
     "Withdrawal operations enforce account ownership, reserved-balance, and supported management transitions.",
   "Withdrawal Policy":
@@ -311,6 +313,8 @@ function domainForPath(path: string): string {
   if (relative.startsWith("earnings/adjustments")) return "Earnings Adjustments";
   if (relative === "funding-transactions" || relative.startsWith("funding-transactions/"))
     return "Funding Transactions";
+  if (relative === "funding-reversals" || relative.startsWith("funding-reversals/"))
+    return "Funding Reversals";
   if (relative.startsWith("withdrawal")) return "Withdrawals";
   if (relative.startsWith("hierarchy")) return "Hierarchy";
   if (relative.startsWith("referral")) return "Referral Network";

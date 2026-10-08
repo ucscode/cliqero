@@ -45,6 +45,7 @@ export async function projectFundingStatus(
       ? await container.bankTransferEvidence.findForFunding(accountId, funding.id)
       : null;
   const walletCredit = await container.walletRepository.findCreditByFunding(funding.id);
+  const reversal = await container.fundingReversals.summary(funding.id);
   return fundingDetailSchema.parse({
     id: funding.id,
     state: funding.state,
@@ -101,6 +102,11 @@ export async function projectFundingStatus(
     verification: projectVerificationObservation(funding.providerInitialization?.verification),
     confirmed_at: funding.confirmedAt?.toISOString() ?? null,
     wallet_credit_state: walletCredit?.state ?? null,
+    reversal: {
+      state: reversal.state,
+      reversed_amount_minor: reversal.reversedAmountMinor,
+      remaining_amount_minor: reversal.remainingAmountMinor,
+    },
     evidence: evidence
       ? {
           id: evidence.id,

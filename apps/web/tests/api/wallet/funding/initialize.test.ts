@@ -38,6 +38,13 @@ function configure(state: string, providerName = "paystack") {
     funding: { findById: vi.fn(async () => funding) },
     fundingInitialization: { process },
     walletRepository: { findCreditByFunding: vi.fn(async () => null) },
+    fundingReversals: {
+      summary: vi.fn(async () => ({
+        state: "none",
+        reversedAmountMinor: "0",
+        remainingAmountMinor: "0",
+      })),
+    },
   };
   return { funding, process };
 }

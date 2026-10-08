@@ -32,7 +32,8 @@ export class PostgresWalletRepository implements WalletRepository {
                      select 1 from wallet_capability.funding_adjustments adjustment
                       where adjustment.uuid::text=debt.source_id and adjustment.account_id=debt.account_id
                         and adjustment.amount_minor > 0)))),0)
-           - coalesce((select sum(amount_minor) from wallet_capability.transfer_entries where wallet='funding' and direction='debit' and correlation_id in (select correlation_id from wallet_capability.transfers where account_id=(select id from identity_capability.accounts where uuid=$1))),0) available,
+           - coalesce((select sum(amount_minor) from wallet_capability.transfer_entries where wallet='funding' and direction='debit' and correlation_id in (select correlation_id from wallet_capability.transfers where account_id=(select id from identity_capability.accounts where uuid=$1))),0)
+           - coalesce((select sum(funding_wallet_minor) from funding_capability.funding_reversals where account_id=(select id from identity_capability.accounts where uuid=$1)),0) available,
            coalesce((select sum(amount_minor) from wallet_capability.credits where account_id=(select id from identity_capability.accounts where uuid=$1) and state='pending'),0) pending`,
         [accountId],
       )
@@ -52,6 +53,16 @@ export class PostgresWalletRepository implements WalletRepository {
     ).rows[0];
     return r ? this.credit(r) : null;
   }
+  async reversedAmountForFunding(id: string) {
+    const row = (
+      await this.sql.query<{ amount: string }>(
+        `select coalesce(sum(amount_minor),0)::text amount from funding_capability.funding_reversals
+        where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)`,
+        [id],
+      )
+    ).rows[0];
+    return BigInt(row?.amount ?? "0");
+  }
   async findPendingCredit(id: string) {
     const row = (
       await this.sql.query<any>(
@@ -59,7 +70,19 @@ export class PostgresWalletRepository implements WalletRepository {
            from wallet_capability.credits c
            join identity_capability.accounts a on a.id=c.account_id
            join funding_capability.funding_transactions f on f.id=c.funding_id
-          where c.uuid=$1 and c.state='pending' for update of c`,
+          where c.uuid=$1 and c.state='pending'`,
+        [id],
+      )
+    ).rows[0];
+    return row ? this.credit(row) : null;
+  }
+  async findPendingCreditForUpdate(id: string) {
+    const row = (
+      await this.sql.query<any>(
+        `select c.*,c.uuid as id,a.uuid as account_uuid,f.uuid as funding_uuid
+         from wallet_capability.credits c join identity_capability.accounts a on a.id=c.account_id
+         join funding_capability.funding_transactions f on f.id=c.funding_id
+        where c.uuid=$1 and c.state='pending' for update of c`,
         [id],
       )
     ).rows[0];
@@ -74,6 +97,9 @@ export class PostgresWalletRepository implements WalletRepository {
             and not exists (
               select 1 from wallet_capability.credits c where c.funding_id=f.id
             )
+            and f.canonical_amount_minor > coalesce((
+              select sum(r.amount_minor) from funding_capability.funding_reversals r where r.funding_id=f.id
+            ),0)
           order by f.updated_at,f.id
           limit $1`,
         [Math.max(1, Math.min(limit, 50))],
@@ -156,6 +182,11 @@ export class PostgresWalletRepository implements WalletRepository {
                 case when e.direction='debit' then 'Funding to earnings' else 'Earnings to funding' end,t.correlation_id::text,null::text,t.correlation_id::text
            from wallet_capability.transfer_entries e join wallet_capability.transfers t on t.id=e.transfer_id
           where e.wallet='funding' and t.account_id=(select id from identity_capability.accounts where uuid=$1)
+         union all
+         select 'funding_reversal','debit','funding-reversal:'||r.uuid::text,r.uuid::text,r.uuid::text,
+                r.funding_wallet_minor,'USD','complete',r.created_at,'Provider funding reversal: '||r.reason,r.provider_reference,null::text,null::text
+           from funding_capability.funding_reversals r
+          where r.account_id=(select id from identity_capability.accounts where uuid=$1) and r.funding_wallet_minor>0
          ) history
          where ($2::timestamptz is null or (created_at,history_id)<($2::timestamptz,$3::text))
          order by created_at desc,history_id desc limit $4`,

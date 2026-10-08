@@ -110,6 +110,39 @@ function schemaObjects(documentValue: unknown): Record<string, any>[] {
 }
 
 describe("public OpenAPI contract quality", () => {
+  it("documents immutable Funding Reversals as a scoped resource with idempotency", () => {
+    const operations = document.paths["/api/funding-reversals"] as any;
+    expect(operations.get.tags).toEqual(["Funding Reversals"]);
+    expect(operations.get.summary).toBeTruthy();
+    expect(operations.get.parameters).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "limit", in: "query" })]),
+    );
+    expect(
+      operations.get.responses["200"].content["application/json"].schema.properties.items.items
+        .properties,
+    ).toMatchObject({
+      funding_id: { type: "string", format: "uuid" },
+      recovery: { type: "object" },
+    });
+    expect(operations.post.tags).toEqual(["Funding Reversals"]);
+    expect(operations.post.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "idempotency-key", in: "header", required: true }),
+      ]),
+    );
+    expect(operations.post.requestBody.content["application/json"].schema.properties).toMatchObject(
+      {
+        funding_id: { type: "string", format: "uuid" },
+        amount_minor: { type: "string" },
+        reason: { type: "string" },
+      },
+    );
+    expect(operations.post.responses["409"]).toBeDefined();
+    expect(document.paths["/api/funding-reversals/{reversalId}"]?.get).toBeDefined();
+    expect(document.paths["/api/funding-reversals/{reversalId}"]).not.toHaveProperty("patch");
+    expect(document.paths["/api/funding-reversals/{reversalId}"]).not.toHaveProperty("delete");
+  });
+
   it("documents normalized funding scopes, methods, and adjustment idempotency", () => {
     const fundingList = document.paths["/api/funding-transactions"]?.get as any;
     expect(fundingList["x-required-api-scopes-any-of"]).toEqual(["wallet:read", "payments:read"]);

@@ -14,6 +14,7 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
     amount: Money;
     correlationId: string;
   }): Promise<FundsReservation> {
+    await this.lockAccount(input.accountId);
     await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [
       `withdrawal:${input.accountId}`,
     ]);
@@ -30,6 +31,7 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
         where debt.account_id=(select id from identity_capability.accounts where uuid=$1) and debt.wallet='earnings' and debt.kind='settlement'),0)
       - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
         and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
+      - coalesce((select sum(funding_reversal.earnings_wallet_minor) from funding_capability.funding_reversals funding_reversal where funding_reversal.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
       )::bigint as minor`,
         [input.accountId, input.amount.currency],
       )
@@ -68,6 +70,7 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
     };
   }
   async available(accountId: string, currency: string): Promise<bigint> {
+    await this.lockAccount(accountId);
     const row = (
       await this.sql.query<{ minor: string }>(
         `select (
@@ -81,6 +84,7 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
         where debt.account_id=(select id from identity_capability.accounts where uuid=$1) and debt.wallet='earnings' and debt.kind='settlement'),0)
       - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
         and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
+      - coalesce((select sum(funding_reversal.earnings_wallet_minor) from funding_capability.funding_reversals funding_reversal where funding_reversal.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
       )::bigint as minor`,
         [accountId, currency],
       )
@@ -93,6 +97,7 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
     kind: "released" | "completed";
     correlationId: string;
   }): Promise<void> {
+    await this.lockAccount(input.accountId);
     await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [
       `withdrawal:${input.accountId}`,
     ]);
@@ -131,6 +136,7 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
     correlationId: string;
     idempotencyKey: string;
   }) {
+    await this.lockAccount(input.accountId);
     await this.sql.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [
       `withdrawal:${input.accountId}`,
     ]);
@@ -178,6 +184,7 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
     amount: Money;
     correlationId: string;
   }) {
+    await this.lockAccount(input.accountId);
     await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
       `withdrawal:${input.accountId}`,
     ]);
@@ -227,6 +234,7 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
     );
   }
   async remove(withdrawalId: string, accountId: string) {
+    await this.lockAccount(accountId);
     await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
       `withdrawal:${accountId}`,
     ]);
@@ -255,6 +263,7 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
     ]);
   }
   async removeForRoot(withdrawalId: string, accountId: string) {
+    await this.lockAccount(accountId);
     await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
       `withdrawal:${accountId}`,
     ]);
@@ -296,5 +305,11 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
       reservedMinor: BigInt(row.reserved_minor),
       completedMinor: BigInt(row.completed_minor),
     }));
+  }
+
+  private async lockAccount(accountId: string) {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `wallet-transfer:${accountId}`,
+    ]);
   }
 }

@@ -20,6 +20,8 @@ describe("WalletCreditProcessor work discovery", () => {
         .mockResolvedValueOnce([{ id: funding.id }])
         .mockResolvedValueOnce([]),
       findCreditByFunding: vi.fn(async () => null),
+      lockAccount: vi.fn(async () => undefined),
+      reversedAmountForFunding: vi.fn(async () => 0n),
       createCredit: vi.fn(async () => undefined),
     };
     const fundingRepository = { findById: vi.fn(async () => funding) };
@@ -31,7 +33,8 @@ describe("WalletCreditProcessor work discovery", () => {
     await processor.runBatch();
 
     expect(wallet.findFundingCreditWork).toHaveBeenCalledTimes(2);
-    expect(fundingRepository.findById).toHaveBeenCalledOnce();
+    expect(fundingRepository.findById).toHaveBeenCalledTimes(2);
+    expect(fundingRepository.findById).toHaveBeenNthCalledWith(1, funding.id);
     expect(fundingRepository.findById).toHaveBeenCalledWith(funding.id, {
       forUpdate: true,
     });

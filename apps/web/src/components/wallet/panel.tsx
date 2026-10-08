@@ -98,7 +98,9 @@ export function walletActivityLabel(
       ? (transaction.provider_display_name ?? "Provider funding")
       : transaction.type === "purchase_debit"
         ? "Listing purchase"
-        : "Wallet movement")
+        : transaction.type === "funding_reversal"
+          ? "Provider funding reversal"
+          : "Wallet movement")
   );
 }
 
@@ -111,7 +113,13 @@ export function walletActivityReference(
 }
 
 export function walletActivityState(state: WalletTransaction["state"]) {
-  return state === "available" ? "Funded" : state === "complete" ? "Completed" : "Pending";
+  return state === "available"
+    ? "Funded"
+    : state === "complete"
+      ? "Completed"
+      : state === "cancelled"
+        ? "Cancelled"
+        : "Pending";
 }
 
 export function WalletPanel({

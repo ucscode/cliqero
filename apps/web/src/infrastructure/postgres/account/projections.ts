@@ -95,6 +95,9 @@ export class AccountProjectionService {
            union all
            select 'USD'::text,'available'::text,amount_minor from ledger_capability.earnings_adjustments
              where account_id=(select id from identity_capability.accounts where uuid=$1)
+           union all
+           select 'USD'::text,'available'::text,-earnings_wallet_minor from funding_capability.funding_reversals
+             where account_id=(select id from identity_capability.accounts where uuid=$1)
          ) effective group by currency,balance_state order by currency,balance_state`,
         [accountId],
       )
@@ -125,6 +128,13 @@ export class AccountProjectionService {
                     'available'::text balance_state,a.reason,a.reference,a.created_at
                from ledger_capability.earnings_adjustments a
               where a.account_id=(select id from identity_capability.accounts where uuid=$1)
+             union all
+             select 'funding-reversal:'||r.uuid::text history_id,r.uuid::text id,null::text purchase_id,
+                    'funding-reversal'::text entry_type,'debit'::text direction,r.earnings_wallet_minor amount_minor,
+                    'USD'::text currency,null::text recipient_role,'available'::text balance_state,
+                    r.reason,null::text reference,r.created_at
+               from funding_capability.funding_reversals r
+              where r.account_id=(select id from identity_capability.accounts where uuid=$1) and r.earnings_wallet_minor>0
            ) history
           where ($2::timestamptz is null or (created_at,history_id)<($2::timestamptz,$3::text))
           order by created_at desc,history_id desc limit $4`,
@@ -142,7 +152,12 @@ export class AccountProjectionService {
         currency: row.currency,
         recipient_role: row.recipient_role,
         balance_state: row.balance_state,
-        source: row.entry_type === "earnings-adjustment" ? "adjustment" : "generated",
+        source:
+          row.entry_type === "earnings-adjustment"
+            ? "adjustment"
+            : row.entry_type === "funding-reversal"
+              ? "funding_reversal"
+              : "generated",
         reason: row.reason ?? null,
         reference: row.reference ?? null,
         created_at: row.created_at,

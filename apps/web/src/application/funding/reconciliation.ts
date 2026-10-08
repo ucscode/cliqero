@@ -57,12 +57,25 @@ export class FundingCreditReconciliationService {
         return prior.response as FundingCreditRepairResult;
       }
 
+      const initialFunding = await this.funding.findById(input.fundingId);
+      if (!initialFunding) throw new PublicApplicationError("Funding not found.", "not_found", 404);
+      // Match reversal and wallet-processor lock order: account economics first,
+      // then the funding row. This avoids a funding-row/account-lock cycle.
+      await this.wallet.lockAccount(initialFunding.accountId);
       const funding = await this.funding.findById(input.fundingId, { forUpdate: true });
       if (!funding) throw new PublicApplicationError("Funding not found.", "not_found", 404);
       if (funding.state !== "confirmed")
         throw new PublicApplicationError(
           "Only confirmed funding can be reconciled into a wallet credit.",
           "funding_state_conflict",
+          409,
+        );
+
+      const reversed = await this.wallet.reversedAmountForFunding(funding.id);
+      if (reversed >= funding.canonicalAmount.minorAmount)
+        throw new PublicApplicationError(
+          "Fully reversed funding cannot be reconciled into a wallet credit.",
+          "funding_fully_reversed",
           409,
         );
 

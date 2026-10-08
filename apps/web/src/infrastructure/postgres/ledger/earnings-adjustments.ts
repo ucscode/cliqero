@@ -76,6 +76,7 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
                 where entry.account_id=a.id and entry.currency='USD' and entry.entry_type='purchase-earnings'
                   and (entry.balance_state='available' or settlement.id is not null)),0)
                + coalesce((select sum(adjustment.amount_minor) from ledger_capability.earnings_adjustments adjustment where adjustment.account_id=a.id),0)
+               - coalesce((select sum(reversal.earnings_wallet_minor) from funding_capability.funding_reversals reversal where reversal.account_id=a.id),0)
                - coalesce((select sum(debt.amount_minor) from ledger_capability.account_debt_entries debt where debt.account_id=a.id and debt.wallet='earnings' and debt.kind='settlement'),0)
                - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=a.id and res.currency='USD'
                   and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0))::bigint current_balance_minor

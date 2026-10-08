@@ -12,6 +12,11 @@ export const fundingStateSchema = z.enum([
   "expired",
   "reconciliation_pending",
 ]);
+export const fundingReversalSummarySchema = z.object({
+  state: z.enum(["none", "partial", "full"]),
+  reversed_amount_minor: z.string(),
+  remaining_amount_minor: z.string(),
+});
 
 const snapshotFieldSchema = z.object({
   name: z.string(),
@@ -73,6 +78,7 @@ export const fundingDetailSchema = z.object({
     .nullable(),
   confirmed_at: z.string().nullable(),
   wallet_credit_state: z.string().nullable(),
+  reversal: fundingReversalSummarySchema,
   evidence: z
     .object({
       id: z.string().uuid(),
@@ -103,4 +109,5 @@ export const fundingStatusSchema = z.object({
   collection_currency: z.string(),
   created_at: z.string().nullable(),
   confirmed_at: z.string().nullable(),
+  reversal: fundingReversalSummarySchema,
 });

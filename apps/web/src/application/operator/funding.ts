@@ -72,7 +72,7 @@ export type OperatorFundingWalletCredit = {
   id: string;
   amountMinor: string;
   currency: string;
-  state: "pending" | "available";
+  state: "pending" | "available" | "cancelled";
   createdAt: string;
   availableAt: string | null;
 };

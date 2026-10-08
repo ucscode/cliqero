@@ -353,6 +353,17 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
     if (!funding) throw new Error("Funding not found");
 
     const previous = await this.get(id);
+    const reversals = (
+      await this.sql.query(
+        `select uuid,amount_minor::text,currency,source,reason,provider_reference,
+              provider_event_id,idempotency_key,correlation_id,created_by,actor_system,
+              pending_credit_minor::text,funding_wallet_minor::text,
+              earnings_wallet_minor::text,debt_minor::text,created_at
+         from funding_capability.funding_reversals where funding_id=$1::bigint
+         order by created_at,uuid`,
+        [funding.id],
+      )
+    ).rows;
     const proofObjects = (
       await this.sql.query<OperatorFundingProofObject>(
         `select proof_storage_provider as provider,
@@ -371,6 +382,10 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
       throw new Error("Funding proof cleanup outbox is unavailable");
 
     await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+    await this.sql.query(
+      `delete from funding_capability.funding_reversals where funding_id=$1::bigint`,
+      [funding.id],
+    );
     await this.sql.query(
       `delete from funding_capability.funding_evidence where funding_id=$1::bigint`,
       [funding.id],
@@ -391,7 +406,7 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
       `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
        values('root.delete','funding_transaction',$1,$2::jsonb,null,$3::uuid,
               (select id from identity_capability.accounts where uuid=$4))`,
-      [id, JSON.stringify(previous), newId(), actorId],
+      [id, JSON.stringify({ ...previous, reversals }), newId(), actorId],
     );
     await this.outbox?.append(
       proofObjects.map((proof) => ({
