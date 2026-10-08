@@ -92,6 +92,77 @@ select json_build_object(
 )::text
 `;
 
+/**
+ * Explicitly reconcile only the three known local development constraint drifts.
+ * This is intentionally separate from --safe-additions: every legacy definition
+ * and every canonical replacement is checked under table locks before DDL.
+ */
+export const knownDevelopmentConstraintReconciliationSql = `
+BEGIN;
+LOCK TABLE payment_capability.reconciliation_attempts IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE ledger_capability.withdrawal_reservation_events IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE wallet_capability.credits IN ACCESS EXCLUSIVE MODE;
+DO $reconcile_known_constraints$
+DECLARE
+  definition text;
+BEGIN
+  SELECT pg_get_constraintdef(oid, true) INTO definition
+    FROM pg_constraint
+   WHERE conrelid='payment_capability.reconciliation_attempts'::regclass
+     AND conname='reconciliation_attempt_idempotency_key_unique';
+  IF definition IS DISTINCT FROM 'UNIQUE (idempotency_key)' THEN
+    RAISE EXCEPTION 'Unexpected canonical reconciliation idempotency constraint: %', definition;
+  END IF;
+
+  SELECT pg_get_constraintdef(oid, true) INTO definition
+    FROM pg_constraint
+   WHERE conrelid='payment_capability.reconciliation_attempts'::regclass
+     AND conname='reconciliation_attempt_identity_unique_numeric';
+  IF definition = 'UNIQUE (payment_id, idempotency_key)' THEN
+    -- The canonical unique idempotency key already implies this composite key.
+    EXECUTE 'ALTER TABLE payment_capability.reconciliation_attempts DROP CONSTRAINT reconciliation_attempt_identity_unique_numeric';
+  ELSIF definition IS NOT NULL THEN
+    RAISE EXCEPTION 'Unexpected local reconciliation identity constraint: %', definition;
+  END IF;
+
+  SELECT pg_get_constraintdef(oid, true) INTO definition
+    FROM pg_constraint
+   WHERE conrelid='ledger_capability.withdrawal_reservation_events'::regclass
+     AND conname='withdrawal_reservation_events_kind_valid';
+  IF definition = 'CHECK (kind = ANY (ARRAY[''reserved''::text, ''released''::text, ''completed''::text]))' THEN
+    IF EXISTS (
+      SELECT 1 FROM ledger_capability.withdrawal_reservation_events
+       WHERE kind IS NULL OR kind NOT IN ('reserved','released','completed','returned')
+    ) THEN
+      RAISE EXCEPTION 'Withdrawal reservation event data is incompatible with the canonical kind constraint';
+    END IF;
+    EXECUTE 'ALTER TABLE ledger_capability.withdrawal_reservation_events DROP CONSTRAINT withdrawal_reservation_events_kind_valid';
+    EXECUTE 'ALTER TABLE ledger_capability.withdrawal_reservation_events ADD CONSTRAINT withdrawal_reservation_events_kind_valid CHECK (kind = ANY (ARRAY[''reserved''::text, ''released''::text, ''completed''::text, ''returned''::text]))';
+  ELSIF definition IS DISTINCT FROM 'CHECK (kind = ANY (ARRAY[''reserved''::text, ''released''::text, ''completed''::text, ''returned''::text]))' THEN
+    RAISE EXCEPTION 'Unexpected withdrawal reservation event kind constraint: %', definition;
+  END IF;
+
+  SELECT pg_get_constraintdef(oid, true) INTO definition
+    FROM pg_constraint
+   WHERE conrelid='wallet_capability.credits'::regclass
+     AND conname='wallet_credit_state_valid';
+  IF definition = 'CHECK (state = ANY (ARRAY[''pending''::text, ''available''::text]))' THEN
+    IF EXISTS (
+      SELECT 1 FROM wallet_capability.credits
+       WHERE state IS NULL OR state NOT IN ('pending','available','cancelled')
+    ) THEN
+      RAISE EXCEPTION 'Wallet credit data is incompatible with the canonical state constraint';
+    END IF;
+    EXECUTE 'ALTER TABLE wallet_capability.credits DROP CONSTRAINT wallet_credit_state_valid';
+    EXECUTE 'ALTER TABLE wallet_capability.credits ADD CONSTRAINT wallet_credit_state_valid CHECK (state = ANY (ARRAY[''pending''::text, ''available''::text, ''cancelled''::text]))';
+  ELSIF definition IS DISTINCT FROM 'CHECK (state = ANY (ARRAY[''pending''::text, ''available''::text, ''cancelled''::text]))' THEN
+    RAISE EXCEPTION 'Unexpected wallet credit state constraint: %', definition;
+  END IF;
+END
+$reconcile_known_constraints$;
+COMMIT;
+`;
+
 /** Split baseline SQL without splitting semicolons inside quoted or dollar-quoted bodies. */
 export function splitSqlStatements(sql) {
   const statements = [];
@@ -570,7 +641,28 @@ function syncDevelopmentDatabase({ safeAdditionsOnly = false } = {}) {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
-  syncDevelopmentDatabase({
-    safeAdditionsOnly: process.argv.includes("--safe-additions"),
-  });
+function reconcileKnownDevelopmentConstraintDrift() {
+  const configuration = composeConfiguration();
+  const postgres = configuration.services?.postgres;
+  const main = configuration.services?.main;
+  const database = postgres?.environment?.POSTGRES_DB;
+  const user = postgres?.environment?.POSTGRES_USER;
+  const applicationUrl = main?.environment?.DATABASE_URL;
+  if (!database || !user || !applicationUrl)
+    throw new Error("Development Compose must define its PostgreSQL user, database, and app URL.");
+  if (new URL(applicationUrl).pathname.slice(1) !== database)
+    throw new Error("Refusing constraint reconciliation: app and local Compose databases differ.");
+
+  psql(database, ["-f", "-"], knownDevelopmentConstraintReconciliationSql);
+  process.stdout.write("Applied the guarded known-constraint reconciliation transaction.\n");
+  // Keep normal synchronization strict: any unrecognized drift still fails.
+  syncDevelopmentDatabase();
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv.includes("--reconcile-known-drift")) reconcileKnownDevelopmentConstraintDrift();
+  else
+    syncDevelopmentDatabase({
+      safeAdditionsOnly: process.argv.includes("--safe-additions"),
+    });
+}

@@ -257,6 +257,13 @@ suite("provider funding reversal recovery", () => {
       idempotencyKey: "reversal-pending-full",
     });
     expect(reversal.recovery.pendingCreditMinor).toBe("1000");
+    const cancelledCredit = await app.walletRepository.findCreditByFunding(funding.id);
+    expect(cancelledCredit?.state).toBe("cancelled");
+    await expect(
+      app.database.query(`update wallet_capability.credits set state='reversed' where uuid=$1`, [
+        cancelledCredit!.id,
+      ]),
+    ).rejects.toMatchObject({ code: "23514" });
     expect((await app.walletRepository.findCreditByFunding(funding.id))?.state).toBe("cancelled");
     expect(await app.walletAvailability.process(credit!.id)).toBe(false);
     expect((await app.wallet.summary(owner.id)).available.minorAmount).toBe(0n);

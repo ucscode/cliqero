@@ -404,6 +404,41 @@ suite("Paystack webhook to commerce consequence", () => {
         .rowCount,
     ).toBe(2);
   });
+  it("converges concurrent reconciliation-attempt retries and rejects non-domain states", async () => {
+    const { buyer, checkout } = await setup();
+    const input = {
+      paymentId: checkout.paymentId,
+      actorId: buyer.id,
+      idempotencyKey: "concurrent-reconciliation-attempt",
+      correlationId: newId(),
+    };
+
+    const results = await Promise.all([
+      app.paymentOperations.begin(input),
+      app.paymentOperations.begin(input),
+    ]);
+
+    expect(results.map(({ created }) => created).sort()).toEqual([false, true]);
+    expect(new Set(results.map(({ attempt }) => attempt.id)).size).toBe(1);
+    expect(
+      (
+        await app.database.query<{ count: string }>(
+          `select count(*)::text count from payment_capability.reconciliation_attempts where idempotency_key=$1`,
+          [input.idempotencyKey],
+        )
+      ).rows[0]?.count,
+    ).toBe("1");
+
+    const attemptId = results[0].attempt.id;
+    await expect(
+      app.database.query(
+        `update payment_capability.reconciliation_attempts set state='queued' where uuid=$1`,
+        [attemptId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await app.paymentOperations.finish(attemptId, "failed", { reason: "test" });
+    expect((await app.paymentOperations.findById(attemptId))?.state).toBe("failed");
+  });
   it("surfaces reconciliation mismatches and network failures without local completion", async () => {
     const { buyer, checkout } = await setup();
     await app.database.query(

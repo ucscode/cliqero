@@ -284,6 +284,15 @@ leaves existing constraint/index/function definitions unchanged and reports
 the remaining drift for deliberate review. Its DDL runs in one transaction
 and rolls back completely if an addition cannot be applied.
 
+For the specifically reviewed reconciliation-attempt, withdrawal-reservation,
+and wallet-credit constraint drift, use `just dev-db-reconcile-known-drift`.
+This separate, explicit operation locks the affected tables, accepts only the
+known legacy or canonical definitions, verifies existing row compatibility,
+applies the narrow constraint changes transactionally, and then runs the
+ordinary strict schema sync. It does not change financial or audit rows, and it
+fails without committing if a definition or row is unexpected. The
+`--safe-additions` mode remains additive-only and never replaces constraints.
+
 To reset only Blog SQLite and recreate its fixtures:
 
 ```bash

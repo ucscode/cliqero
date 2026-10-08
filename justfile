@@ -38,6 +38,11 @@ dev-db-reset:
 dev-db-sync:
 	node scripts/dev-database-sync.mjs
 
+# Explicitly reconcile only the reviewed legacy constraint definitions, then
+# require the normal strict schema sync to prove the database matches 001.
+dev-db-reconcile-known-drift:
+	node scripts/dev-database-sync.mjs --reconcile-known-drift
+
 # Unit tests for the development database schema-sync planner
 dev-db-sync-test:
 	node --test scripts/dev-database-sync.test.mjs

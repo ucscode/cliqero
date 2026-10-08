@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { planAdditiveSync, splitSqlStatements } from "./dev-database-sync.mjs";
+import {
+  knownDevelopmentConstraintReconciliationSql,
+  planAdditiveSync,
+  splitSqlStatements,
+} from "./dev-database-sync.mjs";
 
 test("SQL splitting preserves semicolons inside strings and function bodies", () => {
   const statements = splitSqlStatements(`
@@ -8,6 +12,23 @@ test("SQL splitting preserves semicolons inside strings and function bodies", ()
     CREATE FUNCTION sample.noop() RETURNS void AS $body$ BEGIN RAISE NOTICE 'x;y'; END $body$ LANGUAGE plpgsql;
   `);
   assert.equal(statements.length, 2);
+});
+
+test("known constraint reconciliation is explicit, guarded, transactional DDL", () => {
+  const sql = knownDevelopmentConstraintReconciliationSql;
+  assert.match(sql, /^\s*BEGIN;/);
+  assert.match(sql, /LOCK TABLE payment_capability\.reconciliation_attempts/);
+  assert.match(sql, /LOCK TABLE ledger_capability\.withdrawal_reservation_events/);
+  assert.match(sql, /LOCK TABLE wallet_capability\.credits/);
+  assert.match(sql, /Unexpected local reconciliation identity constraint/);
+  assert.match(sql, /Unexpected withdrawal reservation event kind constraint/);
+  assert.match(sql, /Unexpected wallet credit state constraint/);
+  assert.match(sql, /kind NOT IN \('reserved','released','completed','returned'\)/);
+  assert.match(sql, /state NOT IN \('pending','available','cancelled'\)/);
+  assert.match(sql, /ADD CONSTRAINT withdrawal_reservation_events_kind_valid/);
+  assert.match(sql, /ADD CONSTRAINT wallet_credit_state_valid/);
+  assert.match(sql, /COMMIT;\s*$/);
+  assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/i);
 });
 
 test("safe planner adds missing function definitions without replacing existing ones", () => {

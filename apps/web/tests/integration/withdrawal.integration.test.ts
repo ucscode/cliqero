@@ -836,12 +836,89 @@ suite("withdrawal lifecycle", () => {
         actorId: seller.id,
       },
     });
-    const event = await app.database.query<{ kind: string }>(
-      `select kind from ledger_capability.withdrawal_reservation_events
+    const event = await app.database.query<{ uuid: string; kind: string }>(
+      `select uuid::text uuid,kind from ledger_capability.withdrawal_reservation_events
         where withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
         order by created_at desc,id desc limit 1`,
       [withdrawal.id],
     );
     expect(event.rows[0]?.kind).toBe("returned");
+    await expect(
+      app.database.query(
+        `update ledger_capability.withdrawal_reservation_events set kind='pending' where uuid=$1::uuid`,
+        [event.rows[0]?.uuid],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    expect(
+      (
+        await app.database.query<{ kind: string }>(
+          `select kind from ledger_capability.withdrawal_reservation_events where uuid=$1::uuid`,
+          [event.rows[0]?.uuid],
+        )
+      ).rows[0]?.kind,
+    ).toBe("returned");
+  });
+
+  it("rolls back payout-return evidence and accounting when outbox persistence fails", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 5000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: `rollback-return-${newId()}`,
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await app.withdrawals.complete(seller.id, withdrawal.id, {
+      externalReference: "payout-rollback",
+    });
+    const treasuryBefore = (await app.treasuryRepository.summary()).balanceMinor;
+    const paidOut = withdrawal.netAmount?.minorAmount ?? withdrawal.amount.minorAmount;
+    await app.database.query(`
+      CREATE FUNCTION public.reject_test_payout_return_outbox() RETURNS trigger
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.event_name = 'withdrawal.payout-returned' THEN
+          RAISE EXCEPTION 'forced payout-return outbox failure';
+        END IF;
+        RETURN NEW;
+      END
+      $$;
+      CREATE TRIGGER reject_test_payout_return_outbox
+      BEFORE INSERT ON kernel.outbox_events
+      FOR EACH ROW EXECUTE FUNCTION public.reject_test_payout_return_outbox();
+    `);
+
+    try {
+      await expect(
+        app.withdrawals.recordPayoutReturn(seller.id, withdrawal.id, {
+          amountMinor: paidOut.toString(),
+          reason: "Rollback verification",
+          externalReference: "return-rollback-ref",
+          idempotencyKey: `rollback-return-${newId()}`,
+        }),
+      ).rejects.toThrow("forced payout-return outbox failure");
+    } finally {
+      await app.database.query(`
+        DROP TRIGGER reject_test_payout_return_outbox ON kernel.outbox_events;
+        DROP FUNCTION public.reject_test_payout_return_outbox();
+      `);
+    }
+
+    expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("completed");
+    expect(
+      (await app.database.query(`select 1 from withdrawal_capability.payout_returns`)).rowCount,
+    ).toBe(0);
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.completedMinor).toBe(5000n);
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(0n);
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(treasuryBefore);
+    expect(
+      (
+        await app.database.query(
+          `select 1 from kernel.outbox_events where event_name='withdrawal.payout-returned'`,
+        )
+      ).rowCount,
+    ).toBe(0);
   });
 });
