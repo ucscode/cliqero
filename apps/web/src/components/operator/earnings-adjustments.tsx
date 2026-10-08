@@ -82,7 +82,7 @@ export function OperatorEarningsAdjustmentForm() {
       mode="create"
       eyebrow="Earnings ledger"
       title="New adjustment"
-      description="Post a signed earnings adjustment for an account."
+      description="Post a positive manual Earnings credit for an account."
       backHref="/operator/earnings-adjustments"
       backLabel="Back to adjustments"
       saving={saving}
@@ -94,8 +94,8 @@ export function OperatorEarningsAdjustmentForm() {
       widthClassName="max-w-3xl"
     >
       <p className="text-sm text-slate-600">
-        Positive increases the account balance; negative decreases it. Amounts use USD minor units:
-        1000 = $10.00 and -500 = -$5.00.
+        Amounts use USD minor units: 1000 = $10.00. Recoveries must identify the original earning
+        and are recorded from the Earnings ledger.
       </p>
       <div className="grid gap-2">
         <RequiredLabel htmlFor="adjustment-account">Account</RequiredLabel>
@@ -107,11 +107,13 @@ export function OperatorEarningsAdjustmentForm() {
         />
       </div>
       <div className="grid gap-2">
-        <RequiredLabel htmlFor="adjustment-amount">Signed amount in USD minor units</RequiredLabel>
+        <RequiredLabel htmlFor="adjustment-amount">
+          Positive amount in USD minor units
+        </RequiredLabel>
         <Input
           id="adjustment-amount"
           inputMode="numeric"
-          placeholder="e.g. 1000 or -500"
+          placeholder="e.g. 1000"
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
           required

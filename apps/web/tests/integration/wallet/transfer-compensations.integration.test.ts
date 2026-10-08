@@ -90,6 +90,21 @@ suite("wallet transfer compensation", () => {
     });
   }
 
+  async function insertEarningsSpendFixture(
+    accountId: string,
+    amountMinor: bigint,
+    reason: string,
+  ) {
+    // Seed an append-only negative fact directly; public manual adjustments are positive-only.
+    await app.database.query(
+      `insert into ledger_capability.earnings_adjustments
+        (uuid,account_id,amount_minor,reason,created_by,correlation_id,idempotency_key)
+       select gen_random_uuid(),account.id,$2,$3,account.id,gen_random_uuid(),$4
+         from identity_capability.accounts account where account.uuid=$1`,
+      [accountId, (-amountMinor).toString(), reason, newId()],
+    );
+  }
+
   async function treasuryBalance() {
     return (await app.treasuryRepository.summary()).balanceMinor;
   }
@@ -291,12 +306,7 @@ suite("wallet transfer compensation", () => {
     const owner = await account();
     await fund(owner.id, 10_000n);
     const spent = await transfer(owner.id, "funding", 1_000n);
-    await app.earningsAdjustments.create(owner.id, {
-      accountId: owner.id,
-      amountMinor: "-950",
-      reason: "Spend transferred Earnings",
-      idempotencyKey: "spend-comp-destination",
-    });
+    await insertEarningsSpendFixture(owner.id, 950n, "Spend transferred Earnings fixture");
     const balancesAfterSpend = [
       (await app.wallet.summary(owner.id)).available.minorAmount,
       await app.fundsReservation.available(owner.id, "USD"),
@@ -313,12 +323,11 @@ suite("wallet transfer compensation", () => {
     ]).toEqual(balancesAfterSpend);
 
     const partial = await transfer(owner.id, "funding", 1_000n);
-    await app.earningsAdjustments.create(owner.id, {
-      accountId: owner.id,
-      amountMinor: "-500",
-      reason: "Partially spend transferred Earnings",
-      idempotencyKey: "partial-comp-destination",
-    });
+    await insertEarningsSpendFixture(
+      owner.id,
+      500n,
+      "Partially spend transferred Earnings fixture",
+    );
     await expect(compensate(owner.id, partial.id)).rejects.toMatchObject({
       code: "transfer_compensation_insufficient_destination",
       status: 409,

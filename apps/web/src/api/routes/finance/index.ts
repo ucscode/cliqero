@@ -102,7 +102,9 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
   );
   const operatorEarningsQuery = z.object({
     search: z.string().max(100).optional(),
-    state: z.enum(["pending", "available", "reversed"]).optional(),
+    state: z
+      .enum(["pending", "available", "partially_corrected", "corrected", "reversed"])
+      .optional(),
     sort: z
       .enum(["created", "amount"])
       .default("created")
@@ -225,7 +227,7 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
       tags: ["Earnings Adjustments"],
       summary: "Create an earnings adjustment",
       description:
-        "Posts an immutable signed earnings correction. Idempotency-Key makes retries safe; reusing a key for different normalized intent conflicts. Corrections are new accounting facts, not edited or deleted.",
+        "Posts an immutable positive manual Earnings credit. Negative recoveries use the source-linked Earnings corrections resource. Idempotency-Key makes retries safe; reusing a key for different normalized intent conflicts.",
       request: {
         headers: z.object({ "idempotency-key": z.string().trim().min(1).max(200) }),
         body: {
@@ -236,8 +238,8 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
                   account_id: z.uuid(),
                   amount_minor: z
                     .string()
-                    .regex(/^-?[1-9]\d*$/)
-                    .max(30),
+                    .regex(/^[1-9]\d{0,18}$/)
+                    .max(19),
                   reason: z.string().trim().min(1).max(1000),
                   reference: z.string().trim().max(200).nullable().optional(),
                 })

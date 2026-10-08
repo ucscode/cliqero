@@ -23,10 +23,17 @@ export class EarningsAdjustmentService {
     },
   ) {
     await this.operators.requireCapability(actorId, "finance.manage");
-    if (!/^-?\d+$/.test(input.amountMinor) || BigInt(input.amountMinor) === 0n)
+    if (!/^\d{1,19}$/.test(input.amountMinor))
       throw new PublicApplicationError(
-        "Adjustment amount must be a non-zero minor-unit integer.",
-        "invalid_adjustment",
+        "Manual Earnings adjustments must be positive. Recovering an earning requires a source-linked correction.",
+        "source_linked_correction_required",
+        400,
+      );
+    const requestedAmount = BigInt(input.amountMinor);
+    if (requestedAmount <= 0n || requestedAmount > 9_223_372_036_854_775_807n)
+      throw new PublicApplicationError(
+        "Manual Earnings adjustments must be positive. Recovering an earning requires a source-linked correction.",
+        "source_linked_correction_required",
         400,
       );
     const reason = input.reason.trim();
@@ -50,7 +57,7 @@ export class EarningsAdjustmentService {
       if (existing) {
         if (
           existing.accountId !== input.accountId ||
-          BigInt(existing.amountMinor) !== BigInt(input.amountMinor) ||
+          BigInt(existing.amountMinor) !== requestedAmount ||
           existing.reason !== reason ||
           existing.reference !== reference ||
           existing.createdBy !== actorId
@@ -64,13 +71,13 @@ export class EarningsAdjustmentService {
       }
       const adjustment = await this.repository.create({
         accountId: input.accountId,
-        amountMinor: BigInt(input.amountMinor),
+        amountMinor: requestedAmount,
         reason,
         reference,
         actorId,
         idempotencyKey,
       });
-      const amountMinor = BigInt(input.amountMinor);
+      const amountMinor = requestedAmount;
       if (amountMinor > 0n)
         await this.debt?.settleInflow({
           accountId: input.accountId,

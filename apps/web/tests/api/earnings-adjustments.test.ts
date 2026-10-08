@@ -92,6 +92,19 @@ describe("public earnings adjustment resource", () => {
     expect(methods.create).not.toHaveBeenCalled();
   });
 
+  it("does not accept a negative manual adjustment that would bypass source recovery", async () => {
+    const methods = { list: vi.fn(), get: vi.fn(), create: vi.fn() };
+    const response = await app(session(["finance.manage"]), methods).fetch(
+      new Request("http://localhost/api/earnings/adjustments", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": "unlinked-debit" },
+        body: JSON.stringify({ account_id: accountId, amount_minor: "-100", reason: "Debit" }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(methods.create).not.toHaveBeenCalled();
+  });
+
   it("returns the existing fact as a successful replay without another creation", async () => {
     const methods = {
       list: vi.fn(),

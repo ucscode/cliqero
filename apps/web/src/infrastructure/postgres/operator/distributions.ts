@@ -1,6 +1,7 @@
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { newId } from "@/kernel/ids";
+import { PublicApplicationError } from "@/kernel/errors";
 import { decodeOperatorSortCursor, encodeOperatorSortCursor } from "./cursor";
 
 function cleanSearch(value?: string) {
@@ -90,6 +91,18 @@ export class OperatorDistributionService {
         )
       ).rows[0];
       if (!previous || !distribution) throw new Error("Distribution not found");
+      const linkedCorrection = await this.sql.query(
+        `select 1 from ledger_capability.earnings_corrections correction
+          join ledger_capability.entries source on source.id=correction.source_entry_id
+         where source.distribution_id=$1 limit 1`,
+        [distribution.id],
+      );
+      if ((linkedCorrection.rowCount ?? 0) > 0)
+        throw new PublicApplicationError(
+          "A distribution with source-linked Earnings corrections cannot be hard-deleted.",
+          "distribution_has_earnings_corrections",
+          409,
+        );
       await this.sql.query("select set_config('cliqero.root_delete','on',true)");
       const treasuryEntries = (
         await this.sql.query<any>(
@@ -305,6 +318,7 @@ export type OperatorEarningsEntry = {
   balanceState: string;
   settledAt: string | null;
   createdAt: string;
+  correctableAmountMinor: string;
 };
 
 export class OperatorEarningsService {
@@ -319,11 +333,23 @@ export class OperatorEarningsService {
         await this.sql.query<any>(
           `select e.uuid id,e.account_id,e.amount_minor,e.currency,e.entry_type,e.direction,e.correlation_id,e.created_at
              from ledger_capability.entries e
-            where e.uuid=$1 and e.recipient_role='referral'`,
+            where e.uuid=$1 and e.recipient_role in ('seller','referral')`,
           [id],
         )
       ).rows[0];
       if (!previous) throw new Error("Earnings entry not found");
+      const linkedCorrection = await this.sql.query(
+        `select 1 from ledger_capability.earnings_corrections correction
+          join ledger_capability.entries source on source.id=correction.source_entry_id
+         where source.uuid=$1 limit 1`,
+        [id],
+      );
+      if ((linkedCorrection.rowCount ?? 0) > 0)
+        throw new PublicApplicationError(
+          "An earning with source-linked corrections cannot be hard-deleted.",
+          "earning_has_corrections",
+          409,
+        );
       await this.sql.query("select set_config('cliqero.root_delete','on',true)");
       await this.sql.query(
         `delete from ledger_capability.entry_settlements
@@ -350,7 +376,7 @@ export class OperatorEarningsService {
 
   async list(input: {
     search?: string;
-    state?: "pending" | "available" | "reversed";
+    state?: "pending" | "available" | "partially_corrected" | "corrected" | "reversed";
     cursor?: string;
     limit: number;
     sort?: "created" | "amount";
@@ -369,15 +395,29 @@ export class OperatorEarningsService {
     const rows = (
       await this.sql.query<any>(
         `select e.uuid as id,e.id::text cursor_id,${orderBy}::text cursor_sort_value,a.uuid as account_id,a.username,a.email,p.uuid as purchase_id,d.uuid as distribution_id,e.entry_type,e.direction,e.amount_minor,e.currency,e.referral_level,e.balance_state,e.created_at,s.settled_at,
-              case when e.reversal_id is not null or exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then 'reversed' when s.id is not null then 'available' else e.balance_state end effective_state
+              case when e.reversal_id is not null then 'reversed'
+                   when e.entry_type='purchase-earnings' and e.direction='credit' and correction.reversed_minor > 0 then 'reversed'
+                   when e.entry_type='purchase-earnings' and e.direction='credit' and correction.corrected_minor >= e.amount_minor then 'corrected'
+                   when e.entry_type='purchase-earnings' and e.direction='credit' and correction.corrected_minor > 0 then 'partially_corrected'
+                   when s.id is not null then 'available' else e.balance_state end effective_state,
+              case when e.entry_type='purchase-earnings' and e.direction='credit' and e.reversal_id is null
+                   then greatest(0,e.amount_minor-correction.corrected_minor-correction.reversed_minor)::text else '0' end correctable_minor
          from ledger_capability.entries e
          join identity_capability.account_profiles a on a.id=e.account_id
          left join purchase_capability.purchases p on p.id=e.purchase_id
          left join ledger_capability.purchase_distributions d on d.id=e.distribution_id
          left join ledger_capability.entry_settlements s on s.original_entry_id=e.id
-        where e.recipient_role='referral'
+         left join lateral (
+           select coalesce((select sum(c.amount_minor) from ledger_capability.earnings_corrections c where c.source_entry_id=e.id),0) corrected_minor,
+                  coalesce((select sum(r.amount_minor) from ledger_capability.entries r where r.original_entry_id=e.id and r.reversal_id is not null),0) reversed_minor
+         ) correction on true
+        where e.recipient_role in ('seller','referral')
           and ($1::text is null or a.username ilike '%'||$1||'%' escape '\\' or a.email ilike '%'||$1||'%' escape '\\' or a.uuid::text=$1 or e.uuid::text=$1 or p.uuid::text=$1)
-          and ($2::text is null or (case when e.reversal_id is not null or exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then 'reversed' when s.id is not null then 'available' else e.balance_state end)=$2)
+          and ($2::text is null or (case when e.reversal_id is not null then 'reversed'
+               when e.entry_type='purchase-earnings' and e.direction='credit' and correction.reversed_minor > 0 then 'reversed'
+               when e.entry_type='purchase-earnings' and e.direction='credit' and correction.corrected_minor >= e.amount_minor then 'corrected'
+               when e.entry_type='purchase-earnings' and e.direction='credit' and correction.corrected_minor > 0 then 'partially_corrected'
+               when s.id is not null then 'available' else e.balance_state end)=$2)
           ${cursorClause}
         order by ${orderBy} ${direction},e.id ${direction} limit $${cursor ? 5 : 3}`,
         cursor
@@ -388,11 +428,11 @@ export class OperatorEarningsService {
     const visible = rows.slice(0, input.limit);
     const totals = (
       await this.sql.query<any>(
-        `select coalesce(sum(case when e.balance_state='pending' and e.direction='credit' and e.reversal_id is null and not exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then e.amount_minor when e.balance_state='pending' and e.direction='debit' and e.reversal_id is null then -e.amount_minor else 0 end),0)::bigint pending_minor,
+        `select coalesce(sum(case when e.balance_state='pending' and s.id is null and e.direction='credit' then e.amount_minor when e.balance_state='pending' and s.id is null and e.direction='debit' then -e.amount_minor else 0 end),0)::bigint pending_minor,
               coalesce((select sum(ledger_capability.available_earnings_minor(account.id,'USD'))
                           from identity_capability.accounts account),0)::bigint available_minor,
               coalesce((select sum(r.amount_minor) from ledger_capability.withdrawal_reservations r where (select ev.kind from ledger_capability.withdrawal_reservation_events ev where ev.reservation_id=r.id order by ev.created_at desc,ev.id desc limit 1)='reserved'),0)::bigint reserved_minor
-         from ledger_capability.entries e left join ledger_capability.entry_settlements s on s.original_entry_id=e.id where e.recipient_role='referral'`,
+         from ledger_capability.entries e left join ledger_capability.entry_settlements s on s.original_entry_id=e.id where e.recipient_role in ('seller','referral')`,
       )
     ).rows[0];
     return {
@@ -428,6 +468,7 @@ export class OperatorEarningsService {
       balanceState: row.effective_state,
       settledAt: row.settled_at ?? null,
       createdAt: row.created_at,
+      correctableAmountMinor: String(row.correctable_minor ?? "0"),
     };
   }
 }

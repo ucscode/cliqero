@@ -63,9 +63,15 @@ interface EntryRow {
   original_entry_id: string | null;
   reversal_id: string | null;
   created_at: Date;
+  corrected_minor: string;
 }
 export class PostgresLedgerRepository implements LedgerRepository {
   constructor(private readonly sql: QueryExecutor) {}
+  async lockAccountForMutation(accountId: string) {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `wallet-transfer:${accountId}`,
+    ]);
+  }
   async findDistributionByPurchaseId(purchaseId: string): Promise<PurchaseDistribution | null> {
     const row = (
       await this.sql.query<DistributionRow>(
@@ -134,7 +140,9 @@ export class PostgresLedgerRepository implements LedgerRepository {
       (select uuid from purchase_capability.purchases where id=e.purchase_id) as purchase_id,
       e.entry_type,e.direction,e.amount_minor,e.currency,e.idempotency_key,e.correlation_id,e.recipient_role,e.basis,e.referral_level,e.balance_state,e.created_at,
       (select uuid from ledger_capability.entries where id=e.original_entry_id) as original_entry_id,
-      (select uuid from ledger_capability.reversals where id=e.reversal_id) as reversal_id,e.maturity_at
+      (select uuid from ledger_capability.reversals where id=e.reversal_id) as reversal_id,e.maturity_at,
+      coalesce((select sum(correction.amount_minor) from ledger_capability.earnings_corrections correction
+                 where correction.source_entry_id=e.id),0)::text corrected_minor
      from ledger_capability.entries e where e.purchase_id=(select id from purchase_capability.purchases where uuid=$1) order by e.created_at,e.id`,
         [purchaseId],
       )
@@ -157,6 +165,7 @@ export class PostgresLedgerRepository implements LedgerRepository {
       originalEntryId: row.original_entry_id ?? undefined,
       reversalId: row.reversal_id ?? undefined,
       createdAt: row.created_at,
+      correctedMinor: BigInt(row.corrected_minor ?? "0"),
     }));
   }
   async summarizeAccount(accountId: string) {

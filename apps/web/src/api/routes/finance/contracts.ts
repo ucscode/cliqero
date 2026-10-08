@@ -68,4 +68,5 @@ export const operatorEarningsEntrySchema = z.object({
   balanceState: z.string(),
   settledAt: z.string().nullable(),
   createdAt: z.string(),
+  correctableAmountMinor: z.string().regex(/^\d+$/),
 });

@@ -3820,6 +3820,52 @@ CREATE TRIGGER earnings_adjustments_append_only
 COMMENT ON TABLE ledger_capability.earnings_adjustments IS
   'Append-only signed canonical USD earnings adjustments; corrections require opposite entries.';
 
+-- Source-linked corrections recover an identified purchase-earning allocation
+-- without rewriting that immutable source. Any unrecovered remainder becomes
+-- an explicitly correlated Earnings debt entry.
+CREATE TABLE ledger_capability.earnings_corrections (
+    uuid uuid DEFAULT gen_random_uuid() NOT NULL,
+    account_id bigint NOT NULL,
+    source_entry_id bigint NOT NULL,
+    amount_minor bigint NOT NULL,
+    pending_minor bigint NOT NULL DEFAULT 0,
+    available_minor bigint NOT NULL DEFAULT 0,
+    debt_minor bigint NOT NULL DEFAULT 0,
+    reason text NOT NULL,
+    created_by bigint NOT NULL,
+    correlation_id uuid NOT NULL,
+    idempotency_key text NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT earnings_corrections_amount_positive CHECK (amount_minor > 0),
+    CONSTRAINT earnings_corrections_allocations_nonnegative CHECK (
+      pending_minor >= 0 AND available_minor >= 0 AND debt_minor >= 0
+    ),
+    CONSTRAINT earnings_corrections_allocation_sum CHECK (
+      amount_minor = pending_minor + available_minor + debt_minor
+    ),
+    CONSTRAINT earnings_corrections_reason_nonempty CHECK (length(btrim(reason)) > 0),
+    CONSTRAINT earnings_corrections_uuid_unique UNIQUE (uuid),
+    CONSTRAINT earnings_corrections_idempotency_unique UNIQUE (idempotency_key),
+    CONSTRAINT earnings_corrections_account_fk FOREIGN KEY (account_id)
+      REFERENCES identity_capability.accounts(id),
+    CONSTRAINT earnings_corrections_source_fk FOREIGN KEY (source_entry_id)
+      REFERENCES ledger_capability.entries(id),
+    CONSTRAINT earnings_corrections_actor_fk FOREIGN KEY (created_by)
+      REFERENCES identity_capability.accounts(id)
+);
+CREATE INDEX earnings_corrections_source_idx
+  ON ledger_capability.earnings_corrections (source_entry_id, created_at, id);
+CREATE INDEX earnings_corrections_account_idx
+  ON ledger_capability.earnings_corrections (account_id, created_at DESC, id DESC);
+CREATE INDEX earnings_corrections_correlation_idx
+  ON ledger_capability.earnings_corrections (correlation_id);
+CREATE TRIGGER earnings_corrections_append_only
+  BEFORE UPDATE OR DELETE ON ledger_capability.earnings_corrections
+  FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
+COMMENT ON TABLE ledger_capability.earnings_corrections IS
+  'Append-only source-linked recovery of positive purchase Earnings, allocated to pending value, unreserved available Earnings, and account debt.';
+
 -- A transfer operation and its funding-wallet legs share one stable correlation ID.
 CREATE TABLE wallet_capability.transfers (
     uuid uuid NOT NULL,

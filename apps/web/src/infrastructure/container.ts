@@ -115,6 +115,8 @@ import { PostgresTreasuryDistributionStore } from "@/infrastructure/postgres/tre
 import { OperatorTreasuryService } from "@/infrastructure/postgres/operator/treasury";
 import { EarningsAdjustmentService } from "@/application/finance/earnings-adjustments";
 import { PostgresEarningsAdjustmentRepository } from "@/infrastructure/postgres/ledger/earnings-adjustments";
+import { EarningsCorrectionService } from "@/application/finance/earnings-corrections";
+import { PostgresEarningsCorrectionRepository } from "@/infrastructure/postgres/ledger/earnings-corrections";
 import { PostgresAccountDebtRepository } from "@/infrastructure/postgres/ledger/account-debt";
 import { AccountDebtService } from "@/application/finance/account-debt";
 import { AccountValueRecoveryService } from "@/application/finance/account-value-recovery";
@@ -734,6 +736,16 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         accountDebt(),
       ),
   );
+  const earningsCorrections = lazy(
+    () =>
+      new EarningsCorrectionService(
+        new PostgresEarningsCorrectionRepository(database),
+        operators(),
+        accountDebt(),
+        auditRecorder(),
+        database,
+      ),
+  );
   const accountDebt = lazy(
     () =>
       new AccountDebtService(new PostgresAccountDebtRepository(database), operators(), database),
@@ -1059,6 +1071,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get earningsAdjustments() {
       return earningsAdjustments();
+    },
+    get earningsCorrections() {
+      return earningsCorrections();
     },
     get accountDebt() {
       return accountDebt();

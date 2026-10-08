@@ -59,6 +59,7 @@ export type OperatorEarningsEntry = {
   balanceState: string;
   settledAt: string | null;
   createdAt: string;
+  correctableAmountMinor: string;
 };
 export type OperatorEarningsPage = {
   items: OperatorEarningsEntry[];

@@ -16,7 +16,7 @@ suite("withdrawal lifecycle", () => {
   beforeEach(async () => {
     activeFees = enabledFees;
     await app.database.query(
-      `truncate table treasury_capability.entries,withdrawal_capability.withdrawals,withdrawal_capability.destinations,ledger_capability.withdrawal_reservation_events,ledger_capability.withdrawal_reservations,ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.purchase_distributions,payment_capability.reconciliation_attempts,payment_capability.provider_events,access_capability.access_grants,entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,identity_capability.account_capabilities,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`,
+      `truncate table treasury_capability.entries,ledger_capability.earnings_corrections,withdrawal_capability.withdrawals,withdrawal_capability.destinations,ledger_capability.withdrawal_reservation_events,ledger_capability.withdrawal_reservations,ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.purchase_distributions,payment_capability.reconciliation_attempts,payment_capability.provider_events,access_capability.access_grants,entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,identity_capability.account_capabilities,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`,
     );
     await app.database.query(
       `update ledger_capability.distribution_policy set initial_balance_state='available',settlement_delay_seconds=0,platform_rate_basis_points=0`,
@@ -72,8 +72,60 @@ suite("withdrawal lifecycle", () => {
       name: "Test account",
       values: { bank_name: "Test bank", account_number: "0123456789", account_name: "Seller" },
     });
-    return { seller, buyer, destinationId: savedDestination.id };
+    return { seller, buyer, destinationId: savedDestination.id, purchaseId: checkout.purchaseId! };
   }
+
+  it("does not treat an active withdrawal reservation as recoverable Earnings", async () => {
+    const { seller, destinationId, purchaseId } = await setup();
+    const source = (await app.ledger.findEntriesByPurchaseId(purchaseId)).find(
+      (entry) => entry.recipientRole === "seller" && entry.direction === "credit",
+    )!;
+    expect(source.amount.minorAmount).toBe(10_000n);
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 5_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    const correction = await app.earningsCorrections.create(seller.id, {
+      sourceEntryId: source.id,
+      amountMinor: "6000",
+      reason: "Recover only unreserved value; debt the remainder",
+      idempotencyKey: newId(),
+    });
+    expect(correction.correction).toMatchObject({ availableMinor: "5000", debtMinor: "1000" });
+    expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(5_000n);
+    expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("requested");
+  });
+
+  it("does not debit completed payout value again during a source-linked correction", async () => {
+    const { seller, destinationId, purchaseId } = await setup();
+    const source = (await app.ledger.findEntriesByPurchaseId(purchaseId)).find(
+      (entry) => entry.recipientRole === "seller" && entry.direction === "credit",
+    )!;
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 5_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await app.withdrawals.complete(seller.id, withdrawal.id);
+    const fundingBefore = (await app.wallet.summary(seller.id)).available.minorAmount;
+    const correction = await app.earningsCorrections.create(seller.id, {
+      sourceEntryId: source.id,
+      amountMinor: "6000",
+      reason: "Recover source amount after completed payout",
+      idempotencyKey: newId(),
+    });
+    expect(correction.correction).toMatchObject({ availableMinor: "5000", debtMinor: "1000" });
+    expect((await app.wallet.summary(seller.id)).available.minorAmount).toBe(fundingBefore);
+    expect((await app.fundsReservation.summarize(seller.id))[0].completedMinor).toBe(5_000n);
+  });
   it("reserves available funds atomically and blocks pending funds", async () => {
     const { seller, destinationId } = await setup();
     const first = await app.withdrawals.create({

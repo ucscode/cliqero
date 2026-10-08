@@ -1,12 +1,9 @@
 import { newId } from "@/kernel/ids";
 import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { EventOutbox } from "@/kernel/events";
-import type {
-  LedgerRepository,
-  PurchaseDistribution,
-  LedgerEntryDraft,
-} from "@/modules/ledger/ledger";
+import type { LedgerRepository, LedgerEntryDraft } from "@/modules/ledger/ledger";
 import type { PurchaseRepository } from "@/modules/purchase/purchase";
+import { Money } from "@/modules/money/money";
 
 export interface ReversalRecord {
   id: string;
@@ -48,8 +45,16 @@ export class PurchaseReversalProcessor {
       const distribution = await this.ledger.findDistributionByPurchaseId(purchase.id);
       if (!distribution) throw new Error("Purchase distribution not found");
       const originals = (await this.ledger.findEntriesByPurchaseId(purchase.id)).filter(
-        (entry) => entry.reversalId === undefined,
+        (entry) =>
+          entry.entryType === "purchase-earnings" &&
+          entry.direction === "credit" &&
+          entry.originalEntryId === undefined &&
+          entry.reversalId === undefined,
       );
+      const accountIds = [
+        ...new Set(originals.flatMap((entry) => (entry.accountId ? [entry.accountId] : []))),
+      ].sort();
+      for (const accountId of accountIds) await this.ledger.lockAccountForMutation(accountId);
       const reversal = {
         id: newId(),
         purchaseId: purchase.id,
@@ -62,23 +67,29 @@ export class PurchaseReversalProcessor {
       };
       if (!reversal.reason) throw new Error("Reversal reason is required");
       await this.reversals.create(reversal);
-      const compensations: LedgerEntryDraft[] = originals.map((original) => ({
-        id: newId(),
-        distributionId: distribution.id,
-        accountId: original.accountId,
-        purchaseId: purchase.id,
-        entryType: "purchase-reversal",
-        direction: "debit",
-        amount: original.amount,
-        idempotencyKey: `purchase-reversal:${reversal.id}:${original.id}`,
-        correlationId: input.correlationId,
-        recipientRole: original.recipientRole,
-        basis: "purchase-reversal",
-        referralLevel: original.referralLevel,
-        balanceState: original.balanceState,
-        originalEntryId: original.id,
-        reversalId: reversal.id,
-      }));
+      const compensations: LedgerEntryDraft[] = originals.flatMap((original) => {
+        const remainingMinor = original.amount.minorAmount - (original.correctedMinor ?? 0n);
+        if (remainingMinor <= 0n) return [];
+        return [
+          {
+            id: newId(),
+            distributionId: distribution.id,
+            accountId: original.accountId,
+            purchaseId: purchase.id,
+            entryType: "purchase-reversal",
+            direction: "debit",
+            amount: Money.of(remainingMinor, original.amount.currency),
+            idempotencyKey: `purchase-reversal:${reversal.id}:${original.id}`,
+            correlationId: input.correlationId,
+            recipientRole: original.recipientRole,
+            basis: "purchase-reversal",
+            referralLevel: original.referralLevel,
+            balanceState: original.balanceState,
+            originalEntryId: original.id,
+            reversalId: reversal.id,
+          },
+        ];
+      });
       await this.ledger.append(compensations);
       await this.outbox.append([
         {

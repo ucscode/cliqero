@@ -9,7 +9,11 @@ export default async function OperatorEarningsPage() {
   const access = await requireOperatorPage("/operator/earnings");
   return (
     <OperatorShell {...access} activeSection="earnings">
-      <OperatorEarningsList canDelete={hasCapability(access.capabilities, "system.root")} />
+      <OperatorEarningsList
+        canDelete={hasCapability(access.capabilities, "system.root")}
+        canManage={hasCapability(access.capabilities, "finance.manage")}
+        canReadCorrections={hasCapability(access.capabilities, "finance.read")}
+      />
     </OperatorShell>
   );
 }

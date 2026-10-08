@@ -109,12 +109,27 @@ suite("provider funding reversal recovery", () => {
       grossMinor: 1000n,
       idempotencyKey: `consume-funding:${newId()}`,
     });
-    await app.earningsAdjustments.create(ownerId, {
-      accountId: ownerId,
-      amountMinor: (-BigInt(transfer.netMinor)).toString(),
-      reason: "Integration fixture consumes transferred value",
-      idempotencyKey: `consume-earnings:${newId()}`,
-    });
+    await insertEarningsSpendFixture(
+      ownerId,
+      BigInt(transfer.netMinor),
+      "Integration fixture consumes transferred value",
+    );
+  }
+
+  async function insertEarningsSpendFixture(
+    accountId: string,
+    amountMinor: bigint,
+    reason: string,
+  ) {
+    // Test-only append-only spend fixture. Runtime manual adjustments are
+    // positive-only; production debits use their owning transfer/recovery flow.
+    await app.database.query(
+      `insert into ledger_capability.earnings_adjustments
+        (uuid,account_id,amount_minor,reason,created_by,correlation_id,idempotency_key)
+       select gen_random_uuid(),account.id,$2,$3,account.id,gen_random_uuid(),$4
+         from identity_capability.accounts account where account.uuid=$1`,
+      [accountId, (-amountMinor).toString(), reason, newId()],
+    );
   }
 
   it("neutralizes a full reversal before any credit exists and keeps retries idempotent", async () => {
@@ -754,12 +769,11 @@ suite("provider funding reversal recovery", () => {
       grossMinor: 1000n,
       idempotencyKey: `root-delete-spend:${newId()}`,
     });
-    await app.earningsAdjustments.create(owner.id, {
-      accountId: owner.id,
-      amountMinor: (-BigInt(transfer.netMinor)).toString(),
-      reason: "Consume transfer for root deletion fixture",
-      idempotencyKey: `root-delete-spend-adjustment:${newId()}`,
-    });
+    await insertEarningsSpendFixture(
+      owner.id,
+      BigInt(transfer.netMinor),
+      "Consume transfer for root deletion fixture",
+    );
     const reversal = await app.fundingReversals.createByOperator({
       actorId: owner.id,
       fundingId: funding.id,
@@ -806,12 +820,11 @@ suite("provider funding reversal recovery", () => {
       grossMinor: 1000n,
       idempotencyKey: `concurrent-economic-lock:${newId()}`,
     });
-    await app.earningsAdjustments.create(owner.id, {
-      accountId: owner.id,
-      amountMinor: (-BigInt(transfer.netMinor)).toString(),
-      reason: "Clear transfer fixture earnings",
-      idempotencyKey: `concurrent-economic-lock-clear:${newId()}`,
-    });
+    await insertEarningsSpendFixture(
+      owner.id,
+      BigInt(transfer.netMinor),
+      "Clear transfer fixture earnings",
+    );
     await app.earningsAdjustments.create(owner.id, {
       accountId: owner.id,
       amountMinor: "1000",

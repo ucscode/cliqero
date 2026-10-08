@@ -205,6 +205,8 @@ const domainDescriptions: Record<string, string> = {
     "Distribution operations expose persisted distribution records under their own resource contract.",
   "Earning Entries":
     "Earning entry operations preserve accounting integrity and expose persisted entries under their own resource contract.",
+  "Earnings Corrections":
+    "Earnings corrections are immutable, source-linked recoveries of purchase-earning allocations.",
   "Treasury Entries":
     "Treasury entries are immutable accounting facts; corrections are new compensating entries.",
   "Package Entitlements":
@@ -314,6 +316,7 @@ function domainForPath(path: string): string {
   if (relative === "payment-reconciliation-candidates") return "Payment Reconciliation Candidates";
   if (relative.startsWith("payment-events")) return "Payment Events";
   if (relative.startsWith("earnings/adjustments")) return "Earnings Adjustments";
+  if (relative.startsWith("earnings/corrections")) return "Earnings Corrections";
   if (relative === "funding-transactions" || relative.startsWith("funding-transactions/"))
     return "Funding Transactions";
   if (relative === "funding-reversals" || relative.startsWith("funding-reversals/"))

@@ -9,6 +9,8 @@ import { PurchaseDistributionProcessor } from "@/processors/purchase/distributio
 import { OutboxDispatcher, OutboxHandlerRegistry } from "@/workers/outbox/dispatcher";
 import { OperatorBulkWorkflow } from "@/application/operator/bulk-workflow";
 import { PostgresFundingReversalRepository } from "@/infrastructure/postgres/funding/reversals";
+import { PostgresEarningsCorrectionRepository } from "@/infrastructure/postgres/ledger/earnings-corrections";
+import { EarningsCorrectionService } from "@/application/finance/earnings-corrections";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -16,7 +18,7 @@ suite("purchase financial distribution", () => {
   const app = createContainer(databaseUrl!);
   beforeEach(async () => {
     await app.database
-      .query(`truncate table treasury_capability.entries,ledger_capability.entry_settlements,ledger_capability.entries,ledger_capability.reversals,ledger_capability.purchase_distributions,
+      .query(`truncate table treasury_capability.entries,ledger_capability.entry_settlements,ledger_capability.earnings_corrections,ledger_capability.entries,ledger_capability.reversals,ledger_capability.purchase_distributions,
     payment_capability.reconciliation_attempts,payment_capability.provider_events,referral_capability.listing_attributions,
     referral_capability.account_referrals,access_capability.access_grants,
     entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,
@@ -42,6 +44,16 @@ suite("purchase financial distribution", () => {
       await app.database.query(
         `insert into identity_capability.account_capabilities(account_id,capability)
          values((select id from identity_capability.accounts where uuid=$1),'finance.read')
+         on conflict do nothing`,
+        [accountId],
+      );
+  }
+  async function grantFinanceManage(...accountIds: string[]) {
+    for (const accountId of accountIds)
+      await app.database.query(
+        `insert into identity_capability.account_capabilities(account_id,capability)
+         values((select id from identity_capability.accounts where uuid=$1),'finance.manage'),
+               ((select id from identity_capability.accounts where uuid=$1),'finance.read')
          on conflict do nothing`,
         [accountId],
       );
@@ -76,6 +88,282 @@ suite("purchase financial distribution", () => {
     });
     return { seller, buyer, listing, purchaseId: checkout.purchaseId!, referrerId };
   }
+
+  async function sellerEarning(purchaseId: string) {
+    await app.purchaseDistribution.process({ purchaseId, correlationId: newId() });
+    const earning = (await app.ledger.findEntriesByPurchaseId(purchaseId)).find(
+      (entry) => entry.recipientRole === "seller" && entry.direction === "credit",
+    );
+    if (!earning) throw new Error("Integration fixture did not create a seller earning");
+    return earning;
+  }
+
+  it("creates partial source-linked corrections atomically, idempotently, and within the original allocation", async () => {
+    const value = await completed();
+    await grantFinanceManage(value.seller.id);
+    const source = await sellerEarning(value.purchaseId);
+    const intent = {
+      sourceEntryId: source.id,
+      amountMinor: "20",
+      reason: "Correct a verified seller allocation",
+      idempotencyKey: newId(),
+    };
+    const [first, retry] = await Promise.all([
+      app.earningsCorrections.create(value.seller.id, intent),
+      app.earningsCorrections.create(value.seller.id, intent),
+    ]);
+    expect(first.correction.id).toBe(retry.correction.id);
+    expect([first.created, retry.created].sort()).toEqual([false, true]);
+    expect(first.correction).toMatchObject({
+      sourceEntryId: source.id,
+      accountId: value.seller.id,
+      amountMinor: "20",
+      pendingMinor: "0",
+      availableMinor: "20",
+      debtMinor: "0",
+      createdBy: value.seller.id,
+      createdByUsername: value.seller.username,
+    });
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(64n);
+    const persisted = await app.database.query<{
+      amount_minor: string;
+      correlation_id: string;
+      entry_correlation: string;
+      entry_amount: string;
+    }>(
+      `select correction.amount_minor::text,correction.correlation_id::text,
+              entry.correlation_id::text entry_correlation,entry.amount_minor::text entry_amount
+         from ledger_capability.earnings_corrections correction
+         join ledger_capability.entries entry on entry.original_entry_id=correction.source_entry_id
+          and entry.idempotency_key='earnings-correction:'||correction.uuid||':available'
+        where correction.uuid=$1`,
+      [first.correction.id],
+    );
+    expect(persisted.rows).toEqual([
+      {
+        amount_minor: "20",
+        correlation_id: first.correction.correlationId,
+        entry_correlation: first.correction.correlationId,
+        entry_amount: "20",
+      },
+    ]);
+    await app.earningsCorrections.create(value.seller.id, {
+      ...intent,
+      amountMinor: "30",
+      idempotencyKey: newId(),
+    });
+    expect(
+      (await app.operatorEarnings.list({ limit: 25, search: source.id })).items[0],
+    ).toMatchObject({ balanceState: "partially_corrected", correctableAmountMinor: "34" });
+    await expect(
+      app.earningsCorrections.create(value.seller.id, {
+        ...intent,
+        amountMinor: "35",
+        idempotencyKey: newId(),
+      }),
+    ).rejects.toMatchObject({ code: "correction_exceeds_source_remaining", status: 409 });
+    await app.earningsCorrections.create(value.seller.id, {
+      ...intent,
+      amountMinor: "34",
+      idempotencyKey: newId(),
+    });
+    expect(
+      (await app.operatorEarnings.list({ limit: 25, search: source.id })).items[0],
+    ).toMatchObject({ balanceState: "corrected", correctableAmountMinor: "0" });
+    await expect(
+      app.earningsCorrections.create(value.seller.id, {
+        ...intent,
+        amountMinor: "1",
+        idempotencyKey: newId(),
+      }),
+    ).rejects.toMatchObject({ code: "correction_exceeds_source_remaining", status: 409 });
+    expect(
+      (await app.ledger.findEntriesByPurchaseId(value.purchaseId)).find(
+        (entry) => entry.id === source.id,
+      )?.amount.minorAmount,
+    ).toBe(source.amount.minorAmount);
+  });
+
+  it("serializes competing source corrections and a purchase reversal without over-recovery", async () => {
+    const value = await completed();
+    await grantFinanceManage(value.seller.id);
+    const source = await sellerEarning(value.purchaseId);
+    const outcomes = await Promise.allSettled([
+      app.earningsCorrections.create(value.seller.id, {
+        sourceEntryId: source.id,
+        amountMinor: "50",
+        reason: "First competing correction",
+        idempotencyKey: newId(),
+      }),
+      app.earningsCorrections.create(value.seller.id, {
+        sourceEntryId: source.id,
+        amountMinor: "50",
+        reason: "Second competing correction",
+        idempotencyKey: newId(),
+      }),
+    ]);
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "rejected")).toHaveLength(1);
+    const correctionRows = await app.database.query<{ total: string }>(
+      `select coalesce(sum(amount_minor),0)::text total from ledger_capability.earnings_corrections
+        where source_entry_id=(select id from ledger_capability.entries where uuid=$1)`,
+      [source.id],
+    );
+    const correctionTotal = BigInt(correctionRows.rows[0]!.total);
+    const reversal = await app.purchaseReversal.process({
+      purchaseId: value.purchaseId,
+      reason: "Purchase reversed after partial Earnings correction",
+      source: "operator",
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    const reversalRows = await app.database.query<{ total: string }>(
+      `select coalesce(sum(amount_minor),0)::text total from ledger_capability.entries
+        where original_entry_id=(select id from ledger_capability.entries where uuid=$1)
+          and reversal_id=(select id from ledger_capability.reversals where uuid=$2)`,
+      [source.id, reversal.id],
+    );
+    expect(correctionTotal + BigInt(reversalRows.rows[0]!.total)).toBe(source.amount.minorAmount);
+    await expect(
+      app.earningsCorrections.create(value.seller.id, {
+        sourceEntryId: source.id,
+        amountMinor: "1",
+        reason: "Cannot correct a reversed source",
+        idempotencyKey: newId(),
+      }),
+    ).rejects.toMatchObject({ code: "earning_source_reversed", status: 409 });
+  });
+
+  it("keeps pending corrections pending until maturity and excludes reserved value from recovery", async () => {
+    await app.database.query(
+      `update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`,
+    );
+    const value = await completed();
+    await grantFinanceManage(value.seller.id);
+    const source = await sellerEarning(value.purchaseId);
+    expect(source.balanceState).toBe("pending");
+    const correction = await app.earningsCorrections.create(value.seller.id, {
+      sourceEntryId: source.id,
+      amountMinor: "20",
+      reason: "Correct unvested source amount",
+      idempotencyKey: newId(),
+    });
+    expect(correction.correction).toMatchObject({
+      pendingMinor: "20",
+      availableMinor: "0",
+      debtMinor: "0",
+    });
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(0n);
+    expect(
+      (await app.operatorEarnings.list({ limit: 25, search: source.id })).totals.pendingMinor,
+    ).toBe("64");
+    await app.settlement.settle({ now: new Date(Date.now() + 3_601_000), batchSize: 20 });
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(64n);
+    expect(
+      (await app.operatorEarnings.list({ limit: 25, search: source.id })).totals.pendingMinor,
+    ).toBe("0");
+  });
+
+  it("creates Earnings debt rather than touching Funding when an eligible source has already been spent", async () => {
+    const value = await completed();
+    await grantFinanceManage(value.seller.id);
+    const source = await sellerEarning(value.purchaseId);
+    await app.walletTransfers.transfer({
+      accountId: value.seller.id,
+      from: "earnings",
+      to: "funding",
+      grossMinor: source.amount.minorAmount,
+      idempotencyKey: newId(),
+    });
+    const fundingBefore = (await app.wallet.summary(value.seller.id)).available.minorAmount;
+    const correction = await app.earningsCorrections.create(value.seller.id, {
+      sourceEntryId: source.id,
+      amountMinor: source.amount.minorAmount.toString(),
+      reason: "Recover spent proceeds from the source entitlement",
+      idempotencyKey: newId(),
+    });
+    expect(correction.correction).toMatchObject({
+      availableMinor: "0",
+      debtMinor: source.amount.minorAmount.toString(),
+    });
+    expect((await app.wallet.summary(value.seller.id)).available.minorAmount).toBe(fundingBefore);
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe(
+      source.amount.minorAmount.toString(),
+    );
+  });
+
+  it("serializes a correction with a concurrent Earnings-to-Funding transfer", async () => {
+    const value = await completed();
+    await grantFinanceManage(value.seller.id);
+    const source = await sellerEarning(value.purchaseId);
+    const outcomes = await Promise.allSettled([
+      app.earningsCorrections.create(value.seller.id, {
+        sourceEntryId: source.id,
+        amountMinor: "50",
+        reason: "Concurrent source correction",
+        idempotencyKey: newId(),
+      }),
+      app.walletTransfers.transfer({
+        accountId: value.seller.id,
+        from: "earnings",
+        to: "funding",
+        grossMinor: 50n,
+        idempotencyKey: newId(),
+      }),
+    ]);
+    expect(outcomes[0]?.status).toBe("fulfilled");
+    const correction = outcomes[0]!.status === "fulfilled" ? outcomes[0]!.value.correction : null;
+    expect(correction).not.toBeNull();
+    if (outcomes[1]?.status === "fulfilled") {
+      expect(correction).toMatchObject({ availableMinor: "34", debtMinor: "16" });
+      expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(0n);
+    } else {
+      expect(correction).toMatchObject({ availableMinor: "50", debtMinor: "0" });
+      expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(34n);
+    }
+  });
+
+  it("rolls back correction, ledger debit, debt, and audit together", async () => {
+    const value = await completed();
+    await grantFinanceManage(value.seller.id);
+    const source = await sellerEarning(value.purchaseId);
+    const beforeEntries = await app.database.query<{ count: number }>(
+      `select count(*)::int count from ledger_capability.entries where purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
+      [value.purchaseId],
+    );
+    const failing = new EarningsCorrectionService(
+      new PostgresEarningsCorrectionRepository(app.database),
+      app.operators,
+      app.accountDebt,
+      {
+        record: async () => {
+          throw new Error("forced correction audit failure");
+        },
+      } as any,
+      app.database,
+    );
+    await expect(
+      failing.create(value.seller.id, {
+        sourceEntryId: source.id,
+        amountMinor: source.amount.minorAmount.toString(),
+        reason: "Must roll back when audit persistence fails",
+        idempotencyKey: newId(),
+      }),
+    ).rejects.toThrow("forced correction audit failure");
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.earnings_corrections where source_entry_id=(select id from ledger_capability.entries where uuid=$1)`,
+        [source.id],
+      ),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await app.database.query<{ count: number }>(
+        `select count(*)::int count from ledger_capability.entries where purchase_id=(select id from purchase_capability.purchases where uuid=$1)`,
+        [value.purchaseId],
+      ),
+    ).toMatchObject({ rows: beforeEntries.rows });
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("0");
+  });
 
   it("settles outstanding debt before positive earnings adjustments become available", async () => {
     const owner = await account(`debtadj${newId().replaceAll("-", "").slice(0, 8)}`);
@@ -804,12 +1092,18 @@ suite("purchase financial distribution", () => {
       grossMinor: 1_000n,
       idempotencyKey: newId(),
     });
-    await app.earningsAdjustments.create(value.seller.id, {
-      accountId: value.seller.id,
-      amountMinor: (-BigInt(fundingTransfer.netMinor)).toString(),
-      reason: "Consume fixture Funding balance before recovery test",
-      idempotencyKey: newId(),
-    });
+    await app.database.query(
+      `insert into ledger_capability.earnings_adjustments
+        (uuid,account_id,amount_minor,reason,created_by,correlation_id,idempotency_key)
+       select gen_random_uuid(),account.id,$2,$3,account.id,gen_random_uuid(),$4
+         from identity_capability.accounts account where account.uuid=$1`,
+      [
+        value.seller.id,
+        (-BigInt(fundingTransfer.netMinor)).toString(),
+        "Consume fixture Funding balance before recovery test",
+        newId(),
+      ],
+    );
     const fundingReversal = await app.fundingReversals.createByOperator({
       actorId: value.seller.id,
       fundingId: funding.id,

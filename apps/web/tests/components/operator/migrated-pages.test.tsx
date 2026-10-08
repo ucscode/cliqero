@@ -8,7 +8,11 @@ import {
   OperatorDistributionDetail,
   OperatorDistributionList,
 } from "@/components/operator/distributions";
-import { OperatorEarningsList } from "@/components/operator/earnings";
+import {
+  EarningsCorrectionHistory,
+  EarningsCorrectionSourceSummary,
+  OperatorEarningsList,
+} from "@/components/operator/earnings";
 import { OperatorFundingDetail, OperatorFundingList } from "@/components/operator/funding";
 import { OperatorNetwork } from "@/components/operator/network";
 import { OperatorReviews } from "@/components/operator/reviews";
@@ -53,6 +57,51 @@ const migratedPages = [
 ] as const;
 
 describe("operator console shared page migration", () => {
+  it("links an Earnings correction to its source context and responsible operator", () => {
+    const html = renderPage(
+      <>
+        <EarningsCorrectionSourceSummary
+          accountUsername="seller_one"
+          sourceEntryId="source-entry-id"
+          purchaseId="purchase-id"
+          distributionId="distribution-id"
+          correctableAmountMinor="2500"
+          onClose={() => undefined}
+        />
+        <EarningsCorrectionHistory
+          items={[
+            {
+              id: "correction-id",
+              createdBy: "operator-id",
+              createdByUsername: "finance_operator",
+              accountUsername: "seller_one",
+              sourceEntryId: "source-entry-id",
+              purchaseId: "purchase-id",
+              distributionId: "distribution-id",
+              amountMinor: "2500",
+              pendingMinor: "0",
+              availableMinor: "1800",
+              debtMinor: "700",
+              reason: "Correct verified allocation",
+              correlationId: "correlation-id",
+              createdAt: "2026-10-08T12:30:00.000Z",
+            },
+          ]}
+        />
+      </>,
+    );
+    expect(html).toContain('href="/operator/purchases/purchase-id"');
+    expect(html).toContain('href="/operator/distributions/distribution-id"');
+    expect(html).toContain("source-entry-id");
+    expect(html).toContain(
+      "Any amount not covered by pending or unreserved Earnings becomes account debt",
+    );
+    expect(html).toContain('href="/operator/users/operator-id"');
+    expect(html).toContain("@finance_operator");
+    expect(html).toContain("correlation-id");
+    expect(html).toContain("Earnings debt");
+  });
+
   it("shows human-readable Treasury source and actor links", () => {
     const html = renderPage(
       <OperatorTreasuryTraceability

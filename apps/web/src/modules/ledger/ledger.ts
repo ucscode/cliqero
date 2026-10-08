@@ -21,6 +21,8 @@ export interface LedgerEntryDraft {
 }
 export interface LedgerEntry extends LedgerEntryDraft {
   createdAt: Date;
+  /** Total source-linked corrections already economically applied to this credit. */
+  correctedMinor?: bigint;
 }
 export interface PurchaseDistribution {
   id: string;
@@ -42,6 +44,7 @@ export interface FinancialDistributionPolicyRepository {
   getActive(): Promise<FinancialDistributionPolicy>;
 }
 export interface LedgerRepository {
+  lockAccountForMutation(accountId: string): Promise<void>;
   findDistributionByPurchaseId(purchaseId: string): Promise<PurchaseDistribution | null>;
   createDistribution(distribution: Omit<PurchaseDistribution, "completedAt">): Promise<void>;
   append(entries: readonly LedgerEntryDraft[]): Promise<void>;

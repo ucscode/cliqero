@@ -33,6 +33,22 @@ suite("atomic Funding and Earnings transfers", () => {
     });
   }
 
+  async function insertEarningsSpendFixture(
+    accountId: string,
+    amountMinor: bigint,
+    reason: string,
+  ) {
+    // Seed an append-only negative fact directly: the public manual-adjustment
+    // workflow is positive-only and source-linked recovery owns debits.
+    await app.database.query(
+      `insert into ledger_capability.earnings_adjustments
+        (uuid,account_id,amount_minor,reason,created_by,correlation_id,idempotency_key)
+       select gen_random_uuid(),account.id,$2,$3,account.id,gen_random_uuid(),$4
+         from identity_capability.accounts account where account.uuid=$1`,
+      [accountId, (-amountMinor).toString(), reason, newId()],
+    );
+  }
+
   async function fund(accountId: string, amountMinor: bigint) {
     const funding = await app.fundingService.create({
       accountId,
@@ -120,13 +136,7 @@ suite("atomic Funding and Earnings transfers", () => {
       reference: "TICKET-123",
       idempotencyKey: newId(),
     });
-    await app.earningsAdjustments.create(user.id, {
-      accountId: user.id,
-      amountMinor: "-400",
-      reason: "Support correction",
-      reference: "TICKET-124",
-      idempotencyKey: newId(),
-    });
+    await insertEarningsSpendFixture(user.id, 400n, "Support correction fixture");
     const earningsItems = [] as Array<{
       id: string;
       reason: string | null;
@@ -146,7 +156,7 @@ suite("atomic Funding and Earnings transfers", () => {
     expect(earningsItems.map((entry) => entry.reason)).toEqual(
       expect.arrayContaining([
         "Gift cash",
-        "Support correction",
+        "Support correction fixture",
         "Transfer from funding to earnings",
         "Transfer from earnings to funding",
       ]),

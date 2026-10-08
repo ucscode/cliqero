@@ -187,6 +187,7 @@ function createHarness() {
       })),
     },
     ledger: {
+      lockAccountForMutation: vi.fn(async () => undefined),
       findDistributionByPurchaseId: vi.fn(async (purchaseId: string) => ({
         id: `distribution-${purchaseId}`,
       })),
