@@ -192,9 +192,9 @@ export class PostgresWalletTransferCompensationRepository implements WalletTrans
     if (value.feeMinor > 0n) {
       await this.sql.query(
         `insert into treasury_capability.entries
-          (uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,correlation_id,created_at)
+          (uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,actor_kind,correlation_id,created_at)
          values($1,'debit',$2,'Wallet transfer fee refund',$3,'wallet_transfer_compensation',$4,$5,
-           (select id from identity_capability.accounts where uuid=$6),$7,$8)`,
+           (select id from identity_capability.accounts where uuid=$6),'operator',$7,$8)`,
         [
           newId(),
           value.feeMinor.toString(),

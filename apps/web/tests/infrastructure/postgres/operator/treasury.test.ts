@@ -19,6 +19,8 @@ describe("operator treasury read model", () => {
               note: "Distribution",
               source_kind: "distribution",
               source_id: "00000000-0000-4000-8000-000000000002",
+              correlation_id: "00000000-0000-4000-8000-000000000003",
+              actor_kind: "system",
               created_at: "2026-01-01T00:00:00.000Z",
               actor_id: null,
               actor_username: null,
@@ -39,8 +41,17 @@ describe("operator treasury read model", () => {
     expect(page.items[0]).toMatchObject({
       amountMinor: "1000",
       source: { kind: "distribution", id: "00000000-0000-4000-8000-000000000002" },
-      actor: null,
+      correlationId: "00000000-0000-4000-8000-000000000003",
+      actor: {
+        id: null,
+        username: null,
+        email: null,
+        kind: "system",
+      },
     });
+    expect(
+      queries.find((query) => query.sql.includes("from treasury_capability.entries e"))?.sql,
+    ).toContain("e.correlation_id::text=$1");
     expect(
       queries.some((query) => query.sql.includes("order by e.created_at desc,e.id desc")),
     ).toBe(true);

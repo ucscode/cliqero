@@ -94,6 +94,7 @@ export class WalletTransferCompensationService {
       }
 
       const id = newId();
+      const correlationId = newId();
       const compensation = await this.repository.create({
         id,
         transferId: observed.id,
@@ -111,12 +112,13 @@ export class WalletTransferCompensationService {
           debtMinor: 0n,
         },
         createdBy: input.actorId,
-        correlationId: newId(),
+        correlationId,
         idempotencyKey: key,
         createdAt: new Date(),
       });
       await this.audit.record({
         actorId: input.actorId,
+        correlationId,
         action: "wallet.transfer.compensated",
         subjectType: "wallet_transfer_compensation",
         subjectId: compensation.id,

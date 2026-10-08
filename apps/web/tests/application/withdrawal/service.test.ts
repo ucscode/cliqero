@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { WithdrawalService } from "@/application/withdrawal/service";
 import { Money } from "@/modules/money/money";
+import type { LedgerFundsReservationService } from "@/modules/ledger/reservations";
 import type { Withdrawal } from "@/modules/withdrawal/withdrawal";
 import type { WithdrawalIdempotencyMatch } from "@/modules/withdrawal/withdrawal";
 
@@ -40,7 +41,9 @@ function fixture(
   }));
   const treasuryCreate = vi.fn(async () => undefined);
   const auditRecord = vi.fn(async () => undefined);
-  const releaseOrComplete = vi.fn(async () => undefined);
+  const releaseOrComplete = vi.fn<LedgerFundsReservationService["releaseOrComplete"]>(
+    async () => undefined,
+  );
   const append = vi.fn(async () => undefined);
   const requireCapability = vi.fn(async () => undefined);
   const findByIdempotencyKey = vi.fn<
@@ -182,7 +185,7 @@ describe("WithdrawalService idempotency intent", () => {
 
 describe("WithdrawalService payout return recovery", () => {
   it("restores a completed payout through reservation recovery, Treasury reversal, and debt settlement idempotently", async () => {
-    const { service, withdrawal, recordPayoutReturn, settleInflow, treasuryCreate } =
+    const { service, withdrawal, recordPayoutReturn, settleInflow, treasuryCreate, auditRecord } =
       fixture("completed");
     const input = {
       amountMinor: "2375",
@@ -197,14 +200,17 @@ describe("WithdrawalService payout return recovery", () => {
       expect.objectContaining({
         amountMinor: 2375n,
         restoredMinor: 2500n,
-        correlationId: withdrawal.correlationId,
+        correlationId: expect.any(String),
       }),
     );
+    const correctionCorrelationId = recordPayoutReturn.mock.calls[0]![0].correlationId;
+    expect(correctionCorrelationId).not.toBe(withdrawal.correlationId);
     expect(settleInflow).toHaveBeenCalledWith(
       expect.objectContaining({
         incomingMinor: 2500n,
         sourceKind: "payout_return",
         wallet: "earnings",
+        correlationId: correctionCorrelationId,
       }),
     );
     expect(treasuryCreate).toHaveBeenCalledWith(
@@ -212,7 +218,11 @@ describe("WithdrawalService payout return recovery", () => {
         direction: "debit",
         amountMinor: 125n,
         sourceKind: "withdrawal_fee_reversal",
+        correlationId: correctionCorrelationId,
       }),
+    );
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: correctionCorrelationId }),
     );
   });
 
@@ -269,7 +279,8 @@ describe("WithdrawalService request fees", () => {
         sourceKind: "withdrawal_fee",
         sourceId: withdrawal.id,
         correlationId: "withdrawal-correlation",
-        idempotencyKey: `withdrawal:${withdrawal.id}:fee:request:2000`,
+        actorKind: "customer",
+        idempotencyKey: `withdrawal:${withdrawal.id}:fee:request:withdrawal-correlation`,
       }),
     );
   });
@@ -285,6 +296,7 @@ describe("WithdrawalService manual completion", () => {
       append,
       requireCapability,
       treasuryCreate,
+      auditRecord,
     } = fixture();
 
     const result = await service.complete("operator-1", withdrawal.id, {
@@ -301,11 +313,13 @@ describe("WithdrawalService manual completion", () => {
     );
     expect(releaseOrComplete).toHaveBeenCalledTimes(1);
     expect(treasuryCreate).not.toHaveBeenCalled();
+    const operationCorrelationId = releaseOrComplete.mock.calls[0]![0].correlationId;
+    expect(operationCorrelationId).not.toBe(withdrawal.correlationId);
     expect(releaseOrComplete).toHaveBeenCalledWith({
       withdrawalId: withdrawal.id,
       accountId: withdrawal.accountId,
       kind: "completed",
-      correlationId: withdrawal.correlationId,
+      correlationId: operationCorrelationId,
     });
     expect(result).toMatchObject({
       state: "completed",
@@ -318,6 +332,7 @@ describe("WithdrawalService manual completion", () => {
       expect.objectContaining({
         name: "withdrawal.completed",
         aggregateId: withdrawal.id,
+        correlationId: operationCorrelationId,
         payload: {
           withdrawalId: withdrawal.id,
           completedBy: "operator-1",
@@ -325,35 +340,44 @@ describe("WithdrawalService manual completion", () => {
         },
       }),
     ]);
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: operationCorrelationId }),
+    );
   });
 
   it("keeps cancellation as a command that releases funds, reverses fees, and emits an event", async () => {
-    const { service, withdrawal, releaseOrComplete, append, treasuryCreate } = fixture("requested");
+    const { service, withdrawal, releaseOrComplete, append, treasuryCreate, auditRecord } =
+      fixture("requested");
 
     await expect(service.cancel("account-1", withdrawal.id)).resolves.toMatchObject({
       state: "cancelled",
     });
+    const operationCorrelationId = releaseOrComplete.mock.calls[0]![0].correlationId;
+    expect(operationCorrelationId).not.toBe(withdrawal.correlationId);
     expect(releaseOrComplete).toHaveBeenCalledWith({
       withdrawalId: withdrawal.id,
       accountId: withdrawal.accountId,
       kind: "released",
-      correlationId: withdrawal.correlationId,
+      correlationId: operationCorrelationId,
     });
     expect(treasuryCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         direction: "debit",
         amountMinor: withdrawal.fee?.minorAmount,
         sourceKind: "withdrawal_fee_reversal",
-        correlationId: withdrawal.correlationId,
+        correlationId: operationCorrelationId,
       }),
     );
     expect(append).toHaveBeenCalledWith([
       expect.objectContaining({
         name: "withdrawal.cancelled",
         aggregateId: withdrawal.id,
-        correlationId: withdrawal.correlationId,
+        correlationId: operationCorrelationId,
       }),
     ]);
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: operationCorrelationId }),
+    );
   });
 
   it("rejects completion unless the withdrawal is approved", async () => {
@@ -367,7 +391,7 @@ describe("WithdrawalService manual completion", () => {
   });
 
   it("allows an approved withdrawal to be rejected without execution-provider state", async () => {
-    const { service, withdrawal, releaseOrComplete } = fixture();
+    const { service, withdrawal, releaseOrComplete, append, auditRecord } = fixture();
 
     await expect(
       service.update("operator-1", withdrawal.id, {
@@ -377,12 +401,20 @@ describe("WithdrawalService manual completion", () => {
     ).resolves.toMatchObject({
       state: "rejected",
     });
+    const operationCorrelationId = releaseOrComplete.mock.calls[0]![0].correlationId;
+    expect(operationCorrelationId).not.toBe(withdrawal.correlationId);
     expect(releaseOrComplete).toHaveBeenCalledWith({
       withdrawalId: withdrawal.id,
       accountId: withdrawal.accountId,
       kind: "released",
-      correlationId: withdrawal.correlationId,
+      correlationId: operationCorrelationId,
     });
+    expect(append).toHaveBeenCalledWith([
+      expect.objectContaining({ correlationId: operationCorrelationId }),
+    ]);
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: operationCorrelationId }),
+    );
   });
 });
 

@@ -21,6 +21,7 @@ import type { AccountDebtService } from "@/application/finance/account-debt";
 
 export type WithdrawalCreateInput = {
   accountId: string;
+  actorId?: string;
   amountMinor: bigint;
   currency: string;
   destinationId: string;
@@ -83,6 +84,7 @@ export class WithdrawalService extends CrudService<
     const policy = await this.policy.getActive();
     return this.create({
       accountId: input.accountId,
+      actorId,
       amountMinor: BigInt(input.amountMinor),
       currency: policy.minimumAmount.currency,
       destinationId: input.destinationId,
@@ -166,7 +168,8 @@ export class WithdrawalService extends CrudService<
           feeMinor,
           input.correlationId,
           "request",
-          input.accountId,
+          input.actorId ?? input.accountId,
+          input.actorId ? "operator" : "customer",
         );
       if (initialState !== "rejected")
         try {
@@ -202,6 +205,26 @@ export class WithdrawalService extends CrudService<
           payload: { withdrawalId: id, accountId: input.accountId },
         },
       ]);
+      await this.audit.record({
+        actorId: input.actorId ?? input.accountId,
+        correlationId: input.correlationId,
+        action:
+          initialState === "approved"
+            ? "withdrawal.approved"
+            : initialState === "rejected"
+              ? "withdrawal.rejected"
+              : "withdrawal.requested",
+        subjectType: "withdrawal",
+        subjectId: id,
+        previousState: null,
+        newState: {
+          accountId: input.accountId,
+          amountMinor: amount.minorAmount.toString(),
+          feeMinor: feeMinor.toString(),
+          netMinor: netMinor.toString(),
+          state: initialState,
+        },
+      });
       return withdrawal;
     });
   }
@@ -255,30 +278,41 @@ export class WithdrawalService extends CrudService<
         { ...withdrawal, state: "cancelled", reason: "Cancelled by account" },
         "requested",
       );
+      const correlationId = newId();
       await this.funds.releaseOrComplete({
         withdrawalId: id,
         accountId,
         kind: "released",
-        correlationId: withdrawal.correlationId,
+        correlationId,
       });
       await this.reconcileTreasuryFee(
         withdrawal,
         withdrawal.fee?.minorAmount ?? 0n,
         0n,
-        withdrawal.correlationId,
+        correlationId,
         "reversal",
         accountId,
+        "customer",
       );
       await this.outbox.append([
         {
           id: newId(),
           name: "withdrawal.cancelled",
           aggregateId: id,
-          correlationId: withdrawal.correlationId,
+          correlationId,
           occurredAt: new Date(),
           payload: { withdrawalId: id },
         },
       ]);
+      await this.audit.record({
+        actorId: accountId,
+        correlationId,
+        action: "withdrawal.cancelled",
+        subjectType: "withdrawal",
+        subjectId: id,
+        previousState: { state: "requested" },
+        newState: { state: "cancelled", reason: "Cancelled by account" },
+      });
       return { ...withdrawal, state: "cancelled" as const };
     });
   }
@@ -311,19 +345,20 @@ export class WithdrawalService extends CrudService<
           "invalid_transition",
           409,
         );
+      const correlationId = newId();
       const completedAt = await this.withdrawals.complete(id, actorId, externalReference, note);
       await this.funds.releaseOrComplete({
         withdrawalId: id,
         accountId: withdrawal.accountId,
         kind: "completed",
-        correlationId: withdrawal.correlationId,
+        correlationId,
       });
       await this.outbox.append([
         {
           id: newId(),
           name: "withdrawal.completed",
           aggregateId: id,
-          correlationId: withdrawal.correlationId,
+          correlationId,
           occurredAt: completedAt,
           payload: {
             withdrawalId: id,
@@ -332,6 +367,15 @@ export class WithdrawalService extends CrudService<
           },
         },
       ]);
+      await this.audit.record({
+        actorId,
+        correlationId,
+        action: "withdrawal.completed",
+        subjectType: "withdrawal",
+        subjectId: id,
+        previousState: { state: "approved" },
+        newState: { state: "completed", externalReference, note },
+      });
       return {
         ...withdrawal,
         state: "completed" as const,
@@ -429,7 +473,7 @@ export class WithdrawalService extends CrudService<
           409,
         );
       const returnId = newId();
-      const correlationId = withdrawal.correlationId;
+      const correlationId = newId();
       await this.withdrawals.recordPayoutReturn({
         id: returnId,
         withdrawalId: id,
@@ -454,7 +498,7 @@ export class WithdrawalService extends CrudService<
         sourceKind: "payout_return",
         sourceId: returnId,
         reason: `Returned payout settled outstanding debt: ${reason}`,
-        actor: { kind: "account", id: actorId },
+        actor: { kind: "operator", id: actorId },
         correlationId,
         idempotencyKey: `debt-settlement:payout-return:${returnId}`,
       });
@@ -465,12 +509,14 @@ export class WithdrawalService extends CrudService<
         correlationId,
         "reversal",
         actorId,
+        "operator",
       );
       await this.withdrawals.markPayoutReturned(id, `Payout returned: ${reason}`);
       const payoutReturn = await this.withdrawals.findPayoutReturnByIdempotencyKey(idempotencyKey);
       if (!payoutReturn) throw new Error("Payout return evidence was not persisted");
       await this.audit.record({
         actorId,
+        correlationId,
         action: "withdrawal.payout_returned",
         subjectType: "withdrawal",
         subjectId: id,
@@ -581,13 +627,14 @@ export class WithdrawalService extends CrudService<
         reason: reason || null,
         updatedAt: new Date(),
       };
+      const operationCorrelationId = newId();
       if (current.state === "requested" && amountMinor !== current.amount.minorAmount) {
         try {
           await this.funds.resize({
             withdrawalId: id,
             accountId: current.accountId,
             amount,
-            correlationId: current.correlationId,
+            correlationId: operationCorrelationId,
           });
         } catch (cause) {
           if (cause instanceof Error && cause.message.includes("Insufficient available funds"))
@@ -604,9 +651,10 @@ export class WithdrawalService extends CrudService<
           updated,
           current.fee?.minorAmount ?? 0n,
           feeMinor,
-          current.correlationId,
+          operationCorrelationId,
           "edit",
           actorId,
+          "operator",
         );
       if (current.state === "requested")
         await this.withdrawals.update({ ...updated, state: targetState }, "requested");
@@ -618,15 +666,16 @@ export class WithdrawalService extends CrudService<
             updated,
             feeMinor,
             0n,
-            current.correlationId,
+            operationCorrelationId,
             "reversal",
             actorId,
+            "operator",
           );
           await this.funds.releaseOrComplete({
             withdrawalId: id,
             accountId: current.accountId,
             kind: "released",
-            correlationId: current.correlationId,
+            correlationId: operationCorrelationId,
           });
         }
         await this.outbox.append([
@@ -634,12 +683,22 @@ export class WithdrawalService extends CrudService<
             id: newId(),
             name: target === "approved" ? "withdrawal.approved" : "withdrawal.rejected",
             aggregateId: id,
-            correlationId: current.correlationId,
+            correlationId: operationCorrelationId,
             occurredAt: new Date(),
             payload: { withdrawalId: id, updatedBy: actorId },
           },
         ]);
-        return { ...updated, state: target };
+        const result = { ...updated, state: target };
+        await this.audit.record({
+          actorId,
+          correlationId: operationCorrelationId,
+          action: target === "approved" ? "withdrawal.approved" : "withdrawal.rejected",
+          subjectType: "withdrawal",
+          subjectId: id,
+          previousState: { state: current.state },
+          newState: { state: target, reason: target === "rejected" ? reason : null },
+        });
+        return result;
       }
       if (current.state === "approved" && targetState === "rejected") {
         await this.withdrawals.update({ ...updated, state: "rejected" }, "approved");
@@ -647,29 +706,59 @@ export class WithdrawalService extends CrudService<
           current,
           current.fee?.minorAmount ?? 0n,
           0n,
-          current.correlationId,
+          operationCorrelationId,
           "reversal",
           actorId,
+          "operator",
         );
         await this.funds.releaseOrComplete({
           withdrawalId: id,
           accountId: current.accountId,
           kind: "released",
-          correlationId: current.correlationId,
+          correlationId: operationCorrelationId,
         });
         await this.outbox.append([
           {
             id: newId(),
             name: "withdrawal.rejected",
             aggregateId: id,
-            correlationId: current.correlationId,
+            correlationId: operationCorrelationId,
             occurredAt: new Date(),
             payload: { withdrawalId: id, updatedBy: actorId },
           },
         ]);
+        await this.audit.record({
+          actorId,
+          correlationId: operationCorrelationId,
+          action: "withdrawal.rejected",
+          subjectType: "withdrawal",
+          subjectId: id,
+          previousState: { state: "approved" },
+          newState: { state: "rejected", reason },
+        });
         return { ...updated, state: "rejected" as const };
       }
-      return current.state === "approved" ? current : updated;
+      const result = current.state === "approved" ? current : updated;
+      if (result !== current)
+        await this.audit.record({
+          actorId,
+          correlationId: operationCorrelationId,
+          action: "withdrawal.updated",
+          subjectType: "withdrawal",
+          subjectId: id,
+          previousState: {
+            state: current.state,
+            amountMinor: current.amount.minorAmount.toString(),
+            destinationId: current.destination.savedDestinationId,
+          },
+          newState: {
+            state: result.state,
+            amountMinor: result.amount.minorAmount.toString(),
+            destinationId: result.destination.savedDestinationId,
+            reason: result.reason,
+          },
+        });
+      return result;
     });
   }
 
@@ -679,6 +768,7 @@ export class WithdrawalService extends CrudService<
     return this.uow.transaction(async () => {
       const current = await this.withdrawals.findByIdForUpdate(id);
       if (!current) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
+      const operationCorrelationId = newId();
       if (!root && !["requested", "rejected", "cancelled", "failed"].includes(current.state))
         throw new PublicApplicationError(
           "This withdrawal contains immutable payout history and cannot be deleted.",
@@ -689,15 +779,16 @@ export class WithdrawalService extends CrudService<
         withdrawalId: id,
         accountId: current.accountId,
         kind: "released",
-        correlationId: current.correlationId,
+        correlationId: operationCorrelationId,
       });
       await this.reconcileTreasuryFee(
         current,
         current.fee?.minorAmount ?? 0n,
         0n,
-        current.correlationId,
+        operationCorrelationId,
         "reversal",
         actorId,
+        "operator",
       );
       if (root) {
         await this.funds.removeForRoot(id, current.accountId);
@@ -705,6 +796,7 @@ export class WithdrawalService extends CrudService<
         await this.audit.record({
           actorId,
           action: "root.delete",
+          correlationId: operationCorrelationId,
           subjectType: "withdrawal",
           subjectId: id,
           previousState: {
@@ -726,6 +818,20 @@ export class WithdrawalService extends CrudService<
       } else {
         await this.funds.remove(id, current.accountId);
         await this.withdrawals.delete(id);
+        await this.audit.record({
+          actorId,
+          correlationId: operationCorrelationId,
+          action: "withdrawal.deleted",
+          subjectType: "withdrawal",
+          subjectId: id,
+          previousState: {
+            accountId: current.accountId,
+            state: current.state,
+            amountMinor: current.amount.minorAmount.toString(),
+            currency: current.amount.currency,
+          },
+          newState: { deleted: true, mode: "soft", reservationReconciled: true },
+        });
       }
       return { id, deleted: true as const };
     });
@@ -738,10 +844,11 @@ export class WithdrawalService extends CrudService<
     correlationId: string,
     operation: "request" | "edit" | "reversal",
     actorId: string,
+    actorKind: "customer" | "operator",
   ) {
     const delta = nextFee - previousFee;
     if (delta === 0n) return;
-    const idempotencyKey = `withdrawal:${withdrawal.id}:fee:${operation}:${nextFee}`;
+    const idempotencyKey = `withdrawal:${withdrawal.id}:fee:${operation}:${correlationId}`;
     if (operation === "reversal" && (await this.treasury.findByIdempotencyKey(idempotencyKey)))
       return;
     await this.treasury.create({
@@ -754,6 +861,7 @@ export class WithdrawalService extends CrudService<
       sourceId: withdrawal.id,
       idempotencyKey,
       actorId,
+      actorKind,
       correlationId,
       createdAt: new Date(),
     });

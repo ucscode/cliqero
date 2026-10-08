@@ -201,7 +201,13 @@ export function registerTreasuryRoutes(app: OpenAPIHono<Env>, container: Applica
               entry.sourceKind && entry.sourceId
                 ? { kind: entry.sourceKind, id: entry.sourceId }
                 : null,
-            actor: { id: p.accountId, username: p.account.username, email: null },
+            actor: {
+              id: p.accountId,
+              username: p.account.username,
+              email: null,
+              kind: "operator",
+            },
+            correlationId: entry.correlationId,
             createdAt: entry.createdAt.toISOString(),
           }),
           201,

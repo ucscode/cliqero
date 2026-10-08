@@ -16,7 +16,12 @@ export type OperatorTreasuryEntry = {
   note: string | null;
   source: { kind: string; id: string } | null;
   correlationId: string | null;
-  actor: { id: string; username: string; email: string | null } | null;
+  actor: {
+    id: string | null;
+    username: string | null;
+    email: string | null;
+    kind: "customer" | "operator" | "system" | null;
+  } | null;
   createdAt: string;
 };
 
@@ -107,7 +112,7 @@ export class OperatorTreasuryService {
       sourceKind === undefined ? null : sourceKind,
     ];
     const conditions = [
-      `($1::text is null or e.uuid::text=$1 or e.title ilike '%'||$1||'%' escape '\\' or e.note ilike '%'||$1||'%' escape '\\' or e.source_id::text=$1)`,
+      `($1::text is null or e.uuid::text=$1 or e.title ilike '%'||$1||'%' escape '\\' or e.note ilike '%'||$1||'%' escape '\\' or e.source_id::text=$1 or e.correlation_id::text=$1)`,
       `($2::text is null or e.direction=$2)`,
       `($3::text is null or ($3::text='automatic' and e.source_kind is not null and e.source_kind <> 'treasury_adjustment') or ($3::text='adjustment' and e.source_kind='treasury_adjustment'))`,
     ];
@@ -118,7 +123,7 @@ export class OperatorTreasuryService {
     values.push(input.limit + 1);
     const rows = (
       await this.sql.query<any>(
-        `select e.uuid as id,e.id::text cursor_id,${orderBy}::text cursor_sort_value,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.correlation_id,e.created_at,
+        `select e.uuid as id,e.id::text cursor_id,${orderBy}::text cursor_sort_value,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.correlation_id,e.actor_kind,e.created_at,
                 a.uuid actor_id,a.username actor_username,a.email actor_email
            from treasury_capability.entries e
            left join identity_capability.account_profiles a on a.id=e.actor_id
@@ -146,7 +151,7 @@ export class OperatorTreasuryService {
   async get(id: string): Promise<OperatorTreasuryEntry> {
     const row = (
       await this.sql.query<any>(
-        `select e.uuid as id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.correlation_id,e.created_at,
+        `select e.uuid as id,e.direction,e.amount_minor,e.title,e.note,e.source_kind,e.source_id,e.correlation_id,e.actor_kind,e.created_at,
                 a.uuid actor_id,a.username actor_username,a.email actor_email
            from treasury_capability.entries e
            left join identity_capability.account_profiles a on a.id=e.actor_id
@@ -167,9 +172,15 @@ export class OperatorTreasuryService {
       note: row.note ?? null,
       source:
         row.source_kind && row.source_id ? { kind: row.source_kind, id: row.source_id } : null,
-      actor: row.actor_id
-        ? { id: row.actor_id, username: row.actor_username, email: row.actor_email }
-        : null,
+      actor:
+        row.actor_id || row.actor_kind
+          ? {
+              id: row.actor_id ?? null,
+              username: row.actor_username ?? null,
+              email: row.actor_email ?? null,
+              kind: row.actor_kind ?? null,
+            }
+          : null,
       correlationId: row.correlation_id ?? null,
       createdAt: new Date(row.created_at).toISOString(),
     };

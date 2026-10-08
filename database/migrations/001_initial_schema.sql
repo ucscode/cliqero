@@ -1611,10 +1611,15 @@ CREATE TABLE treasury_capability.entries (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     id bigint NOT NULL,
     actor_id bigint,
+    actor_kind text,
     correlation_id uuid,
     CONSTRAINT entries_amount_minor_check CHECK ((amount_minor > 0)),
     CONSTRAINT entries_direction_check CHECK ((direction = ANY (ARRAY['credit'::text, 'debit'::text]))),
-    CONSTRAINT treasury_source_pair CHECK (((source_kind IS NULL) = (source_id IS NULL)))
+    CONSTRAINT treasury_source_pair CHECK (((source_kind IS NULL) = (source_id IS NULL))),
+    CONSTRAINT treasury_actor_kind_valid CHECK (actor_kind IS NULL OR actor_kind = ANY (ARRAY['customer'::text,'operator'::text,'system'::text])),
+    CONSTRAINT treasury_actor_reference_valid CHECK (actor_kind IS NULL OR
+      (actor_kind='system' AND actor_id IS NULL) OR
+      (actor_kind IN ('customer','operator') AND actor_id IS NOT NULL))
 );
 
 
@@ -1630,6 +1635,33 @@ COMMENT ON TABLE treasury_capability.entries IS 'Append-only canonical USD compa
 --
 
 COMMENT ON COLUMN treasury_capability.entries.source_id IS 'Polymorphic external/business source identifier; not a relational foreign key.';
+
+CREATE FUNCTION treasury_capability.validate_entry_traceability()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF nullif(btrim(NEW.source_kind), '') IS NULL OR nullif(btrim(NEW.source_id::text), '') IS NULL THEN
+    RAISE EXCEPTION 'new Treasury entries require an authoritative source kind and ID'
+      USING ERRCODE='23514';
+  END IF;
+  IF NEW.correlation_id IS NULL THEN
+    RAISE EXCEPTION 'new Treasury entries require a correlation_id'
+      USING ERRCODE='23514';
+  END IF;
+  IF NEW.actor_kind IS NULL THEN
+    RAISE EXCEPTION 'new Treasury entries require explicit actor_kind attribution'
+      USING ERRCODE='23514';
+  END IF;
+  IF (NEW.actor_kind='system' AND NEW.actor_id IS NOT NULL) OR
+     (NEW.actor_kind IN ('customer','operator') AND NEW.actor_id IS NULL) THEN
+    RAISE EXCEPTION 'Treasury actor attribution must match actor_id presence'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER treasury_entries_traceability_required
+  BEFORE INSERT ON treasury_capability.entries
+  FOR EACH ROW EXECUTE FUNCTION treasury_capability.validate_entry_traceability();
 
 
 --
@@ -4056,7 +4088,7 @@ CREATE TABLE ledger_capability.account_debt_entries (
     CONSTRAINT account_debt_source_valid CHECK (length(btrim(source_kind)) > 0 AND length(btrim(source_id)) > 0),
     CONSTRAINT account_debt_reason_nonempty CHECK (length(btrim(reason)) > 0),
     CONSTRAINT account_debt_actor_valid CHECK (
-      (actor_kind = 'account' AND actor_id IS NOT NULL AND actor_system IS NULL) OR
+      (actor_kind IN ('account','operator') AND actor_id IS NOT NULL AND actor_system IS NULL) OR
       (actor_kind = 'system' AND actor_id IS NULL AND length(btrim(actor_system)) > 0)
     ),
     CONSTRAINT account_debt_uuid_unique UNIQUE (uuid),

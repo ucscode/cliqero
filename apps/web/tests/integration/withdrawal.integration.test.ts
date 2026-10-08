@@ -508,7 +508,7 @@ suite("withdrawal lifecycle", () => {
     expect((await app.treasuryRepository.summary()).balanceMinor).toBe(feeAfterCompletion);
     const feeRows = await app.database.query<{ count: string; amount: string }>(
       `select count(*)::text count,coalesce(sum(amount_minor),0)::text amount from treasury_capability.entries where idempotency_key=$1`,
-      [`withdrawal:${completed.id}:fee:request:${completed.fee?.minorAmount ?? 0n}`],
+      [`withdrawal:${completed.id}:fee:request:${completed.correlationId}`],
     );
     expect(feeRows.rows[0]).toEqual({
       count: "1",
@@ -777,6 +777,50 @@ suite("withdrawal lifecycle", () => {
     expect(await app.fundsReservation.available(seller.id, "USD")).toBe(9000n);
     expect(await app.accountDebt.balance(seller.id, seller.id)).toBe("0");
     expect((await app.treasuryRepository.summary()).balanceMinor).toBe(0n);
+    const trace = await app.database.query<{
+      payout_return_correlation: string;
+      treasury_correlation: string;
+      debt_correlation: string;
+      audit_correlation: string;
+      outbox_correlation: string;
+      treasury_actor_kind: string;
+      debt_actor_kind: string;
+      treasury_actor_id: string;
+      debt_actor_id: string;
+    }>(
+      `select returned.correlation_id::text payout_return_correlation,
+              treasury.correlation_id::text treasury_correlation,
+              debt.correlation_id::text debt_correlation,audit.correlation_id::text audit_correlation,
+              event.correlation_id::text outbox_correlation,treasury.actor_kind treasury_actor_kind,
+              debt.actor_kind debt_actor_kind,
+              (select uuid::text from identity_capability.accounts where id=treasury.actor_id) treasury_actor_id,
+              (select uuid::text from identity_capability.accounts where id=debt.actor_id) debt_actor_id
+         from withdrawal_capability.payout_returns returned
+         join withdrawal_capability.withdrawals withdrawal on withdrawal.id=returned.withdrawal_id
+         join treasury_capability.entries treasury on treasury.source_kind='withdrawal_fee_reversal'
+          and treasury.source_id=withdrawal.uuid
+         join ledger_capability.account_debt_entries debt on debt.source_kind='payout_return'
+          and debt.source_id=returned.uuid::text
+         join kernel.audit_records audit on audit.action='withdrawal.payout_returned'
+          and audit.subject_id=withdrawal.uuid::text
+         join kernel.outbox_events event on event.event_name='withdrawal.payout-returned'
+          and event.aggregate_id=withdrawal.uuid
+        where returned.uuid=$1`,
+      [first.payoutReturn.id],
+    );
+    expect(trace.rows).toHaveLength(1);
+    expect(trace.rows[0]).toMatchObject({
+      payout_return_correlation: first.payoutReturn.correlationId,
+      treasury_correlation: first.payoutReturn.correlationId,
+      debt_correlation: first.payoutReturn.correlationId,
+      audit_correlation: first.payoutReturn.correlationId,
+      outbox_correlation: first.payoutReturn.correlationId,
+      treasury_actor_kind: "operator",
+      debt_actor_kind: "operator",
+      treasury_actor_id: seller.id,
+      debt_actor_id: seller.id,
+    });
+    expect(first.payoutReturn.correlationId).not.toBe(withdrawal.correlationId);
     expect(await app.withdrawalRepository.findById(withdrawal.id)).toMatchObject({
       state: "failed",
     });

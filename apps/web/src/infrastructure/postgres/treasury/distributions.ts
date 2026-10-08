@@ -15,11 +15,11 @@ export class PostgresTreasuryDistributionStore implements TreasuryDistributionSt
 
   async findAmount(distributionId: string) {
     const row = (
-      await this.sql.query<{ id: string; amount: string }>(
-        `select uuid as id,platform_amount_minor amount from ledger_capability.purchase_distributions where uuid=$1`,
+      await this.sql.query<{ id: string; amount: string; correlation_id: string }>(
+        `select uuid as id,platform_amount_minor amount,correlation_id from ledger_capability.purchase_distributions where uuid=$1`,
         [distributionId],
       )
     ).rows[0];
-    return row ? { id: row.id, amountMinor: row.amount } : null;
+    return row ? { id: row.id, amountMinor: row.amount, correlationId: row.correlation_id } : null;
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   apiFetch,
@@ -32,6 +32,8 @@ import { RequiredLabel } from "../ui/label";
 import { useOperatorConfirmation } from "./ui/confirmation";
 import { useToast } from "../toast/provider";
 import { CrudEdit } from "@/components/crud/edit";
+import { CopyValue } from "../copy-value";
+import { CrudDetail, type CrudField } from "@/components/crud/detail";
 
 function signedUsdMinor(value: string) {
   const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
@@ -44,6 +46,174 @@ function signedUsdMinor(value: string) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Treasury data is temporarily unavailable.";
+}
+
+export function treasurySourceLabel(source: OperatorTreasuryEntry["source"]) {
+  if (!source) return "Source not recorded";
+  switch (source.kind) {
+    case "distribution":
+      return "Purchase distribution";
+    case "withdrawal_fee":
+      return "Withdrawal fee";
+    case "withdrawal_fee_reversal":
+      return "Withdrawal fee reversal";
+    case "wallet_transfer":
+      return "Wallet transfer fee";
+    case "wallet_transfer_compensation":
+      return "Wallet transfer compensation fee refund";
+    case "treasury_adjustment":
+      return "Manual Treasury adjustment";
+    default:
+      return source.kind.replaceAll("_", " ");
+  }
+}
+
+export function treasurySourceHref(source: OperatorTreasuryEntry["source"]) {
+  if (!source) return null;
+  if (source.kind === "distribution") return `/operator/distributions/${source.id}`;
+  if (source.kind === "withdrawal_fee" || source.kind === "withdrawal_fee_reversal")
+    return `/operator/withdrawals/${source.id}`;
+  return null;
+}
+
+export function OperatorTreasuryTraceability({ entry }: { entry: OperatorTreasuryEntry }) {
+  const sourceHref = treasurySourceHref(entry.source);
+  const actor = entry.actor;
+  return (
+    <div className="grid min-w-0 gap-2 text-sm">
+      <div className="grid gap-0.5">
+        <span className="text-slate-500">Source</span>
+        <span className="break-words font-medium text-slate-800">
+          {sourceHref && entry.source ? (
+            <Link href={sourceHref} className="text-violet-700 hover:underline">
+              {treasurySourceLabel(entry.source)}
+            </Link>
+          ) : (
+            treasurySourceLabel(entry.source)
+          )}
+        </span>
+        {entry.source && (
+          <code className="break-all text-xs text-slate-500">{entry.source.id}</code>
+        )}
+      </div>
+      <div className="grid gap-0.5">
+        <span className="text-slate-500">Actor</span>
+        {actor?.kind === "system" ? (
+          <span className="font-medium text-slate-700">System / automated</span>
+        ) : actor?.id && actor.username ? (
+          <span>
+            <Link
+              href={`/operator/users/${actor.id}`}
+              className="font-medium text-violet-700 hover:underline"
+            >
+              @{actor.username}
+            </Link>
+            <span className="ml-1 text-xs text-slate-500">
+              {actor.kind === "operator"
+                ? "Operator"
+                : actor.kind === "customer"
+                  ? "Customer"
+                  : "Attributed account"}
+            </span>
+          </span>
+        ) : (
+          <span className="text-slate-500">Actor not recorded (historical)</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function OperatorTreasuryCorrelation({ correlationId }: { correlationId: string | null }) {
+  return correlationId ? (
+    <CopyValue label="correlation ID" value={correlationId} />
+  ) : (
+    <span className="text-slate-500">Not recorded (historical)</span>
+  );
+}
+
+export function OperatorTreasuryDetail({ entryId }: { entryId: string }) {
+  const [entry, setEntry] = useState<OperatorTreasuryEntry | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      setEntry(await apiFetch<OperatorTreasuryEntry>(`/api/treasury/entries/${entryId}`));
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    void apiFetch<OperatorTreasuryEntry>(`/api/treasury/entries/${entryId}`)
+      .then((value) => {
+        if (active) setEntry(value);
+      })
+      .catch((cause) => {
+        if (active) setError(errorMessage(cause));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [entryId]);
+
+  if (!entry)
+    return (
+      <CrudDetail
+        eyebrow="Treasury fact"
+        title="Treasury entry"
+        loading={loading}
+        error={
+          !loading
+            ? {
+                title: "Treasury entry unavailable",
+                message: error ?? "This Treasury entry was not found.",
+                retry: () => void load(),
+              }
+            : undefined
+        }
+      />
+    );
+
+  const fields: CrudField[] = [
+    { label: "Direction", value: entry.direction },
+    { label: "Amount", value: <Money minor={entry.amountMinor} /> },
+    { label: "Note", value: entry.note ?? "—" },
+    {
+      label: "Source and actor",
+      value: <OperatorTreasuryTraceability entry={entry} />,
+      className: "sm:col-span-2",
+    },
+    {
+      label: "Correlation ID",
+      value: <OperatorTreasuryCorrelation correlationId={entry.correlationId} />,
+      className: "sm:col-span-2",
+    },
+    { label: "Created", value: new Date(entry.createdAt).toLocaleString() },
+  ];
+
+  return (
+    <CrudDetail
+      eyebrow="Treasury fact"
+      title={entry.title}
+      description={entry.id}
+      headerActions={
+        <Link className="text-sm font-medium text-violet-700" href="/operator/treasury">
+          Back to Treasury
+        </Link>
+      }
+      fields={fields}
+    />
+  );
 }
 
 export function OperatorTreasuryForm() {
@@ -196,7 +366,16 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
       key: "entry",
       label: "Entry",
       primary: true,
-      render: (entry) => <OperatorPrimaryCell title={entry.title} subtitle={entry.note ?? "—"} />,
+      render: (entry) => (
+        <OperatorPrimaryCell
+          title={
+            <Link href={`/operator/treasury/${entry.id}`} className="hover:underline">
+              {entry.title}
+            </Link>
+          }
+          subtitle={entry.note ?? "—"}
+        />
+      ),
     },
     {
       key: "direction",
@@ -205,29 +384,13 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
     },
     {
       key: "source",
-      label: "Source / actor",
-      render: (entry) =>
-        entry.source?.kind === "distribution" ? (
-          <Link href={`/operator/distributions/${entry.source.id}`}>Distribution</Link>
-        ) : entry.source?.kind === "withdrawal_fee" ||
-          entry.source?.kind === "withdrawal_fee_reversal" ? (
-          <Link href={`/operator/withdrawals/${entry.source.id}`}>Withdrawal</Link>
-        ) : entry.source?.kind === "wallet_transfer" ? (
-          <span>Wallet transfer</span>
-        ) : entry.source?.kind === "treasury_adjustment" ? (
-          <span>Adjustment</span>
-        ) : entry.source ? (
-          <span>{entry.source.kind.replaceAll("_", " ")}</span>
-        ) : entry.actor ? (
-          `@${entry.actor.username}`
-        ) : (
-          "Legacy entry"
-        ),
+      label: "Source and actor",
+      render: (entry) => <OperatorTreasuryTraceability entry={entry} />,
     },
     {
       key: "correlation",
       label: "Correlation",
-      render: (entry) => <span className="break-all">{entry.correlationId ?? "—"}</span>,
+      render: (entry) => <OperatorTreasuryCorrelation correlationId={entry.correlationId} />,
     },
     {
       key: "created",
@@ -245,15 +408,6 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
     },
   ];
   const actions = (entry: Entry): readonly OperatorAction[] => [
-    ...(entry.source?.kind === "distribution"
-      ? [
-          {
-            type: "link" as const,
-            label: "View distribution",
-            href: `/operator/distributions/${entry.source.id}`,
-          },
-        ]
-      : []),
     ...(canDelete
       ? [
           {
@@ -361,7 +515,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Title, note, source ID"
+              placeholder="Title, note, source ID, correlation ID"
             />
           </OperatorFilterField>
           <OperatorFilterField label="Direction" htmlFor="treasury-direction">

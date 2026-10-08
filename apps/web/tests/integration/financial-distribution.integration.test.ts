@@ -232,12 +232,27 @@ suite("purchase financial distribution", () => {
     expect(results[0]?.id).toBe(results[1]?.id);
     const rows = (
       await app.database.query<any>(
-        `select source_kind,source_id,amount_minor from treasury_capability.entries where source_kind='distribution' and source_id=$1`,
+        `select t.source_kind,t.source_id::text source_id,t.amount_minor::text amount_minor,
+                t.correlation_id::text correlation_id,t.actor_kind,t.actor_id,
+                d.correlation_id::text distribution_correlation,
+                count(distinct e.uuid)::int ledger_count,
+                bool_and(e.correlation_id=d.correlation_id) ledger_correlations_match
+           from treasury_capability.entries t
+           join ledger_capability.purchase_distributions d on d.uuid=t.source_id
+           left join ledger_capability.entries e on e.distribution_id=d.id
+          where t.source_kind='distribution' and t.source_id=$1
+          group by t.id,d.id`,
         [distribution.id],
       )
     ).rows;
     expect(rows).toHaveLength(platformAmountMinor > 0n ? 1 : 0);
-    if (rows[0]) expect(BigInt(rows[0].amount_minor)).toBe(platformAmountMinor);
+    if (rows[0]) {
+      expect(BigInt(rows[0].amount_minor)).toBe(platformAmountMinor);
+      expect(rows[0].correlation_id).toBe(rows[0].distribution_correlation);
+      expect(rows[0].actor_kind).toBe("system");
+      expect(rows[0].actor_id).toBeNull();
+      expect(rows[0].ledger_correlations_match).toBe(true);
+    }
   });
 
   it("root bulk deletion removes a distribution, its generated ledger facts, and its Treasury projection", async () => {

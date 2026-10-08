@@ -163,9 +163,17 @@ suite("atomic Funding and Earnings transfers", () => {
       entry_correlation_id: string;
       adjustment_reference: string;
       treasury_source_id: string;
+      treasury_correlation_id: string;
+      treasury_actor_kind: string;
+      treasury_actor_id: string;
+      audit_correlation_id: string;
     }>(
       `select t.uuid::text, t.correlation_id::text, x.correlation_id::text entry_correlation_id,
-              a.reference adjustment_reference, tr.source_id::text treasury_source_id
+              a.reference adjustment_reference, tr.source_id::text treasury_source_id,
+              tr.correlation_id::text treasury_correlation_id,tr.actor_kind treasury_actor_kind,
+              (select uuid::text from identity_capability.accounts where id=tr.actor_id) treasury_actor_id,
+              (select correlation_id::text from kernel.audit_records where action='wallet.transfer.created'
+                 and subject_id=t.uuid::text) audit_correlation_id
          from wallet_capability.transfers t
          join wallet_capability.transfer_entries x on x.transfer_id=t.id
          join ledger_capability.earnings_adjustments a on a.reference=t.uuid::text
@@ -179,6 +187,10 @@ suite("atomic Funding and Earnings transfers", () => {
       expect(row.entry_correlation_id).toBe(row.uuid);
       expect(row.adjustment_reference).toBe(row.uuid);
       expect(row.treasury_source_id).toBe(row.uuid);
+      expect(row.treasury_correlation_id).toBe(row.uuid);
+      expect(row.treasury_actor_kind).toBe("customer");
+      expect(row.treasury_actor_id).toBe(user.id);
+      expect(row.audit_correlation_id).toBe(row.uuid);
     }
 
     await expect(
@@ -195,13 +207,14 @@ suite("atomic Funding and Earnings transfers", () => {
       id: newId(),
       direction: "credit",
       amountMinor: 1n,
-      correlationId: null,
+      correlationId: newId(),
       title: "Rollback conflict seed",
       note: null,
-      sourceKind: null,
-      sourceId: null,
+      sourceKind: "wallet_transfer",
+      sourceId: newId(),
       idempotencyKey: "wallet-transfer:rollback-transfer:fee",
       actorId: user.id,
+      actorKind: "customer",
       createdAt: new Date(),
     });
     await expect(

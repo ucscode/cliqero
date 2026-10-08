@@ -12,7 +12,12 @@ import { OperatorEarningsList } from "@/components/operator/earnings";
 import { OperatorFundingDetail, OperatorFundingList } from "@/components/operator/funding";
 import { OperatorNetwork } from "@/components/operator/network";
 import { OperatorReviews } from "@/components/operator/reviews";
-import { OperatorTreasuryPage } from "@/components/operator/treasury";
+import {
+  OperatorTreasuryCorrelation,
+  OperatorTreasuryDetail,
+  OperatorTreasuryPage,
+  OperatorTreasuryTraceability,
+} from "@/components/operator/treasury";
 import { OperatorUserDetail, OperatorUserForm } from "@/components/operator/users";
 import {
   OperatorWithdrawalDetail,
@@ -48,6 +53,72 @@ const migratedPages = [
 ] as const;
 
 describe("operator console shared page migration", () => {
+  it("shows human-readable Treasury source and actor links", () => {
+    const html = renderPage(
+      <OperatorTreasuryTraceability
+        entry={{
+          id: "00000000-0000-4000-8000-000000000001",
+          direction: "credit",
+          amountMinor: "100",
+          title: "Platform allocation",
+          note: null,
+          source: {
+            kind: "distribution",
+            id: "00000000-0000-4000-8000-000000000002",
+          },
+          actor: {
+            id: null,
+            username: null,
+            email: null,
+            kind: "system",
+          },
+          correlationId: "00000000-0000-4000-8000-000000000003",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        }}
+      />,
+    );
+    expect(html).toContain("Purchase distribution");
+    expect(html).toContain('href="/operator/distributions/00000000-0000-4000-8000-000000000002"');
+    expect(html).toContain("System / automated");
+    const humanHtml = renderPage(
+      <OperatorTreasuryTraceability
+        entry={{
+          id: "00000000-0000-4000-8000-000000000004",
+          direction: "debit",
+          amountMinor: "50",
+          title: "Withdrawal fee reversal",
+          note: null,
+          source: {
+            kind: "withdrawal_fee_reversal",
+            id: "00000000-0000-4000-8000-000000000005",
+          },
+          actor: {
+            id: "00000000-0000-4000-8000-000000000006",
+            username: "operator_one",
+            email: null,
+            kind: "operator",
+          },
+          correlationId: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        }}
+      />,
+    );
+    expect(humanHtml).toContain("Withdrawal fee reversal");
+    expect(humanHtml).toContain(
+      'href="/operator/withdrawals/00000000-0000-4000-8000-000000000005"',
+    );
+    expect(humanHtml).toContain("@operator_one");
+    expect(humanHtml).toContain('href="/operator/users/00000000-0000-4000-8000-000000000006"');
+    const correlationHtml = renderPage(
+      <OperatorTreasuryCorrelation correlationId="00000000-0000-4000-8000-000000000003" />,
+    );
+    expect(correlationHtml).toContain('aria-label="Copy correlation ID"');
+    expect(correlationHtml).toContain("00000000-0000-4000-8000-000000000003");
+    expect(renderPage(<OperatorTreasuryCorrelation correlationId={null} />)).toContain(
+      "Not recorded (historical)",
+    );
+  });
+
   it.each(migratedPages)("%s renders within the shared page composition", (title, Page) => {
     const html = renderPage(<Page />);
     expect(html).toContain("max-w-[1400px]");
@@ -75,6 +146,13 @@ describe("operator console shared page migration", () => {
     expect(html).toContain("max-w-4xl");
     expect(html).toContain('role="status"');
     expect(html).toContain("Loading listing");
+  });
+
+  it("uses the shared detail composition for an individual Treasury entry", () => {
+    const html = renderPage(
+      <OperatorTreasuryDetail entryId="00000000-0000-4000-8000-000000000001" />,
+    );
+    expect(html).toContain("Loading Treasury entry");
   });
 
   it("renders listing fields with distinct labels, helper hierarchy, Markdown, zero price, and access URL semantics", () => {

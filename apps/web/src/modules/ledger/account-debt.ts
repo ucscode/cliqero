@@ -1,6 +1,9 @@
 export type AccountDebtKind = "increase" | "settlement" | "write_off";
 export type AccountDebtWallet = "funding" | "earnings" | "account";
-export type AccountDebtActor = { kind: "account"; id: string } | { kind: "system"; id: string };
+export type AccountDebtActor =
+  | { kind: "account"; id: string }
+  | { kind: "operator"; id: string }
+  | { kind: "system"; id: string };
 
 export type AccountDebtEntry = {
   id: string;

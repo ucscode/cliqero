@@ -15,6 +15,7 @@ const debtEntrySchema = z.object({
   reason: z.string(),
   actor: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("account"), id: z.string().uuid() }),
+    z.object({ kind: z.literal("operator"), id: z.string().uuid() }),
     z.object({ kind: z.literal("system"), id: z.string() }),
   ]),
   correlationId: z.string().uuid(),

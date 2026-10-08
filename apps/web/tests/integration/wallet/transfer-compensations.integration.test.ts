@@ -142,11 +142,24 @@ suite("wallet transfer compensation", () => {
       direction: string;
       amount: string;
       source_id: string;
+      correlation_id: string;
+      actor_kind: string;
+      actor_id: string;
     }>(
-      `select direction,amount_minor::text amount,source_id::text
+      `select direction,amount_minor::text amount,source_id::text,correlation_id::text,actor_kind,
+              (select uuid::text from identity_capability.accounts where id=actor_id) actor_id
          from treasury_capability.entries where source_kind='wallet_transfer_compensation'`,
     );
-    expect(treasury.rows).toEqual([{ direction: "debit", amount: "50", source_id: result.id }]);
+    expect(treasury.rows).toEqual([
+      {
+        direction: "debit",
+        amount: "50",
+        source_id: result.id,
+        correlation_id: result.correlationId,
+        actor_kind: "operator",
+        actor_id: owner.id,
+      },
+    ]);
     const persisted = await app.database.query(
       `select uuid from wallet_capability.transfer_compensations
         where transfer_id=(select id from wallet_capability.transfers where uuid=$1)`,
@@ -169,15 +182,18 @@ suite("wallet transfer compensation", () => {
     const audit = await app.database.query<{
       action: string;
       actor_id: string;
+      correlation_id: string;
       new_state: { reason: string; transferId: string; feeMinor: string };
     }>(
-      `select action,(select uuid from identity_capability.accounts where id=actor_id) actor_id,new_state
+      `select action,(select uuid from identity_capability.accounts where id=actor_id) actor_id,
+              correlation_id::text,new_state
          from kernel.audit_records where subject_type='wallet_transfer_compensation' and subject_id=$1`,
       [result.id],
     );
     expect(audit.rows[0]).toMatchObject({
       action: "wallet.transfer.compensated",
       actor_id: owner.id,
+      correlation_id: result.correlationId,
       new_state: { reason: "Transfer correction", transferId: original.id, feeMinor: "50" },
     });
     expect(

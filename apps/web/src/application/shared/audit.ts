@@ -1,5 +1,6 @@
 export interface AuditRecordInput {
   actorId: string;
+  correlationId?: string;
   action: string;
   subjectType: string;
   subjectId: string;

@@ -3,13 +3,13 @@ import type { TreasuryEntry, TreasuryRepository } from "@/modules/treasury/treas
 import { newId } from "@/kernel/ids";
 export class PostgresTreasuryRepository implements TreasuryRepository {
   constructor(private sql: QueryExecutor) {}
-  async create(v: TreasuryEntry) {
+  async create(v: Parameters<TreasuryRepository["create"]>[0]) {
     if (v.direction === "debit") await this.lockBalance();
     const result = await this.sql.query(
-      `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,correlation_id,created_at)
-       values($1,$2,$3,$4,$5,$6,$7,$8,(select id from identity_capability.accounts where uuid=$9),$10,$11)
+      `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,actor_kind,correlation_id,created_at)
+       values($1,$2,$3,$4,$5,$6,$7,$8,(select id from identity_capability.accounts where uuid=$9),$10,$11,$12)
        on conflict(idempotency_key) do nothing returning uuid as id,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,
-       (select uuid from identity_capability.accounts where id=actor_id) as actor_id,correlation_id,created_at`,
+       (select uuid from identity_capability.accounts where id=actor_id) as actor_id,actor_kind,correlation_id,created_at`,
       [
         v.id,
         v.direction,
@@ -20,11 +20,26 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
         v.sourceId,
         v.idempotencyKey,
         v.actorId,
+        v.actorKind,
         v.correlationId,
         v.createdAt,
       ],
     );
-    if (result.rowCount === 0) return (await this.findByIdempotencyKey(v.idempotencyKey))!;
+    if (result.rowCount === 0) {
+      const existing = await this.findByIdempotencyKey(v.idempotencyKey);
+      if (
+        !existing ||
+        existing.direction !== v.direction ||
+        existing.amountMinor !== v.amountMinor ||
+        existing.sourceKind !== v.sourceKind ||
+        existing.sourceId !== v.sourceId ||
+        existing.actorId !== v.actorId ||
+        existing.actorKind !== v.actorKind ||
+        existing.correlationId !== v.correlationId
+      )
+        throw new Error("Treasury idempotency key already used for a different entry");
+      return existing;
+    }
     return map(result.rows[0]);
   }
   async findById(id: string) {
@@ -87,8 +102,8 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
     if (v.amountMinor < 0n) await this.lockBalance();
     const adjustment = await this.sql.query<any>(
       `insert into treasury_capability.adjustments(uuid,amount_minor,reason,reference,created_by,idempotency_key,correlation_id,created_at)
-       values($1,$2,$3,$4,(select id from identity_capability.accounts where uuid=$5),$6,$7,$8)
-       on conflict(idempotency_key) do nothing returning uuid`,
+       values($1,$2,$3,$4,(select id from identity_capability.accounts where uuid=$5),$6,coalesce($7::uuid,gen_random_uuid()),$8)
+       on conflict(idempotency_key) do nothing returning uuid,correlation_id`,
       [
         v.id,
         v.amountMinor.toString(),
@@ -118,7 +133,7 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
         existing.reason !== v.reason ||
         existing.reference !== v.reference ||
         existing.actor_uuid !== v.actorId ||
-        existing.correlation_id !== v.correlationId
+        (v.correlationId != null && existing.correlation_id !== v.correlationId)
       )
         throw new Error(
           "Treasury adjustment idempotency key already used for a different adjustment",
@@ -132,15 +147,15 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
         )
       ).rows[0];
       if (!priorEntry) throw new Error("Treasury adjustment ledger fact is unavailable");
-      return map(priorEntry);
+      return { entry: map(priorEntry), created: false };
     }
     const direction = v.amountMinor > 0n ? "credit" : "debit";
     const amountMinor = v.amountMinor > 0n ? v.amountMinor : -v.amountMinor;
     const note = v.reference ? `${v.reason}\nReference: ${v.reference}` : v.reason;
     const result = await this.sql.query<any>(
-      `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,correlation_id,created_at)
+      `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,actor_kind,correlation_id,created_at)
        values($1,$2,$3,'Treasury adjustment',$4,'treasury_adjustment',$5,$6,
-         (select id from identity_capability.accounts where uuid=$7),$8,$9)
+         (select id from identity_capability.accounts where uuid=$7),'operator',$8,$9)
        returning *,uuid as id,(select uuid from identity_capability.accounts where id=actor_id) as actor_id`,
       [
         newId(),
@@ -150,11 +165,11 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
         adjustmentId,
         `treasury-adjustment:${v.idempotencyKey}`,
         v.actorId,
-        v.correlationId,
+        adjustment.rows[0]?.correlation_id,
         v.createdAt,
       ],
     );
-    return map(result.rows[0]);
+    return { entry: map(result.rows[0]), created: true };
   }
 
   private async lockBalance() {
@@ -176,5 +191,6 @@ function map(r: any): TreasuryEntry {
     actorId: r.actor_id,
     correlationId: r.correlation_id ?? null,
     createdAt: r.created_at,
+    actorKind: r.actor_kind ?? null,
   };
 }

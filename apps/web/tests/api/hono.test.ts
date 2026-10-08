@@ -361,6 +361,7 @@ function appWith(
           sourceKind: "treasury_adjustment",
           sourceId: "00000000-0000-4000-8000-000000000005",
           actorId: input.actorId,
+          correlationId: "00000000-0000-4000-8000-000000000006",
           createdAt: new Date(),
         }),
         get: async () => ({
@@ -371,6 +372,7 @@ function appWith(
           note: null,
           source: null,
           actor: null,
+          correlationId: null,
           createdAt: new Date().toISOString(),
         }),
       },
@@ -384,6 +386,7 @@ function appWith(
           sourceKind: "treasury_adjustment",
           sourceId: "00000000-0000-4000-8000-000000000005",
           actorId: input.actorId,
+          correlationId: "00000000-0000-4000-8000-000000000006",
           createdAt: new Date(),
         }),
       },
@@ -1244,6 +1247,10 @@ describe("Hono API foundation", () => {
       "x-authentication-mode": "account",
       "x-required-api-scope": "treasury:manage",
     });
+    const treasuryEntrySchema =
+      paths["/api/treasury/entries/{entryId}"].get.responses["200"].content["application/json"]
+        .schema;
+    expect(JSON.stringify(treasuryEntrySchema)).toContain("correlationId");
     expect(paths["/api/treasury/adjustments"]).toBeUndefined();
     expect(paths["/api/earnings/adjustments"].get).toBeDefined();
     expect(paths["/api/earnings/adjustments"].post).toBeDefined();
@@ -2707,7 +2714,12 @@ describe("Hono API foundation", () => {
           body: JSON.stringify({ amount_minor: "100", reason: "Correction" }),
         }),
       );
-    expect((await post({ ...base, capabilities: ["system.root"] })).status).toBe(201);
+    const created = await post({ ...base, capabilities: ["system.root"] });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({
+      correlationId: "00000000-0000-4000-8000-000000000006",
+      actor: { kind: "operator" },
+    });
     expect((await post({ ...base, capabilities: ["system.root"], kind: "api_key" })).status).toBe(
       403,
     );

@@ -15,7 +15,7 @@ type DebtRow = {
   source_kind: string;
   source_id: string;
   reason: string;
-  actor_kind: "account" | "system";
+  actor_kind: "account" | "operator" | "system";
   actor_id: string | null;
   actor_system: string | null;
   correlation_id: string;
@@ -90,7 +90,7 @@ export class PostgresAccountDebtRepository implements AccountDebtRepository {
           entry.sourceId,
           entry.reason,
           entry.actor.kind,
-          entry.actor.kind === "account" ? entry.actor.id : null,
+          entry.actor.kind === "account" || entry.actor.kind === "operator" ? entry.actor.id : null,
           entry.actor.kind === "system" ? entry.actor.id : null,
           entry.correlationId,
           entry.idempotencyKey,
@@ -147,7 +147,9 @@ export class PostgresAccountDebtRepository implements AccountDebtRepository {
       actor:
         row.actor_kind === "system"
           ? { kind: "system", id: row.actor_system! }
-          : { kind: "account", id: row.actor_id! },
+          : row.actor_kind === "operator"
+            ? { kind: "operator", id: row.actor_id! }
+            : { kind: "account", id: row.actor_id! },
       correlationId: row.correlation_id,
       idempotencyKey: row.idempotency_key,
       createdAt: new Date(row.created_at),

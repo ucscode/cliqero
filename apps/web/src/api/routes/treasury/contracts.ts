@@ -8,8 +8,14 @@ export const operatorTreasuryEntrySchema = z.object({
   note: z.string().nullable(),
   source: z.object({ kind: z.string(), id: z.string().uuid() }).nullable(),
   actor: z
-    .object({ id: z.string().uuid(), username: z.string(), email: z.string().nullable() })
+    .object({
+      id: z.string().uuid().nullable(),
+      username: z.string().nullable(),
+      email: z.string().nullable(),
+      kind: z.enum(["customer", "operator", "system"]).nullable(),
+    })
     .nullable(),
+  correlationId: z.string().uuid().nullable(),
   createdAt: z.string(),
 });
 export const operatorTreasurySummarySchema = z.object({

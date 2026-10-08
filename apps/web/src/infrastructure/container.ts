@@ -266,6 +266,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         wallet(),
         fundsReservation(),
         accountDebt(),
+        auditRecorder(),
       ),
   );
   const walletTransferCompensations = lazy(() => {
@@ -300,7 +301,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     return { getActive: async () => policy };
   });
   const treasuryRepository = lazy(() => new PostgresTreasuryRepository(database));
-  const treasury = lazy(() => new TreasuryService(treasuryRepository(), database));
+  const treasury = lazy(() => new TreasuryService(treasuryRepository(), database, auditRecorder()));
   const treasuryProcessor = lazy(
     () =>
       new TreasuryProcessor(new PostgresTreasuryDistributionStore(database), treasuryRepository()),

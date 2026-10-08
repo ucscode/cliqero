@@ -7,6 +7,7 @@ import type { WalletService } from "@/application/wallet/service";
 import type { LedgerFundsReservationService } from "@/modules/ledger/reservations";
 import type { AccountDebtService } from "@/application/finance/account-debt";
 import type { WalletName } from "@/modules/wallet/wallet";
+import type { AuditRecorder } from "@/application/shared/audit";
 
 export class PostgresWalletTransferService {
   constructor(
@@ -16,6 +17,7 @@ export class PostgresWalletTransferService {
     private readonly wallet: Pick<WalletService, "summary">,
     private readonly earnings: Pick<LedgerFundsReservationService, "available">,
     private readonly debt?: AccountDebtService,
+    private readonly audit?: AuditRecorder,
   ) {}
 
   quote(from: WalletName, grossMinor: bigint) {
@@ -144,8 +146,8 @@ export class PostgresWalletTransferService {
       }
       if (amounts.feeMinor > 0n) {
         await this.sql.query(
-          `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,correlation_id)
-           values($1,'credit',$2,$3,$4,'wallet_transfer',$5,$6,(select id from identity_capability.accounts where uuid=$7),$8)`,
+          `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,actor_kind,correlation_id)
+           values($1,'credit',$2,$3,$4,'wallet_transfer',$5,$6,(select id from identity_capability.accounts where uuid=$7),'customer',$8)`,
           [
             newId(),
             amounts.feeMinor.toString(),
@@ -160,6 +162,22 @@ export class PostgresWalletTransferService {
           ],
         );
       }
+      await this.audit?.record({
+        actorId: input.accountId,
+        correlationId: correlation,
+        action: "wallet.transfer.created",
+        subjectType: "wallet_transfer",
+        subjectId: id,
+        previousState: null,
+        newState: {
+          from: input.from,
+          to: input.to,
+          grossMinor: amounts.grossMinor.toString(),
+          feeMinor: amounts.feeMinor.toString(),
+          netMinor: amounts.netMinor.toString(),
+          idempotencyKey: input.idempotencyKey,
+        },
+      });
       return {
         id,
         from: input.from,

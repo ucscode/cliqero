@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { newId } from "@/kernel/ids";
 import {
   TreasuryService,
   type TreasuryEntry,
@@ -7,7 +8,7 @@ import {
 
 class Fake implements TreasuryRepository {
   items: TreasuryEntry[] = [];
-  async create(value: TreasuryEntry) {
+  async create(value: Parameters<TreasuryRepository["create"]>[0]) {
     this.items.push(value);
     return value;
   }
@@ -18,7 +19,7 @@ class Fake implements TreasuryRepository {
         throw new Error(
           "Treasury adjustment idempotency key already used for a different adjustment",
         );
-      return old;
+      return { entry: old, created: false };
     }
     const entry: TreasuryEntry = {
       id: value.id,
@@ -30,11 +31,12 @@ class Fake implements TreasuryRepository {
       sourceId: value.id,
       idempotencyKey: value.idempotencyKey,
       actorId: value.actorId,
-      correlationId: value.correlationId,
+      actorKind: "operator",
+      correlationId: value.correlationId ?? newId(),
       createdAt: value.createdAt,
     };
     this.items.push(entry);
-    return entry;
+    return { entry, created: true };
   }
   async findById(id: string) {
     return this.items.find((entry) => entry.id === id) ?? null;
@@ -103,5 +105,28 @@ describe("Treasury adjustments", () => {
         idempotencyKey: "blank",
       }),
     ).rejects.toThrow("reason");
+  });
+
+  it("keeps generated adjustment correlation stable on idempotent retry and audit", async () => {
+    const repo = new Fake();
+    const audits: string[] = [];
+    const service = new TreasuryService(repo, undefined, {
+      record: async ({ correlationId }) => {
+        audits.push(correlationId);
+      },
+    });
+    const input = {
+      amountMinor: 25n,
+      reason: "Trace correction",
+      actorId: "operator",
+      idempotencyKey: "trace-adjustment-retry",
+    };
+
+    const first = await service.createAdjustment(input);
+    const retry = await service.createAdjustment(input);
+
+    expect(retry.id).toBe(first.id);
+    expect(retry.correlationId).toBe(first.correlationId);
+    expect(audits).toEqual([first.correlationId]);
   });
 });
