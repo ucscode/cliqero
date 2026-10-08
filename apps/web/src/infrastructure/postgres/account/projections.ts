@@ -98,6 +98,11 @@ export class AccountProjectionService {
            union all
            select 'USD'::text,'available'::text,-earnings_wallet_minor from funding_capability.funding_reversals
              where account_id=(select id from identity_capability.accounts where uuid=$1)
+           union all
+           select 'USD'::text,'available'::text,
+                  case when from_wallet='earnings' then gross_minor else -net_minor end
+             from wallet_capability.transfer_compensations
+            where account_id=(select id from identity_capability.accounts where uuid=$1)
          ) effective group by currency,balance_state order by currency,balance_state`,
         [accountId],
       )
@@ -135,6 +140,16 @@ export class AccountProjectionService {
                     r.reason,null::text reference,r.created_at
                from funding_capability.funding_reversals r
               where r.account_id=(select id from identity_capability.accounts where uuid=$1) and r.earnings_wallet_minor>0
+             union all
+             select 'transfer-compensation:'||c.uuid::text history_id,c.uuid::text id,null::text purchase_id,
+                    'wallet-transfer-compensation'::text entry_type,
+                    case when c.from_wallet='earnings' then 'credit' else 'debit' end direction,
+                    case when c.from_wallet='earnings' then c.gross_minor else c.net_minor end amount_minor,
+                    'USD'::text currency,null::text recipient_role,'available'::text balance_state,
+                    c.reason,transfer.uuid::text reference,c.created_at
+               from wallet_capability.transfer_compensations c
+               join wallet_capability.transfers transfer on transfer.id=c.transfer_id
+              where c.account_id=(select id from identity_capability.accounts where uuid=$1)
            ) history
           where ($2::timestamptz is null or (created_at,history_id)<($2::timestamptz,$3::text))
           order by created_at desc,history_id desc limit $4`,
@@ -157,7 +172,9 @@ export class AccountProjectionService {
             ? "adjustment"
             : row.entry_type === "funding-reversal"
               ? "funding_reversal"
-              : "generated",
+              : row.entry_type === "wallet-transfer-compensation"
+                ? "wallet_transfer_compensation"
+                : "generated",
         reason: row.reason ?? null,
         reference: row.reference ?? null,
         created_at: row.created_at,

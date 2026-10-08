@@ -55,6 +55,7 @@ export type WalletTransaction = {
     | "purchase_debit"
     | "funding_adjustment"
     | "funding_transfer"
+    | "wallet_transfer_compensation"
     | "funding_reversal";
   direction: "credit" | "debit";
   label: string;

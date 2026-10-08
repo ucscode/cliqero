@@ -19,7 +19,7 @@ suite("atomic Funding and Earnings transfers", () => {
   beforeEach(async () => {
     activeFees = enabledFees;
     await app.database.query(
-      `truncate table wallet_capability.transfer_entries,wallet_capability.transfers,ledger_capability.earnings_adjustments,treasury_capability.entries,wallet_capability.debits,wallet_capability.credits,checkout_capability.checkouts,funding_capability.funding_transactions,ledger_capability.entries,ledger_capability.purchase_distributions,access_capability.access_grants,entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`,
+      `truncate table wallet_capability.transfer_compensations,wallet_capability.transfer_entries,wallet_capability.transfers,ledger_capability.earnings_adjustments,treasury_capability.entries,wallet_capability.debits,wallet_capability.credits,checkout_capability.checkouts,funding_capability.funding_transactions,ledger_capability.entries,ledger_capability.purchase_distributions,access_capability.access_grants,entitlement_capability.entitlements,purchase_capability.purchases,payment_capability.payments,listing_capability.listings,identity_capability.sessions,identity_capability.accounts,kernel.outbox_events,kernel.idempotency_records restart identity cascade`,
     );
   });
   afterAll(() => app.database.close());

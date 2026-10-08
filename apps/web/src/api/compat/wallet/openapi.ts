@@ -35,7 +35,16 @@ export const compatibilityContracts = defineCompatibilityContracts({
       transactions: list(
         object({
           id: uuid,
-          type: text,
+          type: scalar("string", {
+            enum: [
+              "funding_credit",
+              "purchase_debit",
+              "funding_adjustment",
+              "funding_transfer",
+              "wallet_transfer_compensation",
+              "funding_reversal",
+            ],
+          }),
           source_id: uuid,
           direction: text,
           label: text,

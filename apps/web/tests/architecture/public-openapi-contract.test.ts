@@ -110,6 +110,70 @@ function schemaObjects(documentValue: unknown): Record<string, any>[] {
 }
 
 describe("public OpenAPI contract quality", () => {
+  it("documents immutable wallet-transfer compensation as one full-only resource", () => {
+    const collection = document.paths["/api/wallet-transfer-compensations"] as any;
+    const item = document.paths["/api/wallet-transfer-compensations/{compensationId}"] as any;
+    expect(Object.keys(collection).sort()).toEqual(["get", "post"]);
+    expect(Object.keys(item)).toEqual(["get"]);
+    expect(collection.get.tags).toEqual(["Wallet Transfer Compensations"]);
+    expect(collection.get.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "limit", in: "query" }),
+        expect.objectContaining({ name: "cursor", in: "query" }),
+      ]),
+    );
+    expect(collection.get["x-authorization-variants"]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "owner", scope: "wallet:read" }),
+        expect.objectContaining({ value: "finance_operator", capability: "finance.read" }),
+      ]),
+    );
+    expect(collection.post.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "idempotency-key", in: "header", required: true }),
+      ]),
+    );
+    expect(collection.post.requestBody.content["application/json"].schema.properties).toMatchObject(
+      {
+        transfer_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 1 },
+      },
+    );
+    expect(collection.post["x-required-api-scope"]).toBe("payments:manage");
+    expect(collection.post.responses["409"]).toBeDefined();
+    expect(
+      Object.values(collection.post.responses["409"].content["application/json"].examples).map(
+        (example: any) => example.value.code,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "idempotency_conflict",
+        "transfer_already_compensated",
+        "account_debt_blocks_operation",
+        "transfer_compensation_insufficient_destination",
+        "transfer_compensation_treasury_shortfall",
+      ]),
+    );
+    expect(collection.post.responses["201"].content["application/json"].examples).toBeDefined();
+    expect(collection.get.responses["200"].content["application/json"].examples).toBeDefined();
+    expect(
+      item.get.responses["200"].content["application/json"].schema.properties.recovery,
+    ).toMatchObject({ type: "object" });
+    expect(
+      item.get.responses["200"].content["application/json"].examples ??
+        item.get.responses["200"].content["application/json"].example,
+    ).toBeDefined();
+    expect(document.tags).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "Wallet Transfer Compensations" })]),
+    );
+  });
+
+  it("includes compensation in the canonical wallet activity type contract", () => {
+    const typeSchema = (document.paths["/api/wallet/transactions"]?.get as any).responses["200"]
+      .content["application/json"].schema.properties.transactions.items.properties.type;
+    expect(typeSchema.enum).toContain("wallet_transfer_compensation");
+  });
+
   it("documents immutable Funding Reversals as a scoped resource with idempotency", () => {
     const operations = document.paths["/api/funding-reversals"] as any;
     expect(operations.get.tags).toEqual(["Funding Reversals"]);

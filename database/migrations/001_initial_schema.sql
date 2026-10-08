@@ -3810,7 +3810,8 @@ CREATE TABLE wallet_capability.transfers (
     ),
     CONSTRAINT wallet_transfers_uuid_unique UNIQUE (uuid),
     CONSTRAINT wallet_transfers_idempotency_unique UNIQUE (account_id, idempotency_key),
-    CONSTRAINT wallet_transfers_correlation_unique UNIQUE (correlation_id)
+    CONSTRAINT wallet_transfers_correlation_unique UNIQUE (correlation_id),
+    CONSTRAINT wallet_transfers_id_account_unique UNIQUE (id,account_id)
 );
 CREATE TABLE wallet_capability.transfer_entries (
     uuid uuid NOT NULL,
@@ -3842,6 +3843,74 @@ CREATE TRIGGER wallet_transfers_append_only
 CREATE TRIGGER wallet_transfer_entries_append_only
   BEFORE UPDATE OR DELETE ON wallet_capability.transfer_entries
   FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
+
+-- Full wallet-transfer compensation is a separate immutable economic fact.
+CREATE TABLE wallet_capability.transfer_compensations (
+    uuid uuid NOT NULL,
+    transfer_id bigint NOT NULL,
+    account_id bigint NOT NULL,
+    from_wallet text NOT NULL,
+    to_wallet text NOT NULL,
+    gross_minor bigint NOT NULL,
+    fee_minor bigint NOT NULL,
+    net_minor bigint NOT NULL,
+    reason text NOT NULL,
+    destination_wallet_minor bigint NOT NULL,
+    source_wallet_minor bigint NOT NULL,
+    fee_refunded_minor bigint NOT NULL,
+    debt_minor bigint NOT NULL DEFAULT 0,
+    created_by bigint NOT NULL,
+    correlation_id uuid NOT NULL,
+    idempotency_key text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CONSTRAINT transfer_compensations_uuid_unique UNIQUE (uuid),
+    CONSTRAINT transfer_compensations_transfer_unique UNIQUE (transfer_id),
+    CONSTRAINT transfer_compensations_idempotency_unique UNIQUE (idempotency_key),
+    CONSTRAINT transfer_compensations_direction_valid CHECK (
+      (from_wallet='funding' AND to_wallet='earnings') OR
+      (from_wallet='earnings' AND to_wallet='funding')
+    ),
+    CONSTRAINT transfer_compensations_amounts_valid CHECK (
+      gross_minor > 0 AND fee_minor >= 0 AND net_minor >= 0 AND gross_minor=fee_minor+net_minor AND
+      destination_wallet_minor=net_minor AND source_wallet_minor=gross_minor AND
+      fee_refunded_minor=fee_minor AND debt_minor=0
+    ),
+    CONSTRAINT transfer_compensations_reason_nonempty CHECK (length(btrim(reason)) > 0),
+    CONSTRAINT transfer_compensations_transfer_account_fk
+      FOREIGN KEY (transfer_id,account_id)
+      REFERENCES wallet_capability.transfers(id,account_id),
+    CONSTRAINT transfer_compensations_actor_fk
+      FOREIGN KEY (created_by) REFERENCES identity_capability.accounts(id)
+);
+CREATE INDEX transfer_compensations_account_created_idx
+  ON wallet_capability.transfer_compensations(account_id,created_at DESC,id DESC);
+CREATE TRIGGER wallet_transfer_compensations_append_only
+  BEFORE UPDATE OR DELETE ON wallet_capability.transfer_compensations
+  FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
+CREATE FUNCTION wallet_capability.validate_transfer_compensation_snapshot()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original wallet_capability.transfers%ROWTYPE;
+BEGIN
+  SELECT * INTO original
+    FROM wallet_capability.transfers
+   WHERE id=NEW.transfer_id AND account_id=NEW.account_id;
+  IF NOT FOUND OR NEW.from_wallet IS DISTINCT FROM original.from_wallet
+     OR NEW.to_wallet IS DISTINCT FROM original.to_wallet
+     OR NEW.gross_minor IS DISTINCT FROM original.gross_minor
+     OR NEW.fee_minor IS DISTINCT FROM original.fee_minor
+     OR NEW.net_minor IS DISTINCT FROM original.net_minor THEN
+    RAISE EXCEPTION 'wallet transfer compensation must preserve the original transfer snapshot'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER wallet_transfer_compensation_snapshot_valid
+  BEFORE INSERT ON wallet_capability.transfer_compensations
+  FOR EACH ROW EXECUTE FUNCTION wallet_capability.validate_transfer_compensation_snapshot();
+COMMENT ON TABLE wallet_capability.transfer_compensations IS
+  'Append-only full compensation facts for completed wallet transfers; never rewrites the original transfer or its ledger legs.';
 
 ALTER TABLE withdrawal_capability.withdrawals
   ADD COLUMN fee_minor bigint NOT NULL DEFAULT 0,
@@ -4153,6 +4222,8 @@ RETURNS bigint LANGUAGE sql STABLE AS $$
          ))
     ),0)
     + coalesce((SELECT sum(amount_minor) FROM ledger_capability.earnings_adjustments WHERE account_id=p_account_id),0)
+    + coalesce((SELECT sum(CASE WHEN from_wallet='earnings' THEN gross_minor ELSE -net_minor END)
+                  FROM wallet_capability.transfer_compensations WHERE account_id=p_account_id),0)
     - coalesce((SELECT sum(amount_minor) FROM ledger_capability.account_debt_entries
                  WHERE account_id=p_account_id AND wallet='earnings' AND kind='settlement'),0)
     - coalesce((SELECT sum(r.amount_minor) FROM ledger_capability.withdrawal_reservations r

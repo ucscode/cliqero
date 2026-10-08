@@ -6,8 +6,7 @@ import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { WalletService } from "@/application/wallet/service";
 import type { LedgerFundsReservationService } from "@/modules/ledger/reservations";
 import type { AccountDebtService } from "@/application/finance/account-debt";
-
-export type WalletName = "funding" | "earnings";
+import type { WalletName } from "@/modules/wallet/wallet";
 
 export class PostgresWalletTransferService {
   constructor(

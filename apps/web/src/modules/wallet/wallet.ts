@@ -2,6 +2,7 @@ import type { Id } from "@/kernel/ids";
 import type { Money } from "@/modules/money/money";
 
 export const WALLET_OVERVIEW_ACTIVITY_LIMIT = 5;
+export type WalletName = "funding" | "earnings";
 
 export interface WalletSummary {
   currency: "USD";
@@ -30,6 +31,7 @@ export type WalletTransaction = {
     | "purchase_debit"
     | "funding_adjustment"
     | "funding_transfer"
+    | "wallet_transfer_compensation"
     | "funding_reversal";
   id: Id;
   sourceId: Id;

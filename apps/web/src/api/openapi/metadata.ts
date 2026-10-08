@@ -234,6 +234,8 @@ const domainDescriptions: Record<string, string> = {
   "Wallet Transactions":
     "Wallet transactions are a read-only projection of posted account movements.",
   "Wallet Transfers": "Wallet transfers preserve the atomic transfer, earnings, and Treasury legs.",
+  "Wallet Transfer Compensations":
+    "Immutable, full-only wallet-transfer corrections that preserve original transfer evidence and safely reverse its wallet and Treasury effects.",
   "Wallet Transfer Quote": "A wallet transfer quote is a read-only fee and net-amount calculation.",
   "Funding Transactions":
     "Provider-neutral funding transactions are persisted and processed idempotently.",
@@ -304,6 +306,7 @@ function domainForPath(path: string): string {
   if (relative === "wallet/transactions") return "Wallet Transactions";
   if (relative === "wallet/transfers" || relative.startsWith("wallet/transfers/"))
     return "Wallet Transfers";
+  if (relative.startsWith("wallet-transfer-compensations")) return "Wallet Transfer Compensations";
   if (relative === "wallet/transfer-quote") return "Wallet Transfer Quote";
   if (relative === "funding-options") return "Funding Options";
   if (relative === "funding-methods") return "Funding Methods";

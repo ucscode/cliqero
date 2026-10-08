@@ -164,6 +164,34 @@ Requests may instead be rejected or cancelled while still requested. Cliqero doe
 
 with rejection/failure states as required.
 
+## Wallet-transfer compensation
+
+Completed Funding↔Earnings transfers are immutable financial facts. A finance
+operator can create one full compensation through
+`POST /api/wallet-transfer-compensations`; it preserves the original transfer
+and appends an account-linked compensation fact. Both transfer directions use
+the original gross, net, and fee snapshots—current fee configuration is never
+consulted. The operation reclaims the entire net destination amount, restores
+the original gross source amount, and debits Treasury for the original fee
+when nonzero. A zero-fee transfer creates no Treasury debit.
+
+Compensation is rejected with a classified conflict when any account debt is
+outstanding, the full destination amount is no longer safely available (active
+withdrawal reservations are excluded), or Treasury cannot cover the fee
+refund. It is strictly full-only: partial recovery and debt-backed wallet
+restoration are not supported. This conservative policy prevents manufacturing
+spendable value or refunding Treasury income that is no longer present. The
+operation shares the account economic lock with transfers and withdrawal
+reservation, and the entire compensation plus Treasury entry commits atomically.
+The owner can read compensation history using `wallet:read`; finance operators
+need `finance.read` plus API-key scope `payments:read`. Creation needs
+`finance.manage` plus `payments:manage` for API keys. Original transfer and
+compensation remain separate wallet-history events, and source-linked Treasury
+and audit records identify the actor, reason, and correlation.
+
+This checkpoint does not implement source-linked Earnings corrections; those
+remain separate recovery work.
+
 ## Financial invariants
 
 The following are non-negotiable:

@@ -33,6 +33,7 @@ export class PostgresWalletRepository implements WalletRepository {
                       where adjustment.uuid::text=debt.source_id and adjustment.account_id=debt.account_id
                         and adjustment.amount_minor > 0)))),0)
            - coalesce((select sum(amount_minor) from wallet_capability.transfer_entries where wallet='funding' and direction='debit' and correlation_id in (select correlation_id from wallet_capability.transfers where account_id=(select id from identity_capability.accounts where uuid=$1))),0)
+           + coalesce((select sum(case when from_wallet='funding' then gross_minor else -net_minor end) from wallet_capability.transfer_compensations where account_id=(select id from identity_capability.accounts where uuid=$1)),0)
            - coalesce((select sum(funding_wallet_minor) from funding_capability.funding_reversals where account_id=(select id from identity_capability.accounts where uuid=$1)),0) available,
            coalesce((select sum(amount_minor) from wallet_capability.credits where account_id=(select id from identity_capability.accounts where uuid=$1) and state='pending'),0) pending`,
         [accountId],
@@ -187,6 +188,19 @@ export class PostgresWalletRepository implements WalletRepository {
                 r.funding_wallet_minor,'USD','complete',r.created_at,'Provider funding reversal: '||r.reason,r.provider_reference,null::text,null::text
            from funding_capability.funding_reversals r
           where r.account_id=(select id from identity_capability.accounts where uuid=$1) and r.funding_wallet_minor>0
+         union all
+         select 'wallet_transfer_compensation',
+                case when compensation.from_wallet='funding' then 'credit' else 'debit' end,
+                'transfer-compensation:'||compensation.uuid::text,compensation.uuid::text,transfer.uuid::text,
+                case when compensation.from_wallet='funding' then compensation.gross_minor else compensation.net_minor end,
+                'USD','complete',compensation.created_at,
+                'Transfer compensation: '||compensation.reason||'; restored '||compensation.source_wallet_minor::text||
+                  ', reclaimed '||compensation.destination_wallet_minor::text||
+                  ', fee refunded '||compensation.fee_refunded_minor::text,
+                transfer.uuid::text,null::text,null::text
+           from wallet_capability.transfer_compensations compensation
+           join wallet_capability.transfers transfer on transfer.id=compensation.transfer_id
+          where compensation.account_id=(select id from identity_capability.accounts where uuid=$1)
          ) history
          where ($2::timestamptz is null or (created_at,history_id)<($2::timestamptz,$3::text))
          order by created_at desc,history_id desc limit $4`,

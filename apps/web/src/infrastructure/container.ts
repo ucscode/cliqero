@@ -79,6 +79,8 @@ import { PostgresFundingRepository } from "./postgres/funding/repository";
 import { PostgresAdministrativeFundingRepository } from "./postgres/funding/administrative";
 import { PostgresWalletRepository } from "./postgres/wallet/repository";
 import { PostgresWalletTransferService } from "@/infrastructure/postgres/wallet/transfers";
+import { WalletTransferCompensationService } from "@/application/wallet/transfer-compensations";
+import { PostgresWalletTransferCompensationRepository } from "@/infrastructure/postgres/wallet/transfer-compensations";
 import { FeePolicyLoader, type FeePolicySource } from "@/modules/fee/policy";
 import { PostgresCheckoutRepository } from "./postgres/checkout/repository";
 import { FundingService } from "@/application/funding/service";
@@ -266,6 +268,18 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         accountDebt(),
       ),
   );
+  const walletTransferCompensations = lazy(() => {
+    const repository = new PostgresWalletTransferCompensationRepository(database);
+    return new WalletTransferCompensationService(
+      repository,
+      wallet(),
+      fundsReservation(),
+      accountDebt(),
+      operators(),
+      auditRecorder(),
+      database,
+    );
+  });
   const checkoutRepository = lazy(() => new PostgresCheckoutRepository(database));
   const referralGraph = lazy(() => new PostgresReferralGraphRepository(database));
   const commissionPolicy = lazy(() => new PostgresCommissionPolicyRepository(database));
@@ -879,6 +893,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get walletTransfers() {
       return walletTransfers();
+    },
+    get walletTransferCompensations() {
+      return walletTransferCompensations();
     },
     get feePolicy() {
       return feePolicy();

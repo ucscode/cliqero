@@ -152,6 +152,7 @@ export class PostgresFundingReversalRepository implements FundingReversalReposit
         `select greatest(0,
           coalesce((select sum(amount_minor) from wallet_capability.credits where account_id=a.id and state='available'),0)
           + coalesce((select sum(case when direction='credit' then amount_minor else -amount_minor end) from wallet_capability.transfer_entries e join wallet_capability.transfers t on t.id=e.transfer_id where t.account_id=a.id and e.wallet='funding'),0)
+          + coalesce((select sum(case when from_wallet='funding' then gross_minor else -net_minor end) from wallet_capability.transfer_compensations where account_id=a.id),0)
           + coalesce((select sum(amount_minor) from wallet_capability.funding_adjustments where account_id=a.id),0)
           - coalesce((select sum(amount_minor) from wallet_capability.debits where account_id=a.id),0)
           - coalesce((select sum(amount_minor) from ledger_capability.account_debt_entries where account_id=a.id and wallet='funding' and kind='settlement'),0)

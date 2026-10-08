@@ -39,6 +39,8 @@ import { accountDebtOpenApiMetadata } from "./routes/account-debt/metadata";
 import { registerPurchaseReconciliationRoutes } from "./routes/purchases/reconciliation";
 import { purchaseRecoveryOpenApiMetadata } from "./routes/purchases/metadata";
 import { fundingReversalOpenApiMetadata } from "./routes/funding-reversals/metadata";
+import { registerWalletTransferCompensationRoutes } from "./routes/wallet-transfer-compensations";
+import { walletTransferCompensationOpenApiMetadata } from "./routes/wallet-transfer-compensations/metadata";
 
 export function createApiApp(
   container: ApplicationContainer,
@@ -83,6 +85,7 @@ export function createApiApp(
   registerReviewRoutes(app, container);
   registerFundingRoutes(app, container);
   registerFundingReversalRoutes(app, container);
+  registerWalletTransferCompensationRoutes(app, container);
   registerPaymentCallbackRoutes(app, container);
   registerPackageEntitlementRoutes(app, container);
   registerAccountDebtRoutes(app, container);
@@ -112,6 +115,7 @@ export function generateOpenApiDocument(app: OpenAPIHono<Env>) {
     financeOpenApiMetadata,
     fundingOperationsOpenApiMetadata,
     fundingReversalOpenApiMetadata,
+    walletTransferCompensationOpenApiMetadata,
     treasuryOpenApiMetadata,
     withdrawalOpenApiMetadata,
     operatorReviewOpenApiMetadata,

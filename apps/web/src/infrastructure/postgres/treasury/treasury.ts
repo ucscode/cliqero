@@ -4,6 +4,7 @@ import { newId } from "@/kernel/ids";
 export class PostgresTreasuryRepository implements TreasuryRepository {
   constructor(private sql: QueryExecutor) {}
   async create(v: TreasuryEntry) {
+    if (v.direction === "debit") await this.lockBalance();
     const result = await this.sql.query(
       `insert into treasury_capability.entries(uuid,direction,amount_minor,title,note,source_kind,source_id,idempotency_key,actor_id,correlation_id,created_at)
        values($1,$2,$3,$4,$5,$6,$7,$8,(select id from identity_capability.accounts where uuid=$9),$10,$11)
@@ -83,6 +84,7 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
   }
 
   async createAdjustment(v: Parameters<TreasuryRepository["createAdjustment"]>[0]) {
+    if (v.amountMinor < 0n) await this.lockBalance();
     const adjustment = await this.sql.query<any>(
       `insert into treasury_capability.adjustments(uuid,amount_minor,reason,reference,created_by,idempotency_key,correlation_id,created_at)
        values($1,$2,$3,$4,(select id from identity_capability.accounts where uuid=$5),$6,$7,$8)
@@ -153,6 +155,12 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
       ],
     );
     return map(result.rows[0]);
+  }
+
+  private async lockBalance() {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      "treasury-balance",
+    ]);
   }
 }
 function map(r: any): TreasuryEntry {
