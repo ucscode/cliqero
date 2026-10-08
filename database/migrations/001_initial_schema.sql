@@ -4137,7 +4137,8 @@ COMMENT ON TABLE funding_capability.funding_reversals IS
 -- The single spendable Earnings calculation used by reservations and recovery.
 -- Purchase earnings and their immutable purchase-reversal debit entries are
 -- both included once, so partial reversals reduce (rather than erase) the
--- original credit. Pending entries are excluded until settled/matured.
+-- original credit. Pending entries are excluded until their settlement fact is
+-- committed; a reached maturity timestamp alone never makes value spendable.
 CREATE FUNCTION ledger_capability.available_earnings_minor(p_account_id bigint, p_currency text DEFAULT 'USD')
 RETURNS bigint LANGUAGE sql STABLE AS $$
   SELECT greatest(0,
@@ -4146,8 +4147,9 @@ RETURNS bigint LANGUAGE sql STABLE AS $$
         FROM ledger_capability.entries e
        WHERE e.account_id=p_account_id AND e.currency=p_currency
          AND e.entry_type IN ('purchase-earnings','purchase-reversal')
-         AND (e.balance_state='available' OR e.maturity_at <= now() OR EXISTS (
-           SELECT 1 FROM ledger_capability.entry_settlements s WHERE s.original_entry_id=e.id
+         AND (e.balance_state='available' OR EXISTS (
+           SELECT 1 FROM ledger_capability.entry_settlements s
+            WHERE s.original_entry_id=e.id AND s.to_state='available'
          ))
     ),0)
     + coalesce((SELECT sum(amount_minor) FROM ledger_capability.earnings_adjustments WHERE account_id=p_account_id),0)

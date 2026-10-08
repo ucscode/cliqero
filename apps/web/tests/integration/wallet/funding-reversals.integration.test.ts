@@ -650,7 +650,7 @@ suite("provider funding reversal recovery", () => {
     expect(await app.fundsReservation.available(owner.id, "USD")).toBe(0n);
   });
 
-  it("caps recovery at net available purchase earnings and includes only matured pending entries", async () => {
+  it("caps recovery at net available purchase earnings and excludes unsettled matured entries", async () => {
     const owner = await account();
     const funding = await confirmedFunding(owner.id, 1000n);
     await spendFundingWithoutSpendableEarnings(owner.id, funding.id);
@@ -672,7 +672,9 @@ suite("provider funding reversal recovery", () => {
       state: "pending",
       maturityAt: new Date(Date.now() - 60_000),
     });
-    expect(await app.fundsReservation.available(owner.id, "USD")).toBe(80n);
+    // A past maturity timestamp does not make a pending earning available;
+    // the settlement processor must first commit its availability transition.
+    expect(await app.fundsReservation.available(owner.id, "USD")).toBe(60n);
     const reversal = await app.fundingReversals.createByOperator({
       actorId: owner.id,
       fundingId: funding.id,
@@ -680,8 +682,8 @@ suite("provider funding reversal recovery", () => {
       reason: "Recover only available net earnings",
       idempotencyKey: "net-earnings-recovery",
     });
-    expect(reversal.recovery.earningsWalletMinor).toBe("80");
-    expect(reversal.recovery.debtMinor).toBe("920");
+    expect(reversal.recovery.earningsWalletMinor).toBe("60");
+    expect(reversal.recovery.debtMinor).toBe("940");
     expect(await app.fundsReservation.available(owner.id, "USD")).toBe(0n);
   });
 

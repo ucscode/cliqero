@@ -8,6 +8,7 @@ import {
 import { PurchaseDistributionProcessor } from "@/processors/purchase/distribution";
 import { OutboxDispatcher, OutboxHandlerRegistry } from "@/workers/outbox/dispatcher";
 import { OperatorBulkWorkflow } from "@/application/operator/bulk-workflow";
+import { PostgresFundingReversalRepository } from "@/infrastructure/postgres/funding/reversals";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -45,7 +46,7 @@ suite("purchase financial distribution", () => {
         [accountId],
       );
   }
-  async function completed(attributionSource?: string, referrerId?: string) {
+  async function completed(attributionSource?: string, referrerId?: string, priceMinor = "101") {
     const seller = await account(`seller${newId().slice(0, 5)}`),
       buyer = await account(`buyer${newId().slice(0, 5)}`);
     const listing = await app.listingService.create(seller, {
@@ -53,7 +54,7 @@ suite("purchase financial distribution", () => {
       title: "Auditable",
       shortDescription: "Auditable purchase",
       longDescription: "Detailed auditable listing.",
-      priceMinor: "101",
+      priceMinor,
       currency: "USD",
       destination: "https://example.test/access",
     });
@@ -699,6 +700,179 @@ suite("purchase financial distribution", () => {
       claimed: 0,
       settled: 0,
     });
+  });
+
+  it("keeps matured pending earnings unavailable until debt-first settlement commits", async () => {
+    await app.database.query(
+      `update ledger_capability.distribution_policy
+          set initial_balance_state='pending',settlement_delay_seconds=0,platform_rate_basis_points=0`,
+    );
+    await app.database.query(
+      `update referral_capability.commission_policy set rates_basis_points='{}'`,
+    );
+
+    const value = await completed(undefined, undefined, "10000");
+    await app.purchaseDistribution.process({
+      purchaseId: value.purchaseId,
+      correlationId: newId(),
+    });
+    const earning = (await app.ledger.findEntriesByPurchaseId(value.purchaseId)).find(
+      (entry) => entry.recipientRole === "seller",
+    )!;
+    expect(earning).toMatchObject({
+      amount: { minorAmount: 10_000n },
+      balanceState: "pending",
+      recipientRole: "seller",
+      purchaseId: value.purchaseId,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(earning.maturityAt!.getTime()).toBeLessThan(Date.now());
+    const settlementFactsBefore = await app.database.query<{ count: number }>(
+      `select count(*)::int count from ledger_capability.entry_settlements
+        where original_entry_id=(select id from ledger_capability.entries where uuid=$1)`,
+      [earning.id],
+    );
+    expect(settlementFactsBefore.rows[0]?.count).toBe(0);
+
+    const reversalRepository = new PostgresFundingReversalRepository(app.database);
+    const spendable = async () =>
+      BigInt(
+        (
+          await app.database.query<{ amount: string }>(
+            `select ledger_capability.available_earnings_minor(
+               (select id from identity_capability.accounts where uuid=$1),'USD')::text amount`,
+            [value.seller.id],
+          )
+        ).rows[0]!.amount,
+      );
+    expect(await spendable()).toBe(0n);
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(0n);
+    expect(await reversalRepository.availableEarnings(value.seller.id)).toBe(0n);
+
+    const destination = await app.withdrawalDestinations.create(value.seller.id, {
+      method: "bank_ng",
+      name: "Pending earnings test destination",
+      values: { bank_name: "Test bank", account_number: "0123456789", account_name: "Seller" },
+    });
+    await expect(
+      app.withdrawals.create({
+        accountId: value.seller.id,
+        amountMinor: 100n,
+        currency: "USD",
+        destinationId: destination.id,
+        idempotencyKey: newId(),
+        correlationId: newId(),
+      }),
+    ).rejects.toMatchObject({ code: "insufficient_funds" });
+
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'finance.manage'),
+             ((select id from identity_capability.accounts where uuid=$1),'finance.read')
+       on conflict do nothing`,
+      [value.seller.id],
+    );
+    const funding = await app.fundingService.create({
+      accountId: value.seller.id,
+      amountMinor: 1_000n,
+      providerName: "development",
+      idempotencyKey: newId(),
+    });
+    await app.fundingInitialization.process(funding.id);
+    expect((await app.fundingVerification.process(funding.id))?.state).toBe("confirmed");
+    const walletCredit = await app.walletCredit.process(funding.id);
+    await app.walletAvailability.process(walletCredit!.id);
+    const fundingTransfer = await app.walletTransfers.transfer({
+      accountId: value.seller.id,
+      from: "funding",
+      to: "earnings",
+      grossMinor: 1_000n,
+      idempotencyKey: newId(),
+    });
+    await app.earningsAdjustments.create(value.seller.id, {
+      accountId: value.seller.id,
+      amountMinor: (-BigInt(fundingTransfer.netMinor)).toString(),
+      reason: "Consume fixture Funding balance before recovery test",
+      idempotencyKey: newId(),
+    });
+    const fundingReversal = await app.fundingReversals.createByOperator({
+      actorId: value.seller.id,
+      fundingId: funding.id,
+      amountMinor: "1000",
+      reason: "Verify pending Earnings are not recoverable",
+      idempotencyKey: newId(),
+    });
+    expect(fundingReversal.recovery).toMatchObject({
+      earningsWalletMinor: "0",
+      debtMinor: "1000",
+    });
+    expect(await reversalRepository.availableEarnings(value.seller.id)).toBe(0n);
+
+    await app.accountDebt.increase({
+      accountId: value.seller.id,
+      amountMinor: 2_000n,
+      wallet: "account",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Complete the debt-first settlement fixture",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: newId(),
+    });
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("3000");
+
+    const maturity = new Date(Date.now() + 1_000);
+    const firstSettlement = await app.settlement.settle({ now: maturity, batchSize: 10 });
+    expect(firstSettlement).toEqual({ claimed: 1, settled: 1 });
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("0");
+    expect(await spendable()).toBe(7_000n);
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(7_000n);
+    expect(await reversalRepository.availableEarnings(value.seller.id)).toBe(7_000n);
+
+    const persisted = await app.database.query<{ count: number }>(
+      `select count(*)::int count from ledger_capability.entry_settlements
+        where original_entry_id=(select id from ledger_capability.entries where uuid=$1)
+          and from_state='pending' and to_state='available'`,
+      [earning.id],
+    );
+    expect(persisted.rows[0]?.count).toBe(1);
+    const debtSettlement = await app.database.query<{ amount: string; count: number }>(
+      `select coalesce(sum(amount_minor),0)::text amount,count(*)::int count
+         from ledger_capability.account_debt_entries
+        where account_id=(select id from identity_capability.accounts where uuid=$1)
+          and kind='settlement' and source_kind='purchase_earning' and source_id=$2`,
+      [value.seller.id, earning.id],
+    );
+    expect(debtSettlement.rows[0]).toEqual({ amount: "3000", count: 1 });
+
+    expect(await app.settlement.settle({ now: maturity, batchSize: 10 })).toEqual({
+      claimed: 0,
+      settled: 0,
+    });
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("0");
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(7_000n);
+
+    await app.database.query(
+      `update ledger_capability.distribution_policy set settlement_delay_seconds=3600`,
+    );
+    const future = await completed();
+    await app.purchaseDistribution.process({
+      purchaseId: future.purchaseId,
+      correlationId: newId(),
+    });
+    const futureEarning = (await app.ledger.findEntriesByPurchaseId(future.purchaseId)).find(
+      (entry) => entry.recipientRole === "seller",
+    )!;
+    expect(futureEarning.balanceState).toBe("pending");
+    expect(futureEarning.maturityAt!.getTime()).toBeGreaterThan(Date.now());
+    expect(await app.fundsReservation.available(future.seller.id, "USD")).toBe(0n);
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.entry_settlements
+          where original_entry_id=(select id from ledger_capability.entries where uuid=$1)`,
+        [futureEarning.id],
+      ),
+    ).toMatchObject({ rowCount: 0 });
   });
 
   it("settles newly-created pre-maturity debt and caps it at the earning amount", async () => {
