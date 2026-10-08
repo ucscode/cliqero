@@ -59,7 +59,7 @@ docker logs --tail=100 cliqero-outbox-worker-1
 just prod-build
 ```
 
-Production recipes explicitly use `docker compose -f compose.yaml`, so the development override is not loaded. The main production image is `cliqero-main-prod`; development is `cliqero-main-dev`. The distinct identities prevent cross-mode image reuse.
+Production recipes explicitly use `docker compose -f compose.production.yaml`, so the development override is not loaded. That production-only overlay requires separate bootstrap/runtime PostgreSQL credentials and a configured Better Auth secret. The main production image is `cliqero-main-prod`; development is `cliqero-main-dev`. The distinct identities prevent cross-mode image reuse.
 
 Subsequent starts can use:
 
@@ -72,6 +72,39 @@ just prod
 Copy `.env.example` to `.env` and review every value before non-local deployment. Important bootstrap values include application URL, PostgreSQL credentials/connection values, the Better Auth secret and authentication configuration, application port, and blog database path. See [Environment variables](./environment-variables.md) for the complete runtime reference, including worker, cache, logging, and testing settings that are intentionally not all placed in `.env.example`.
 
 Do not reuse development secrets in production.
+
+Production Compose requires `BETTER_AUTH_SECRET`, `POSTGRES_APP_USER`, and
+`POSTGRES_APP_PASSWORD`; it has no Better Auth secret fallback and connects the
+web app and outbox worker with the restricted runtime login. Keep
+`POSTGRES_USER`/`POSTGRES_PASSWORD` as the separate bootstrap/schema-management
+identity. Generate runtime passwords as URL-safe strings (for example, random
+bytes encoded as hex) so the Compose-built PostgreSQL URL is unambiguous.
+
+On a fresh PostgreSQL volume, Compose first applies the canonical
+`001_initial_schema.sql`, then provisions the runtime login and grants access
+to the application schemas, tables, sequences, and functions. The runtime role
+is not an owner and cannot create schemas, alter/drop tables, disable triggers,
+or assume the bootstrap role. Append-only triggers reject runtime update/delete
+even if a caller sets `cliqero.root_delete`; only the table owner may use that
+maintenance escape hatch.
+
+For an existing production database, take the deployment's normal verified
+backup first, then run the mounted provisioning script explicitly as the
+bootstrap identity:
+
+```bash
+docker compose -p cliqero-prod -f compose.production.yaml exec -T postgres \\
+  bash -ec 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /opt/cliqero/roles/provision-runtime-role.sql && psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /opt/cliqero/roles/harden-runtime-triggers.sql'
+```
+
+The script creates the runtime role if absent, tightens its privilege flags,
+adds the grants/default grants, and applies the root-delete trigger guard. It
+does not reset tables, alter financial rows, or change an existing role's
+password. Configure `POSTGRES_APP_PASSWORD` to match the existing login; if
+that password must be replaced, treat rotation as a separate approved
+credential operation. Restart the app/worker only after the restricted login
+has been verified. Never run this production procedure against the local
+development database without explicit approval.
 
 The Docker blog database path is `/workspace/data/blog/blog.sqlite` and is persisted through the `blog-data` named volume.
 

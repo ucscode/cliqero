@@ -11,8 +11,12 @@ import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 
 class MemoryAccountDebtRepository implements AccountDebtRepository {
   readonly entries: Array<AccountDebtEntry & { requestFingerprint: string }> = [];
-  async lockAccount() {}
+  readonly operations: string[] = [];
+  async lockAccount() {
+    this.operations.push("lock");
+  }
   async balance(accountId: string) {
+    this.operations.push("balance");
     return this.entries
       .filter((entry) => entry.accountId === accountId)
       .reduce(
@@ -167,6 +171,16 @@ describe("AccountDebtService", () => {
         code: "account_debt_blocks_operation",
         status: 409,
       });
+  });
+
+  it("serializes debt checks with account debt writes", async () => {
+    const { service, increase, repository } = harness();
+    await increase(1n);
+    repository.operations.length = 0;
+    await expect(
+      service.requireNoOutstandingUnderLock("account-1", "withdrawal"),
+    ).rejects.toMatchObject({ code: "account_debt_blocks_operation", status: 409 });
+    expect(repository.operations.slice(0, 2)).toEqual(["lock", "balance"]);
   });
 
   it("uses account-bound versioned opaque cursors with deterministic pages", async () => {

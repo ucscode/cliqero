@@ -1,0 +1,23 @@
+include:
+  - path: ./services/postgres/compose.yaml
+  - path: ./services/main/compose.yaml
+  - path: ./services/outbox-worker/compose.yaml
+
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB for production}
+      POSTGRES_USER: ${POSTGRES_USER:?Set the separate PostgreSQL bootstrap role}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the PostgreSQL bootstrap password}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:?Set the restricted runtime role}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Set the restricted runtime password}
+  main:
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER:?Set the restricted runtime role}:${POSTGRES_APP_PASSWORD:?Set the restricted runtime password}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB for production}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set a unique random BETTER_AUTH_SECRET of at least 32 characters}
+  outbox-worker:
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER:?Set the restricted runtime role}:${POSTGRES_APP_PASSWORD:?Set the restricted runtime password}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB for production}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set a unique random BETTER_AUTH_SECRET of at least 32 characters}

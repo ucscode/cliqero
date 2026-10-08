@@ -80,6 +80,15 @@ export class AccountDebtService {
       );
   }
 
+  /** Serialize a value-out policy check with debt creation and settlement. Call inside a UoW. */
+  async requireNoOutstandingUnderLock(
+    accountId: string,
+    operation: "purchase" | "withdrawal" | "transfer",
+  ) {
+    await this.repository.lockAccount(accountId);
+    await this.requireNoOutstanding(accountId, operation);
+  }
+
   async history(actorId: string, accountId: string, limit = 50, cursor?: string) {
     await this.operators.requireCapability(actorId, "finance.read");
     const boundedLimit = Math.max(1, Math.min(limit, 100));

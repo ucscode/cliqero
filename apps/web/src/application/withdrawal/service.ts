@@ -132,7 +132,7 @@ export class WithdrawalService extends CrudService<
       );
       if (prior) return this.resolveIdempotent(prior, input, initialState, initialReason);
       if (initialState !== "rejected")
-        await this.debt?.requireNoOutstanding(input.accountId, "withdrawal");
+        await this.debt?.requireNoOutstandingUnderLock(input.accountId, "withdrawal");
       const destination = await this.destinations.resolveForWithdrawal(
         input.accountId,
         input.destinationId,
@@ -604,6 +604,9 @@ export class WithdrawalService extends CrudService<
         );
       if (targetState === "rejected" && !reason)
         throw new PublicApplicationError("A rejection reason is required.", "reason_required", 400);
+
+      if (current.state === "requested" && targetState === "approved")
+        await this.debt?.requireNoOutstandingUnderLock(current.accountId, "withdrawal");
 
       const destination =
         current.state === "approved"

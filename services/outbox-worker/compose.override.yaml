@@ -4,6 +4,8 @@ services:
     environment:
       NODE_ENV: development
       TUNNEL_URL: ${TUNNEL_URL:-}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cliqero}:${POSTGRES_PASSWORD:-cliqero-local}@postgres:5432/${POSTGRES_DB:-cliqero}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-cliqero-development-better-auth-secret-change-me-32}
     volumes:
       # Keep worker source and local configuration live during development.
       - ../..:/workspace

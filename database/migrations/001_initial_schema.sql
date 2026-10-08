@@ -171,7 +171,11 @@ CREATE FUNCTION ledger_capability.prevent_entry_mutation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 begin
-  if current_setting('cliqero.root_delete', true) = 'on' then
+  -- Custom GUCs are caller-settable. Only the owning/bootstrap role may use
+  -- this maintenance escape hatch; the restricted runtime role cannot bypass
+  -- append-only protection by setting cliqero.root_delete itself.
+  if current_setting('cliqero.root_delete', true) = 'on'
+     and current_user = pg_get_userbyid((select relowner from pg_class where oid = tg_relid)) then
     if tg_op = 'DELETE' then return old; end if;
     return new;
   end if;
@@ -232,7 +236,8 @@ CREATE FUNCTION referral_capability.prevent_account_referral_delete() RETURNS tr
     LANGUAGE plpgsql
     AS $$
 begin
-  if current_setting('cliqero.root_delete', true) = 'on' then
+  if current_setting('cliqero.root_delete', true) = 'on'
+     and current_user = pg_get_userbyid((select relowner from pg_class where oid = tg_relid)) then
     return old;
   end if;
   if exists (
@@ -263,7 +268,8 @@ $$;
 CREATE FUNCTION treasury_capability.prevent_entry_mutation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$ begin
-  if current_setting('cliqero.root_delete', true) = 'on' then
+  if current_setting('cliqero.root_delete', true) = 'on'
+     and current_user = pg_get_userbyid((select relowner from pg_class where oid = tg_relid)) then
     if tg_op = 'DELETE' then return old; end if;
     return new;
   end if;
@@ -278,7 +284,8 @@ end $$;
 CREATE FUNCTION wallet_capability.prevent_movement_mutation() RETURNS trigger
     LANGUAGE plpgsql
 AS $$ begin
-  if current_setting('cliqero.root_delete', true) = 'on' then
+  if current_setting('cliqero.root_delete', true) = 'on'
+     and current_user = pg_get_userbyid((select relowner from pg_class where oid = tg_relid)) then
     if tg_op = 'DELETE' then return old; end if;
     return new;
   end if;

@@ -60,6 +60,7 @@ function fixture(
   );
   const findPayoutReturnByIdempotencyKey = vi.fn(async () => payoutReturn);
   const settleInflow = vi.fn(async () => ({ entry: null, changed: false, settledMinor: 0n }));
+  const requireNoOutstandingUnderLock = vi.fn(async () => undefined);
   const service = new WithdrawalService(
     {
       findById: async () => withdrawal,
@@ -115,7 +116,11 @@ function fixture(
     },
     { create: treasuryCreate, findByIdempotencyKey: async () => null } as any,
     { record: auditRecord },
-    { settleInflow, requireNoOutstanding: vi.fn(async () => undefined) } as any,
+    {
+      settleInflow,
+      requireNoOutstanding: vi.fn(async () => undefined),
+      requireNoOutstandingUnderLock,
+    } as any,
   );
   return {
     service,
@@ -132,10 +137,27 @@ function fixture(
     recordPayoutReturn,
     findPayoutReturnByIdempotencyKey,
     settleInflow,
+    requireNoOutstandingUnderLock,
   };
 }
 
 describe("WithdrawalService idempotency intent", () => {
+  it("checks account debt under the account lock before approving a requested withdrawal", async () => {
+    const { service, requireNoOutstandingUnderLock } = fixture("requested");
+    requireNoOutstandingUnderLock.mockRejectedValue(
+      Object.assign(new Error("Outstanding debt blocks withdrawal."), {
+        code: "account_debt_blocks_operation",
+      }),
+    );
+
+    await expect(
+      service.update("operator-1", "withdrawal-1", { state: "approved" }),
+    ).rejects.toMatchObject({
+      code: "account_debt_blocks_operation",
+    });
+    expect(requireNoOutstandingUnderLock).toHaveBeenCalledWith("account-1", "withdrawal");
+  });
+
   it("matches equivalent normalized intent while rejecting state or reason changes", async () => {
     const { service, withdrawal, findByIdempotencyKey } = fixture();
     findByIdempotencyKey.mockResolvedValue({

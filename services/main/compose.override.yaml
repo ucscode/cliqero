@@ -9,6 +9,8 @@ services:
     environment:
       NODE_ENV: development
       TUNNEL_URL: ${TUNNEL_URL:-}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cliqero}:${POSTGRES_PASSWORD:-cliqero-local}@postgres:5432/${POSTGRES_DB:-cliqero}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-cliqero-development-better-auth-secret-change-me-32}
     volumes:
       # Mount the repository in development so source, content, package manifests,
       # lockfile, and repository scripts stay live and host-authoritative.

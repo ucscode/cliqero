@@ -169,6 +169,9 @@ function runIntegration(connectionString) {
     ...process.env,
     TEST_DATABASE_URL: connectionString,
     APP_URL: "http://localhost:3000",
+    // API-key integration cases exercise encrypted recovery material. Use a
+    // deterministic test-only key when the caller has not supplied one.
+    APP_ENCRYPTION_KEY: process.env.APP_ENCRYPTION_KEY ?? Buffer.alloc(32).toString("base64"),
     MEDIA_ROOT: "/tmp/cliqero-media",
     BLOG_DATABASE_PATH: "/tmp/cliqero-blog-integration.sqlite",
   };

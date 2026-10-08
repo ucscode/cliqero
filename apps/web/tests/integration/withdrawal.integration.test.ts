@@ -100,6 +100,71 @@ suite("withdrawal lifecycle", () => {
     expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("requested");
   });
 
+  it("blocks requested withdrawal approval when debt was recorded after the request", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 5_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.accountDebt.increase({
+      accountId: seller.id,
+      amountMinor: 750n,
+      wallet: "account",
+      sourceKind: "test_recovery",
+      sourceId: newId(),
+      reason: "Debt added after withdrawal request",
+      actor: { kind: "system", id: "test-recovery" },
+      correlationId: newId(),
+      idempotencyKey: newId(),
+    });
+
+    await expect(
+      app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" }),
+    ).rejects.toMatchObject({ code: "account_debt_blocks_operation", status: 409 });
+    expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("requested");
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(5_000n);
+  });
+
+  it("linearizes concurrent debt creation and withdrawal approval without releasing the reserve", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 5_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    const [debtResult, approvalResult] = await Promise.allSettled([
+      app.accountDebt.increase({
+        accountId: seller.id,
+        amountMinor: 750n,
+        wallet: "account",
+        sourceKind: "test_recovery",
+        sourceId: newId(),
+        reason: "Concurrent withdrawal/debt policy test",
+        actor: { kind: "system", id: "test-recovery" },
+        correlationId: newId(),
+        idempotencyKey: newId(),
+      }),
+      app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" }),
+    ]);
+
+    expect(debtResult.status).toBe("fulfilled");
+    const persisted = await app.withdrawalRepository.findById(withdrawal.id);
+    if (approvalResult.status === "fulfilled") {
+      expect(persisted?.state).toBe("approved");
+    } else {
+      expect(approvalResult.reason).toMatchObject({ code: "account_debt_blocks_operation" });
+      expect(persisted?.state).toBe("requested");
+    }
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(5_000n);
+  });
+
   it("serializes a source correction with a competing withdrawal reservation", async () => {
     const { seller, destinationId, purchaseId } = await setup();
     const source = (await app.ledger.findEntriesByPurchaseId(purchaseId)).find(

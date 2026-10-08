@@ -49,4 +49,22 @@ describe("Better Auth optional social providers", () => {
 
     await boundary.close();
   });
+
+  it("fails Better Auth startup before opening its database pool when production secret is absent", () => {
+    const environment = process.env as Record<string, string | undefined>;
+    const previousNodeEnv = environment.NODE_ENV;
+    const previousSecret = environment.BETTER_AUTH_SECRET;
+    environment.NODE_ENV = "production";
+    delete environment.BETTER_AUTH_SECRET;
+    try {
+      expect(() => new BetterAuthBoundary(database, "postgresql://localhost/cliqero-test")).toThrow(
+        /BETTER_AUTH_SECRET/,
+      );
+    } finally {
+      if (previousNodeEnv === undefined) delete environment.NODE_ENV;
+      else environment.NODE_ENV = previousNodeEnv;
+      if (previousSecret === undefined) delete environment.BETTER_AUTH_SECRET;
+      else environment.BETTER_AUTH_SECRET = previousSecret;
+    }
+  });
 });

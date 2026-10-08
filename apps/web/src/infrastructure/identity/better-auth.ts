@@ -9,16 +9,7 @@ import { siteConfig } from "@/config/site";
 import { getOptionalSocialProviders } from "@/config/auth";
 import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
-
-const developmentSecret = "cliqero-development-better-auth-secret-change-me-32";
-
-function requiredSecret(): string {
-  const secret = process.env.BETTER_AUTH_SECRET?.trim();
-  if (secret) return secret;
-  if (process.env.NODE_ENV === "production")
-    throw new Error("BETTER_AUTH_SECRET is required in production");
-  return developmentSecret;
-}
+import { resolveBetterAuthSecret } from "@/infrastructure/identity/secret";
 
 async function deliverAuthenticationEmail(
   purpose: AuthenticationEmailPurpose,
@@ -52,6 +43,7 @@ export class BetterAuthBoundary implements AuthenticationGateway {
     databaseUrl: string,
     authConfigurationPath = "config/security/auth.yaml",
   ) {
+    const secret = resolveBetterAuthSecret();
     // Keep Better Auth's tables separate from Cliqero's domain schemas. The
     // explicit search_path also prevents accidental unqualified reads from
     // business tables with similarly named columns.
@@ -82,7 +74,7 @@ export class BetterAuthBoundary implements AuthenticationGateway {
       appName: siteConfig.name,
       baseURL: siteConfig.url,
       basePath: "/api/auth",
-      secret: requiredSecret(),
+      secret,
       database: this.pool,
       // Better Auth keeps its public/protocol field named `name`, but its
       // physical column is explicitly a provider/display name. Cliqero's
