@@ -344,6 +344,18 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
   }
 
   async deleteForRoot(id: string, actorId: string) {
+    const owner = (
+      await this.sql.query<{ account_id: string }>(
+        `select account.uuid account_id from funding_capability.funding_transactions funding
+           join identity_capability.accounts account on account.id=funding.account_id
+          where funding.uuid=$1`,
+        [id],
+      )
+    ).rows[0];
+    if (!owner) throw new Error("Funding not found");
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `wallet-transfer:${owner.account_id}`,
+    ]);
     const funding = (
       await this.sql.query<{ id: string }>(
         `select id::text from funding_capability.funding_transactions where uuid=$1 for update`,
@@ -355,7 +367,8 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
     const previous = await this.get(id);
     const reversals = (
       await this.sql.query(
-        `select uuid,amount_minor::text,currency,source,reason,provider_reference,
+        `select uuid,amount_minor::text,currency,provider_collection_amount_minor::text,
+              provider_collection_currency,source,reason,provider_reference,
               provider_event_id,idempotency_key,correlation_id,created_by,actor_system,
               pending_credit_minor::text,funding_wallet_minor::text,
               earnings_wallet_minor::text,debt_minor::text,created_at
@@ -364,6 +377,58 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
         [funding.id],
       )
     ).rows;
+    const reversalIds = reversals.map((reversal) => String(reversal.uuid));
+    const credit = (
+      await this.sql.query<{ uuid: string }>(
+        `select uuid from wallet_capability.credits where funding_id=$1::bigint for update`,
+        [funding.id],
+      )
+    ).rows[0];
+    const linkedDebt = (
+      await this.sql.query<any>(
+        `select entry.uuid,entry.kind,entry.amount_minor::text,entry.wallet,entry.source_kind,
+                entry.source_id,entry.reason,entry.actor_kind,actor.uuid actor_id,entry.actor_system,
+                entry.correlation_id,entry.idempotency_key,entry.created_at
+           from ledger_capability.account_debt_entries entry
+           left join identity_capability.accounts actor on actor.id=entry.actor_id
+          where entry.account_id=(select id from identity_capability.accounts where uuid=$1)
+            and ((entry.source_kind='wallet_funding_credit' and entry.source_id=$2)
+              or (entry.source_kind='funding_reversal' and entry.source_id=any($3::text[])))
+          order by entry.created_at,entry.id for update of entry`,
+        [owner.account_id, credit?.uuid ?? "", reversalIds],
+      )
+    ).rows;
+    const dependentActivity = await this.sql.query(
+      `select 1
+         from ledger_capability.account_debt_entries increase
+         join ledger_capability.account_debt_entries later
+           on later.account_id=increase.account_id and later.kind in ('settlement','write_off')
+          and (later.created_at,later.id)>(increase.created_at,increase.id)
+        where increase.account_id=(select id from identity_capability.accounts where uuid=$1)
+          and increase.kind='increase'
+          and ((increase.source_kind='wallet_funding_credit' and increase.source_id=$2)
+            or (increase.source_kind='funding_reversal' and increase.source_id=any($3::text[])))
+          and not ((later.source_kind='wallet_funding_credit' and later.source_id=$2)
+            or (later.source_kind='funding_reversal' and later.source_id=any($3::text[])))
+        limit 1`,
+      [owner.account_id, credit?.uuid ?? "", reversalIds],
+    );
+    const resultingDebt = (
+      await this.sql.query<{ amount: string }>(
+        `select coalesce(sum(case when kind='increase' then amount_minor else -amount_minor end),0)::text amount
+           from ledger_capability.account_debt_entries entry
+          where entry.account_id=(select id from identity_capability.accounts where uuid=$1)
+            and not ((entry.source_kind='wallet_funding_credit' and entry.source_id=$2)
+              or (entry.source_kind='funding_reversal' and entry.source_id=any($3::text[])))`,
+        [owner.account_id, credit?.uuid ?? "", reversalIds],
+      )
+    ).rows[0];
+    if (dependentActivity.rowCount || BigInt(resultingDebt?.amount ?? "0") < 0n)
+      throw new PublicApplicationError(
+        "Funding deletion conflicts with subsequent account-debt activity.",
+        "funding_delete_debt_dependency_conflict",
+        409,
+      );
     const proofObjects = (
       await this.sql.query<OperatorFundingProofObject>(
         `select proof_storage_provider as provider,
@@ -382,6 +447,14 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
       throw new Error("Funding proof cleanup outbox is unavailable");
 
     await this.sql.query("select set_config('cliqero.root_delete','on',true)");
+    if (linkedDebt.length)
+      await this.sql.query(
+        `delete from ledger_capability.account_debt_entries
+          where account_id=(select id from identity_capability.accounts where uuid=$1)
+            and ((source_kind='wallet_funding_credit' and source_id=$2)
+              or (source_kind='funding_reversal' and source_id=any($3::text[])))`,
+        [owner.account_id, credit?.uuid ?? "", reversalIds],
+      );
     await this.sql.query(
       `delete from funding_capability.funding_reversals where funding_id=$1::bigint`,
       [funding.id],
@@ -406,7 +479,7 @@ export class PostgresOperatorFundingReader implements OperatorFundingReader {
       `insert into kernel.audit_records(action,subject_type,subject_id,previous_state,new_state,correlation_id,actor_id)
        values('root.delete','funding_transaction',$1,$2::jsonb,null,$3::uuid,
               (select id from identity_capability.accounts where uuid=$4))`,
-      [id, JSON.stringify({ ...previous, reversals }), newId(), actorId],
+      [id, JSON.stringify({ ...previous, reversals, linkedDebt }), newId(), actorId],
     );
     await this.outbox?.append(
       proofObjects.map((proof) => ({

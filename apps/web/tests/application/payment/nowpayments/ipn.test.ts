@@ -27,6 +27,7 @@ function harness(current: FundingTransaction) {
   const saved: FundingTransaction[] = [];
   const repository: FundingRepository = {
     findById: vi.fn(async () => current),
+    findOriginById: vi.fn(async () => "provider" as const),
     findByIdempotency: vi.fn(),
     findByProviderReference: vi.fn(async (_provider, reference) =>
       reference === current.providerReference ? current : null,

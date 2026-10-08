@@ -4074,6 +4074,8 @@ CREATE TABLE funding_capability.funding_reversals (
     account_id bigint NOT NULL,
     amount_minor bigint NOT NULL,
     currency text NOT NULL DEFAULT 'USD',
+    provider_collection_amount_minor bigint,
+    provider_collection_currency text,
     source text NOT NULL,
     reason text NOT NULL,
     provider_reference text,
@@ -4089,7 +4091,11 @@ CREATE TABLE funding_capability.funding_reversals (
     debt_minor bigint NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    CONSTRAINT funding_reversals_positive CHECK (amount_minor > 0),
+    CONSTRAINT funding_reversals_amount_valid CHECK (
+      (source='operator' AND amount_minor > 0 AND provider_collection_amount_minor IS NULL AND provider_collection_currency IS NULL) OR
+      (source='provider_event' AND amount_minor >= 0 AND provider_collection_amount_minor > 0
+        AND provider_collection_currency IS NOT NULL AND provider_collection_currency ~ '^[A-Z]{3}$')
+    ),
     CONSTRAINT funding_reversals_usd CHECK (currency = 'USD'),
     CONSTRAINT funding_reversals_source_valid CHECK (source IN ('operator','provider_event')),
     CONSTRAINT funding_reversals_reason_nonempty CHECK (length(btrim(reason)) > 0),
@@ -4127,5 +4133,36 @@ CREATE TRIGGER funding_reversals_append_only
   FOR EACH ROW EXECUTE FUNCTION ledger_capability.prevent_entry_mutation();
 COMMENT ON TABLE funding_capability.funding_reversals IS
   'Immutable provider-funding reversal evidence and allocation across pending credit, Funding, Earnings, and account debt.';
+
+-- The single spendable Earnings calculation used by reservations and recovery.
+-- Purchase earnings and their immutable purchase-reversal debit entries are
+-- both included once, so partial reversals reduce (rather than erase) the
+-- original credit. Pending entries are excluded until settled/matured.
+CREATE FUNCTION ledger_capability.available_earnings_minor(p_account_id bigint, p_currency text DEFAULT 'USD')
+RETURNS bigint LANGUAGE sql STABLE AS $$
+  SELECT greatest(0,
+    coalesce((
+      SELECT sum(CASE WHEN e.direction='credit' THEN e.amount_minor ELSE -e.amount_minor END)
+        FROM ledger_capability.entries e
+       WHERE e.account_id=p_account_id AND e.currency=p_currency
+         AND e.entry_type IN ('purchase-earnings','purchase-reversal')
+         AND (e.balance_state='available' OR e.maturity_at <= now() OR EXISTS (
+           SELECT 1 FROM ledger_capability.entry_settlements s WHERE s.original_entry_id=e.id
+         ))
+    ),0)
+    + coalesce((SELECT sum(amount_minor) FROM ledger_capability.earnings_adjustments WHERE account_id=p_account_id),0)
+    - coalesce((SELECT sum(amount_minor) FROM ledger_capability.account_debt_entries
+                 WHERE account_id=p_account_id AND wallet='earnings' AND kind='settlement'),0)
+    - coalesce((SELECT sum(r.amount_minor) FROM ledger_capability.withdrawal_reservations r
+                 WHERE r.account_id=p_account_id AND r.currency=p_currency
+                   AND (SELECT e.kind FROM ledger_capability.withdrawal_reservation_events e
+                         WHERE e.reservation_id=r.id ORDER BY e.created_at DESC,e.id DESC LIMIT 1)
+                       IN ('reserved','completed')),0)
+    - coalesce((SELECT sum(r.earnings_wallet_minor) FROM funding_capability.funding_reversals r
+                 WHERE r.account_id=p_account_id),0)
+  )::bigint;
+$$;
+COMMENT ON FUNCTION ledger_capability.available_earnings_minor(bigint,text) IS
+  'Authoritative spendable Earnings balance after effective ledger entries, adjustments, debt settlements, withdrawal reservations, and funding-reversal recovery.';
 
 -- End of canonical PostgreSQL baseline.

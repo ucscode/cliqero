@@ -14,8 +14,10 @@ const item = z.object({
   id: z.uuid(),
   funding_id: z.uuid(),
   account_id: z.uuid(),
-  amount_minor: z.string(),
+  amount_minor: z.string().regex(/^(0|[1-9][0-9]*)$/),
   currency: z.literal("USD"),
+  provider_collection_amount_minor: z.string().nullable(),
+  provider_collection_currency: z.string().nullable(),
   source: z.enum(["operator", "provider_event"]),
   reason: z.string(),
   provider_reference: z.string().nullable(),
@@ -88,13 +90,17 @@ export function registerFundingReversalRoutes(
     async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const finance = hasCapability(p.capabilities as never, "finance.read");
+      const finance =
+        hasCapability(p.capabilities as never, "finance.read") &&
+        (p.kind !== "api_key" || p.scopes.has("payments:read"));
       const denied = finance
         ? requireCapabilityScope(c, p, "finance.read", "payments:read")
         : requireScope(c, p, "wallet:read");
       if (denied) return denied;
       try {
         const q = c.req.valid("query");
+        if (!finance && q.account_id && q.account_id !== p.accountId)
+          return c.json({ items: [], next_cursor: null }, 200);
         const page = await container.fundingReversals.list({
           accountId: finance ? q.account_id : p.accountId,
           fundingId: q.funding_id,
@@ -200,17 +206,20 @@ export function registerFundingReversalRoutes(
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       try {
+        const finance =
+          hasCapability(p.capabilities as never, "finance.read") &&
+          (p.kind !== "api_key" || p.scopes.has("payments:read"));
+        const denied = finance
+          ? requireCapabilityScope(c, p, "finance.read", "payments:read")
+          : requireScope(c, p, "wallet:read");
+        if (denied) return denied;
         const reversal = await container.fundingReversals.get(c.req.valid("param").reversalId);
         if (!reversal) return c.json({ error: "Not found", code: "not_found" }, 404);
-        if (hasCapability(p.capabilities as never, "finance.read")) {
-          const denied = requireCapabilityScope(c, p, "finance.read", "payments:read");
-          if (denied) return denied;
-        } else if (reversal.accountId !== p.accountId) {
-          return c.json({ error: "Forbidden", code: "forbidden" }, 403);
-        } else {
-          const denied = requireScope(c, p, "wallet:read");
-          if (denied) return denied;
+        if (finance) {
+          return c.json(project(reversal), 200);
         }
+        if (reversal.accountId !== p.accountId)
+          return c.json({ error: "Not found", code: "not_found" }, 404);
         return c.json(project(reversal), 200);
       } catch (e) {
         return domainError(c, e);
@@ -226,6 +235,8 @@ function project(v: Awaited<ReturnType<ApplicationContainer["fundingReversals"][
     account_id: v.accountId,
     amount_minor: v.amountMinor,
     currency: v.currency,
+    provider_collection_amount_minor: v.providerCollectionAmountMinor,
+    provider_collection_currency: v.providerCollectionCurrency,
     source: v.source,
     reason: v.reason,
     provider_reference: v.providerReference,

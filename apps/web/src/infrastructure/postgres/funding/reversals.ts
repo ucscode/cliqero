@@ -9,6 +9,8 @@ type Row = {
   account_id: string;
   amount_minor: string;
   currency: "USD";
+  provider_collection_amount_minor: string | null;
+  provider_collection_currency: string | null;
   source: FundingReversal["source"];
   reason: string;
   provider_reference: string | null;
@@ -97,8 +99,14 @@ export class PostgresFundingReversalRepository implements FundingReversalReposit
       `wallet-transfer:${accountId}`,
     ]);
     const funding = (
-      await this.sql.query<{ amount: string; provider_origin: boolean; state: string }>(
-        `select f.canonical_amount_minor::text amount,f.state, not exists(select 1 from funding_capability.administrative_fundings a where a.uuid=f.uuid) provider_origin
+      await this.sql.query<{
+        amount: string;
+        collection_amount: string;
+        collection_currency: string;
+        provider_origin: boolean;
+        state: string;
+      }>(
+        `select f.canonical_amount_minor::text amount,f.collection_amount_minor::text collection_amount,f.collection_currency,f.state, not exists(select 1 from funding_capability.administrative_fundings a where a.uuid=f.uuid) provider_origin
          from funding_capability.funding_transactions f where f.uuid=$1 and f.account_id=(select id from identity_capability.accounts where uuid=$2) for update`,
         [fundingId, accountId],
       )
@@ -113,9 +121,23 @@ export class PostgresFundingReversalRepository implements FundingReversalReposit
       providerOrigin: funding?.provider_origin === true,
       state: funding?.state ?? "missing",
       fundingAmountMinor: BigInt(funding?.amount ?? "0"),
+      collectionAmountMinor: BigInt(funding?.collection_amount ?? "0"),
+      collectionCurrency: funding?.collection_currency ?? "USD",
       creditAmountMinor: BigInt(credit?.amount ?? "0"),
       creditState: credit?.state ?? null,
     };
+  }
+  async providerRefundedCollection(fundingId: string, currency: string) {
+    const row = (
+      await this.sql.query<{ amount: string }>(
+        `select coalesce(sum(provider_collection_amount_minor),0)::text amount
+           from funding_capability.funding_reversals
+          where funding_id=(select id from funding_capability.funding_transactions where uuid=$1)
+            and source='provider_event' and provider_collection_currency=$2`,
+        [fundingId, currency],
+      )
+    ).rows[0];
+    return BigInt(row?.amount ?? "0");
   }
   async reducePendingCredit(fundingId: string, remainingMinor: bigint) {
     await this.sql.query(
@@ -143,16 +165,8 @@ export class PostgresFundingReversalRepository implements FundingReversalReposit
   async availableEarnings(accountId: string) {
     const row = (
       await this.sql.query<{ amount: string }>(
-        `select greatest(0,
-        coalesce((select sum(case when e.direction='credit' then e.amount_minor else -e.amount_minor end)
-          from ledger_capability.entries e left join ledger_capability.entry_settlements s on s.original_entry_id=e.id
-          where e.account_id=a.id and e.currency='USD' and e.entry_type='purchase-earnings' and (e.balance_state='available' or s.id is not null)),0)
-        + coalesce((select sum(amount_minor) from ledger_capability.earnings_adjustments where account_id=a.id),0)
-        - coalesce((select sum(amount_minor) from ledger_capability.account_debt_entries where account_id=a.id and wallet='earnings' and kind='settlement'),0)
-        - coalesce((select sum(amount_minor) from ledger_capability.withdrawal_reservations r where r.account_id=a.id and r.currency='USD'
-          and (select kind from ledger_capability.withdrawal_reservation_events e where e.reservation_id=r.id order by e.created_at desc,e.id desc limit 1) in ('reserved','completed')),0)
-        - coalesce((select sum(earnings_wallet_minor) from funding_capability.funding_reversals where account_id=a.id),0)
-      )::text amount from identity_capability.accounts a where a.uuid=$1`,
+        `select ledger_capability.available_earnings_minor(a.id,'USD')::text amount
+           from identity_capability.accounts a where a.uuid=$1`,
         [accountId],
       )
     ).rows[0];
@@ -162,15 +176,17 @@ export class PostgresFundingReversalRepository implements FundingReversalReposit
     const row = (
       await this.sql.query<Row>(
         `insert into funding_capability.funding_reversals
-        (uuid,funding_id,account_id,amount_minor,currency,source,reason,provider_reference,provider_event_id,idempotency_key,request_fingerprint,correlation_id,created_by,actor_system,pending_credit_minor,funding_wallet_minor,earnings_wallet_minor,debt_minor)
-       values($1,(select id from funding_capability.funding_transactions where uuid=$2),(select id from identity_capability.accounts where uuid=$3),$4,$5,$6,$7,$8,$9,$10,$11,$12,(select id from identity_capability.accounts where uuid=$13),$14,$15,$16,$17,$18)
-       returning uuid id,(select uuid from funding_capability.funding_transactions where id=funding_id) funding_id,(select uuid from identity_capability.accounts where id=account_id) account_id,amount_minor,currency,source,reason,provider_reference,provider_event_id,idempotency_key,correlation_id,(select uuid from identity_capability.accounts where id=created_by) created_by,actor_system,pending_credit_minor,funding_wallet_minor,earnings_wallet_minor,debt_minor,created_at`,
+        (uuid,funding_id,account_id,amount_minor,currency,provider_collection_amount_minor,provider_collection_currency,source,reason,provider_reference,provider_event_id,idempotency_key,request_fingerprint,correlation_id,created_by,actor_system,pending_credit_minor,funding_wallet_minor,earnings_wallet_minor,debt_minor)
+       values($1,(select id from funding_capability.funding_transactions where uuid=$2),(select id from identity_capability.accounts where uuid=$3),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,(select id from identity_capability.accounts where uuid=$15),$16,$17,$18,$19,$20)
+       returning uuid id,(select uuid from funding_capability.funding_transactions where id=funding_id) funding_id,(select uuid from identity_capability.accounts where id=account_id) account_id,amount_minor,currency,provider_collection_amount_minor,provider_collection_currency,source,reason,provider_reference,provider_event_id,idempotency_key,correlation_id,(select uuid from identity_capability.accounts where id=created_by) created_by,actor_system,pending_credit_minor,funding_wallet_minor,earnings_wallet_minor,debt_minor,created_at`,
         [
           input.id,
           input.fundingId,
           input.accountId,
           input.amountMinor,
           input.currency,
+          input.providerCollectionAmountMinor,
+          input.providerCollectionCurrency,
           input.source,
           input.reason,
           input.providerReference,
@@ -215,7 +231,7 @@ export class PostgresFundingReversalRepository implements FundingReversalReposit
   }
 }
 
-const projection = `select reversal.uuid id,funding.uuid funding_id,account.uuid account_id,reversal.amount_minor,reversal.currency,reversal.source,reversal.reason,reversal.provider_reference,reversal.provider_event_id,reversal.idempotency_key,reversal.correlation_id,actor.uuid created_by,reversal.actor_system,reversal.pending_credit_minor,reversal.funding_wallet_minor,reversal.earnings_wallet_minor,reversal.debt_minor,reversal.created_at,to_char(reversal.created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') cursor_at
+const projection = `select reversal.uuid id,funding.uuid funding_id,account.uuid account_id,reversal.amount_minor,reversal.currency,reversal.provider_collection_amount_minor::text provider_collection_amount_minor,reversal.provider_collection_currency,reversal.source,reversal.reason,reversal.provider_reference,reversal.provider_event_id,reversal.idempotency_key,reversal.correlation_id,actor.uuid created_by,reversal.actor_system,reversal.pending_credit_minor,reversal.funding_wallet_minor,reversal.earnings_wallet_minor,reversal.debt_minor,reversal.created_at,to_char(reversal.created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') cursor_at
  from funding_capability.funding_reversals reversal join funding_capability.funding_transactions funding on funding.id=reversal.funding_id join identity_capability.accounts account on account.id=reversal.account_id left join identity_capability.accounts actor on actor.id=reversal.created_by`;
 function project(row: Row): FundingReversal {
   return {
@@ -224,6 +240,8 @@ function project(row: Row): FundingReversal {
     accountId: row.account_id,
     amountMinor: String(row.amount_minor),
     currency: row.currency,
+    providerCollectionAmountMinor: row.provider_collection_amount_minor,
+    providerCollectionCurrency: row.provider_collection_currency,
     source: row.source,
     reason: row.reason,
     providerReference: row.provider_reference,
@@ -254,7 +272,7 @@ function decodeCursor(value: string) {
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v.id)
     )
       throw new Error();
-    return { createdAt: new Date(v.createdAt).toISOString(), id: v.id };
+    return { createdAt: v.createdAt, id: v.id };
   } catch {
     throw new PublicApplicationError("Invalid funding reversal cursor.", "invalid_cursor", 400);
   }

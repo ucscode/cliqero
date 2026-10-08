@@ -20,19 +20,8 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
     ]);
     const available = (
       await this.sql.query<{ minor: string }>(
-        `select (
-      coalesce((select sum(case when entry.direction='credit' then entry.amount_minor else -entry.amount_minor end)
-        from ledger_capability.entries entry left join ledger_capability.entry_settlements settlement on settlement.original_entry_id=entry.id
-        where entry.account_id=(select id from identity_capability.accounts where uuid=$1) and entry.currency=$2 and entry.entry_type='purchase-earnings'
-          and (entry.balance_state='available' or settlement.id is not null)),0)
-      + coalesce((select sum(adjustment.amount_minor) from ledger_capability.earnings_adjustments adjustment
-        where adjustment.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
-      - coalesce((select sum(debt.amount_minor) from ledger_capability.account_debt_entries debt
-        where debt.account_id=(select id from identity_capability.accounts where uuid=$1) and debt.wallet='earnings' and debt.kind='settlement'),0)
-      - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
-        and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
-      - coalesce((select sum(funding_reversal.earnings_wallet_minor) from funding_capability.funding_reversals funding_reversal where funding_reversal.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
-      )::bigint as minor`,
+        `select ledger_capability.available_earnings_minor(
+           (select id from identity_capability.accounts where uuid=$1),$2)::text minor`,
         [input.accountId, input.amount.currency],
       )
     ).rows[0];
@@ -73,19 +62,8 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
     await this.lockAccount(accountId);
     const row = (
       await this.sql.query<{ minor: string }>(
-        `select (
-      coalesce((select sum(case when entry.direction='credit' then entry.amount_minor else -entry.amount_minor end)
-        from ledger_capability.entries entry left join ledger_capability.entry_settlements settlement on settlement.original_entry_id=entry.id
-        where entry.account_id=(select id from identity_capability.accounts where uuid=$1) and entry.currency=$2 and entry.entry_type='purchase-earnings'
-          and (entry.balance_state='available' or settlement.id is not null)),0)
-      + coalesce((select sum(adjustment.amount_minor) from ledger_capability.earnings_adjustments adjustment
-        where adjustment.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
-      - coalesce((select sum(debt.amount_minor) from ledger_capability.account_debt_entries debt
-        where debt.account_id=(select id from identity_capability.accounts where uuid=$1) and debt.wallet='earnings' and debt.kind='settlement'),0)
-      - coalesce((select sum(res.amount_minor) from ledger_capability.withdrawal_reservations res where res.account_id=(select id from identity_capability.accounts where uuid=$1) and res.currency=$2
-        and (select event.kind from ledger_capability.withdrawal_reservation_events event where event.reservation_id=res.id order by event.created_at desc,event.id desc limit 1) in ('reserved','completed')),0)
-      - coalesce((select sum(funding_reversal.earnings_wallet_minor) from funding_capability.funding_reversals funding_reversal where funding_reversal.account_id=(select id from identity_capability.accounts where uuid=$1)),0)
-      )::bigint as minor`,
+        `select ledger_capability.available_earnings_minor(
+           (select id from identity_capability.accounts where uuid=$1),$2)::text minor`,
         [accountId, currency],
       )
     ).rows[0];

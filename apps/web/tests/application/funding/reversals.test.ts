@@ -31,11 +31,14 @@ function setup() {
         providerOrigin: true,
         state: "confirmed",
         fundingAmountMinor: 1000n,
+        collectionAmountMinor: 1000n,
+        collectionCurrency: "USD",
         creditAmountMinor: 0n,
         creditState: null,
       }),
     ),
     reducePendingCredit: vi.fn(),
+    providerRefundedCollection: vi.fn(async () => 0n),
     availableFunding: async () => 600n,
     availableEarnings: async () => 250n,
     create: async (input) => {
@@ -48,7 +51,7 @@ function setup() {
   const debt = { increase: vi.fn(async () => undefined) };
   const service = new FundingReversalService(
     repository,
-    { findById: async () => funding } as never,
+    { findById: async () => funding, findOriginById: async () => null } as never,
     new AccountValueRecoveryService(repository, debt as never),
     { requireCapability: vi.fn(async () => undefined) } as never,
     { record: vi.fn(async () => undefined) } as never,
@@ -83,6 +86,8 @@ describe("FundingReversalService", () => {
       providerOrigin: true,
       state: "confirmed",
       fundingAmountMinor: 1000n,
+      collectionAmountMinor: 1000n,
+      collectionCurrency: "USD",
       creditAmountMinor: 1000n,
       creditState: "available",
     });
@@ -124,6 +129,8 @@ describe("FundingReversalService", () => {
       providerOrigin: false,
       state: "confirmed",
       fundingAmountMinor: 1000n,
+      collectionAmountMinor: 1000n,
+      collectionCurrency: "USD",
       creditAmountMinor: 0n,
       creditState: null,
     });
@@ -148,6 +155,8 @@ describe("FundingReversalService", () => {
         providerOrigin: true,
         state,
         fundingAmountMinor: 1000n,
+        collectionAmountMinor: 1000n,
+        collectionCurrency: "USD",
         creditAmountMinor: 0n,
         creditState: null,
       });
@@ -163,12 +172,51 @@ describe("FundingReversalService", () => {
     }
   });
 
+  it("resolves administrative funding to the intended conflict and preserves missing as 404", async () => {
+    const fundingReader = {
+      findById: async () => null,
+      findOriginById: async (id: string) => (id === "admin" ? "administrative" : null),
+    };
+    const repository = {
+      lockIdempotencyKey: vi.fn(),
+      findByIdempotencyKey: vi.fn(async () => null),
+    };
+    const instance = new FundingReversalService(
+      repository as never,
+      fundingReader as never,
+      {} as never,
+      { requireCapability: vi.fn() } as never,
+      { record: vi.fn() } as never,
+      { transaction: async (operation) => operation() },
+    );
+    await expect(
+      instance.createByOperator({
+        actorId: "actor",
+        fundingId: "admin",
+        amountMinor: "1",
+        reason: "attempt",
+        idempotencyKey: "admin-origin",
+      }),
+    ).rejects.toMatchObject({ code: "provider_funding_required", status: 409 });
+    await expect(
+      instance.createByOperator({
+        actorId: "actor",
+        fundingId: "missing",
+        amountMinor: "1",
+        reason: "attempt",
+        idempotencyKey: "missing-origin",
+      }),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+  });
+
   it("routes fully unavailable recovery to explicit account debt", async () => {
     const { service, repository, debt } = setup();
     repository.lockForReversal.mockResolvedValue({
       providerOrigin: true,
       state: "confirmed",
       fundingAmountMinor: 1000n,
+      collectionAmountMinor: 1000n,
+      collectionCurrency: "USD",
       creditAmountMinor: 1000n,
       creditState: "available",
     });

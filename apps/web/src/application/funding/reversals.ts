@@ -16,7 +16,6 @@ export type NormalizedFundingReversalEvent = {
   currency: string;
   providerReversalReference: string | null;
   reason: string;
-  full: boolean;
 };
 
 export class FundingReversalService {
@@ -90,25 +89,11 @@ export class FundingReversalService {
         "funding_not_found",
         404,
       );
-    if (input.currency !== funding.collectionAmount.currency)
-      throw new PublicApplicationError(
-        "Provider reversal currency does not match the persisted funding currency.",
-        "provider_reversal_amount_invalid",
-        409,
-      );
-    const amount = input.full
-      ? null
-      : await canonicalPartialAmount(funding, input.amountMinor, input.currency);
-    if (amount === 0n)
-      throw new PublicApplicationError(
-        "Provider reversal amount is below one canonical minor unit.",
-        "provider_reversal_amount_invalid",
-        409,
-      );
     return this.apply({
       fundingId: funding.id,
-      amountMinor: amount,
-      fullProviderReversal: input.full,
+      amountMinor: null,
+      providerCollectionAmountMinor: parseProviderAmount(input.amountMinor),
+      providerCollectionCurrency: input.currency,
       reason,
       source: "provider_event",
       providerReference: input.providerReversalReference,
@@ -122,7 +107,8 @@ export class FundingReversalService {
   private async apply(input: {
     fundingId: string;
     amountMinor: bigint | null;
-    fullProviderReversal?: boolean;
+    providerCollectionAmountMinor?: bigint;
+    providerCollectionCurrency?: string;
     reason: string;
     source: "operator" | "provider_event";
     providerReference: string | null;
@@ -138,7 +124,12 @@ export class FundingReversalService {
         const sameProviderEvent =
           input.source === "provider_event" &&
           prior.source === "provider_event" &&
-          prior.providerEventId === input.providerEventId;
+          prior.providerEventId === input.providerEventId &&
+          prior.fundingId === input.fundingId &&
+          prior.providerCollectionAmountMinor === input.providerCollectionAmountMinor?.toString() &&
+          prior.providerCollectionCurrency === input.providerCollectionCurrency &&
+          prior.reason === input.reason &&
+          prior.providerReference === input.providerReference;
         const sameManualIntent =
           input.source === "operator" &&
           prior.source === "operator" &&
@@ -155,7 +146,16 @@ export class FundingReversalService {
         return prior;
       }
       const funding = await this.funding.findById(input.fundingId);
-      if (!funding) throw new PublicApplicationError("Funding not found.", "not_found", 404);
+      if (!funding) {
+        const origin = await this.funding.findOriginById(input.fundingId);
+        if (origin === "administrative")
+          throw new PublicApplicationError(
+            "Funding reversals require provider-origin funding.",
+            "provider_funding_required",
+            409,
+          );
+        throw new PublicApplicationError("Funding not found.", "not_found", 404);
+      }
       const locked = await this.reversals.lockForReversal(funding.id, funding.accountId);
       if (locked.state === "missing")
         throw new PublicApplicationError("Funding not found.", "not_found", 404);
@@ -172,8 +172,47 @@ export class FundingReversalService {
           409,
         );
       const remaining = await this.reversals.remaining(funding.id);
-      const amountMinor = input.fullProviderReversal ? remaining : input.amountMinor;
-      if (amountMinor === null || amountMinor <= 0n || amountMinor > remaining)
+      let amountMinor = input.amountMinor;
+      if (input.source === "provider_event") {
+        if (
+          input.providerCollectionCurrency !== locked.collectionCurrency ||
+          input.providerCollectionAmountMinor === undefined
+        )
+          throw new PublicApplicationError(
+            "Provider reversal currency does not match persisted funding facts.",
+            "provider_reversal_amount_invalid",
+            409,
+          );
+        const previousCollection = await this.reversals.providerRefundedCollection(
+          funding.id,
+          locked.collectionCurrency,
+        );
+        const nextCollection = previousCollection + input.providerCollectionAmountMinor;
+        if (nextCollection > locked.collectionAmountMinor)
+          throw new PublicApplicationError(
+            "Cumulative provider refunds exceed the original collection amount.",
+            "funding_reversal_exceeds_remaining",
+            409,
+          );
+        const priorCanonical = canonicalFromCollection(
+          previousCollection,
+          locked.collectionAmountMinor,
+          locked.fundingAmountMinor,
+        );
+        const nextCanonical = canonicalFromCollection(
+          nextCollection,
+          locked.collectionAmountMinor,
+          locked.fundingAmountMinor,
+        );
+        const providerDelta = nextCanonical - priorCanonical;
+        amountMinor = min(providerDelta, remaining);
+      }
+      if (
+        amountMinor === null ||
+        amountMinor < 0n ||
+        amountMinor > remaining ||
+        (input.source === "operator" && amountMinor === 0n)
+      )
         throw new PublicApplicationError(
           "Reversal exceeds the remaining reversible amount.",
           "funding_reversal_exceeds_remaining",
@@ -212,6 +251,8 @@ export class FundingReversalService {
         accountId: funding.accountId,
         amountMinor: amountMinor.toString(),
         currency: "USD",
+        providerCollectionAmountMinor: input.providerCollectionAmountMinor?.toString() ?? null,
+        providerCollectionCurrency: input.providerCollectionCurrency ?? null,
         source: input.source,
         reason: input.reason,
         providerReference: input.providerReference,
@@ -260,30 +301,32 @@ function parseAmount(value: string) {
     );
   return BigInt(value);
 }
-function min(a: bigint, b: bigint) {
-  return a < b ? a : b;
-}
-async function canonicalPartialAmount(
-  funding: Awaited<ReturnType<FundingRepository["findById"]>> & {},
-  amount: string,
-  currency: string,
-): Promise<bigint> {
-  if (!/^[1-9][0-9]*$/.test(amount) || currency !== funding.collectionAmount.currency)
+function parseProviderAmount(value: string) {
+  if (!/^[1-9][0-9]{0,29}$/.test(value))
     throw new PublicApplicationError(
       "Provider reversal amount facts are invalid.",
       "provider_reversal_amount_invalid",
       409,
     );
-  const collection = BigInt(funding.collectionAmount.minorAmount);
-  const canonical = funding.canonicalAmount.minorAmount;
-  const numerator = BigInt(amount) * canonical;
+  const amount = BigInt(value);
+  if (amount > 9_223_372_036_854_775_807n)
+    throw new PublicApplicationError(
+      "Provider reversal amount facts exceed the supported integer range.",
+      "provider_reversal_amount_invalid",
+      409,
+    );
+  return amount;
+}
+function min(a: bigint, b: bigint) {
+  return a < b ? a : b;
+}
+function canonicalFromCollection(collectionRefund: bigint, collection: bigint, canonical: bigint) {
   if (collection <= 0n)
     throw new PublicApplicationError(
       "Provider reversal cannot be converted safely from persisted funding facts.",
       "provider_reversal_conversion_unsafe",
       409,
     );
-  // Round half up in canonical minor units, using the original persisted
-  // collection/canonical amounts rather than a refreshed market rate.
-  return (numerator + collection / 2n) / collection;
+  if (collectionRefund === collection) return canonical;
+  return (collectionRefund * canonical + collection / 2n) / collection;
 }

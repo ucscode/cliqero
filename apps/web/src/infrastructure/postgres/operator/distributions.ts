@@ -389,9 +389,8 @@ export class OperatorEarningsService {
     const totals = (
       await this.sql.query<any>(
         `select coalesce(sum(case when e.balance_state='pending' and e.direction='credit' and e.reversal_id is null and not exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then e.amount_minor when e.balance_state='pending' and e.direction='debit' and e.reversal_id is null then -e.amount_minor else 0 end),0)::bigint pending_minor,
-              coalesce(sum(case when (e.balance_state='available' or s.id is not null) and e.direction='credit' and e.reversal_id is null and not exists(select 1 from ledger_capability.entries c where c.original_entry_id=e.id) then e.amount_minor when (e.balance_state='available' or s.id is not null) and e.direction='debit' and e.reversal_id is null then -e.amount_minor else 0 end),0)::bigint
-                - coalesce((select sum(debt.amount_minor) from ledger_capability.account_debt_entries debt where debt.wallet='earnings' and debt.kind='settlement'),0)
-                - coalesce((select sum(reversal.earnings_wallet_minor) from funding_capability.funding_reversals reversal),0) available_minor,
+              coalesce((select sum(ledger_capability.available_earnings_minor(account.id,'USD'))
+                          from identity_capability.accounts account),0)::bigint available_minor,
               coalesce((select sum(r.amount_minor) from ledger_capability.withdrawal_reservations r where (select ev.kind from ledger_capability.withdrawal_reservation_events ev where ev.reservation_id=r.id order by ev.created_at desc,ev.id desc limit 1)='reserved'),0)::bigint reserved_minor
          from ledger_capability.entries e left join ledger_capability.entry_settlements s on s.original_entry_id=e.id where e.recipient_role='referral'`,
       )

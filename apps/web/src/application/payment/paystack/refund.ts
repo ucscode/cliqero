@@ -37,9 +37,6 @@ export class PaystackRefundProcessedHandler implements OutboxEventHandler {
     );
     if (funding) {
       if (!this.fundingReversals) throw new Error("Funding reversal handler is unavailable");
-      const full =
-        providerEvent.currency === funding.collectionAmount.currency &&
-        BigInt(providerEvent.amountMinor) === funding.collectionAmount.minorAmount;
       try {
         await this.fundingReversals.applyProviderEvent({
           eventId: providerEvent.id,
@@ -50,7 +47,6 @@ export class PaystackRefundProcessedHandler implements OutboxEventHandler {
           providerReversalReference:
             paystackRefundReference(providerEvent.payload) ?? providerEvent.eventKey,
           reason: "Paystack refund processed",
-          full,
         });
       } catch (error) {
         if (!(error instanceof PublicApplicationError)) throw error;

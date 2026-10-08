@@ -12,7 +12,8 @@ import { fundingDetailSchema, fundingStatusSchema } from "@/api/compat/wallet/fu
 import { domainError } from "../shared/error";
 import { errorSchema } from "../shared/schemas";
 import { PublicApplicationError } from "@/kernel/errors";
-import { deleteResourceIds, resourceDeleteSchema } from "@/api/shared/resource-delete";
+import { publicErrorPayload } from "@/api/error";
+import { resourceDeleteSchema } from "@/api/shared/resource-delete";
 import {
   requireCapabilityScope,
   requirePrincipal,
@@ -447,6 +448,8 @@ export function registerFundingRoutes(app: OpenAPIHono<Env>, container: Applicat
                     id: z.uuid(),
                     deleted: z.boolean(),
                     error: z.string().nullable(),
+                    error_code: z.string().optional(),
+                    status: z.number().int().optional(),
                   }),
                 ),
               }),
@@ -478,24 +481,32 @@ export function registerFundingRoutes(app: OpenAPIHono<Env>, container: Applicat
       )
         return c.json({ error: "Forbidden", code: "forbidden" }, 403);
       const { ids } = c.req.valid("json");
-      const result = await deleteResourceIds(
-        ids,
-        async (id) => {
-          try {
-            const funding = await container.operatorFunding.get(id);
-            const authorized =
-              funding.origin === "administrative"
-                ? hasCapability(p.capabilities as never, "finance.manage")
-                : hasCapability(p.capabilities as never, "system.root");
-            if (!authorized) throw new Error("Funding could not be deleted.");
-            return await container.operatorFunding.deleteByOperator(p.accountId, id);
-          } catch {
-            throw new Error("Funding could not be deleted.");
-          }
-        },
-        "Funding could not be deleted.",
-      );
-      return c.json(result, 200);
+      const results = [];
+      for (const id of ids) {
+        try {
+          const funding = await container.operatorFunding.get(id);
+          const authorized =
+            funding.origin === "administrative"
+              ? hasCapability(p.capabilities as never, "finance.manage")
+              : hasCapability(p.capabilities as never, "system.root");
+          if (!authorized) throw new Error("Funding could not be deleted.");
+          await container.operatorFunding.deleteByOperator(p.accountId, id);
+          results.push({ id, deleted: true, error: null });
+        } catch (error) {
+          const publicError = publicErrorPayload(error);
+          const debtConflict =
+            publicError?.payload.code === "funding_delete_debt_dependency_conflict";
+          results.push({
+            id,
+            deleted: false,
+            error: debtConflict ? publicError.payload.error : "Funding could not be deleted.",
+            ...(debtConflict
+              ? { error_code: publicError.payload.code, status: publicError.status }
+              : {}),
+          });
+        }
+      }
+      return c.json({ results }, 200);
     },
   );
 

@@ -6,6 +6,8 @@ export type FundingReversal = {
   accountId: string;
   amountMinor: string;
   currency: "USD";
+  providerCollectionAmountMinor: string | null;
+  providerCollectionCurrency: string | null;
   source: FundingReversalSource;
   reason: string;
   providerReference: string | null;
@@ -45,10 +47,13 @@ export interface FundingReversalRepository {
     providerOrigin: boolean;
     state: string;
     fundingAmountMinor: bigint;
+    collectionAmountMinor: bigint;
+    collectionCurrency: string;
     creditAmountMinor: bigint;
     creditState: "pending" | "available" | "cancelled" | null;
   }>;
   reducePendingCredit(fundingId: string, remainingMinor: bigint): Promise<void>;
+  providerRefundedCollection(fundingId: string, currency: string): Promise<bigint>;
   availableFunding(accountId: string): Promise<bigint>;
   availableEarnings(accountId: string): Promise<bigint>;
   create(input: Omit<FundingReversal, "createdAt">): Promise<FundingReversal>;

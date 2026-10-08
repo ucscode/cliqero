@@ -457,6 +457,39 @@ describe("canonical funding transaction resource", () => {
     expect(JSON.stringify(result)).not.toContain("secret SQL details");
   });
 
+  it("preserves a classified debt-dependency conflict on root funding deletion", async () => {
+    const app = createApp(principal(["system.root"]), {
+      operatorFunding: {
+        get: vi.fn(async () => ({ ...adminSummary, origin: "provider" })),
+        deleteByOperator: vi.fn(async () => {
+          throw new PublicApplicationError(
+            "Funding deletion conflicts with subsequent account-debt activity.",
+            "funding_delete_debt_dependency_conflict",
+            409,
+          );
+        }),
+      },
+    });
+    const response = await app.fetch(
+      new Request("http://localhost/api/funding-transactions", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [fundingId] }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      results: [
+        {
+          id: fundingId,
+          deleted: false,
+          error_code: "funding_delete_debt_dependency_conflict",
+          status: 409,
+        },
+      ],
+    });
+  });
+
   it("does not expose duplicate internal funding CRUD routes", async () => {
     const app = createApp(principal(["finance.manage"]));
     const cases = [

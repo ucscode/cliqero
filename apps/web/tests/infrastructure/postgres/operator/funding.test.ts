@@ -278,8 +278,10 @@ describe("PostgresOperatorFundingReader", () => {
         }),
       ]),
     );
-    expect(statements[0]).toContain("where uuid=$1 for update");
-    expect(statements[1]).toContain("from funding_capability.funding_transactions f");
+    expect(statements[0]).toContain("select account.uuid account_id");
+    expect(statements[1]).toContain("pg_advisory_xact_lock");
+    expect(statements[2]).toContain("where uuid=$1 for update");
+    expect(statements[3]).toContain("from funding_capability.funding_transactions f");
   });
 
   it("rejects malformed opaque cursors", async () => {

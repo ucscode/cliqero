@@ -54,7 +54,6 @@ describe("Paystack refund funding adaptation", () => {
       currency: "NGN",
       providerReversalReference: "paystack-refund-1",
       reason: "Paystack refund processed",
-      full: true,
     });
     expect(events.markProcessed).toHaveBeenCalledWith(providerEventId);
     expect(events.markRejected).not.toHaveBeenCalled();

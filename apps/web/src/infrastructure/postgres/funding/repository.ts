@@ -14,6 +14,18 @@ export class PostgresFundingRepository implements FundingRepository {
   findById(id: string, o?: { forUpdate?: boolean }) {
     return this.find("f.uuid=$1", [id], o);
   }
+  async findOriginById(id: string): Promise<"provider" | "administrative" | null> {
+    const row = (
+      await this.sql.query<{ origin: "provider" | "administrative" }>(
+        `select case when exists(select 1 from funding_capability.funding_transactions where uuid=$1)
+                     then 'provider' else 'administrative' end origin
+          where exists(select 1 from funding_capability.funding_transactions where uuid=$1)
+             or exists(select 1 from funding_capability.administrative_fundings where uuid=$1)`,
+        [id],
+      )
+    ).rows[0];
+    return row?.origin ?? null;
+  }
   findByIdempotency(accountId: string, key: string) {
     return this.find(
       "f.account_id=(select id from identity_capability.accounts where uuid=$1) and f.idempotency_key=$2",

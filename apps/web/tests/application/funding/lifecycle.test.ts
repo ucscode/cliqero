@@ -57,6 +57,7 @@ function service(existing: any) {
   const funding = {
     findByIdempotency: async () => existing,
     findById: async () => null,
+    findOriginById: async () => null,
     findByProviderReference: async () => null,
     findByProviderTransactionId: async () => null,
     findWork: async () => [],
@@ -134,6 +135,7 @@ describe("funding minimum preflight", () => {
     let saved = false;
     const repository = {
       findById: async () => funding,
+      findOriginById: async () => null,
       findByIdempotency: async () => null,
       findByProviderReference: async () => null,
       findByProviderTransactionId: async () => null,

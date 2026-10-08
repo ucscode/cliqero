@@ -97,6 +97,7 @@ export type FundingHistoryPage = {
 };
 export interface FundingRepository {
   findById(id: Id, options?: { forUpdate?: boolean }): Promise<FundingTransaction | null>;
+  findOriginById(id: Id): Promise<"provider" | "administrative" | null>;
   findByIdempotency(accountId: Id, key: string): Promise<FundingTransaction | null>;
   findByProviderReference(provider: string, reference: string): Promise<FundingTransaction | null>;
   findByProviderTransactionId(
