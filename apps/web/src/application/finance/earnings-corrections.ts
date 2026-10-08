@@ -109,19 +109,21 @@ export class EarningsCorrectionService {
         idempotencyKey,
       });
       const sourceIsPending = pendingMinor > 0n;
-      await this.repository.appendDebit({
-        id: newId(),
-        source,
-        // The immutable ledger debit records the full source correction. The
-        // available/debt split separately records what was physically recovered
-        // versus retained as a debt obligation.
-        amountMinor,
-        balanceState: sourceIsPending ? "pending" : "available",
-        maturityAt: sourceIsPending ? source.maturityAt : null,
-        correctionId: id,
-        correlationId,
-        suffix: sourceIsPending ? "pending" : "available",
-      });
+      const ledgerDebitMinor = pendingMinor + availableMinor;
+      if (ledgerDebitMinor > 0n)
+        await this.repository.appendDebit({
+          id: newId(),
+          source,
+          // A pending debit cancels an unsettled entitlement and becomes
+          // effective with its source; an available debit recovers spendable
+          // funds now. The unrecovered remainder is represented only as debt.
+          amountMinor: ledgerDebitMinor,
+          balanceState: sourceIsPending ? "pending" : "available",
+          maturityAt: sourceIsPending ? source.maturityAt : null,
+          correctionId: id,
+          correlationId,
+          suffix: sourceIsPending ? "pending" : "available",
+        });
       if (debtMinor > 0n)
         await this.debt.increase({
           accountId: source.accountId,

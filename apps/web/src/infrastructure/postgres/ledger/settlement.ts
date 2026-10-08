@@ -11,7 +11,11 @@ export class PostgresSettlementStore implements SettlementStore {
   }): Promise<readonly MaturedLedgerEntry[]> {
     const rows = await this.sql.query<MaturedLedgerEntry>(
       `select entry.uuid as id,entry.id::text as "relationalId",account.uuid as "accountId",
-              entry.amount_minor::text as "amountMinor",entry.entry_type as "entryType",
+              case when entry.entry_type='purchase-earnings' and entry.direction='credit'
+                     then greatest(0,entry.amount_minor-coalesce((select sum(correction.pending_minor)
+                       from ledger_capability.earnings_corrections correction
+                      where correction.source_entry_id=entry.id),0))
+                   else entry.amount_minor end::text as "amountMinor",entry.entry_type as "entryType",
               entry.recipient_role as "recipientRole",entry.correlation_id as "correlationId"
          from ledger_capability.entries entry
          left join identity_capability.accounts account on account.id=entry.account_id

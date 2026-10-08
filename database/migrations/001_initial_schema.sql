@@ -4297,7 +4297,12 @@ RETURNS bigint LANGUAGE sql STABLE AS $$
          AND (e.balance_state='available' OR EXISTS (
            SELECT 1 FROM ledger_capability.entry_settlements s
             WHERE s.original_entry_id=e.id AND s.to_state='available'
-         ))
+         ) OR (e.direction='debit' AND e.basis='earnings-correction' AND EXISTS (
+           SELECT 1
+             FROM ledger_capability.entry_settlements source_settlement
+            WHERE source_settlement.original_entry_id=e.original_entry_id
+              AND source_settlement.to_state='available'
+         )))
     ),0)
     + coalesce((SELECT sum(amount_minor) FROM ledger_capability.earnings_adjustments WHERE account_id=p_account_id),0)
     + coalesce((SELECT sum(CASE WHEN from_wallet='earnings' THEN gross_minor ELSE -net_minor END)

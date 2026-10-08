@@ -100,6 +100,49 @@ suite("withdrawal lifecycle", () => {
     expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("requested");
   });
 
+  it("serializes a source correction with a competing withdrawal reservation", async () => {
+    const { seller, destinationId, purchaseId } = await setup();
+    const source = (await app.ledger.findEntriesByPurchaseId(purchaseId)).find(
+      (entry) => entry.recipientRole === "seller" && entry.direction === "credit",
+    )!;
+    const outcomes = await Promise.allSettled([
+      app.withdrawals.create({
+        accountId: seller.id,
+        amountMinor: 5_000n,
+        currency: "USD",
+        destinationId,
+        idempotencyKey: newId(),
+        correlationId: newId(),
+      }),
+      app.earningsCorrections.create(seller.id, {
+        sourceEntryId: source.id,
+        amountMinor: "6000",
+        reason: "Concurrent correction and withdrawal reservation",
+        idempotencyKey: newId(),
+      }),
+    ]);
+    const withdrawal = outcomes[0];
+    const corrected = outcomes[1];
+    expect(corrected?.status).toBe("fulfilled");
+    if (corrected?.status !== "fulfilled") return;
+    expect(
+      BigInt(corrected.value.correction.availableMinor) +
+        BigInt(corrected.value.correction.debtMinor),
+    ).toBe(6_000n);
+    const reserved = (await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor ?? 0n;
+    if (withdrawal?.status === "fulfilled") {
+      expect(reserved).toBe(5_000n);
+      expect(corrected.value.correction).toMatchObject({
+        availableMinor: "5000",
+        debtMinor: "1000",
+      });
+    } else {
+      expect(reserved).toBe(0n);
+      expect(corrected.value.correction).toMatchObject({ availableMinor: "6000", debtMinor: "0" });
+    }
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBeGreaterThanOrEqual(0n);
+  });
+
   it("does not debit completed payout value again during a source-linked correction", async () => {
     const { seller, destinationId, purchaseId } = await setup();
     const source = (await app.ledger.findEntriesByPurchaseId(purchaseId)).find(

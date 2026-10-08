@@ -399,7 +399,7 @@ export class OperatorEarningsService {
                    when e.entry_type='purchase-earnings' and e.direction='credit' and correction.reversed_minor > 0 then 'reversed'
                    when e.entry_type='purchase-earnings' and e.direction='credit' and correction.corrected_minor >= e.amount_minor then 'corrected'
                    when e.entry_type='purchase-earnings' and e.direction='credit' and correction.corrected_minor > 0 then 'partially_corrected'
-                   when s.id is not null then 'available' else e.balance_state end effective_state,
+                   when s.id is not null or (e.direction='debit' and e.basis='earnings-correction' and exists(select 1 from ledger_capability.entry_settlements source_settlement where source_settlement.original_entry_id=e.original_entry_id and source_settlement.to_state='available')) then 'available' else e.balance_state end effective_state,
               case when e.entry_type='purchase-earnings' and e.direction='credit' and e.reversal_id is null
                    then greatest(0,e.amount_minor-correction.corrected_minor-correction.reversed_minor)::text else '0' end correctable_minor
          from ledger_capability.entries e
@@ -417,7 +417,7 @@ export class OperatorEarningsService {
                when e.entry_type='purchase-earnings' and e.direction='credit' and correction.reversed_minor > 0 then 'reversed'
                when e.entry_type='purchase-earnings' and e.direction='credit' and correction.corrected_minor >= e.amount_minor then 'corrected'
                when e.entry_type='purchase-earnings' and e.direction='credit' and correction.corrected_minor > 0 then 'partially_corrected'
-               when s.id is not null then 'available' else e.balance_state end)=$2)
+               when s.id is not null or (e.direction='debit' and e.basis='earnings-correction' and exists(select 1 from ledger_capability.entry_settlements source_settlement where source_settlement.original_entry_id=e.original_entry_id and source_settlement.to_state='available')) then 'available' else e.balance_state end)=$2)
           ${cursorClause}
         order by ${orderBy} ${direction},e.id ${direction} limit $${cursor ? 5 : 3}`,
         cursor
@@ -428,7 +428,7 @@ export class OperatorEarningsService {
     const visible = rows.slice(0, input.limit);
     const totals = (
       await this.sql.query<any>(
-        `select coalesce(sum(case when e.balance_state='pending' and s.id is null and e.direction='credit' then e.amount_minor when e.balance_state='pending' and s.id is null and e.direction='debit' then -e.amount_minor else 0 end),0)::bigint pending_minor,
+        `select coalesce(sum(case when e.balance_state='pending' and s.id is null and not (e.direction='debit' and e.basis='earnings-correction' and exists(select 1 from ledger_capability.entry_settlements source_settlement where source_settlement.original_entry_id=e.original_entry_id and source_settlement.to_state='available')) and e.direction='credit' then e.amount_minor when e.balance_state='pending' and s.id is null and not (e.direction='debit' and e.basis='earnings-correction' and exists(select 1 from ledger_capability.entry_settlements source_settlement where source_settlement.original_entry_id=e.original_entry_id and source_settlement.to_state='available')) and e.direction='debit' then -e.amount_minor else 0 end),0)::bigint pending_minor,
               coalesce((select sum(ledger_capability.available_earnings_minor(account.id,'USD'))
                           from identity_capability.accounts account),0)::bigint available_minor,
               coalesce((select sum(r.amount_minor) from ledger_capability.withdrawal_reservations r where (select ev.kind from ledger_capability.withdrawal_reservation_events ev where ev.reservation_id=r.id order by ev.created_at desc,ev.id desc limit 1)='reserved'),0)::bigint reserved_minor

@@ -234,6 +234,49 @@ suite("purchase financial distribution", () => {
     ).rejects.toMatchObject({ code: "earning_source_reversed", status: 409 });
   });
 
+  it("serializes a purchase reversal against a concurrent source correction", async () => {
+    const value = await completed();
+    await grantFinanceManage(value.seller.id);
+    const source = await sellerEarning(value.purchaseId);
+    const [correctionResult, reversalResult] = await Promise.allSettled([
+      app.earningsCorrections.create(value.seller.id, {
+        sourceEntryId: source.id,
+        amountMinor: "50",
+        reason: "Concurrent source correction before purchase reversal",
+        idempotencyKey: newId(),
+      }),
+      app.purchaseReversal.process({
+        purchaseId: value.purchaseId,
+        reason: "Concurrent purchase reversal",
+        source: "operator",
+        idempotencyKey: newId(),
+        correlationId: newId(),
+      }),
+    ]);
+    expect(reversalResult.status).toBe("fulfilled");
+    const recovery = await app.database.query<{ total: string }>(
+      `select coalesce(sum(amount_minor),0)::text total
+         from ledger_capability.entries
+        where original_entry_id=(select id from ledger_capability.entries where uuid=$1)
+          and direction='debit'`,
+      [source.id],
+    );
+    const correction = await app.database.query<{ total: string }>(
+      `select coalesce(sum(amount_minor),0)::text total
+         from ledger_capability.earnings_corrections
+        where source_entry_id=(select id from ledger_capability.entries where uuid=$1)`,
+      [source.id],
+    );
+    expect(BigInt(recovery.rows[0]!.total)).toBe(source.amount.minorAmount);
+    if (correctionResult.status === "fulfilled") {
+      expect(correctionResult.value.correction.availableMinor).toBe("50");
+      expect(correction.rows[0]!.total).toBe("50");
+    } else {
+      expect(correctionResult.reason).toMatchObject({ code: "earning_source_reversed" });
+      expect(correction.rows[0]!.total).toBe("0");
+    }
+  });
+
   it("keeps pending corrections pending until maturity and excludes reserved value from recovery", async () => {
     await app.database.query(
       `update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`,
@@ -259,9 +302,69 @@ suite("purchase financial distribution", () => {
     ).toBe("64");
     await app.settlement.settle({ now: new Date(Date.now() + 3_601_000), batchSize: 20 });
     expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(64n);
+    expect(await app.ledger.summarizeAccount(value.seller.id)).toContainEqual({
+      currency: "USD",
+      balanceState: "available",
+      amountMinor: 64n,
+    });
     expect(
       (await app.operatorEarnings.list({ limit: 25, search: source.id })).totals.pendingMinor,
     ).toBe("0");
+  });
+
+  it("settles only the uncanceled portion of a corrected pending earning against existing debt", async () => {
+    await app.database.query(
+      `update ledger_capability.distribution_policy set initial_balance_state='pending',settlement_delay_seconds=3600`,
+    );
+    const value = await completed();
+    await grantFinanceManage(value.seller.id);
+    const source = await sellerEarning(value.purchaseId);
+    const correction = await app.earningsCorrections.create(value.seller.id, {
+      sourceEntryId: source.id,
+      amountMinor: "20",
+      reason: "Cancel pending entitlement before it settles",
+      idempotencyKey: newId(),
+    });
+    expect(correction.correction).toMatchObject({ pendingMinor: "20", debtMinor: "0" });
+
+    await app.accountDebt.increase({
+      accountId: value.seller.id,
+      amountMinor: 70n,
+      wallet: "earnings",
+      sourceKind: "integration_fixture",
+      sourceId: newId(),
+      reason: "Existing debt before corrected pending earning settles",
+      actor: { kind: "system", id: "integration-test" },
+      correlationId: newId(),
+      idempotencyKey: `pending-correction-debt:${newId()}`,
+    });
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(0n);
+
+    await app.settlement.settle({ now: new Date(Date.now() + 3_601_000), batchSize: 20 });
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("6");
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(0n);
+    expect(await app.ledger.summarizeAccount(value.seller.id)).toContainEqual({
+      currency: "USD",
+      balanceState: "available",
+      amountMinor: 64n,
+    });
+    const debtSettlements = await app.database.query<{ amount_minor: string }>(
+      `select amount_minor::text from ledger_capability.account_debt_entries
+        where account_id=(select id from identity_capability.accounts where uuid=$1)
+          and kind='settlement' and source_kind='purchase_earning'`,
+      [value.seller.id],
+    );
+    expect(debtSettlements.rows).toEqual([{ amount_minor: "64" }]);
+
+    await app.earningsAdjustments.create(value.seller.id, {
+      accountId: value.seller.id,
+      amountMinor: "10",
+      reason: "Verify account returns to normal after corrected debt settles",
+      reference: newId(),
+      idempotencyKey: newId(),
+    });
+    expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe("0");
+    expect(await app.fundsReservation.available(value.seller.id, "USD")).toBe(4n);
   });
 
   it("creates Earnings debt rather than touching Funding when an eligible source has already been spent", async () => {
@@ -290,7 +393,143 @@ suite("purchase financial distribution", () => {
     expect(await app.accountDebt.balance(value.seller.id, value.seller.id)).toBe(
       source.amount.minorAmount.toString(),
     );
+    expect(
+      await app.database.query(
+        `select 1 from ledger_capability.entries
+          where original_entry_id=(select id from ledger_capability.entries where uuid=$1)
+            and basis='earnings-correction'`,
+        [source.id],
+      ),
+    ).toMatchObject({ rowCount: 0 });
   });
+
+  it("recovers a corrected source once across current Earnings and later debt-settling inflows", async () => {
+    await app.database.query(
+      `update ledger_capability.distribution_policy set platform_rate_basis_points=0`,
+    );
+    await app.database.query(
+      `update referral_capability.commission_policy set rates_basis_points='{0,0}'`,
+    );
+    const originalPurchase = await completed(undefined, undefined, "10000");
+    await grantFinanceManage(originalPurchase.seller.id);
+    const source = await sellerEarning(originalPurchase.purchaseId);
+    expect(source.amount.minorAmount).toBe(10_000n);
+    expect(await app.fundsReservation.available(originalPurchase.seller.id, "USD")).toBe(10_000n);
+
+    await app.walletTransfers.transfer({
+      accountId: originalPurchase.seller.id,
+      from: "earnings",
+      to: "funding",
+      grossMinor: 8_000n,
+      idempotencyKey: newId(),
+    });
+    expect(await app.fundsReservation.available(originalPurchase.seller.id, "USD")).toBe(2_000n);
+
+    const correction = await app.earningsCorrections.create(originalPurchase.seller.id, {
+      sourceEntryId: source.id,
+      amountMinor: "10000",
+      reason: "Correct the source allocation and recover consumed proceeds once",
+      idempotencyKey: newId(),
+    });
+    expect(correction.correction).toMatchObject({
+      amountMinor: "10000",
+      availableMinor: "2000",
+      debtMinor: "8000",
+    });
+    const immediate = await accountingSnapshot(originalPurchase.seller.id, source.id);
+    expect(immediate).toMatchObject({
+      sourceCreditMinor: "10000",
+      transferAdjustmentMinor: "-8000",
+      correctionDebitMinor: "2000",
+      debtIncreaseMinor: "8000",
+      debtSettlementMinor: "0",
+      debtBalanceMinor: "8000",
+      earningsAvailableMinor: "0",
+    });
+
+    await app.database.query(
+      `update ledger_capability.distribution_policy set platform_rate_basis_points=1000`,
+    );
+    await app.database.query(
+      `update referral_capability.commission_policy set rates_basis_points='{500,250}'`,
+    );
+    const laterPurchase = await completed(undefined, originalPurchase.seller.id, "160000");
+    await app.purchaseDistribution.process({
+      purchaseId: laterPurchase.purchaseId,
+      correlationId: newId(),
+    });
+    const laterEarning = (await app.ledger.findEntriesByPurchaseId(laterPurchase.purchaseId)).find(
+      (entry) =>
+        entry.recipientRole === "referral" && entry.accountId === originalPurchase.seller.id,
+    );
+    expect(laterEarning?.amount.minorAmount).toBe(8_000n);
+    const afterDebtSettlement = await accountingSnapshot(originalPurchase.seller.id, source.id);
+    expect(afterDebtSettlement).toMatchObject({
+      sourceCreditMinor: "10000",
+      transferAdjustmentMinor: "-8000",
+      correctionDebitMinor: "2000",
+      laterEarningCreditMinor: "8000",
+      debtIncreaseMinor: "8000",
+      debtSettlementMinor: "8000",
+      debtBalanceMinor: "0",
+      earningsAvailableMinor: "0",
+    });
+
+    const recoveryRetry = await app.earningsCorrections.create(originalPurchase.seller.id, {
+      sourceEntryId: source.id,
+      amountMinor: "10000",
+      reason: "Correct the source allocation and recover consumed proceeds once",
+      idempotencyKey: correction.correction.idempotencyKey,
+    });
+    expect(recoveryRetry.created).toBe(false);
+    const finalEarning = await completed(undefined, originalPurchase.seller.id, "20000");
+    await app.purchaseDistribution.process({
+      purchaseId: finalEarning.purchaseId,
+      correlationId: newId(),
+    });
+    const finalSnapshot = await accountingSnapshot(originalPurchase.seller.id, source.id);
+    expect(finalSnapshot.debtBalanceMinor).toBe("0");
+    expect(finalSnapshot.earningsAvailableMinor).toBe("1000");
+    expect(
+      BigInt(finalSnapshot.correctionDebitMinor) + BigInt(finalSnapshot.debtSettlementMinor),
+    ).toBe(10_000n);
+  });
+
+  async function accountingSnapshot(accountId: string, sourceEntryId: string) {
+    const row = (
+      await app.database.query<{
+        sourceCreditMinor: string;
+        transferAdjustmentMinor: string;
+        correctionDebitMinor: string;
+        laterEarningCreditMinor: string;
+        debtIncreaseMinor: string;
+        debtSettlementMinor: string;
+        debtBalanceMinor: string;
+        earningsAvailableMinor: string;
+      }>(
+        `select source.amount_minor::text "sourceCreditMinor",
+                coalesce((select sum(adjustment.amount_minor) from ledger_capability.earnings_adjustments adjustment
+                           join wallet_capability.transfers transfer on transfer.uuid::text=adjustment.reference
+                          where transfer.account_id=source.account_id and transfer.from_wallet='earnings'),0)::text "transferAdjustmentMinor",
+                coalesce((select sum(debit.amount_minor) from ledger_capability.entries debit
+                          where debit.original_entry_id=source.id and debit.basis='earnings-correction'),0)::text "correctionDebitMinor",
+                coalesce((select sum(earning.amount_minor) from ledger_capability.entries earning
+                           where earning.account_id=source.account_id and earning.recipient_role='referral'
+                             and earning.created_at>source.created_at),0)::text "laterEarningCreditMinor",
+                coalesce((select sum(entry.amount_minor) from ledger_capability.account_debt_entries entry
+                           where entry.account_id=source.account_id and entry.kind='increase'),0)::text "debtIncreaseMinor",
+                coalesce((select sum(entry.amount_minor) from ledger_capability.account_debt_entries entry
+                           where entry.account_id=source.account_id and entry.kind='settlement'),0)::text "debtSettlementMinor",
+                (select coalesce(sum(case when entry.kind='increase' then entry.amount_minor else -entry.amount_minor end),0)::text
+                   from ledger_capability.account_debt_entries entry where entry.account_id=source.account_id) "debtBalanceMinor",
+                ledger_capability.available_earnings_minor(source.account_id,'USD')::text "earningsAvailableMinor"
+           from ledger_capability.entries source where source.uuid=$1`,
+        [sourceEntryId],
+      )
+    ).rows[0];
+    if (!row) throw new Error("Earnings correction accounting source disappeared");
+    return row;
+  }
 
   it("serializes a correction with a concurrent Earnings-to-Funding transfer", async () => {
     const value = await completed();
