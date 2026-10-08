@@ -76,49 +76,62 @@ export function treasurySourceHref(source: OperatorTreasuryEntry["source"]) {
   return null;
 }
 
+export function OperatorTreasurySource({ source }: { source: OperatorTreasuryEntry["source"] }) {
+  const sourceHref = treasurySourceHref(source);
+  return (
+    <div className="grid min-w-0 gap-0.5 text-sm">
+      <span className="break-words font-medium text-slate-800">
+        {sourceHref && source ? (
+          <Link href={sourceHref} className="text-violet-700 hover:underline">
+            {treasurySourceLabel(source)}
+          </Link>
+        ) : (
+          treasurySourceLabel(source)
+        )}
+      </span>
+      {source && <code className="break-all text-xs text-slate-500">{source.id}</code>}
+    </div>
+  );
+}
+
+export function OperatorTreasuryActor({ actor }: { actor: OperatorTreasuryEntry["actor"] }) {
+  return (
+    <div className="min-w-0 text-sm">
+      {actor?.kind === "system" ? (
+        <span className="font-medium text-slate-700">System / automated</span>
+      ) : actor?.id && actor.username ? (
+        <span className="break-words">
+          <Link
+            href={`/operator/users/${actor.id}`}
+            className="font-medium text-violet-700 hover:underline"
+          >
+            @{actor.username}
+          </Link>
+          <span className="ml-1 text-xs text-slate-500">
+            {actor.kind === "operator"
+              ? "Operator"
+              : actor.kind === "customer"
+                ? "Customer"
+                : "Attributed account"}
+          </span>
+        </span>
+      ) : (
+        <span className="text-slate-500">Actor not recorded (historical)</span>
+      )}
+    </div>
+  );
+}
+
 export function OperatorTreasuryTraceability({ entry }: { entry: OperatorTreasuryEntry }) {
-  const sourceHref = treasurySourceHref(entry.source);
-  const actor = entry.actor;
   return (
     <div className="grid min-w-0 gap-2 text-sm">
       <div className="grid gap-0.5">
         <span className="text-slate-500">Source</span>
-        <span className="break-words font-medium text-slate-800">
-          {sourceHref && entry.source ? (
-            <Link href={sourceHref} className="text-violet-700 hover:underline">
-              {treasurySourceLabel(entry.source)}
-            </Link>
-          ) : (
-            treasurySourceLabel(entry.source)
-          )}
-        </span>
-        {entry.source && (
-          <code className="break-all text-xs text-slate-500">{entry.source.id}</code>
-        )}
+        <OperatorTreasurySource source={entry.source} />
       </div>
       <div className="grid gap-0.5">
         <span className="text-slate-500">Actor</span>
-        {actor?.kind === "system" ? (
-          <span className="font-medium text-slate-700">System / automated</span>
-        ) : actor?.id && actor.username ? (
-          <span>
-            <Link
-              href={`/operator/users/${actor.id}`}
-              className="font-medium text-violet-700 hover:underline"
-            >
-              @{actor.username}
-            </Link>
-            <span className="ml-1 text-xs text-slate-500">
-              {actor.kind === "operator"
-                ? "Operator"
-                : actor.kind === "customer"
-                  ? "Customer"
-                  : "Attributed account"}
-            </span>
-          </span>
-        ) : (
-          <span className="text-slate-500">Actor not recorded (historical)</span>
-        )}
+        <OperatorTreasuryActor actor={entry.actor} />
       </div>
     </div>
   );
@@ -214,6 +227,23 @@ export function OperatorTreasuryDetail({ entryId }: { entryId: string }) {
       fields={fields}
     />
   );
+}
+
+type TreasuryEntry = OperatorTreasuryPage["items"][number];
+
+export function treasuryTraceabilityColumns(): readonly CrudColumn<TreasuryEntry>[] {
+  return [
+    {
+      key: "source",
+      label: "Source",
+      render: (entry) => <OperatorTreasurySource source={entry.source} />,
+    },
+    {
+      key: "actor",
+      label: "Actor",
+      render: (entry) => <OperatorTreasuryActor actor={entry.actor} />,
+    },
+  ];
 }
 
 export function OperatorTreasuryForm() {
@@ -360,7 +390,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
     { search: "", direction: "", source: "", sort: "created", sort_direction: "desc" },
   );
 
-  type Entry = OperatorTreasuryPage["items"][number];
+  type Entry = TreasuryEntry;
   const columns: readonly CrudColumn<Entry>[] = [
     {
       key: "entry",
@@ -382,11 +412,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
       label: "Direction",
       render: (entry) => <OperatorStatusCell status={entry.direction} />,
     },
-    {
-      key: "source",
-      label: "Source and actor",
-      render: (entry) => <OperatorTreasuryTraceability entry={entry} />,
-    },
+    ...treasuryTraceabilityColumns(),
     {
       key: "correlation",
       label: "Correlation",

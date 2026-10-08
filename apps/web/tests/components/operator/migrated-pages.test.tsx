@@ -17,10 +17,13 @@ import { OperatorFundingDetail, OperatorFundingList } from "@/components/operato
 import { OperatorNetwork } from "@/components/operator/network";
 import { OperatorReviews } from "@/components/operator/reviews";
 import {
+  OperatorTreasuryActor,
   OperatorTreasuryCorrelation,
   OperatorTreasuryDetail,
   OperatorTreasuryPage,
+  OperatorTreasurySource,
   OperatorTreasuryTraceability,
+  treasuryTraceabilityColumns,
 } from "@/components/operator/treasury";
 import { OperatorUserDetail, OperatorUserForm } from "@/components/operator/users";
 import {
@@ -165,6 +168,61 @@ describe("operator console shared page migration", () => {
     expect(correlationHtml).toContain("00000000-0000-4000-8000-000000000003");
     expect(renderPage(<OperatorTreasuryCorrelation correlationId={null} />)).toContain(
       "Not recorded (historical)",
+    );
+  });
+
+  it("renders Treasury source and actor as separate compact table columns", () => {
+    expect(treasuryTraceabilityColumns().map((column) => column.label)).toEqual([
+      "Source",
+      "Actor",
+    ]);
+
+    const source = renderPage(
+      <OperatorTreasurySource
+        source={{
+          kind: "wallet_transfer",
+          id: "transfer-id",
+        }}
+      />,
+    );
+    expect(source).toContain("Wallet transfer fee");
+    expect(source).toContain("transfer-id");
+    expect(source).not.toContain(">Source<");
+    expect(renderPage(<OperatorTreasurySource source={null} />)).toContain("Source not recorded");
+
+    const customer = renderPage(
+      <OperatorTreasuryActor
+        actor={{
+          id: "customer-id",
+          username: "customer_one",
+          email: null,
+          kind: "customer",
+        }}
+      />,
+    );
+    expect(customer).toContain('href="/operator/users/customer-id"');
+    expect(customer).toContain("@customer_one");
+    expect(customer).toContain("Customer");
+    expect(customer).not.toContain(">Actor<");
+
+    const operator = renderPage(
+      <OperatorTreasuryActor
+        actor={{
+          id: "operator-id",
+          username: "operator_one",
+          email: null,
+          kind: "operator",
+        }}
+      />,
+    );
+    expect(operator).toContain("Operator");
+    expect(
+      renderPage(
+        <OperatorTreasuryActor actor={{ id: null, username: null, email: null, kind: "system" }} />,
+      ),
+    ).toContain("System / automated");
+    expect(renderPage(<OperatorTreasuryActor actor={null} />)).toContain(
+      "Actor not recorded (historical)",
     );
   });
 
