@@ -2,10 +2,15 @@
 
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { OperatorActionsMenu, type OperatorAction } from "../operator/ui/actions-menu";
+import {
+  OperatorActionsMenu,
+  visibleOperatorActions,
+  type OperatorAction,
+} from "../operator/ui/actions-menu";
 import { OperatorActionCell } from "../operator/ui/data-cells";
 import { OperatorTableSurface } from "../operator/ui/table-surface";
 import { cn } from "@/lib/utils";
+import type { Capability } from "@/modules/identity/capabilities";
 
 export type CrudColumn<T> = {
   key: string;
@@ -60,6 +65,7 @@ export type CrudTableRowProps<T> = {
   selectionLabel: string | null;
   selected: boolean;
   onToggle: (item: T, checked: boolean) => void;
+  capabilities?: readonly Capability[];
 };
 
 export function crudTableRowPropsEqual<T>(
@@ -74,7 +80,8 @@ export function crudTableRowPropsEqual<T>(
     previous.selectionEnabled === next.selectionEnabled &&
     previous.selectionLabel === next.selectionLabel &&
     previous.selected === next.selected &&
-    previous.onToggle === next.onToggle
+    previous.onToggle === next.onToggle &&
+    previous.capabilities === next.capabilities
   );
 }
 
@@ -87,8 +94,9 @@ function CrudTableRow<T>({
   selectionLabel,
   selected,
   onToggle,
+  capabilities = [],
 }: CrudTableRowProps<T>) {
-  const rowActions = actions?.(item) ?? [];
+  const rowActions = visibleOperatorActions(actions?.(item) ?? [], capabilities);
   return (
     <TableRow className="odd:bg-white even:bg-slate-50/70 hover:bg-slate-50">
       {selectionEnabled && (
@@ -122,6 +130,7 @@ function CrudTableRow<T>({
           <OperatorActionCell>
             <OperatorActionsMenu
               actions={rowActions}
+              capabilities={capabilities}
               label={actionLabel?.(item) ?? "Row actions"}
             />
           </OperatorActionCell>
@@ -149,7 +158,8 @@ export function crudMobileCardPropsEqual<T>(
     previous.selectionEnabled === next.selectionEnabled &&
     previous.selectionLabel === next.selectionLabel &&
     previous.selected === next.selected &&
-    previous.onToggle === next.onToggle
+    previous.onToggle === next.onToggle &&
+    previous.capabilities === next.capabilities
   );
 }
 
@@ -162,8 +172,9 @@ function CrudMobileCard<T>({
   selectionLabel,
   selected,
   onToggle,
+  capabilities = [],
 }: CrudMobileCardProps<T>) {
-  const rowActions = actions?.(item) ?? [];
+  const rowActions = visibleOperatorActions(actions?.(item) ?? [], capabilities);
   return (
     <article className="min-w-0 rounded-md border border-slate-200 bg-white px-4 py-4">
       {selectionEnabled && selectionLabel !== null && (
@@ -199,7 +210,11 @@ function CrudMobileCard<T>({
       {rowActions.length > 0 && (
         <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
           <span className="text-xs font-medium text-slate-500">Actions</span>
-          <OperatorActionsMenu actions={rowActions} label={actionLabel?.(item) ?? "Row actions"} />
+          <OperatorActionsMenu
+            actions={rowActions}
+            capabilities={capabilities}
+            label={actionLabel?.(item) ?? "Row actions"}
+          />
         </div>
       )}
     </article>
@@ -217,6 +232,7 @@ export function CrudTable<T>({
   getRowKey,
   actions,
   actionLabel,
+  capabilities = [],
   footer,
   className,
   selection,
@@ -227,6 +243,7 @@ export function CrudTable<T>({
   getRowKey: (item: T) => string;
   actions?: (item: T) => readonly OperatorAction[];
   actionLabel?: (item: T) => string;
+  capabilities?: readonly Capability[];
   footer?: ReactNode;
   className?: string;
   selection?: CrudSelection<T>;
@@ -325,6 +342,7 @@ export function CrudTable<T>({
                   desktopColumns={desktopColumns}
                   actions={actions}
                   actionLabel={actionLabel}
+                  capabilities={capabilities}
                   selectionEnabled={Boolean(selection)}
                   selectionLabel={
                     selection && canSelectItem(item) ? selection.labelForItem(item) : null
@@ -346,6 +364,7 @@ export function CrudTable<T>({
             mobileColumns={mobileColumns}
             actions={actions}
             actionLabel={actionLabel}
+            capabilities={capabilities}
             selectionEnabled={Boolean(selection)}
             selectionLabel={selection && canSelectItem(item) ? selection.labelForItem(item) : null}
             selected={selection?.selectedKeys.has(getRowKey(item)) ?? false}

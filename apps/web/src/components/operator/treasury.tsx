@@ -34,6 +34,8 @@ import { useToast } from "../toast/provider";
 import { CrudEdit } from "@/components/crud/edit";
 import { CopyValue } from "../copy-value";
 import { CrudDetail, type CrudField } from "@/components/crud/detail";
+import type { Capability } from "@/modules/identity/capabilities";
+import { OperatorResourceLink } from "./ui/resource-link";
 
 function signedUsdMinor(value: string) {
   const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
@@ -76,15 +78,28 @@ export function treasurySourceHref(source: OperatorTreasuryEntry["source"]) {
   return null;
 }
 
-export function OperatorTreasurySource({ source }: { source: OperatorTreasuryEntry["source"] }) {
+export function OperatorTreasurySource({
+  source,
+  capabilities = [],
+}: {
+  source: OperatorTreasuryEntry["source"];
+  capabilities?: readonly Capability[];
+}) {
   const sourceHref = treasurySourceHref(source);
+  const requiredCapability =
+    source?.kind === "distribution" ? "finance.read" : "withdrawals.manage";
   return (
     <div className="grid min-w-0 gap-0.5 text-sm">
       <span className="break-words font-medium text-slate-800">
         {sourceHref && source ? (
-          <Link href={sourceHref} className="text-violet-700 hover:underline">
+          <OperatorResourceLink
+            capabilities={capabilities}
+            requiredCapability={requiredCapability}
+            href={sourceHref}
+            className="text-violet-700 hover:underline"
+          >
             {treasurySourceLabel(source)}
-          </Link>
+          </OperatorResourceLink>
         ) : (
           treasurySourceLabel(source)
         )}
@@ -94,19 +109,27 @@ export function OperatorTreasurySource({ source }: { source: OperatorTreasuryEnt
   );
 }
 
-export function OperatorTreasuryActor({ actor }: { actor: OperatorTreasuryEntry["actor"] }) {
+export function OperatorTreasuryActor({
+  actor,
+  capabilities = [],
+}: {
+  actor: OperatorTreasuryEntry["actor"];
+  capabilities?: readonly Capability[];
+}) {
   return (
     <div className="min-w-0 text-sm">
       {actor?.kind === "system" ? (
         <span className="font-medium text-slate-700">System / automated</span>
       ) : actor?.id && actor.username ? (
         <span className="break-words">
-          <Link
+          <OperatorResourceLink
+            capabilities={capabilities}
+            requiredCapability="accounts.read"
             href={`/operator/users/${actor.id}`}
             className="font-medium text-violet-700 hover:underline"
           >
             @{actor.username}
-          </Link>
+          </OperatorResourceLink>
           <span className="ml-1 text-xs text-slate-500">
             {actor.kind === "operator"
               ? "Operator"
@@ -122,16 +145,22 @@ export function OperatorTreasuryActor({ actor }: { actor: OperatorTreasuryEntry[
   );
 }
 
-export function OperatorTreasuryTraceability({ entry }: { entry: OperatorTreasuryEntry }) {
+export function OperatorTreasuryTraceability({
+  entry,
+  capabilities = [],
+}: {
+  entry: OperatorTreasuryEntry;
+  capabilities?: readonly Capability[];
+}) {
   return (
     <div className="grid min-w-0 gap-2 text-sm">
       <div className="grid gap-0.5">
         <span className="text-slate-500">Source</span>
-        <OperatorTreasurySource source={entry.source} />
+        <OperatorTreasurySource source={entry.source} capabilities={capabilities} />
       </div>
       <div className="grid gap-0.5">
         <span className="text-slate-500">Actor</span>
-        <OperatorTreasuryActor actor={entry.actor} />
+        <OperatorTreasuryActor actor={entry.actor} capabilities={capabilities} />
       </div>
     </div>
   );
@@ -145,7 +174,13 @@ export function OperatorTreasuryCorrelation({ correlationId }: { correlationId: 
   );
 }
 
-export function OperatorTreasuryDetail({ entryId }: { entryId: string }) {
+export function OperatorTreasuryDetail({
+  entryId,
+  capabilities = [],
+}: {
+  entryId: string;
+  capabilities?: readonly Capability[];
+}) {
   const [entry, setEntry] = useState<OperatorTreasuryEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -203,7 +238,7 @@ export function OperatorTreasuryDetail({ entryId }: { entryId: string }) {
     { label: "Note", value: entry.note ?? "—" },
     {
       label: "Source and actor",
-      value: <OperatorTreasuryTraceability entry={entry} />,
+      value: <OperatorTreasuryTraceability entry={entry} capabilities={capabilities} />,
       className: "sm:col-span-2",
     },
     {
@@ -231,17 +266,21 @@ export function OperatorTreasuryDetail({ entryId }: { entryId: string }) {
 
 type TreasuryEntry = OperatorTreasuryPage["items"][number];
 
-export function treasuryTraceabilityColumns(): readonly CrudColumn<TreasuryEntry>[] {
+export function treasuryTraceabilityColumns(
+  capabilities: readonly Capability[] = [],
+): readonly CrudColumn<TreasuryEntry>[] {
   return [
     {
       key: "source",
       label: "Source",
-      render: (entry) => <OperatorTreasurySource source={entry.source} />,
+      render: (entry) => (
+        <OperatorTreasurySource source={entry.source} capabilities={capabilities} />
+      ),
     },
     {
       key: "actor",
       label: "Actor",
-      render: (entry) => <OperatorTreasuryActor actor={entry.actor} />,
+      render: (entry) => <OperatorTreasuryActor actor={entry.actor} capabilities={capabilities} />,
     },
   ];
 }
@@ -352,7 +391,13 @@ export function OperatorTreasuryForm() {
   );
 }
 
-export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolean }) {
+export function OperatorTreasuryPage({
+  canDelete = false,
+  capabilities = [],
+}: {
+  canDelete?: boolean;
+  capabilities?: readonly Capability[];
+}) {
   const confirm = useOperatorConfirmation();
   const [summary, setSummary] = useState<OperatorTreasurySummary | null>(null);
   const [search, setSearch] = useState("");
@@ -412,7 +457,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
       label: "Direction",
       render: (entry) => <OperatorStatusCell status={entry.direction} />,
     },
-    ...treasuryTraceabilityColumns(),
+    ...treasuryTraceabilityColumns(capabilities),
     {
       key: "correlation",
       label: "Correlation",
@@ -502,6 +547,7 @@ export function OperatorTreasuryPage({ canDelete = false }: { canDelete?: boolea
     : [];
   return (
     <CrudIndex
+      capabilities={capabilities}
       eyebrow="Company accounting"
       title="Treasury"
       description="Inspect deterministic company ledger facts and authorized signed adjustments. Wallet deposits and user earnings remain separate."

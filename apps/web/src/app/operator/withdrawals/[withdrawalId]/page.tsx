@@ -18,6 +18,7 @@ export default async function OperatorWithdrawalDetailPage({
     <OperatorShell {...access} activeSection="withdrawals">
       <OperatorWithdrawalDetail
         withdrawalId={withdrawalId}
+        capabilities={access.capabilities}
         canManage={hasCapability(access.capabilities, "withdrawals.manage")}
       />
     </OperatorShell>

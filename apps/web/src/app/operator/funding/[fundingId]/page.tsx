@@ -16,6 +16,7 @@ export default async function OperatorFundingDetailPage({
     <OperatorShell {...access} activeSection="funding">
       <OperatorFundingDetail
         fundingId={fundingId}
+        capabilities={access.capabilities}
         canManage={hasCapability(access.capabilities, "finance.manage")}
         canDelete={hasCapability(access.capabilities, "system.root")}
       />

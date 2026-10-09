@@ -13,6 +13,7 @@ export default async function OperatorReviewsPage({
   return (
     <OperatorShell {...access} activeSection="reviews">
       <OperatorReviews
+        capabilities={access.capabilities}
         initialListingId={params.listing ?? ""}
         canDelete={hasCapability(access.capabilities, "reviews.moderate")}
       />

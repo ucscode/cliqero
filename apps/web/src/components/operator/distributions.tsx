@@ -25,6 +25,8 @@ import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { useOperatorConfirmation } from "./ui/confirmation";
+import type { Capability } from "@/modules/identity/capabilities";
+import { OperatorResourceLink } from "./ui/resource-link";
 
 function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
@@ -36,7 +38,13 @@ function stateLabel(value: string) {
   return value.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function OperatorDistributionList({ canDelete = false }: { canDelete?: boolean }) {
+export function OperatorDistributionList({
+  canDelete = false,
+  capabilities = [],
+}: {
+  canDelete?: boolean;
+  capabilities?: readonly Capability[];
+}) {
   const confirm = useOperatorConfirmation();
   const [search, setSearch] = useState("");
   const [sortChoice, setSortChoice] = useState("created:desc");
@@ -67,7 +75,13 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
       key: "buyer",
       label: "Buyer",
       render: (item) => (
-        <Link href={`/operator/users/${item.buyer.id}`}>@{item.buyer.username}</Link>
+        <OperatorResourceLink
+          capabilities={capabilities}
+          requiredCapability="accounts.read"
+          href={`/operator/users/${item.buyer.id}`}
+        >
+          @{item.buyer.username}
+        </OperatorResourceLink>
       ),
     },
     { key: "beneficiaries", label: "Beneficiaries", render: (item) => item.beneficiaryCount },
@@ -84,7 +98,12 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
   ];
   const actions = (item: OperatorDistributionPage["items"][number]): readonly OperatorAction[] => [
     { type: "link", label: "View", href: `/operator/distributions/${item.id}` },
-    { type: "link", label: "View buyer", href: `/operator/users/${item.buyer.id}` },
+    {
+      type: "link",
+      label: "View buyer",
+      href: `/operator/users/${item.buyer.id}`,
+      requiredCapability: "accounts.read",
+    },
     ...(canDelete
       ? [
           {
@@ -153,6 +172,7 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
       : [];
   return (
     <CrudIndex
+      capabilities={capabilities}
       eyebrow="Accounting inspection"
       title="Distributions"
       description="Purchase distribution records show referral commissions and the platform remainder as originally recorded."
@@ -222,7 +242,13 @@ export function OperatorDistributionList({ canDelete = false }: { canDelete?: bo
   );
 }
 
-export function OperatorDistributionDetail({ distributionId }: { distributionId: string }) {
+export function OperatorDistributionDetail({
+  distributionId,
+  capabilities = [],
+}: {
+  distributionId: string;
+  capabilities?: readonly Capability[];
+}) {
   const [distribution, setDistribution] = useState<DistributionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -261,9 +287,13 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
                 <div>
                   <dt>Listing</dt>
                   <dd>
-                    <Link href={`/operator/catalogue/${distribution.listingId}`}>
+                    <OperatorResourceLink
+                      capabilities={capabilities}
+                      requiredCapability="catalogue.manage"
+                      href={`/operator/catalogue/${distribution.listingId}`}
+                    >
                       {distribution.listingTitle}
-                    </Link>
+                    </OperatorResourceLink>
                     <br />
                     <small className="break-value">{distribution.listingId}</small>
                   </dd>
@@ -271,9 +301,13 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
                 <div>
                   <dt>Buyer</dt>
                   <dd>
-                    <Link href={`/operator/users/${distribution.buyer.id}`}>
+                    <OperatorResourceLink
+                      capabilities={capabilities}
+                      requiredCapability="accounts.read"
+                      href={`/operator/users/${distribution.buyer.id}`}
+                    >
                       @{distribution.buyer.username}
-                    </Link>
+                    </OperatorResourceLink>
                     <br />
                     <small className="break-value">
                       {distribution.buyer.email ?? "No authentication email"}
@@ -329,9 +363,13 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
             {distribution.attribution.referrer ? (
               <p className="panel-intro">
                 Promoted by{" "}
-                <Link href={`/operator/users/${distribution.attribution.referrer.id}`}>
+                <OperatorResourceLink
+                  capabilities={capabilities}
+                  requiredCapability="accounts.read"
+                  href={`/operator/users/${distribution.attribution.referrer.id}`}
+                >
                   @{distribution.attribution.referrer.username}
-                </Link>{" "}
+                </OperatorResourceLink>{" "}
               </p>
             ) : (
               <p className="panel-intro">No referral attribution was recorded for this purchase.</p>
@@ -349,9 +387,13 @@ export function OperatorDistributionDetail({ distributionId }: { distributionId:
                   <div className="operator-distribution-allocation" key={allocation.id}>
                     <div>
                       <strong>
-                        <Link href={`/operator/users/${allocation.account.id}`}>
+                        <OperatorResourceLink
+                          capabilities={capabilities}
+                          requiredCapability="accounts.read"
+                          href={`/operator/users/${allocation.account.id}`}
+                        >
                           @{allocation.account.username}
-                        </Link>
+                        </OperatorResourceLink>
                       </strong>
                       <span>
                         Level {allocation.level ?? "—"} · {stateLabel(allocation.entryType)} ·{" "}

@@ -11,6 +11,7 @@ import { OperatorToolbar } from "../operator/ui/toolbar";
 import { CrudTable, type CrudColumn } from "./table";
 import { CrudBulkActions, type CrudBulkAction } from "./bulk-actions";
 import type { OperatorAction } from "../operator/ui/actions-menu";
+import type { Capability } from "@/modules/identity/capabilities";
 
 export type CrudPagination = {
   hasPrevious: boolean;
@@ -60,6 +61,7 @@ export function CrudIndex<T>({
   bulkActions,
   sectionTitle,
   sectionDescription,
+  capabilities = [],
 }: {
   eyebrow?: string;
   title: string;
@@ -100,6 +102,7 @@ export function CrudIndex<T>({
     readonly CrudBulkAction<T>[] | ((selectedItems: readonly T[]) => readonly CrudBulkAction<T>[]);
   sectionTitle?: string;
   sectionDescription?: string;
+  capabilities?: readonly Capability[];
 }) {
   const collectionInitialized = initialized ?? !loading;
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
@@ -141,6 +144,7 @@ export function CrudIndex<T>({
         columns={columns}
         getRowKey={getRowKey}
         actions={actions}
+        capabilities={capabilities}
         actionLabel={actionLabel}
         selectedItems={selectedItems}
         selection={

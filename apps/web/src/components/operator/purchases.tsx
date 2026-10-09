@@ -17,6 +17,8 @@ import { OperatorSection } from "./ui/section";
 import { OperatorErrorState } from "./ui/error-state";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import type { Capability } from "@/modules/identity/capabilities";
+import { OperatorResourceLink } from "./ui/resource-link";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { useOperatorConfirmation } from "./ui/confirmation";
 
@@ -47,10 +49,12 @@ export function OperatorPurchaseList({
   initialBuyer = "",
   initialListing = "",
   canDelete = false,
+  capabilities = [],
 }: {
   initialBuyer?: string;
   initialListing?: string;
   canDelete?: boolean;
+  capabilities?: readonly Capability[];
 }) {
   const confirm = useOperatorConfirmation();
   const [buyer, setBuyer] = useState(initialBuyer);
@@ -81,14 +85,26 @@ export function OperatorPurchaseList({
       key: "buyer",
       label: "Buyer",
       render: (item) => (
-        <Link href={`/operator/users/${item.buyer.id}`}>@{item.buyer.username}</Link>
+        <OperatorResourceLink
+          capabilities={capabilities}
+          requiredCapability="accounts.read"
+          href={`/operator/users/${item.buyer.id}`}
+        >
+          @{item.buyer.username}
+        </OperatorResourceLink>
       ),
     },
     {
       key: "listing",
       label: "Listing",
       render: (item) => (
-        <Link href={`/operator/catalogue/${item.listing.id}`}>{item.listing.title}</Link>
+        <OperatorResourceLink
+          capabilities={capabilities}
+          requiredCapability="catalogue.manage"
+          href={`/operator/catalogue/${item.listing.id}`}
+        >
+          {item.listing.title}
+        </OperatorResourceLink>
       ),
     },
     {
@@ -141,6 +157,7 @@ export function OperatorPurchaseList({
     : [];
   return (
     <CrudIndex
+      capabilities={capabilities}
       eyebrow="Commerce history"
       title="Purchases"
       description="Purchase records and payment evidence."
@@ -260,7 +277,13 @@ export function OperatorPurchaseList({
   );
 }
 
-export function OperatorPurchaseDetail({ purchaseId }: { purchaseId: string }) {
+export function OperatorPurchaseDetail({
+  purchaseId,
+  capabilities = [],
+}: {
+  purchaseId: string;
+  capabilities?: readonly Capability[];
+}) {
   const [purchase, setPurchase] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -295,9 +318,13 @@ export function OperatorPurchaseDetail({ purchaseId }: { purchaseId: string }) {
                 <div>
                   <dt>Buyer</dt>
                   <dd>
-                    <Link href={`/operator/users/${purchase.buyer.id}`}>
+                    <OperatorResourceLink
+                      capabilities={capabilities}
+                      requiredCapability="accounts.read"
+                      href={`/operator/users/${purchase.buyer.id}`}
+                    >
                       @{purchase.buyer.username}
-                    </Link>
+                    </OperatorResourceLink>
                     {purchase.buyer.email && (
                       <small className="block">{purchase.buyer.email}</small>
                     )}
@@ -306,9 +333,13 @@ export function OperatorPurchaseDetail({ purchaseId }: { purchaseId: string }) {
                 <div>
                   <dt>Listing</dt>
                   <dd>
-                    <Link href={`/operator/catalogue/${purchase.listing.id}`}>
+                    <OperatorResourceLink
+                      capabilities={capabilities}
+                      requiredCapability="catalogue.manage"
+                      href={`/operator/catalogue/${purchase.listing.id}`}
+                    >
                       {purchase.listing.title}
-                    </Link>
+                    </OperatorResourceLink>
                     <small className="block">Snapshot: {purchase.listing_snapshot.title}</small>
                   </dd>
                 </div>

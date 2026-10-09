@@ -12,7 +12,7 @@ export default async function OperatorEarningsAdjustmentPage({
   const access = await requireOperatorPage(`/operator/earnings-adjustments/${id}`);
   return (
     <OperatorShell {...access} activeSection="adjustments">
-      <OperatorEarningsAdjustmentDetail id={id} />
+      <OperatorEarningsAdjustmentDetail id={id} capabilities={access.capabilities} />
     </OperatorShell>
   );
 }

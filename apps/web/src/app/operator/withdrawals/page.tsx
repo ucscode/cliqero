@@ -10,6 +10,7 @@ export default async function OperatorWithdrawalsPage() {
   return (
     <OperatorShell {...access} activeSection="withdrawals">
       <OperatorWithdrawalList
+        capabilities={access.capabilities}
         canManage={hasCapability(access.capabilities, "withdrawals.manage")}
       />
     </OperatorShell>

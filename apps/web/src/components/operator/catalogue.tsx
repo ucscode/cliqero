@@ -41,6 +41,8 @@ import { useCrudCollection } from "@/components/crud/use-collection";
 import type { CrudColumn } from "@/components/crud/table";
 import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import type { OperatorAction } from "./ui/actions-menu";
+import { hasCapability, type Capability } from "@/modules/identity/capabilities";
+import { OperatorResourceLink } from "./ui/resource-link";
 import { OperatorEmptyState } from "./ui/empty-state";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
@@ -84,7 +86,92 @@ export function createCatalogueImagePreview(file: File) {
   };
 }
 
-export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boolean }) {
+export function operatorCatalogueRowActions(
+  listing: OperatorListing,
+  canDelete: boolean,
+  handlers: {
+    changeState: (listing: OperatorListing, action: "publish" | "restore" | "archive") => void;
+    deleteListing: (listing: OperatorListing) => void;
+    openListing: (listing: OperatorListing) => void;
+  },
+): readonly OperatorAction[] {
+  return [
+    {
+      type: "link",
+      label: "Edit",
+      href: `/operator/catalogue/${listing.id}`,
+      requiredCapability: "catalogue.manage",
+    },
+    {
+      type: "link",
+      label: "View reviews",
+      href: `/operator/reviews?listing=${listing.id}`,
+      requiredCapability: "reviews.moderate",
+    },
+    {
+      type: "link",
+      label: "View purchases",
+      href: `/operator/purchases?listing=${listing.id}`,
+      requiredCapability: "finance.read",
+    },
+    {
+      type: "action",
+      label: "Open listing",
+      requiredCapability: "catalogue.manage",
+      onSelect: () => handlers.openListing(listing),
+    },
+    ...(listing.state === "draft"
+      ? [
+          {
+            type: "action" as const,
+            label: "Publish",
+            requiredCapability: "catalogue.manage" as const,
+            onSelect: () => handlers.changeState(listing, "publish"),
+          },
+        ]
+      : []),
+    ...(listing.state === "published"
+      ? [
+          {
+            type: "action" as const,
+            label: "Archive",
+            requiredCapability: "catalogue.manage" as const,
+            destructive: true,
+            onSelect: () => handlers.changeState(listing, "archive"),
+          },
+        ]
+      : []),
+    ...(listing.state === "archived"
+      ? [
+          {
+            type: "action" as const,
+            label: "Restore",
+            requiredCapability: "catalogue.manage" as const,
+            onSelect: () => handlers.changeState(listing, "restore"),
+          },
+        ]
+      : []),
+    ...(canDelete
+      ? [
+          {
+            type: "action" as const,
+            label: "Delete",
+            requiredCapability: "catalogue.manage" as const,
+            destructive: true,
+            onSelect: () => handlers.deleteListing(listing),
+          },
+        ]
+      : []),
+  ];
+}
+
+export function OperatorCatalogueList({
+  capabilities = [],
+}: {
+  capabilities?: readonly Capability[];
+}) {
+  const canManage = hasCapability(capabilities, "catalogue.manage");
+  const canDelete = canManage;
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
   const [visibility, setVisibility] = useState("");
@@ -260,26 +347,28 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
     }
   }
 
-  const bulkActions: readonly CrudBulkAction<OperatorListing>[] = [
-    { value: "publish", label: "Publish", onSelect: (items) => bulkState(items, "publish") },
-    {
-      value: "archive",
-      label: "Archive",
-      destructive: true,
-      onSelect: (items) => bulkState(items, "archive"),
-    },
-    { value: "restore", label: "Restore", onSelect: (items) => bulkState(items, "restore") },
-    ...(canDelete
-      ? [
-          {
-            value: "delete",
-            label: "Delete",
-            destructive: true,
-            onSelect: (items: readonly OperatorListing[]) => bulkDelete(items),
-          },
-        ]
-      : []),
-  ];
+  const bulkActions: readonly CrudBulkAction<OperatorListing>[] = canManage
+    ? [
+        { value: "publish", label: "Publish", onSelect: (items) => bulkState(items, "publish") },
+        {
+          value: "archive",
+          label: "Archive",
+          destructive: true,
+          onSelect: (items) => bulkState(items, "archive"),
+        },
+        { value: "restore", label: "Restore", onSelect: (items) => bulkState(items, "restore") },
+        ...(canDelete
+          ? [
+              {
+                value: "delete",
+                label: "Delete",
+                destructive: true,
+                onSelect: (items: readonly OperatorListing[]) => bulkDelete(items),
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   async function importFile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -376,18 +465,26 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
       key: "reviews",
       label: "Reviews",
       render: (listing) => (
-        <Link href={`/operator/reviews?listing=${encodeURIComponent(listing.id)}`}>
+        <OperatorResourceLink
+          capabilities={capabilities}
+          requiredCapability="reviews.moderate"
+          href={`/operator/reviews?listing=${encodeURIComponent(listing.id)}`}
+        >
           {listing.review_count}
-        </Link>
+        </OperatorResourceLink>
       ),
     },
     {
       key: "purchases",
       label: "Purchases",
       render: (listing) => (
-        <Link href={`/operator/purchases?listing=${encodeURIComponent(listing.id)}`}>
+        <OperatorResourceLink
+          capabilities={capabilities}
+          requiredCapability="finance.read"
+          href={`/operator/purchases?listing=${encodeURIComponent(listing.id)}`}
+        >
           {listing.purchase_count}
-        </Link>
+        </OperatorResourceLink>
       ),
     },
     {
@@ -403,72 +500,35 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
       ),
     },
   ];
-  const actions = (listing: OperatorListing): readonly OperatorAction[] => [
-    { type: "link", label: "Edit", href: `/operator/catalogue/${listing.id}` },
-    { type: "link", label: "View reviews", href: `/operator/reviews?listing=${listing.id}` },
-    { type: "link", label: "View purchases", href: `/operator/purchases?listing=${listing.id}` },
-    {
-      type: "action" as const,
-      label: "Open listing",
-      onSelect: () =>
+  const actions = (listing: OperatorListing) =>
+    operatorCatalogueRowActions(listing, canDelete, {
+      changeState: (item, action) => void changeState(item, action),
+      deleteListing: (item) => void deleteListing(item),
+      openListing: (item) =>
         void openResolvedWindow(async () => {
-          if (listing.state === "published") return `/listings/${listing.id}`;
-          return (await apiFetch<{ url: string }>(`/internal/listings/${listing.id}/preview-token`))
+          if (item.state === "published") return `/listings/${item.id}`;
+          return (await apiFetch<{ url: string }>(`/internal/listings/${item.id}/preview-token`))
             .url;
         }),
-    },
-    ...(listing.state === "draft"
-      ? [
-          {
-            type: "action" as const,
-            label: "Publish",
-            onSelect: () => void changeState(listing, "publish"),
-          },
-        ]
-      : []),
-    ...(listing.state === "published"
-      ? [
-          {
-            type: "action" as const,
-            label: "Archive",
-            destructive: true,
-            onSelect: () => void changeState(listing, "archive"),
-          },
-        ]
-      : []),
-    ...(listing.state === "archived"
-      ? [
-          {
-            type: "action" as const,
-            label: "Restore",
-            onSelect: () => void changeState(listing, "restore"),
-          },
-        ]
-      : []),
-    ...(canDelete
-      ? [
-          {
-            type: "action" as const,
-            label: "Delete",
-            destructive: true,
-            onSelect: () => void deleteListing(listing),
-          },
-        ]
-      : []),
-  ];
+    });
 
   return (
     <>
       <CrudIndex
+        capabilities={capabilities}
         eyebrow="Platform catalogue"
         title="Listings"
         description="Create and curate the listings Cliqero makes available to customers."
         headerActions={
-          <Button type="button" variant="secondary" onClick={() => setTransferOpen(true)}>
-            Transfer
-          </Button>
+          canManage ? (
+            <Button type="button" variant="secondary" onClick={() => setTransferOpen(true)}>
+              Transfer
+            </Button>
+          ) : undefined
         }
-        createAction={{ label: "New listing", href: "/operator/catalogue/new" }}
+        createAction={
+          canManage ? { label: "New listing", href: "/operator/catalogue/new" } : undefined
+        }
         filters={
           <>
             <OperatorFilterField label="Search" htmlFor="catalogue-search">
@@ -563,7 +623,9 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
         items={collection.items}
         columns={columns}
         getRowKey={(listing) => listing.id}
-        selection={{ labelForItem: (listing) => `listing ${listing.title}` }}
+        selection={
+          canManage ? { labelForItem: (listing) => `listing ${listing.title}` } : undefined
+        }
         bulkActions={bulkActions}
         actions={actions}
         actionLabel={(listing) => `Actions for ${listing.title}`}
@@ -573,9 +635,11 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
         emptyTitle="No listings found"
         emptyDescription="Try another filter or create the first catalogue listing."
         emptyAction={
-          <Button asChild>
-            <Link href="/operator/catalogue/new">New listing</Link>
-          </Button>
+          canManage ? (
+            <Button asChild>
+              <Link href="/operator/catalogue/new">New listing</Link>
+            </Button>
+          ) : undefined
         }
         pagination={{
           hasPrevious: collection.hasPrevious,

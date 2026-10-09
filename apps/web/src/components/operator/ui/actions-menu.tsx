@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { Button } from "../../ui/button";
+import { hasCapability, type Capability } from "@/modules/identity/capabilities";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +18,7 @@ type OperatorActionBase = {
   disabled?: boolean;
   destructive?: boolean;
   separatorBefore?: boolean;
+  requiredCapability?: Capability;
 };
 
 export type OperatorAction =
@@ -27,6 +29,16 @@ export type OperatorAction =
       rel?: "noopener noreferrer";
     })
   | (OperatorActionBase & { type: "action"; onSelect: () => void });
+
+export function visibleOperatorActions(
+  actions: readonly OperatorAction[],
+  capabilities: readonly string[],
+) {
+  return actions.filter(
+    (action) =>
+      !action.requiredCapability || hasCapability(capabilities, action.requiredCapability),
+  );
+}
 
 export function operatorActionMenuItem(action: OperatorAction) {
   const className = action.destructive ? "text-red-700 focus:text-red-800" : undefined;
@@ -52,11 +64,14 @@ export function operatorActionMenuItem(action: OperatorAction) {
 export function OperatorActionsMenu({
   actions,
   label = "Row actions",
+  capabilities = [],
 }: {
   actions: readonly OperatorAction[];
   label?: string;
+  capabilities?: readonly string[];
 }) {
-  if (actions.length === 0) return null;
+  const visibleActions = visibleOperatorActions(actions, capabilities);
+  if (visibleActions.length === 0) return null;
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -71,7 +86,7 @@ export function OperatorActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {actions.map((action) => (
+        {visibleActions.map((action) => (
           <Fragment key={action.label}>
             {action.separatorBefore && <DropdownMenuSeparator />}
             {operatorActionMenuItem(action)}

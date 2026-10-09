@@ -13,7 +13,10 @@ export default async function OperatorDistributionDetailPage({
   const { distributionId } = await params;
   return (
     <OperatorShell {...access} activeSection="distributions">
-      <OperatorDistributionDetail distributionId={distributionId} />
+      <OperatorDistributionDetail
+        distributionId={distributionId}
+        capabilities={access.capabilities}
+      />
     </OperatorShell>
   );
 }

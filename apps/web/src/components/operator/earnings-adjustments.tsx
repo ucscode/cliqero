@@ -19,6 +19,8 @@ import { OperatorPrimaryCell } from "./ui/data-cells";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { OperatorAccountSelector } from "./ui/account-selector";
 import { useOperatorConfirmation } from "./ui/confirmation";
+import type { Capability } from "@/modules/identity/capabilities";
+import { OperatorResourceLink } from "./ui/resource-link";
 
 type Adjustment = {
   id: string;
@@ -143,9 +145,11 @@ export function OperatorEarningsAdjustmentForm() {
 export function OperatorEarningsAdjustments({
   canManage,
   canDelete = false,
+  capabilities = [],
 }: {
   canManage: boolean;
   canDelete?: boolean;
+  capabilities?: readonly Capability[];
 }) {
   const confirm = useOperatorConfirmation();
   const [items, setItems] = useState<Adjustment[]>([]);
@@ -179,7 +183,15 @@ export function OperatorEarningsAdjustments({
       primary: true,
       render: (item) => (
         <OperatorPrimaryCell
-          title={<Link href={`/operator/users/${item.accountId}`}>@{item.accountUsername}</Link>}
+          title={
+            <OperatorResourceLink
+              capabilities={capabilities}
+              requiredCapability="accounts.read"
+              href={`/operator/users/${item.accountId}`}
+            >
+              @{item.accountUsername}
+            </OperatorResourceLink>
+          }
           subtitle={item.accountId}
         />
       ),
@@ -214,7 +226,15 @@ export function OperatorEarningsAdjustments({
     {
       key: "actor",
       label: "Created by",
-      render: (item) => <Link href={`/operator/users/${item.createdBy}`}>{item.createdBy}</Link>,
+      render: (item) => (
+        <OperatorResourceLink
+          capabilities={capabilities}
+          requiredCapability="accounts.read"
+          href={`/operator/users/${item.createdBy}`}
+        >
+          {item.createdBy}
+        </OperatorResourceLink>
+      ),
     },
     {
       key: "created",
@@ -261,6 +281,7 @@ export function OperatorEarningsAdjustments({
 
   return (
     <CrudIndex
+      capabilities={capabilities}
       eyebrow="Earnings adjustments"
       title="Earning adjustments"
       description="Signed USD adjustments record increases and decreases to account earnings."
@@ -333,7 +354,13 @@ export function OperatorEarningsAdjustments({
   );
 }
 
-export function OperatorEarningsAdjustmentDetail({ id }: { id: string }) {
+export function OperatorEarningsAdjustmentDetail({
+  id,
+  capabilities = [],
+}: {
+  id: string;
+  capabilities?: readonly Capability[];
+}) {
   const [item, setItem] = useState<Adjustment | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -363,7 +390,13 @@ export function OperatorEarningsAdjustmentDetail({ id }: { id: string }) {
           <div>
             <dt>Account</dt>
             <dd>
-              <Link href={`/operator/users/${item.accountId}`}>@{item.accountUsername}</Link>
+              <OperatorResourceLink
+                capabilities={capabilities}
+                requiredCapability="accounts.read"
+                href={`/operator/users/${item.accountId}`}
+              >
+                @{item.accountUsername}
+              </OperatorResourceLink>
             </dd>
           </div>
           <div>
@@ -385,7 +418,13 @@ export function OperatorEarningsAdjustmentDetail({ id }: { id: string }) {
           <div>
             <dt>Created by</dt>
             <dd>
-              <Link href={`/operator/users/${item.createdBy}`}>{item.createdBy}</Link>
+              <OperatorResourceLink
+                capabilities={capabilities}
+                requiredCapability="accounts.read"
+                href={`/operator/users/${item.createdBy}`}
+              >
+                {item.createdBy}
+              </OperatorResourceLink>
             </dd>
           </div>
           <div>

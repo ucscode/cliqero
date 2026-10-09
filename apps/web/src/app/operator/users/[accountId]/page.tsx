@@ -16,6 +16,7 @@ export default async function OperatorUserDetailPage({
     <OperatorShell {...access} activeSection="users">
       <OperatorUserDetail
         accountId={accountId}
+        capabilities={access.capabilities}
         canManage={hasCapability(access.capabilities, "accounts.manage")}
       />
     </OperatorShell>

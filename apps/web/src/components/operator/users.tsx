@@ -14,6 +14,8 @@ import {
 import {
   CAPABILITIES,
   CAPABILITY_METADATA,
+  hasAllCapabilities,
+  hasCapability,
   type Capability,
 } from "@/modules/identity/capabilities";
 import { OperatorPrimaryCell, OperatorSecondaryText, OperatorValueCell } from "./ui/data-cells";
@@ -39,6 +41,7 @@ import { Alert } from "../ui/alert";
 import { CountrySelect } from "../country-select";
 import { Label, RequiredLabel } from "../ui/label";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
+import { OperatorResourceLink } from "./ui/resource-link";
 import { useToast } from "../toast/provider";
 import { OperatorAccountSelector } from "./ui/account-selector";
 
@@ -86,6 +89,7 @@ export function operatorUserRowActions(
       type: "link" as const,
       label: "View network",
       href: `/operator/network?root=${account.id}`,
+      requiredCapability: "hierarchy.manage" as const,
     },
   ];
 }
@@ -108,10 +112,12 @@ export async function applyOperatorUserSearch(
 export function OperatorUsersList({
   canManage = false,
   canDelete = false,
+  capabilities = [],
   deletedNotice = false,
 }: {
   canManage?: boolean;
   canDelete?: boolean;
+  capabilities?: readonly Capability[];
   deletedNotice?: boolean;
 }) {
   const confirm = useOperatorConfirmation();
@@ -162,6 +168,7 @@ export function OperatorUsersList({
       error={collection.error}
       canManage={canManage}
       canDelete={canDelete}
+      capabilities={capabilities}
       onSearchChange={setSearch}
       onSearch={async (event) => {
         event.preventDefault();
@@ -260,6 +267,7 @@ export function OperatorUsersListView({
   error,
   canManage,
   canDelete,
+  capabilities = [],
   onSearchChange,
   onSearch,
   onRetry,
@@ -281,6 +289,7 @@ export function OperatorUsersListView({
   error: string | null;
   canManage?: boolean;
   canDelete?: boolean;
+  capabilities?: readonly Capability[];
   onSearchChange: (value: string) => void;
   onSearch: (event: FormEvent<HTMLFormElement>) => boolean | Promise<boolean>;
   onRetry: () => void;
@@ -340,6 +349,7 @@ export function OperatorUsersListView({
 
   return (
     <CrudIndex
+      capabilities={capabilities}
       eyebrow="Account operations"
       title="Users"
       description="Search safe account projections and inspect referral context."
@@ -428,9 +438,11 @@ export function OperatorUsersListView({
 export function OperatorUserDetail({
   accountId,
   canManage = false,
+  capabilities = [],
 }: {
   accountId: string;
   canManage?: boolean;
+  capabilities?: readonly Capability[];
 }) {
   const router = useRouter();
   const confirm = useOperatorConfirmation();
@@ -715,68 +727,71 @@ export function OperatorUserDetail({
                       { label: "Direct referrals", value: account.directReferralCount },
                     ]}
                   />
-                  {!account.deletedAt && canManage && (
-                    <div className="grid gap-3">
-                      <div className="grid gap-2">
-                        <Label htmlFor="operator-new-parent">New parent</Label>
-                        <OperatorAccountSelector
-                          inputId="operator-new-parent"
-                          loadAccounts={loadParentOptions}
-                          value={selectedParent}
-                          isDisabled={saving}
-                          onChange={(option) => {
-                            setSelectedParent(option);
-                            setParentError(null);
-                          }}
-                          placeholder="Search username, email or account ID"
-                          excludedAccountId={account.id}
-                        />
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          disabled={
-                            saving ||
-                            !selectedParent ||
-                            selectedParent.id === account.id ||
-                            selectedParent.id === account.parent?.id
-                          }
-                          onClick={() => void reassign(selectedParent)}
-                        >
-                          {saving ? "Saving…" : "Assign parent"}
-                        </Button>
-                        {account.parent && (
+                  {!account.deletedAt &&
+                    hasAllCapabilities(capabilities, ["accounts.read", "hierarchy.manage"]) && (
+                      <div className="grid gap-3">
+                        <div className="grid gap-2">
+                          <Label htmlFor="operator-new-parent">New parent</Label>
+                          <OperatorAccountSelector
+                            inputId="operator-new-parent"
+                            loadAccounts={loadParentOptions}
+                            value={selectedParent}
+                            isDisabled={saving}
+                            onChange={(option) => {
+                              setSelectedParent(option);
+                              setParentError(null);
+                            }}
+                            placeholder="Search username, email or account ID"
+                            excludedAccountId={account.id}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
-                            variant="secondary"
-                            disabled={saving}
-                            onClick={async () => {
-                              if (
-                                await confirm({
-                                  title: "Remove parent?",
-                                  description: `Remove @${account.parent!.username} as this account’s parent? Descendants will remain attached.`,
-                                  confirmLabel: "Remove parent",
-                                  destructive: true,
-                                })
-                              )
-                                await reassign(null);
-                            }}
+                            disabled={
+                              saving ||
+                              !selectedParent ||
+                              selectedParent.id === account.id ||
+                              selectedParent.id === account.parent?.id
+                            }
+                            onClick={() => void reassign(selectedParent)}
                           >
-                            Remove parent
+                            {saving ? "Saving…" : "Assign parent"}
                           </Button>
+                          {account.parent && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={saving}
+                              onClick={async () => {
+                                if (
+                                  await confirm({
+                                    title: "Remove parent?",
+                                    description: `Remove @${account.parent!.username} as this account’s parent? Descendants will remain attached.`,
+                                    confirmLabel: "Remove parent",
+                                    destructive: true,
+                                  })
+                                )
+                                  await reassign(null);
+                              }}
+                            >
+                              Remove parent
+                            </Button>
+                          )}
+                        </div>
+                        {saving && (
+                          <p role="status" className="text-sm text-slate-600">
+                            Updating referral parent…
+                          </p>
                         )}
+                        {parentError && <Alert role="alert">{parentError}</Alert>}
                       </div>
-                      {saving && (
-                        <p role="status" className="text-sm text-slate-600">
-                          Updating referral parent…
-                        </p>
-                      )}
-                      {parentError && <Alert role="alert">{parentError}</Alert>}
-                    </div>
+                    )}
+                  {hasCapability(capabilities, "hierarchy.manage") && (
+                    <Button asChild variant="secondary" className="w-fit">
+                      <Link href={`/operator/network?root=${account.id}`}>View network</Link>
+                    </Button>
                   )}
-                  <Button asChild variant="secondary" className="w-fit">
-                    <Link href={`/operator/network?root=${account.id}`}>View network</Link>
-                  </Button>
                 </div>
               </OperatorSection>
             </div>
@@ -787,9 +802,13 @@ export function OperatorUserDetail({
                   {
                     label: "Purchases",
                     value: (
-                      <Link href={`/operator/purchases?buyer=${encodeURIComponent(account.id)}`}>
+                      <OperatorResourceLink
+                        capabilities={capabilities}
+                        requiredCapability="finance.read"
+                        href={`/operator/purchases?buyer=${encodeURIComponent(account.id)}`}
+                      >
                         {account.purchaseCount.toLocaleString("en-US")}
-                      </Link>
+                      </OperatorResourceLink>
                     ),
                   },
                 ]}

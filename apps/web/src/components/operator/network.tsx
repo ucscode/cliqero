@@ -17,6 +17,11 @@ import { OperatorErrorState } from "./ui/error-state";
 import { OperatorLoadingState } from "./ui/loading-state";
 import { OperatorPage, OperatorPageHeader } from "./ui/page";
 import { OperatorFilterField, OperatorToolbar } from "./ui/toolbar";
+import {
+  hasAllCapabilities,
+  hasCapability,
+  type Capability,
+} from "@/modules/identity/capabilities";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -24,7 +29,7 @@ function errorMessage(error: unknown) {
     : "The hierarchy service is temporarily unavailable.";
 }
 
-export function OperatorNetwork() {
+export function OperatorNetwork({ capabilities = [] }: { capabilities?: readonly Capability[] }) {
   const router = useRouter();
   const params = useSearchParams();
   const rootParam = params.get("root");
@@ -176,8 +181,16 @@ export function OperatorNetwork() {
         onLoadChildren={(id) => void loadMore(id)}
         loadingChildren={loadingChildren}
         onResetRoot={() => router.push("/operator/network")}
-        onViewUser={(id) => router.push(`/operator/users/${id}`)}
-        onReassignParent={(id) => router.push(`/operator/users/${id}`)}
+        onViewUser={
+          hasCapability(capabilities, "accounts.read")
+            ? (id) => router.push(`/operator/users/${id}`)
+            : undefined
+        }
+        onReassignParent={
+          hasAllCapabilities(capabilities, ["accounts.read", "hierarchy.manage"])
+            ? (id) => router.push(`/operator/users/${id}`)
+            : undefined
+        }
       />
     </OperatorPage>
   );

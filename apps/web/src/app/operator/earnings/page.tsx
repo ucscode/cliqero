@@ -10,6 +10,7 @@ export default async function OperatorEarningsPage() {
   return (
     <OperatorShell {...access} activeSection="earnings">
       <OperatorEarningsList
+        capabilities={access.capabilities}
         canDelete={hasCapability(access.capabilities, "system.root")}
         canManage={hasCapability(access.capabilities, "finance.manage")}
         canReadCorrections={hasCapability(access.capabilities, "finance.read")}

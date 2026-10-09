@@ -8,7 +8,7 @@ export default async function OperatorNetworkPage() {
   const access = await requireOperatorPage("/operator/network");
   return (
     <OperatorShell {...access} activeSection="network">
-      <OperatorNetwork />
+      <OperatorNetwork capabilities={access.capabilities} />
     </OperatorShell>
   );
 }

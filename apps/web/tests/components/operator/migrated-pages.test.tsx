@@ -72,6 +72,7 @@ describe("operator console shared page migration", () => {
           onClose={() => undefined}
         />
         <EarningsCorrectionHistory
+          capabilities={["accounts.read"]}
           items={[
             {
               id: "correction-id",
@@ -108,6 +109,7 @@ describe("operator console shared page migration", () => {
   it("shows human-readable Treasury source and actor links", () => {
     const html = renderPage(
       <OperatorTreasuryTraceability
+        capabilities={["finance.read", "withdrawals.manage", "accounts.read"]}
         entry={{
           id: "00000000-0000-4000-8000-000000000001",
           direction: "credit",
@@ -134,6 +136,7 @@ describe("operator console shared page migration", () => {
     expect(html).toContain("System / automated");
     const humanHtml = renderPage(
       <OperatorTreasuryTraceability
+        capabilities={["finance.read", "withdrawals.manage", "accounts.read"]}
         entry={{
           id: "00000000-0000-4000-8000-000000000004",
           direction: "debit",
@@ -179,6 +182,7 @@ describe("operator console shared page migration", () => {
 
     const source = renderPage(
       <OperatorTreasurySource
+        capabilities={["finance.read"]}
         source={{
           kind: "wallet_transfer",
           id: "transfer-id",
@@ -192,6 +196,7 @@ describe("operator console shared page migration", () => {
 
     const customer = renderPage(
       <OperatorTreasuryActor
+        capabilities={["accounts.read"]}
         actor={{
           id: "customer-id",
           username: "customer_one",
@@ -207,6 +212,7 @@ describe("operator console shared page migration", () => {
 
     const operator = renderPage(
       <OperatorTreasuryActor
+        capabilities={["accounts.read"]}
         actor={{
           id: "operator-id",
           username: "operator_one",
@@ -313,7 +319,7 @@ describe("operator console shared page migration", () => {
   });
 
   it("keeps catalogue transfer tools secondary to the browse surface", () => {
-    const html = renderPage(<OperatorCatalogueList />);
+    const html = renderPage(<OperatorCatalogueList capabilities={["catalogue.manage"]} />);
     expect(html).toContain(">Transfer</button>");
     expect(html).toContain("New listing");
     expect(html).toContain(

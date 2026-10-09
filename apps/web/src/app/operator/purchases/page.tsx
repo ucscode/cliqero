@@ -15,6 +15,7 @@ export default async function OperatorPurchasesPage({
   return (
     <OperatorShell {...access} activeSection="purchases">
       <OperatorPurchaseList
+        capabilities={access.capabilities}
         initialBuyer={filters.buyer}
         initialListing={filters.listing}
         canDelete={hasCapability(access.capabilities, "system.root")}

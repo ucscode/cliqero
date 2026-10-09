@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -26,6 +25,8 @@ import type { OperatorAction } from "./ui/actions-menu";
 import { OperatorErrorState } from "./ui/error-state";
 import { OperatorSection } from "./ui/section";
 import { useOperatorConfirmation } from "./ui/confirmation";
+import type { Capability } from "@/modules/identity/capabilities";
+import { OperatorResourceLink } from "./ui/resource-link";
 import { OperatorAccountSelector } from "./ui/account-selector";
 import { Textarea } from "../ui/textarea";
 import { RequiredLabel } from "../ui/label";
@@ -278,9 +279,11 @@ export function operatorBankTransferEvidenceRows(
 export function OperatorFundingList({
   canManage = false,
   canDelete = false,
+  capabilities = [],
 }: {
   canManage?: boolean;
   canDelete?: boolean;
+  capabilities?: readonly Capability[];
 }) {
   const confirm = useOperatorConfirmation();
   const [search, setSearch] = useState("");
@@ -329,7 +332,13 @@ export function OperatorFundingList({
       render: (funding) => (
         <OperatorPrimaryCell
           title={
-            <Link href={`/operator/users/${funding.account.id}`}>@{funding.account.username}</Link>
+            <OperatorResourceLink
+              capabilities={capabilities}
+              requiredCapability="accounts.read"
+              href={`/operator/users/${funding.account.id}`}
+            >
+              @{funding.account.username}
+            </OperatorResourceLink>
           }
           subtitle={funding.account.email ?? funding.account.id}
         />
@@ -410,11 +419,17 @@ export function OperatorFundingList({
           },
         ]
       : []),
-    { type: "link", label: "View account", href: `/operator/users/${funding.account.id}` },
+    {
+      type: "link",
+      label: "View account",
+      href: `/operator/users/${funding.account.id}`,
+      requiredCapability: "accounts.read",
+    },
   ];
 
   return (
     <CrudIndex
+      capabilities={capabilities}
       eyebrow="Funding operations"
       title="Wallet funding"
       description="Inspect provider-backed wallet funding without changing financial facts or confirming payments manually."
@@ -578,10 +593,12 @@ export function OperatorFundingDetail({
   fundingId,
   canManage = false,
   canDelete = false,
+  capabilities = [],
 }: {
   fundingId: string;
   canManage?: boolean;
   canDelete?: boolean;
+  capabilities?: readonly Capability[];
 }) {
   const router = useRouter();
   const confirm = useOperatorConfirmation();
@@ -728,9 +745,13 @@ export function OperatorFundingDetail({
                 <div>
                   <dt>Account</dt>
                   <dd>
-                    <Link href={`/operator/users/${funding.account.id}`}>
+                    <OperatorResourceLink
+                      capabilities={capabilities}
+                      requiredCapability="accounts.read"
+                      href={`/operator/users/${funding.account.id}`}
+                    >
                       @{funding.account.username}
-                    </Link>
+                    </OperatorResourceLink>
                   </dd>
                 </div>
                 <div>

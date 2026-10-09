@@ -13,7 +13,7 @@ export default async function OperatorTreasuryEntryPage({
   const access = await requireOperatorPage(`/operator/treasury/${encodeURIComponent(entryId)}`);
   return (
     <OperatorShell {...access} activeSection="treasury">
-      <OperatorTreasuryDetail entryId={entryId} />
+      <OperatorTreasuryDetail entryId={entryId} capabilities={access.capabilities} />
     </OperatorShell>
   );
 }

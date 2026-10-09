@@ -30,6 +30,8 @@ import { CrudSortSelect } from "@/components/crud/sort-select";
 import type { FormEvent } from "react";
 import { OperatorAccountSelector } from "./ui/account-selector";
 import { useOperatorConfirmation } from "./ui/confirmation";
+import type { Capability } from "@/modules/identity/capabilities";
+import { OperatorResourceLink } from "./ui/resource-link";
 import { Textarea } from "../ui/textarea";
 import { RequiredLabel } from "../ui/label";
 
@@ -318,7 +320,13 @@ const states: Array<[OperatorWithdrawalState, string]> = [
 ];
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Withdrawal data is temporarily unavailable.";
-export function OperatorWithdrawalList({ canManage = false }: { canManage?: boolean }) {
+export function OperatorWithdrawalList({
+  canManage = false,
+  capabilities = [],
+}: {
+  canManage?: boolean;
+  capabilities?: readonly Capability[];
+}) {
   const confirm = useOperatorConfirmation();
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorWithdrawalState | "">("");
@@ -357,7 +365,15 @@ export function OperatorWithdrawalList({ canManage = false }: { canManage?: bool
       primary: true,
       render: (item) => (
         <OperatorPrimaryCell
-          title={<Link href={`/operator/users/${item.account.id}`}>@{item.account.username}</Link>}
+          title={
+            <OperatorResourceLink
+              capabilities={capabilities}
+              requiredCapability="accounts.read"
+              href={`/operator/users/${item.account.id}`}
+            >
+              @{item.account.username}
+            </OperatorResourceLink>
+          }
           subtitle={item.account.email ?? item.account.id}
         />
       ),
@@ -396,6 +412,7 @@ export function OperatorWithdrawalList({ canManage = false }: { canManage?: bool
   ];
   return (
     <CrudIndex
+      capabilities={capabilities}
       eyebrow="Withdrawal operations"
       title="Withdrawal requests"
       description="Review reserved earnings, then record when an external payment has been sent."
@@ -555,7 +572,12 @@ export function OperatorWithdrawalList({ canManage = false }: { canManage?: bool
               },
             ]
           : []),
-        { type: "link", label: "View account", href: `/operator/users/${item.account.id}` },
+        {
+          type: "link",
+          label: "View account",
+          href: `/operator/users/${item.account.id}`,
+          requiredCapability: "accounts.read",
+        },
       ]}
       actionLabel={(item) => `Actions for withdrawal ${item.id}`}
       loading={collection.loading}
@@ -578,9 +600,11 @@ export function OperatorWithdrawalList({ canManage = false }: { canManage?: bool
 export function OperatorWithdrawalDetail({
   withdrawalId,
   canManage = false,
+  capabilities = [],
 }: {
   withdrawalId: string;
   canManage?: boolean;
+  capabilities?: readonly Capability[];
 }) {
   const [item, setItem] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -691,7 +715,13 @@ export function OperatorWithdrawalDetail({
                 <br />
                 {item.account.email ?? "No authentication email"}
               </p>
-              <Link href={`/operator/users/${item.account.id}`}>View account</Link>
+              <OperatorResourceLink
+                capabilities={capabilities}
+                requiredCapability="accounts.read"
+                href={`/operator/users/${item.account.id}`}
+              >
+                View account
+              </OperatorResourceLink>
             </OperatorSection>
             <OperatorSection title="Destination" surface>
               <p className="mb-3">

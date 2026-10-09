@@ -13,7 +13,7 @@ export default async function OperatorPurchaseDetailPage({
   const access = await requireOperatorPage(`/operator/purchases/${purchaseId}`);
   return (
     <OperatorShell {...access} activeSection="purchases">
-      <OperatorPurchaseDetail purchaseId={purchaseId} />
+      <OperatorPurchaseDetail purchaseId={purchaseId} capabilities={access.capabilities} />
     </OperatorShell>
   );
 }

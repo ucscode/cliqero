@@ -115,6 +115,13 @@ export function hasAnyCapability(
   return requested.some((capability) => hasCapability(capabilities, capability));
 }
 
+export function hasAllCapabilities(
+  capabilities: readonly string[],
+  requested: readonly Capability[],
+): boolean {
+  return requested.every((capability) => hasCapability(capabilities, capability));
+}
+
 export function canAccessOperator(capabilities: readonly string[]): boolean {
   return hasAnyCapability(capabilities, OPERATOR_SECTION_CAPABILITIES);
 }

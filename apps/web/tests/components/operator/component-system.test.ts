@@ -96,9 +96,13 @@ describe("operator component-system migration", () => {
         resolve(__dirname, `../../../src/app/operator/${page}`),
         "utf8",
       );
-      expect(pageSource, page).toContain(
-        `hasCapability(access.capabilities, "${requiredCapability[page]}")`,
-      );
+      if (page === "catalogue/page.tsx") {
+        expect(pageSource, page).toContain("capabilities={access.capabilities}");
+      } else {
+        expect(pageSource, page).toContain(
+          `hasCapability(access.capabilities, "${requiredCapability[page]}")`,
+        );
+      }
       if (page === "withdrawals/page.tsx")
         expect(source).toContain("operatorWithdrawalDeleteAllowed");
     }

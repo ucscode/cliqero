@@ -9,7 +9,10 @@ export default async function OperatorDistributionsPage() {
   const access = await requireOperatorPage("/operator/distributions");
   return (
     <OperatorShell {...access} activeSection="distributions">
-      <OperatorDistributionList canDelete={hasCapability(access.capabilities, "system.root")} />
+      <OperatorDistributionList
+        capabilities={access.capabilities}
+        canDelete={hasCapability(access.capabilities, "system.root")}
+      />
     </OperatorShell>
   );
 }

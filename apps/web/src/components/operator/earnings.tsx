@@ -18,6 +18,8 @@ import type { CrudBulkAction } from "@/components/crud/bulk-actions";
 import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "./ui/bulk-outcome";
 import { useOperatorConfirmation } from "./ui/confirmation";
+import type { Capability } from "@/modules/identity/capabilities";
+import { OperatorResourceLink } from "./ui/resource-link";
 import { Textarea } from "../ui/textarea";
 import { RequiredLabel } from "../ui/label";
 import { useToast } from "../toast/provider";
@@ -84,7 +86,13 @@ export function EarningsCorrectionSourceSummary({
   );
 }
 
-export function EarningsCorrectionHistory({ items }: { items: EarningsCorrectionSummary[] }) {
+export function EarningsCorrectionHistory({
+  items,
+  capabilities = [],
+}: {
+  items: EarningsCorrectionSummary[];
+  capabilities?: readonly Capability[];
+}) {
   return (
     <div className="grid gap-2 border-t border-slate-200 pt-4">
       <h3 className="font-medium">Recorded corrections</h3>
@@ -94,9 +102,14 @@ export function EarningsCorrectionHistory({ items }: { items: EarningsCorrection
         items.map((item) => (
           <article key={item.id} className="grid gap-1 rounded-lg bg-slate-50 p-3 text-sm">
             <p>
-              <Link className="font-semibold underline" href={`/operator/users/${item.createdBy}`}>
+              <OperatorResourceLink
+                capabilities={capabilities}
+                requiredCapability="accounts.read"
+                className="font-semibold underline"
+                href={`/operator/users/${item.createdBy}`}
+              >
                 @{item.createdByUsername}
-              </Link>{" "}
+              </OperatorResourceLink>{" "}
               · {formatDate(item.createdAt)} · <Money minor={item.amountMinor} />
             </p>
             <p>
@@ -118,10 +131,12 @@ export function OperatorEarningsList({
   canDelete = false,
   canManage = false,
   canReadCorrections = false,
+  capabilities = [],
 }: {
   canDelete?: boolean;
   canManage?: boolean;
   canReadCorrections?: boolean;
+  capabilities?: readonly Capability[];
 }) {
   const confirm = useOperatorConfirmation();
   const toast = useToast();
@@ -218,7 +233,13 @@ export function OperatorEarningsList({
       render: (entry) => (
         <OperatorPrimaryCell
           title={
-            <Link href={`/operator/users/${entry.account.id}`}>@{entry.account.username}</Link>
+            <OperatorResourceLink
+              capabilities={capabilities}
+              requiredCapability="accounts.read"
+              href={`/operator/users/${entry.account.id}`}
+            >
+              @{entry.account.username}
+            </OperatorResourceLink>
           }
           subtitle={entry.account.email ?? entry.account.id}
         />
@@ -297,6 +318,7 @@ export function OperatorEarningsList({
 
   return (
     <CrudIndex
+      capabilities={capabilities}
       eyebrow="Ledger inspection"
       title="User earnings"
       description="Recorded referral commission facts, separated from buyer wallet funds. Reads never settle or mutate entries."
@@ -356,7 +378,7 @@ export function OperatorEarningsList({
                   {correctionError}
                 </p>
               )}
-              <EarningsCorrectionHistory items={correctionHistory} />
+              <EarningsCorrectionHistory items={correctionHistory} capabilities={capabilities} />
             </section>
           )}
           {totals && (
@@ -450,7 +472,12 @@ export function OperatorEarningsList({
       selection={canDelete ? { labelForItem: (entry) => `earning ${entry.id}` } : undefined}
       bulkActions={bulkActions}
       actions={(entry) => [
-        { type: "link", label: "View account", href: `/operator/users/${entry.account.id}` },
+        {
+          type: "link",
+          label: "View account",
+          href: `/operator/users/${entry.account.id}`,
+          requiredCapability: "accounts.read",
+        },
         ...((canReadCorrections || canManage) &&
         entry.entryType === "purchase-earnings" &&
         entry.direction === "credit"

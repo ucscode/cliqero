@@ -9,7 +9,10 @@ export default async function OperatorTreasuryPageRoute() {
   const access = await requireOperatorPage("/operator/treasury");
   return (
     <OperatorShell {...access} activeSection="treasury">
-      <OperatorTreasuryPage canDelete={hasCapability(access.capabilities, "system.root")} />
+      <OperatorTreasuryPage
+        capabilities={access.capabilities}
+        canDelete={hasCapability(access.capabilities, "system.root")}
+      />
     </OperatorShell>
   );
 }

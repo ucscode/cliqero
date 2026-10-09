@@ -10,6 +10,7 @@ export default async function OperatorFundingPage() {
   return (
     <OperatorShell {...access} activeSection="funding">
       <OperatorFundingList
+        capabilities={access.capabilities}
         canManage={hasCapability(access.capabilities, "finance.manage")}
         canDelete={hasCapability(access.capabilities, "system.root")}
       />

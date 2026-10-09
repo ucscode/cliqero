@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, type ListingReview } from "@/lib/api-client";
 import { Select } from "../ui/select";
@@ -23,6 +22,8 @@ import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { useOperatorConfirmation } from "./ui/confirmation";
+import type { Capability } from "@/modules/identity/capabilities";
+import { OperatorResourceLink } from "./ui/resource-link";
 
 type Review = ListingReview & { reviewer?: string; listing_title?: string };
 type OperatorReviewDetail = Review & { moderated_by?: string | null };
@@ -214,9 +215,11 @@ export function reviewQueueQuery(
 export function OperatorReviews({
   initialListingId = "",
   canDelete = false,
+  capabilities = [],
 }: {
   initialListingId?: string;
   canDelete?: boolean;
+  capabilities?: readonly Capability[];
 }) {
   const confirm = useOperatorConfirmation();
   const toast = useToast();
@@ -362,9 +365,13 @@ export function OperatorReviews({
       render: (review) => (
         <OperatorPrimaryCell
           title={
-            <Link href={`/operator/catalogue/${review.listing_id}`}>
+            <OperatorResourceLink
+              capabilities={capabilities}
+              requiredCapability="catalogue.manage"
+              href={`/operator/catalogue/${review.listing_id}`}
+            >
               {review.listing_title ?? "Listing"}
-            </Link>
+            </OperatorResourceLink>
           }
           subtitle={review.listing_id}
         />
@@ -399,6 +406,7 @@ export function OperatorReviews({
 
   return (
     <CrudIndex
+      capabilities={capabilities}
       eyebrow="Customer feedback"
       title="Reviews"
       description="Moderate submitted listing reviews. Decisions remain protected by the review moderation capability."
