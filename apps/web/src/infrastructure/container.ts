@@ -216,10 +216,8 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
           deleteAllForListing: (listingId: string) => integrations().deleteAllForListing(listingId),
         },
         {
-          deleteForListing: (actorId: string, listingId: string) =>
-            operatorPurchases().deleteForListing(actorId, listingId),
+          deleteAllForListing: (listingId: string) => listingMedia().deleteAllForListing(listingId),
         },
-        { deleteAllForRoot: (listingId: string) => listingMedia().deleteAllForRoot(listingId) },
         operators(),
       ),
   );

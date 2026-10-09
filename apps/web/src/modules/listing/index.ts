@@ -223,7 +223,9 @@ export abstract class ListingRepository extends CrudRepository<
     visibility?: ListingVisibility | "all";
     limit: number;
   }): Promise<{ items: readonly Listing[]; nextCursor: string | null }>;
-  abstract deleteForRoot(id: Id): Promise<boolean>;
+  /** Physically removes a listing only when no purchase, payment, entitlement, or review history exists. */
+  abstract hasHardDeleteDependencies(id: Id): Promise<boolean>;
+  abstract hardDelete(id: Id): Promise<boolean>;
   abstract countsForListings(
     ids: readonly Id[],
   ): Promise<ReadonlyMap<Id, { reviews: number; purchases: number }>>;

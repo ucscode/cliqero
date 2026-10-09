@@ -481,8 +481,7 @@ suite("listing review visibility", () => {
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
        values
-         ((select id from identity_capability.accounts where uuid=$1),'reviews.moderate'),
-         ((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+         ((select id from identity_capability.accounts where uuid=$1),'reviews.moderate')`,
       [operator.id],
     );
     const listing = await app.listingService.create(operator, {

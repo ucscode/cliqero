@@ -72,11 +72,11 @@ describe("BlogService SQLite workflow", () => {
     expect(() => service.categoryService.delete(other.id)).toThrow(/assigned/);
     expect(service.list({ publishedOnly: true, category: "guides" }).items).toEqual([]);
   });
-  it("root category deletion removes assignments but preserves the article", () => {
+  it("Operator category deletion removes assignments but preserves the article", () => {
     const category = service.categoryService.create("Root cleanup category");
     const post = service.create(input({ category_ids: [category.id] }), "author");
 
-    service.categoryService.deleteForRoot(category.id);
+    service.categoryService.deleteForOperator(category.id);
 
     expect(service.get(post.id)).toMatchObject({ id: post.id, categories: [] });
     expect(service.categories()).not.toContainEqual(category);

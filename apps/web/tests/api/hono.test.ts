@@ -884,6 +884,7 @@ describe("Hono API foundation", () => {
       listingId: "00000000-0000-4000-8000-000000000013",
       accountId: "00000000-0000-4000-8000-000000000014",
     }));
+    const remove = vi.fn(async (_account: unknown, id: string) => ({ id, deleted: true }));
     const response = await appWith(
       { ...root, capabilities: ["reviews.moderate"] },
       undefined,
@@ -900,6 +901,27 @@ describe("Hono API foundation", () => {
     );
     expect(response.status).toBe(200);
     expect(update).toHaveBeenCalledWith(root.account, reviewId, { status: "approved" });
+    const manager = { ...root, capabilities: ["reviews.moderate"] };
+    const deleted = await appWith(manager, undefined, undefined, undefined, undefined, {
+      delete: remove,
+    }).fetch(
+      new Request("http://localhost/api/reviews", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [reviewId] }),
+      }),
+    );
+    expect(deleted.status).toBe(200);
+    expect(remove).toHaveBeenCalledWith(manager.account, reviewId);
+    const deniedDelete = await appWith({ ...manager, capabilities: ["accounts.read"] }).fetch(
+      new Request("http://localhost/api/reviews", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [reviewId] }),
+      }),
+    );
+    expect(deniedDelete.status).toBe(403);
+    expect(remove).toHaveBeenCalledTimes(1);
     const actionRoute = await appWith(root).fetch(
       new Request(`http://localhost/api/reviews/${reviewId}/approve`, { method: "POST" }),
     );
@@ -2709,6 +2731,18 @@ describe("Hono API foundation", () => {
         )
       ).status,
     ).toBe(200);
+
+    expect(
+      (
+        await appWith({ ...base, capabilities: ["accounts.read"] }).fetch(
+          new Request("http://localhost/api/accounts", {
+            method: "DELETE",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ids: [target] }),
+          }),
+        )
+      ).status,
+    ).toBe(403);
 
     const duplicateBulkIds = await appWith({
       ...base,

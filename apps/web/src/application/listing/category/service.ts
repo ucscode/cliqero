@@ -88,7 +88,7 @@ export class ListingCategoryService extends CrudService<
     });
   }
 
-  async deleteForRoot(id: string, actorId: string) {
+  async deleteForOperator(id: string, actorId: string) {
     return this.uow.transaction(async () => {
       const category = await this.repository.findById(id);
       if (!category) throw new ListingCategoryNotFoundError();
@@ -96,7 +96,7 @@ export class ListingCategoryService extends CrudService<
       await this.repository.delete(id);
       await this.audit?.record({
         actorId,
-        action: "root.delete",
+        action: "listing_category.deleted",
         subjectType: "catalogue_category",
         subjectId: id,
         previousState: category,

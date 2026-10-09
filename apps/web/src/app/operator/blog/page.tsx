@@ -7,7 +7,7 @@ export default async function OperatorBlogPage() {
   const access = await requireOperatorPage("/operator/blog");
   return (
     <OperatorShell {...access} activeSection="blog">
-      <OperatorBlogList canDelete={hasCapability(access.capabilities, "system.root")} />
+      <OperatorBlogList canDelete={hasCapability(access.capabilities, "content.manage")} />
     </OperatorShell>
   );
 }

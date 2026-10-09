@@ -1107,6 +1107,54 @@ suite("withdrawal lifecycle", () => {
       state: "completed",
     });
   });
+  it("lets a withdrawal manager hard-delete an uninitiated approved request but not completed history", async () => {
+    const { seller, destinationId } = await setup();
+    await app.database.query(
+      `delete from identity_capability.account_capabilities
+        where account_id=(select id from identity_capability.accounts where uuid=$1)
+          and capability='system.root'`,
+      [seller.id],
+    );
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'withdrawals.manage')`,
+      [seller.id],
+    );
+
+    const approved = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 2000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, approved.id, { state: "approved" });
+    await expect(app.withdrawals.delete(seller.id, approved.id)).resolves.toEqual({
+      id: approved.id,
+      deleted: true,
+    });
+    expect(await app.withdrawalRepository.findById(approved.id)).toBeNull();
+
+    const completed = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, completed.id, { state: "approved" });
+    await recordInitiation(completed.id, seller.id);
+    await app.withdrawals.complete(seller.id, completed.id, { externalReference: "manager-proof" });
+    await expect(app.withdrawals.delete(seller.id, completed.id)).rejects.toMatchObject({
+      code: "withdrawal_immutable",
+    });
+    expect(await app.withdrawalRepository.findById(completed.id)).toMatchObject({
+      state: "completed",
+    });
+  });
+
   it("reflects reserved, released, and completed amounts in withdrawable earnings", async () => {
     const { seller, destinationId } = await setup();
     const initial = await app.fundsReservation.available(seller.id, "USD");

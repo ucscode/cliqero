@@ -54,10 +54,7 @@ export class ListingService extends CrudService<
     private readonly uow?: UnitOfWork,
     private readonly categoryService?: ListingCategoryService,
     private readonly integrationCleanup?: { deleteAllForListing(listingId: Id): Promise<void> },
-    private readonly rootPurchaseDeleter?: {
-      deleteForListing(actorId: string, listingId: Id): Promise<number>;
-    },
-    private readonly rootMediaDeleter?: { deleteAllForRoot(listingId: Id): Promise<number> },
+    private readonly listingMediaDeleter?: { deleteAllForListing(listingId: Id): Promise<number> },
     private readonly operators?: OperatorAuthorizationService,
   ) {
     super();
@@ -180,18 +177,32 @@ export class ListingService extends CrudService<
       return { id };
     });
   }
-  async deleteCatalogueForRoot(actor: Account, id: Id) {
-    const listing = await this.listings.findById(id);
-    if (!listing) throw new PublicApplicationError("Listing not found.", "not_found", 404);
-    await this.rootMediaDeleter?.deleteAllForRoot(id);
+  async deleteCatalogue(actor: Account, id: Id) {
+    if (!this.uow)
+      throw new PublicApplicationError(
+        "Transactional catalogue deletion is unavailable.",
+        "delete_unavailable",
+        503,
+      );
+    if (!this.operators)
+      throw new PublicApplicationError("Catalogue authorization is unavailable.", "forbidden", 403);
+    await this.operators.requireCapability(actor.id, "catalogue.manage");
     return this.catalogueMutation(async () => {
-      await this.rootPurchaseDeleter?.deleteForListing(actor.id, id);
+      const listing = await this.listings.findById(id);
+      if (!listing) throw new PublicApplicationError("Listing not found.", "not_found", 404);
+      if (await this.listings.hasHardDeleteDependencies(id))
+        throw new PublicApplicationError(
+          "This listing has purchase, payment, entitlement, review, or referral history and cannot be deleted.",
+          "listing_history_conflict",
+          409,
+        );
+      await this.listingMediaDeleter?.deleteAllForListing(id);
       await this.integrationCleanup?.deleteAllForListing(id);
-      const deleted = await this.listings.deleteForRoot(id);
+      const deleted = await this.listings.hardDelete(id);
       if (!deleted) throw new PublicApplicationError("Listing not found.", "not_found", 404);
       await this.audit(
         actor.id,
-        "root.delete",
+        "listing.deleted",
         id,
         {
           state: listing.state,
@@ -199,7 +210,7 @@ export class ListingService extends CrudService<
           price_minor: listing.price.minorAmount.toString(),
           currency: listing.price.currency,
         },
-        { deleted: true, mode: "physical" },
+        { deleted: true, mode: "physical", dependentHistoryPreserved: true },
       );
       return { id };
     });

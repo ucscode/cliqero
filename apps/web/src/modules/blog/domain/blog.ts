@@ -70,7 +70,7 @@ export abstract class BlogCategoryRepository extends CrudRepository<
   abstract transaction<T>(operation: () => T): T;
   abstract list(): BlogCategory[];
   abstract isUsed(id: string): boolean;
-  abstract deleteForRoot(id: string): void;
+  abstract deleteWithPosts(id: string): void;
 }
 
 /** The common renderer contract for canonical posts and private editor snapshots. */

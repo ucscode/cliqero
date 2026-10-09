@@ -13,8 +13,7 @@ export interface OperatorBulkWorkflowDependencies {
   withdrawals: { delete(actorId: string, withdrawalId: string): Promise<unknown> };
   operatorTreasury: { deleteForRoot(actorId: string, entryId: string): Promise<unknown> };
   listingService: {
-    delete(actor: Account, listingId: string): Promise<unknown>;
-    deleteCatalogueForRoot(actor: Account, listingId: string): Promise<unknown>;
+    deleteCatalogue(actor: Account, listingId: string): Promise<unknown>;
     update(
       actor: Account,
       listingId: string,
@@ -31,9 +30,9 @@ export interface OperatorBulkWorkflowDependencies {
   };
   blog: {
     delete(postId: string): unknown;
-    categoryService: { deleteForRoot(categoryId: string): unknown };
+    categoryService: { deleteForOperator(categoryId: string): unknown };
   };
-  listingCategories: { deleteForRoot(categoryId: string, actorId: string): Promise<unknown> };
+  listingCategories: { deleteForOperator(categoryId: string, actorId: string): Promise<unknown> };
 }
 
 export type OperatorBulkCommand =
@@ -79,12 +78,7 @@ export class OperatorBulkWorkflow {
   constructor(private readonly container: OperatorBulkWorkflowDependencies) {}
 
   async execute(actor: Account, command: OperatorBulkCommand): Promise<OperatorBulkOutcome> {
-    const requiredCapability: Capability =
-      command.action === "delete"
-        ? "system.root"
-        : command.resource === "listings"
-          ? "catalogue.manage"
-          : "reviews.moderate";
+    const requiredCapability = bulkCommandCapability(command);
     await this.container.operators.requireCapability(actor.id, requiredCapability);
 
     const outcome: OperatorBulkOutcome = { succeeded: [], failed: [] };
@@ -114,7 +108,7 @@ export class OperatorBulkWorkflow {
             break;
           case "listings":
             if (command.action === "delete") {
-              await this.container.listingService.deleteCatalogueForRoot(actor, id);
+              await this.container.listingService.deleteCatalogue(actor, id);
             } else {
               await this.container.listingService.update(actor, id, { state: command.state });
             }
@@ -130,10 +124,10 @@ export class OperatorBulkWorkflow {
             this.container.blog.delete(id);
             break;
           case "blog-categories":
-            this.container.blog.categoryService.deleteForRoot(id);
+            this.container.blog.categoryService.deleteForOperator(id);
             break;
           case "catalogue-categories":
-            await this.container.listingCategories.deleteForRoot(id, actor.id);
+            await this.container.listingCategories.deleteForOperator(id, actor.id);
             break;
         }
         outcome.succeeded.push(id);
@@ -145,5 +139,33 @@ export class OperatorBulkWorkflow {
       }
     }
     return outcome;
+  }
+}
+
+function bulkCommandCapability(command: OperatorBulkCommand): Capability {
+  if (command.action === "update")
+    return command.resource === "listings" ? "catalogue.manage" : "reviews.moderate";
+
+  switch (command.resource) {
+    case "accounts":
+      return "accounts.manage";
+    case "listings":
+    case "catalogue-categories":
+      return "catalogue.manage";
+    case "reviews":
+      return "reviews.moderate";
+    case "blog-posts":
+    case "blog-categories":
+      return "content.manage";
+    case "withdrawals":
+      return "withdrawals.manage";
+    // These are immutable financial/evidentiary facts. Deletion is restricted
+    // to audited root cleanup; ordinary financial corrections use recovery flows.
+    case "purchases":
+    case "distributions":
+    case "earnings":
+    case "earnings-adjustments":
+    case "treasury":
+      return "system.root";
   }
 }

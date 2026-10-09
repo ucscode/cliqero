@@ -65,7 +65,7 @@ export class SqliteBlogCategoryRepository extends BlogCategoryRepository {
     }
   }
 
-  deleteForRoot(id: string): void {
+  deleteWithPosts(id: string): void {
     this.db.transaction(() => {
       this.db.prepare("delete from blog_post_categories where category_id=?").run(id);
       if (!this.db.prepare("delete from blog_categories where id=?").run(id).changes)

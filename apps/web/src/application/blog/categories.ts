@@ -13,7 +13,7 @@ import slugify from "slugify";
 
 const slugBase = (value: string) => slugify(value, { lower: true, strict: true, trim: true });
 
-/** Ordinary CRUD lifecycle for blog categories; root deletion is a cleanup command. */
+/** Ordinary CRUD lifecycle for blog categories with audited Operator-side post detachment. */
 export class BlogCategoryService extends CrudService<
   [name: string, suppliedSlug?: string],
   [id: string],
@@ -65,9 +65,9 @@ export class BlogCategoryService extends CrudService<
     this.repository.delete(id);
   }
 
-  deleteForRoot(id: string): void {
+  deleteForOperator(id: string): void {
     this.get(id);
-    this.repository.deleteForRoot(id);
+    this.repository.deleteWithPosts(id);
   }
 
   private uniqueSlug(base: string) {

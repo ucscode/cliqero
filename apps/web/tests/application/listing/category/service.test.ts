@@ -82,7 +82,7 @@ describe("ListingCategoryService", () => {
     await expect(service.get(category.id)).rejects.toThrow("not found");
   });
 
-  it("root deletion clears assignments, physically deletes, and audits atomically", async () => {
+  it("operator deletion clears assignments, physically deletes, and audits atomically", async () => {
     const { service, repository, categories } = setup();
     const category = await service.create("Assigned category");
     const audit = { record: vi.fn(async () => undefined) };
@@ -92,15 +92,15 @@ describe("ListingCategoryService", () => {
       audit,
     );
 
-    await rootService.deleteForRoot(category.id, "root-id");
+    await rootService.deleteForOperator(category.id, "operator-id");
 
     expect(repository.removeAssignmentsForRoot).toHaveBeenCalledWith(category.id);
     expect(repository.delete).toHaveBeenCalledWith(category.id);
     expect(categories.has(category.id)).toBe(false);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
-        actorId: "root-id",
-        action: "root.delete",
+        actorId: "operator-id",
+        action: "listing_category.deleted",
         subjectType: "catalogue_category",
       }),
     );

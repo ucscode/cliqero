@@ -28,8 +28,8 @@ describe("operator manual withdrawal workflow", () => {
       amountAndDestinationLocked: true,
       stateOptions: [],
     });
-    expect(operatorWithdrawalDeleteAllowed("completed", true, true, true)).toBe(false);
-    expect(operatorWithdrawalDeleteAllowed("approved", true, true)).toBe(true);
+    expect(operatorWithdrawalDeleteAllowed("completed", true, true)).toBe(false);
+    expect(operatorWithdrawalDeleteAllowed("approved", true)).toBe(true);
     for (const state of ["completed", "rejected", "cancelled", "failed"] as const)
       expect(operatorWithdrawalEditPolicy(state)).toMatchObject({
         editable: false,
@@ -63,10 +63,11 @@ describe("operator manual withdrawal workflow", () => {
     }
   });
 
-  it("lets system.root delete every withdrawal state while preserving ordinary restrictions", () => {
-    expect(operatorWithdrawalDeleteAllowed("completed", true, true)).toBe(true);
-    expect(operatorWithdrawalDeleteAllowed("completed", true, false)).toBe(false);
-    expect(operatorWithdrawalDeleteAllowed("requested", true, false)).toBe(true);
-    expect(operatorWithdrawalDeleteAllowed("requested", false, false)).toBe(false);
+  it("allows managers to delete only uninitiated mutable withdrawals", () => {
+    expect(operatorWithdrawalDeleteAllowed("completed", true)).toBe(false);
+    expect(operatorWithdrawalDeleteAllowed("approved", true)).toBe(true);
+    expect(operatorWithdrawalDeleteAllowed("requested", true)).toBe(true);
+    expect(operatorWithdrawalDeleteAllowed("requested", false)).toBe(false);
+    expect(operatorWithdrawalDeleteAllowed("requested", true, true)).toBe(false);
   });
 });

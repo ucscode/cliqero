@@ -7,7 +7,7 @@ export default async function OperatorApiKeysPage() {
   const access = await requireOperatorPage("/operator/api-keys");
   return (
     <OperatorShell {...access} activeSection="apiKeys">
-      <OperatorApiKeys canDelete={hasCapability(access.capabilities, "system.root")} />
+      <OperatorApiKeys canDelete={hasCapability(access.capabilities, "api_keys.manage")} />
     </OperatorShell>
   );
 }

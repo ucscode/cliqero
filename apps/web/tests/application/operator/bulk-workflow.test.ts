@@ -84,7 +84,7 @@ describe("OperatorBulkWorkflow", () => {
     const requireCapability = vi.fn(async () => undefined);
     const workflow = new OperatorBulkWorkflow({
       operators: { requireCapability },
-      listingService: { deleteCatalogueForRoot: remove },
+      listingService: { deleteCatalogue: remove },
     } as never);
 
     await expect(
@@ -97,7 +97,7 @@ describe("OperatorBulkWorkflow", () => {
       succeeded: ["listing-a"],
       failed: [{ id: "listing-b", message: "Listing has dependent history." }],
     });
-    expect(requireCapability).toHaveBeenCalledWith(actor.id, "system.root");
+    expect(requireCapability).toHaveBeenCalledWith(actor.id, "catalogue.manage");
     expect(remove).toHaveBeenCalledTimes(2);
     expect(remove).toHaveBeenNthCalledWith(1, actor, "listing-a");
     expect(remove).toHaveBeenNthCalledWith(2, actor, "listing-b");
@@ -130,5 +130,22 @@ describe("OperatorBulkWorkflow", () => {
     expect(remove).toHaveBeenCalledTimes(2);
     expect(remove).toHaveBeenNthCalledWith(1, actor.id, "good");
     expect(remove).toHaveBeenNthCalledWith(2, actor.id, "bad");
+  });
+
+  it.each([
+    [{ resource: "accounts", action: "delete", ids: ["one"] }, "accounts.manage"],
+    [{ resource: "reviews", action: "delete", ids: ["one"] }, "reviews.moderate"],
+    [{ resource: "blog-posts", action: "delete", ids: ["one"] }, "content.manage"],
+    [{ resource: "blog-categories", action: "delete", ids: ["one"] }, "content.manage"],
+    [{ resource: "catalogue-categories", action: "delete", ids: ["one"] }, "catalogue.manage"],
+    [{ resource: "withdrawals", action: "delete", ids: ["one"] }, "withdrawals.manage"],
+    [{ resource: "purchases", action: "delete", ids: ["one"] }, "system.root"],
+  ] as const)("requires the resource capability for %j", async (command, capability) => {
+    const requireCapability = vi.fn(async () => undefined);
+    const workflow = new OperatorBulkWorkflow({
+      operators: { requireCapability },
+    } as never);
+    await workflow.execute(actor, command as never);
+    expect(requireCapability).toHaveBeenCalledWith(actor.id, capability);
   });
 });

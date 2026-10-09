@@ -12,7 +12,7 @@ vi.mock("@/api/http", async (importOriginal) => {
 
 import { createContainer } from "@/infrastructure/container";
 import { createApiApp } from "@/api/hono";
-import { POST } from "@/api/compat/listings/route";
+import { DELETE, POST } from "@/api/compat/listings/route";
 import { PATCH } from "@/api/compat/listings/[id]/route";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -189,5 +189,52 @@ suite("Operator catalogue editor API contract", () => {
         { id: generatedCategory.id, deleted: true, error: null },
       ],
     });
+  });
+
+  it("uses guarded catalogue-manager hard deletion through the canonical collection API", async () => {
+    await app.database.query(
+      `delete from identity_capability.account_capabilities
+        where account_id=(select id from identity_capability.accounts where uuid=$1)
+          and capability='system.root'`,
+      [state.account.id],
+    );
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'catalogue.manage')`,
+      [state.account.id],
+    );
+    const listing = await app.listingService.create(state.account, {
+      title: "Manager-deletable listing",
+      shortDescription: "No historical dependencies",
+      longDescription: "A catalogue manager can delete this eligible listing.",
+      priceMinor: "1000",
+      currency: "USD",
+      destination: "https://example.test/manager-delete",
+    });
+
+    const response = await DELETE(
+      new Request("http://localhost/api/listings", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: [listing.id] }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      results: [{ id: listing.id, deleted: true, error: null }],
+    });
+    expect(
+      await app.database.query("select 1 from listing_capability.listings where uuid=$1", [
+        listing.id,
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await app.database.query(
+        `select 1 from kernel.audit_records
+          where action='listing.deleted' and subject_type='listing' and subject_id=$1`,
+        [listing.id],
+      ),
+    ).toMatchObject({ rowCount: 1 });
   });
 });

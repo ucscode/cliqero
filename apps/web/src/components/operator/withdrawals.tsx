@@ -62,13 +62,10 @@ export function operatorWithdrawalEditPolicy(
 export function operatorWithdrawalDeleteAllowed(
   state: OperatorWithdrawalState,
   canManage: boolean,
-  canDelete: boolean,
   payoutInitiated = false,
 ) {
-  if (payoutInitiated) return false;
-  return (
-    canDelete || (canManage && ["requested", "rejected", "cancelled", "failed"].includes(state))
-  );
+  if (payoutInitiated || state === "completed") return false;
+  return canManage && ["requested", "approved", "rejected", "cancelled", "failed"].includes(state);
 }
 
 export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string }) {
@@ -321,13 +318,7 @@ const states: Array<[OperatorWithdrawalState, string]> = [
 ];
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Withdrawal data is temporarily unavailable.";
-export function OperatorWithdrawalList({
-  canManage = false,
-  canDelete = false,
-}: {
-  canManage?: boolean;
-  canDelete?: boolean;
-}) {
+export function OperatorWithdrawalList({ canManage = false }: { canManage?: boolean }) {
   const confirm = useOperatorConfirmation();
   const [search, setSearch] = useState("");
   const [state, setState] = useState<OperatorWithdrawalState | "">("");
@@ -505,9 +496,8 @@ export function OperatorWithdrawalList({
                   if (
                     !(await confirm({
                       title: `Delete ${items.length} withdrawal record(s)?`,
-                      description: canDelete
-                        ? "This permanently removes the selected records."
-                        : "Only mutable requests can be deleted; completed payouts remain financial history.",
+                      description:
+                        "Uninitiated withdrawals are permanently removed; completed or externally initiated payouts remain financial history.",
                       confirmLabel: "Delete",
                       destructive: true,
                     }))
@@ -533,7 +523,7 @@ export function OperatorWithdrawalList({
       }
       actions={(item) => [
         { type: "link", label: "View", href: `/operator/withdrawals/${item.id}` },
-        ...(canDelete && !item.payoutInitiation
+        ...(operatorWithdrawalDeleteAllowed(item.state, canManage, Boolean(item.payoutInitiation))
           ? [
               {
                 type: "action" as const,

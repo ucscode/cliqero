@@ -522,7 +522,7 @@ suite("operator account index PostgreSQL projection", () => {
     });
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
-       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+       values((select id from identity_capability.accounts where uuid=$1),'accounts.manage')`,
       [actor.id],
     );
     await app.database.query(

@@ -240,29 +240,6 @@ export class PostgresLedgerFundsReservationService implements LedgerFundsReserva
       reservation.id,
     ]);
   }
-  async removeForRoot(withdrawalId: string, accountId: string) {
-    await this.lockAccount(accountId);
-    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
-      `withdrawal:${accountId}`,
-    ]);
-    const reservation = (
-      await this.sql.query<{ id: string }>(
-        `select r.id from ledger_capability.withdrawal_reservations r
-          where r.withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)
-            and r.account_id=(select id from identity_capability.accounts where uuid=$2)
-          for update`,
-        [withdrawalId, accountId],
-      )
-    ).rows[0];
-    if (!reservation) return;
-    await this.sql.query(
-      `delete from ledger_capability.withdrawal_reservation_events where reservation_id=$1`,
-      [reservation.id],
-    );
-    await this.sql.query(`delete from ledger_capability.withdrawal_reservations where id=$1`, [
-      reservation.id,
-    ]);
-  }
   async summarize(accountId: string) {
     const rows = (
       await this.sql.query<{ currency: string; reserved_minor: string; completed_minor: string }>(

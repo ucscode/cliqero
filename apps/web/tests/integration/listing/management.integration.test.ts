@@ -97,18 +97,18 @@ suite("listing management and media", () => {
     );
   });
 
-  it("root bulk deletion physically removes an assigned listing and its purchase history", async () => {
-    const { owner, other: buyer } = await accounts("root-delete");
+  it("catalogue managers hard-delete only listings without historical dependencies", async () => {
+    const { owner, other: buyer } = await accounts("catalogue-delete");
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
-       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+       values((select id from identity_capability.accounts where uuid=$1),'catalogue.manage')`,
       [owner.id],
     );
     const category = await app.listingCategories.create("Root deletion category");
     const simpleListing = await app.listingService.create(owner, {
       title: "Root deletion listing without history",
       shortDescription: "No dependent purchase records",
-      longDescription: "Mixed root deletion batch fixture.",
+      longDescription: "Mixed catalogue deletion batch fixture.",
       priceMinor: "500",
       currency: "USD",
       destination: "https://example.test/root-delete-simple",
@@ -146,12 +146,42 @@ suite("listing management and media", () => {
       ids: [listing.id, simpleListing.id],
     });
 
-    expect(outcome).toEqual({ succeeded: [listing.id, simpleListing.id], failed: [] });
+    expect(outcome).toEqual({
+      succeeded: [simpleListing.id],
+      failed: [
+        {
+          id: listing.id,
+          message:
+            "This listing has purchase, payment, entitlement, review, or referral history and cannot be deleted.",
+        },
+      ],
+    });
+    await app.database.query(
+      `insert into identity_capability.account_capabilities(account_id,capability)
+       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+      [owner.id],
+    );
+    expect(
+      await new OperatorBulkWorkflow(app).execute(owner, {
+        resource: "listings",
+        action: "delete",
+        ids: [listing.id],
+      }),
+    ).toEqual({
+      succeeded: [],
+      failed: [
+        {
+          id: listing.id,
+          message:
+            "This listing has purchase, payment, entitlement, review, or referral history and cannot be deleted.",
+        },
+      ],
+    });
     expect(
       await app.database.query("select 1 from listing_capability.listings where uuid=$1", [
         listing.id,
       ]),
-    ).toMatchObject({ rows: [] });
+    ).toMatchObject({ rowCount: 1 });
     expect(
       await app.database.query("select 1 from listing_capability.listings where uuid=$1", [
         simpleListing.id,
@@ -161,35 +191,57 @@ suite("listing management and media", () => {
       await app.database.query("select 1 from purchase_capability.purchases where uuid=$1", [
         checkout.purchaseId,
       ]),
-    ).toMatchObject({ rows: [] });
-    expect(
-      await app.database.query(
-        `select 1 from checkout_capability.checkouts where listing_id=(select id from listing_capability.listings where uuid=$1)
-         union all select 1 from payment_capability.payments where id=(select id from payment_capability.payments where uuid=$2)
-         union all select 1 from ledger_capability.purchase_distributions where uuid=$3
-         union all select 1 from treasury_capability.entries where source_id=$3`,
-        [listing.id, checkout.paymentId, distribution.id],
-      ),
-    ).toMatchObject({ rows: [] });
+    ).toMatchObject({ rowCount: 1 });
+    const retainedEvidence = await app.database.query(
+      `select
+         exists(select 1 from payment_capability.payments where uuid=$1) as payment,
+         exists(select 1 from ledger_capability.purchase_distributions where uuid=$2) as distribution,
+         exists(select 1 from treasury_capability.entries where source_id=$2) as treasury`,
+      [checkout.paymentId, distribution.id],
+    );
+    expect(retainedEvidence.rows[0]).toEqual({
+      payment: true,
+      distribution: true,
+      treasury:
+        distribution.platformAmountMinor !== undefined && distribution.platformAmountMinor > 0n,
+    });
     expect(
       await app.database.query(
         "select 1 from listing_capability.listing_categories where listing_id=(select id from listing_capability.listings where uuid=$1)",
         [listing.id],
       ),
-    ).toMatchObject({ rows: [] });
+    ).toMatchObject({ rowCount: 1 });
     expect(
       await app.database.query(
-        "select 1 from kernel.audit_records where action='root.delete' and subject_type='listing' and subject_id=$1",
-        [listing.id],
+        "select 1 from kernel.audit_records where action='listing.deleted' and subject_type='listing' and subject_id=$1",
+        [simpleListing.id],
       ),
-    ).toMatchObject({ rows: [{ "?column?": 1 }] });
+    ).toMatchObject({ rowCount: 1 });
   });
 
-  it("root listing deletion removes final integrations and preserves shared credentials until last listing", async () => {
+  it("does not let listing ownership substitute for catalogue management authority", async () => {
+    const { owner } = await accounts("listingdel");
+    const listing = await app.listingService.create(owner, {
+      title: "Owned listing",
+      shortDescription: "Owner is not an Operator",
+      longDescription: "Ownership alone cannot authorize Operator deletion.",
+      priceMinor: "100",
+      currency: "USD",
+      destination: "https://example.test/owner-delete-denied",
+    });
+
+    await expect(app.listingService.deleteCatalogue(owner, listing.id)).rejects.toMatchObject({
+      status: 403,
+      code: "forbidden",
+    });
+    expect(await app.listingService.getOwner(owner, listing.id)).toBeDefined();
+  });
+
+  it("catalogue manager deletion removes final integrations and preserves shared credentials until last listing", async () => {
     const { owner } = await accounts("rootint");
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
-       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+       values((select id from identity_capability.accounts where uuid=$1),'catalogue.manage')`,
       [owner.id],
     );
     const createListing = (title: string) =>
@@ -247,11 +299,11 @@ suite("listing management and media", () => {
     ).toMatchObject({ rowCount: 0 });
   });
 
-  it("root deletion removes category assignments without deleting the listing", async () => {
+  it("catalogue manager category deletion removes assignments without deleting the listing", async () => {
     const { owner } = await accounts("root-category");
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
-       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+       values((select id from identity_capability.accounts where uuid=$1),'catalogue.manage')`,
       [owner.id],
     );
     const category = await app.listingCategories.create("Assigned root category");
@@ -278,17 +330,17 @@ suite("listing management and media", () => {
     expect((await app.listingService.getOwner(owner, listing.id)).categories).toEqual([]);
     expect(
       await app.database.query(
-        "select 1 from kernel.audit_records where action='root.delete' and subject_type='catalogue_category' and subject_id=$1",
+        "select 1 from kernel.audit_records where action='listing_category.deleted' and subject_type='catalogue_category' and subject_id=$1",
         [category.id],
       ),
     ).toMatchObject({ rowCount: 1 });
   });
 
-  it("root blog deletion removes posts and assigned categories through the same server workflow", async () => {
-    const { owner } = await accounts("root-blog");
+  it("content managers delete posts and assigned categories through the same server workflow", async () => {
+    const { owner } = await accounts("contentdel");
     await app.database.query(
       `insert into identity_capability.account_capabilities(account_id,capability)
-       values((select id from identity_capability.accounts where uuid=$1),'system.root')`,
+       values((select id from identity_capability.accounts where uuid=$1),'content.manage')`,
       [owner.id],
     );
     const sqlite = new Database(":memory:");

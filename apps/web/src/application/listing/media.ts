@@ -180,7 +180,7 @@ export class ListingMediaService {
       key: value.objectKey,
     });
   }
-  async deleteAllForRoot(listingId: string) {
+  async deleteAllForListing(listingId: string) {
     const values = await this.media.listByListing(listingId, true);
     for (const value of values) {
       await this.storage.get(value.storageProvider).delete({
@@ -189,7 +189,7 @@ export class ListingMediaService {
         key: value.objectKey,
       });
     }
-    await this.media.deleteForRoot(listingId);
+    await this.media.deleteForListing(listingId);
     return values.length;
   }
   private async getUnchecked(listingId: string, id: string) {

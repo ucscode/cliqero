@@ -25,11 +25,12 @@ export const CAPABILITY_METADATA = {
   },
   "catalogue.manage": {
     label: "Catalogue management",
-    description: "Manage listings, publication, media and access configuration.",
+    description:
+      "Manage listings, publication, media, categories and access configuration; delete only when protected history is absent.",
   },
   "content.manage": {
     label: "Content management",
-    description: "Create, edit and publish runtime blog content.",
+    description: "Create, edit, publish and delete runtime blog content and categories.",
   },
   "accounts.read": {
     label: "Account inspection",
@@ -37,7 +38,8 @@ export const CAPABILITY_METADATA = {
   },
   "accounts.manage": {
     label: "Account management",
-    description: "Create accounts and update supported profile fields.",
+    description:
+      "Create accounts, update supported profile fields and tombstone eligible accounts while preserving platform history.",
   },
   "hierarchy.manage": {
     label: "Hierarchy management",
@@ -53,7 +55,8 @@ export const CAPABILITY_METADATA = {
   },
   "withdrawals.manage": {
     label: "Withdrawal operations",
-    description: "Review withdrawals and record externally completed payments.",
+    description:
+      "Review and manage withdrawals, remove uninitiated requests, and record or reconcile payout outcomes.",
   },
   "treasury.manage": {
     label: "Treasury management",

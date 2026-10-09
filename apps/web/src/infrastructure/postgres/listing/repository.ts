@@ -245,51 +245,28 @@ export class PostgresListingRepository extends ListingRepository {
     );
     return (result.rowCount ?? 0) === 1;
   }
-  async deleteForRoot(id: string): Promise<boolean> {
+  async hasHardDeleteDependencies(id: string): Promise<boolean> {
+    const result = await this.sql.query<{ has_history: boolean }>(
+      `select
+        exists(select 1 from purchase_capability.purchases p where p.listing_id=l.id)
+        or exists(select 1 from checkout_capability.checkouts c where c.listing_id=l.id)
+        or exists(select 1 from payment_capability.payments p where p.listing_id=l.id)
+        or exists(select 1 from entitlement_capability.entitlements e where e.listing_id=l.id)
+        or exists(select 1 from listing_capability.reviews r where r.listing_id=l.id)
+        or exists(select 1 from referral_capability.listing_attributions a where a.listing_id=l.id)
+        as has_history
+       from listing_capability.listings l where l.uuid=$1 for update of l`,
+      [id],
+    );
+    return result.rows[0]?.has_history ?? false;
+  }
+
+  async hardDelete(id: string): Promise<boolean> {
     return this.mutate(async () => {
-      const row = await this.sql.query<{ id: string }>(
-        "select id from listing_capability.listings where uuid=$1 for update",
-        [id],
-      );
-      if (!row.rows[0]) return false;
-      const listingId = row.rows[0].id;
-      await this.sql.query("select set_config('cliqero.root_delete','on',true)");
-      await this.sql.query("delete from listing_capability.reviews where listing_id=$1", [
-        listingId,
+      const result = await this.sql.query("delete from listing_capability.listings where uuid=$1", [
+        id,
       ]);
-      await this.sql.query(
-        "delete from referral_capability.listing_attributions where listing_id=$1",
-        [listingId],
-      );
-      await this.sql.query(
-        "delete from wallet_capability.debits where checkout_id in (select id from checkout_capability.checkouts where listing_id=$1)",
-        [listingId],
-      );
-      await this.sql.query(
-        "delete from access_capability.access_grants where entitlement_id in (select id from entitlement_capability.entitlements where listing_id=$1)",
-        [listingId],
-      );
-      await this.sql.query("delete from entitlement_capability.entitlements where listing_id=$1", [
-        listingId,
-      ]);
-      await this.sql.query("delete from checkout_capability.checkouts where listing_id=$1", [
-        listingId,
-      ]);
-      await this.sql.query(
-        "delete from payment_capability.provider_operations where payment_id in (select id from payment_capability.payments where listing_id=$1)",
-        [listingId],
-      );
-      await this.sql.query(
-        "delete from payment_capability.reconciliation_attempts where payment_id in (select id from payment_capability.payments where listing_id=$1)",
-        [listingId],
-      );
-      await this.sql.query("delete from payment_capability.payments where listing_id=$1", [
-        listingId,
-      ]);
-      const deleted = await this.sql.query("delete from listing_capability.listings where id=$1", [
-        listingId,
-      ]);
-      return (deleted.rowCount ?? 0) === 1;
+      return (result.rowCount ?? 0) === 1;
     });
   }
 

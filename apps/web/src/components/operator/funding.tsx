@@ -388,7 +388,7 @@ export function OperatorFundingList({
     ...(canManage && funding.origin === "administrative"
       ? [{ type: "link" as const, label: "Edit", href: `/operator/funding/${funding.id}/edit` }]
       : []),
-    ...(canDelete
+    ...(canDelete || (canManage && funding.origin === "administrative")
       ? [
           {
             type: "action" as const,
@@ -569,7 +569,7 @@ export function OperatorFundingList({
         onNext: () => void collection.next(),
       }}
       sectionTitle="Funding records"
-      sectionDescription="Provider facts, evidence, and wallet-credit state are inspected. System-root operators can delete a funding record with its linked records."
+      sectionDescription="Finance managers can delete eligible administrative funding. Provider funding cleanup remains restricted to system-root maintenance."
     />
   );
 }
@@ -655,7 +655,7 @@ export function OperatorFundingDetail({
   async function deleteFunding() {
     if (
       !funding ||
-      !canDelete ||
+      !(canDelete || (canManage && funding.origin === "administrative")) ||
       !(await confirm({
         title: "Delete funding record?",
         description: "Delete this funding record and its linked financial effects?",
@@ -696,7 +696,7 @@ export function OperatorFundingDetail({
       headerActions={
         <div className="flex items-center gap-2">
           <OperatorStatusCell status={funding.state} label={stateLabel(funding.state)} />
-          {canDelete && (
+          {(canDelete || (canManage && funding.origin === "administrative")) && (
             <Button variant="destructive" onClick={() => void deleteFunding()}>
               Delete
             </Button>

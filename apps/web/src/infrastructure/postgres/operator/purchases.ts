@@ -147,17 +147,6 @@ export class PostgresOperatorPurchaseReader implements OperatorPurchaseReader {
     };
   }
 
-  async listIdsForListing(listingId: string) {
-    return (
-      await this.sql.query<{ uuid: string }>(
-        `select uuid from purchase_capability.purchases
-          where listing_id=(select id from listing_capability.listings where uuid=$1)
-          order by id`,
-        [listingId],
-      )
-    ).rows.map((row) => row.uuid);
-  }
-
   async deleteForRoot(purchaseId: string, actorId: string) {
     const purchase = await this.get(purchaseId);
     if (!purchase) return false;

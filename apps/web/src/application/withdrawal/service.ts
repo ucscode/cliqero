@@ -1009,11 +1009,16 @@ export class WithdrawalService extends CrudService<
   }
 
   override async delete(actorId: string, id: string): Promise<{ id: string; deleted: true }> {
-    const root = await this.operators.hasCapability(actorId, "system.root");
-    if (!root) await this.operators.requireCapability(actorId, "withdrawals.manage");
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
     return this.uow.transaction(async () => {
       const current = await this.withdrawals.findByIdForUpdate(id);
       if (!current) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
+      if (current.state === "completed")
+        throw new PublicApplicationError(
+          "A completed payout is immutable and cannot be deleted.",
+          "withdrawal_immutable",
+          409,
+        );
       if (await this.withdrawals.findPayoutInitiationByWithdrawalId(id))
         throw new PublicApplicationError(
           "A withdrawal with external payout evidence cannot be deleted.",
@@ -1021,7 +1026,7 @@ export class WithdrawalService extends CrudService<
           409,
         );
       const operationCorrelationId = newId();
-      if (!root && !["requested", "rejected", "cancelled", "failed"].includes(current.state))
+      if (!["requested", "approved", "rejected", "cancelled", "failed"].includes(current.state))
         throw new PublicApplicationError(
           "This withdrawal contains immutable payout history and cannot be deleted.",
           "withdrawal_immutable",
@@ -1042,49 +1047,22 @@ export class WithdrawalService extends CrudService<
         actorId,
         "operator",
       );
-      if (root) {
-        await this.funds.removeForRoot(id, current.accountId);
-        await this.withdrawals.deleteForRoot(id);
-        await this.audit.record({
-          actorId,
-          action: "root.delete",
-          correlationId: operationCorrelationId,
-          subjectType: "withdrawal",
-          subjectId: id,
-          previousState: {
-            accountId: current.accountId,
-            amountMinor: current.amount.minorAmount.toString(),
-            currency: current.amount.currency,
-            feeMinor: current.fee?.minorAmount.toString() ?? "0",
-            netAmountMinor:
-              current.netAmount?.minorAmount.toString() ?? current.amount.minorAmount.toString(),
-            state: current.state,
-            correlationId: current.correlationId,
-            reason: current.reason,
-            externalReference: current.externalReference,
-            completionNote: current.completionNote,
-            completedAt: current.completedAt?.toISOString() ?? null,
-          },
-          newState: { deleted: true, mode: "physical", reservationReconciled: true },
-        });
-      } else {
-        await this.funds.remove(id, current.accountId);
-        await this.withdrawals.delete(id);
-        await this.audit.record({
-          actorId,
-          correlationId: operationCorrelationId,
-          action: "withdrawal.deleted",
-          subjectType: "withdrawal",
-          subjectId: id,
-          previousState: {
-            accountId: current.accountId,
-            state: current.state,
-            amountMinor: current.amount.minorAmount.toString(),
-            currency: current.amount.currency,
-          },
-          newState: { deleted: true, mode: "soft", reservationReconciled: true },
-        });
-      }
+      await this.funds.remove(id, current.accountId);
+      await this.withdrawals.delete(id);
+      await this.audit.record({
+        actorId,
+        correlationId: operationCorrelationId,
+        action: "withdrawal.deleted",
+        subjectType: "withdrawal",
+        subjectId: id,
+        previousState: {
+          accountId: current.accountId,
+          state: current.state,
+          amountMinor: current.amount.minorAmount.toString(),
+          currency: current.amount.currency,
+        },
+        newState: { deleted: true, mode: "physical", reservationReconciled: true },
+      });
       return { id, deleted: true as const };
     });
   }

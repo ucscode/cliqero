@@ -122,7 +122,6 @@ export abstract class WithdrawalRepository extends CrudRepository<
   abstract findById(id: string): Promise<Withdrawal | null>;
   abstract update(withdrawal: Withdrawal, expectedState?: WithdrawalState): Promise<void>;
   abstract delete(id: string): Promise<void>;
-  abstract deleteForRoot(id: string): Promise<void>;
   abstract complete(
     id: string,
     actorId: string,

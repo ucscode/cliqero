@@ -316,7 +316,9 @@ describe("operator console shared page migration", () => {
     const html = renderPage(<OperatorCatalogueList />);
     expect(html).toContain(">Transfer</button>");
     expect(html).toContain("New listing");
-    expect(html).toContain("Root deletion removes the listing");
+    expect(html).toContain(
+      "Catalogue managers can permanently delete listings only when no purchase, payment, entitlement, review, or referral history depends on them.",
+    );
     expect(html).not.toContain("Manage categories");
     expect(html).not.toContain("Import listings");
   });

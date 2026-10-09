@@ -20,7 +20,7 @@ export async function DELETE(request: Request) {
     await container.operators.requireCapability(account.id, "catalogue.manage");
     const { ids } = resourceDeleteSchema().parse(await request.json());
     return Response.json(
-      await deleteResourceIds(ids, (id) => container.listingService.delete(account, id)),
+      await deleteResourceIds(ids, (id) => container.listingService.deleteCatalogue(account, id)),
     );
   } catch (error) {
     return apiError(error, request);

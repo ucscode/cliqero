@@ -158,7 +158,7 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
     if (
       !(await confirm({
         title: "Delete listing?",
-        description: `Permanently delete “${listing.title}” and its dependent purchase history?`,
+        description: `Permanently delete “${listing.title}”? Listings with purchase, payment, entitlement, review, or referral history cannot be deleted.`,
         confirmLabel: "Delete",
         destructive: true,
       }))
@@ -226,7 +226,7 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
     if (
       !(await confirm({
         title: "Delete listings?",
-        description: `Permanently delete ${listings.length} selected listing${listings.length === 1 ? "" : "s"} and dependent purchase history?`,
+        description: `Permanently delete ${listings.length} selected listing${listings.length === 1 ? "" : "s"}? Listings with purchase, payment, entitlement, review, or referral history cannot be deleted.`,
         confirmLabel: "Delete",
         destructive: true,
       }))
@@ -584,7 +584,7 @@ export function OperatorCatalogueList({ canDelete = false }: { canDelete?: boole
           onNext: () => void collection.next(),
         }}
         sectionTitle="Catalogue"
-        sectionDescription="Root deletion removes the listing and its dependent purchase history."
+        sectionDescription="Catalogue managers can permanently delete listings only when no purchase, payment, entitlement, review, or referral history depends on them."
       />
       <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">

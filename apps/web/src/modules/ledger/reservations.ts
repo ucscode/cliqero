@@ -35,7 +35,6 @@ export interface LedgerFundsReservationService {
     correlationId: string;
   }): Promise<void>;
   remove(withdrawalId: string, accountId: string): Promise<void>;
-  removeForRoot(withdrawalId: string, accountId: string): Promise<void>;
   summarize(
     accountId: string,
   ): Promise<Array<{ currency: string; reservedMinor: bigint; completedMinor: bigint }>>;

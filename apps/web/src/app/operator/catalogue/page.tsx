@@ -10,7 +10,7 @@ export default async function OperatorCataloguePage() {
   return (
     <OperatorShell {...access} activeSection="catalogue">
       <section aria-labelledby="operator-catalogue-heading">
-        <OperatorCatalogueList canDelete={hasCapability(access.capabilities, "system.root")} />
+        <OperatorCatalogueList canDelete={hasCapability(access.capabilities, "catalogue.manage")} />
       </section>
     </OperatorShell>
   );

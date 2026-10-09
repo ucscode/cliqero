@@ -9,7 +9,9 @@ export default async function OperatorListingCategoriesPage() {
   const access = await requireOperatorPage("/operator/catalogue/categories");
   return (
     <OperatorShell {...access} activeSection="catalogueCategories">
-      <OperatorListingCategories canDelete={hasCapability(access.capabilities, "system.root")} />
+      <OperatorListingCategories
+        canDelete={hasCapability(access.capabilities, "catalogue.manage")}
+      />
     </OperatorShell>
   );
 }

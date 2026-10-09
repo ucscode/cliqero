@@ -45,7 +45,7 @@ describe("operator component-system migration", () => {
     expect(source, file).toContain("/internal/withdrawals/bulk-delete");
   });
 
-  it("keeps every Operator record table root-deletable through shared selection", () => {
+  it("gates Operator deletion by resource-management capability and keeps immutable facts root-only", () => {
     const tables = [
       ["catalogue.tsx", "runOperatorBulkAction", "catalogue/page.tsx"],
       ["catalogue/categories.tsx", "runOperatorBulkAction", "catalogue/categories/page.tsx"],
@@ -69,21 +69,42 @@ describe("operator component-system migration", () => {
 
     expect(renderedTableFiles.sort()).toEqual([...inventoryFiles].sort());
 
+    const requiredCapability: Record<string, string> = {
+      "catalogue/page.tsx": "catalogue.manage",
+      "catalogue/categories/page.tsx": "catalogue.manage",
+      "reviews/page.tsx": "reviews.moderate",
+      "users/page.tsx": "accounts.manage",
+      "api-keys/page.tsx": "api_keys.manage",
+      "purchases/page.tsx": "system.root",
+      "funding/page.tsx": "system.root",
+      "distributions/page.tsx": "system.root",
+      "earnings/page.tsx": "system.root",
+      "earnings-adjustments/page.tsx": "system.root",
+      "withdrawals/page.tsx": "withdrawals.manage",
+      "treasury/page.tsx": "system.root",
+      "blog/page.tsx": "content.manage",
+      "blog/categories/page.tsx": "content.manage",
+    };
+
     for (const [file, bulkPath, page] of tables) {
       const source = readFileSync(resolve(operatorRoot, file), "utf8");
       expect(source, file).toContain("selection=");
       expect(source, file).toContain('label: "Delete"');
       expect(source, file).toContain(bulkPath);
-      expect(source, file).toContain("canDelete");
+      if (file !== "withdrawals.tsx") expect(source, file).toContain("canDelete");
       const pageSource = readFileSync(
         resolve(__dirname, `../../../src/app/operator/${page}`),
         "utf8",
       );
-      expect(pageSource, page).toContain('hasCapability(access.capabilities, "system.root")');
+      expect(pageSource, page).toContain(
+        `hasCapability(access.capabilities, "${requiredCapability[page]}")`,
+      );
+      if (page === "withdrawals/page.tsx")
+        expect(source).toContain("operatorWithdrawalDeleteAllowed");
     }
   });
 
-  it("limits destructive account controls and bulk deletion to system.root", () => {
+  it("limits account deletion to account managers and preserves canonical collection DELETE", () => {
     const source = readFileSync(resolve(operatorRoot, "users.tsx"), "utf8");
     expect(source).toContain("canDelete && onBulkDelete");
     expect(source).toContain('value: "delete"');
@@ -91,6 +112,12 @@ describe("operator component-system migration", () => {
     expect(source).toContain('method: "DELETE"');
     expect(source).toContain("JSON.stringify({ ids: [account.id] })");
     expect(source).not.toContain("/api/accounts/bulk");
+  });
+
+  it("offers funding deletion to finance managers only for administrative records", () => {
+    const source = readFileSync(resolve(operatorRoot, "funding.tsx"), "utf8");
+    expect(source).toContain('canManage && funding.origin === "administrative"');
+    expect(source).toContain('canDelete || (canManage && funding.origin === "administrative")');
   });
 
   it("runs bulk selection through the server-side workflow, not repeated browser API calls", () => {

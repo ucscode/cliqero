@@ -162,18 +162,11 @@ export class PostgresWithdrawalRepository extends WithdrawalRepository {
   }
   async delete(id: string) {
     const result = await this.sql.query(
-      `delete from withdrawal_capability.withdrawals where uuid=$1 and state in ('requested','rejected','cancelled','failed')`,
+      `delete from withdrawal_capability.withdrawals where uuid=$1 and state in ('requested','approved','rejected','cancelled','failed')`,
       [id],
     );
     if (result.rowCount !== 1)
       throw new Error("This withdrawal contains immutable payout history and cannot be deleted");
-  }
-  async deleteForRoot(id: string) {
-    const result = await this.sql.query(
-      `delete from withdrawal_capability.withdrawals where uuid=$1`,
-      [id],
-    );
-    if (result.rowCount !== 1) throw new Error("Withdrawal not found");
   }
   async complete(
     id: string,
