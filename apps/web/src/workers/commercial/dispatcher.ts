@@ -20,6 +20,12 @@ const consoleLogger: CommercialWorkflowLogger = {
     ),
 };
 export class CommercialWorkflowDispatcher {
+  private iterationHealthy = true;
+
+  get lastIterationHealthy(): boolean {
+    return this.iterationHealthy;
+  }
+
   constructor(
     private app: ApplicationContainer,
     private logger: CommercialWorkflowLogger = consoleLogger,
@@ -27,6 +33,7 @@ export class CommercialWorkflowDispatcher {
     private clock: () => Date = () => new Date(),
   ) {}
   async runOnce() {
+    this.iterationHealthy = true;
     let processed = 0;
     processed += await this.family(
       "funding-expiry",
@@ -104,6 +111,7 @@ export class CommercialWorkflowDispatcher {
     return processed;
   }
   private failure(family: string, workId: string | undefined, error: unknown, message: string) {
+    this.iterationHealthy = false;
     this.diagnostics?.write({
       level: "error",
       event: "worker.workflow.failed",

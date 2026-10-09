@@ -47,6 +47,7 @@ function appWith(
   operatorWithdrawalOverrides: Record<string, unknown> = {},
   capabilityOverrides: Record<string, unknown> = {},
   accountDebtOverrides: Record<string, unknown> = {},
+  databaseOverrides: Record<string, unknown> = {},
 ) {
   const ordinaryId = "00000000-0000-4000-8000-000000000001";
   const resolvedPrincipal = principal ?? {
@@ -58,6 +59,10 @@ function appWith(
   };
   return createApiApp(
     {
+      database: {
+        query: async () => ({ rows: [{ "?column?": 1 }], rowCount: 1 }),
+        ...databaseOverrides,
+      },
       principalResolver: principalResolverOverride ?? { resolve: async () => resolvedPrincipal },
       profiles: {
         get: async () => ({
@@ -2235,7 +2240,39 @@ describe("Hono API foundation", () => {
   it("dispatches compatibility application routes through the Hono boundary", async () => {
     const response = await appWith().fetch(new Request("http://localhost/api/health"));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: "ok", service: "cliqero-main" });
+    expect(await response.json()).toEqual({
+      status: "ok",
+      service: "cliqero-main",
+      dependencies: { database: "ok" },
+    });
+  });
+  it("reports the application unhealthy when PostgreSQL cannot be reached", async () => {
+    const response = await appWith(
+      null,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        query: async () => {
+          throw new Error("database unavailable");
+        },
+      },
+    ).fetch(new Request("http://localhost/api/health"));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      status: "unavailable",
+      service: "cliqero-main",
+      dependencies: { database: "unavailable" },
+      error: "Service unavailable",
+      code: "service_unavailable",
+    });
   });
   it("returns a canonical not-found response for the removed gateway route", async () => {
     const response = await appWith().fetch(new Request("http://localhost/api/gateway"));

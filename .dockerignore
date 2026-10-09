@@ -1,9 +1,15 @@
 .git
 .next
+**/.next
 node_modules
+**/node_modules
 coverage
 *.log
 *.tsbuildinfo
+.env
+.env.*
+**/.env
+**/.env.*
+**/data/blog/*.sqlite*
 config/secrets/**/*.yaml
 !config/secrets/**/*.example.yaml
-

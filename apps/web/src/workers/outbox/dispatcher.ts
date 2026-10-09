@@ -47,6 +47,12 @@ const defaults: OutboxDispatcherOptions = {
 
 export class OutboxDispatcher {
   private readonly options: OutboxDispatcherOptions;
+  private iterationHealthy = true;
+
+  get lastIterationHealthy(): boolean {
+    return this.iterationHealthy;
+  }
+
   constructor(
     private readonly workerId: string,
     private readonly outbox: PostgresOutbox,
@@ -58,6 +64,7 @@ export class OutboxDispatcher {
   }
 
   async runOnce(): Promise<number> {
+    this.iterationHealthy = true;
     const recovered = await this.outbox.recoverAbandoned(this.options.staleAfterMilliseconds);
     if (recovered) this.logger.info({ worker_id: this.workerId, recovered }, "outbox.recovered");
     const events = await this.outbox.claim(this.workerId, this.options.batchSize);
@@ -95,6 +102,7 @@ export class OutboxDispatcher {
       await this.outbox.markPublished(event.id, this.workerId);
       this.logger.info(fields, "outbox.event.published");
     } catch (error) {
+      this.iterationHealthy = false;
       const message = errorMessage(error);
       await this.outbox.markFailed(event.id, this.workerId, message);
       this.logger.error({ ...fields, error: message }, "outbox.event.failed");

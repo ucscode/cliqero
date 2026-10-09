@@ -8,7 +8,8 @@ services:
       NODE_ENV: production
       CLIQERO_DEPLOYMENT_MODE: production
       POSTGRES_USER: ${POSTGRES_USER:-}
-      APP_URL: ${APP_URL:-http://localhost:3000}
+      APP_URL: ${APP_URL:-}
+      MEDIA_ROOT: ${MEDIA_ROOT:-/var/lib/cliqero/media}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       DATABASE_URL: postgresql://${POSTGRES_APP_USER:-}:${POSTGRES_APP_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
@@ -19,6 +20,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "--import", "tsx", "apps/web/src/workers/outbox/health-check.ts"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
     volumes:
       - ../../config:/workspace/config:ro

@@ -44,7 +44,9 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
   it("continues past poison items and across every processor family", async () => {
     const events: string[] = [],
       logger = { error: vi.fn() };
-    expect(await new CommercialWorkflowDispatcher(application(events), logger).runOnce()).toBe(8);
+    const dispatcher = new CommercialWorkflowDispatcher(application(events), logger);
+    expect(await dispatcher.runOnce()).toBe(8);
+    expect(dispatcher.lastIterationHealthy).toBe(false);
     for (const family of [
       "expiry",
       "verification",
@@ -67,7 +69,9 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
       throw new Error("discovery unavailable");
     };
     const logger = { error: vi.fn() };
-    await new CommercialWorkflowDispatcher(app, logger).runOnce();
+    const dispatcher = new CommercialWorkflowDispatcher(app, logger);
+    await dispatcher.runOnce();
+    expect(dispatcher.lastIterationHealthy).toBe(false);
     expect(events).toContain("verification:verification-healthy");
     expect(events).toContain("distribution:distribution-healthy");
   });
@@ -117,6 +121,13 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
       expect(now.toISOString()).toBe("2026-09-18T10:00:00.000Z");
       return [{ id: "due-funding", providerName: "test-provider" }] as any;
     });
+    app.fundingExpiry.findWork = async () => [];
+    app.walletRepository.findFundingCreditWork = async () => [];
+    app.walletRepository.findPendingCredits = async () => [];
+    app.purchases.findCompletedWithoutEntitlement = async () => [];
+    app.purchases.findCompletedWithoutDistribution = async () => [];
+    app.treasuryProcessor.findWork = async () => [];
+    app.listingMediaDeletion.findWork = async () => [];
     app.funding.findVerificationWork = findVerificationWork;
     app.funding.findWork = vi.fn(async () => {
       throw new Error("state-only verification discovery must not be used");
@@ -126,15 +137,17 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
       return null;
     };
 
-    await new CommercialWorkflowDispatcher(
+    const dispatcher = new CommercialWorkflowDispatcher(
       app,
       { error: vi.fn() },
       undefined,
       () => new Date("2026-09-18T10:00:00.000Z"),
-    ).runOnce();
+    );
+    await dispatcher.runOnce();
 
     expect(findVerificationWork).toHaveBeenCalledOnce();
     expect(events).toContain("verification:due-funding");
+    expect(dispatcher.lastIterationHealthy).toBe(true);
   });
 
   it("does not rediscover a still-pending funding before its next eligibility time", async () => {

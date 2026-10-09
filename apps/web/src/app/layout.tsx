@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Manrope } from "next/font/google";
+import localFont from "next/font/local";
 import "./styles.css";
 import { siteConfig } from "@/config/site";
 import { loadSiteConfiguration } from "@/config/site-loader";
@@ -8,8 +8,10 @@ import { ToastProvider } from "@/components/toast/provider";
 
 const crudMaxRows = loadSiteConfiguration().crud.table.max_rows;
 
-const manrope = Manrope({
-  subsets: ["latin"],
+const manrope = localFont({
+  src: "../../data/fonts/manrope-latin-variable.woff2",
+  weight: "200 800",
+  style: "normal",
   display: "swap",
   variable: "--font-manrope",
 });

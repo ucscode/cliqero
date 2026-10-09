@@ -1,5 +1,8 @@
-FROM node:22-slim AS base
+FROM node:22-slim AS dependencies
 WORKDIR /workspace
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/blockchain/tron/package.json packages/blockchain/tron/package.json
@@ -7,12 +10,25 @@ COPY packages/payment/paystack/package.json packages/payment/paystack/package.js
 COPY packages/payment/nowpayments/package.json packages/payment/nowpayments/package.json
 RUN npm ci
 
+FROM node:22-slim AS base
+WORKDIR /workspace
+COPY package.json package-lock.json* ./
+COPY apps/web/package.json apps/web/package.json
+COPY packages/blockchain/tron/package.json packages/blockchain/tron/package.json
+COPY packages/payment/paystack/package.json packages/payment/paystack/package.json
+COPY packages/payment/nowpayments/package.json packages/payment/nowpayments/package.json
+COPY --from=dependencies /workspace/node_modules ./node_modules
+COPY --from=dependencies /workspace/apps/web/node_modules ./apps/web/node_modules
+
 FROM base AS development
 COPY . .
 EXPOSE 3000
 CMD ["npm", "run", "dev", "--workspace", "@cliqero/web", "--", "--hostname", "0.0.0.0"]
 
 FROM base AS build
+ARG APP_URL
+ENV APP_URL=${APP_URL}
+RUN test -n "$APP_URL"
 COPY . .
 RUN npm run build --workspace @cliqero/web
 

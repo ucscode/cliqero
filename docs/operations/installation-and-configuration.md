@@ -67,6 +67,27 @@ Subsequent starts can use:
 just prod
 ```
 
+### Production HTTPS reverse proxy
+
+The production Compose app port is published on host loopback by default
+(`APP_BIND_ADDRESS=127.0.0.1`) so it is not directly reachable from public
+interfaces. Terminate TLS at the host's existing reverse proxy and forward to
+`http://127.0.0.1:${APP_PORT:-3000}`. Set `APP_URL` to the exact external HTTPS
+origin (including a non-default port, with no path); the same value is baked
+into generated public site configuration and used as Better Auth's base URL.
+The proxy must preserve the external `Host` and forward the original scheme as
+`X-Forwarded-Proto: https`; configure the proxy to trust client forwarding
+headers only from its trusted proxy network. Do not expose PostgreSQL or the
+worker through the proxy. If a remote load balancer must reach the app directly,
+set `APP_BIND_ADDRESS` deliberately and restrict that interface with network
+firewall rules instead of relying on the application port as a public edge.
+
+`/api/health` checks both the HTTP application and PostgreSQL connectivity, and
+returns 503 when PostgreSQL is unavailable. The outbox worker healthcheck is
+based on a recent successful polling/processing iteration rather than only its
+process state. Compose also waits for PostgreSQL health before initial app/worker
+start.
+
 ## Environment file
 
 Copy `.env.example` to `.env` and review every value before non-local deployment. Important bootstrap values include application URL, PostgreSQL credentials/connection values, the Better Auth secret and authentication configuration, application port, and blog database path. See [Environment variables](./environment-variables.md) for the complete runtime reference, including worker, cache, logging, and testing settings that are intentionally not all placed in `.env.example`.

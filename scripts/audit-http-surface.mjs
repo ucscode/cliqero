@@ -1,7 +1,9 @@
 const base = process.env.APP_URL ?? "http://127.0.0.1:3000";
+const headers = { accept: "application/json" };
+if (process.env.OPENAPI_KEY) headers["x-openapi-key"] = process.env.OPENAPI_KEY;
 
 const response = await fetch(new URL("/api/openapi.json", base), {
-  headers: { accept: "application/json" },
+  headers,
 });
 if (!response.ok) throw new Error(`OpenAPI returned HTTP ${response.status}`);
 

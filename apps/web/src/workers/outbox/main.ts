@@ -16,6 +16,7 @@ import {
   installDevelopmentProcessDiagnostics,
 } from "@/infrastructure/development-log";
 import { verifyProductionDatabaseRole } from "@/infrastructure/postgres/runtime-security";
+import { OutboxWorkerHealth } from "./health";
 
 const workerDiagnostics = createDevelopmentDiagnosticWriter("worker.log");
 installDevelopmentProcessDiagnostics();
@@ -56,6 +57,8 @@ const commercial = new CommercialWorkflowDispatcher(container, logger, {
   write: workerDiagnostics.write,
 });
 const abortController = new AbortController();
+const workerHealth = new OutboxWorkerHealth();
+workerHealth.clear();
 for (const signal of ["SIGTERM", "SIGINT"] as const)
   process.once(signal, () => abortController.abort());
 try {
@@ -69,6 +72,8 @@ try {
         dispatcher.runOnce(),
         commercial.runOnce(),
       ]);
+      if (dispatcher.lastIterationHealthy && commercial.lastIterationHealthy)
+        workerHealth.recordSuccessfulIteration();
       return outboxCount + commercialCount;
     },
     logger,

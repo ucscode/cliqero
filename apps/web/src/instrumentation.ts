@@ -3,6 +3,12 @@ import { verifyProductionDatabaseRole } from "@/infrastructure/postgres/runtime-
 
 export async function register(): Promise<void> {
   if (process.env.NODE_ENV !== "production") return;
-  resolveBetterAuthSecret();
-  await verifyProductionDatabaseRole();
+  try {
+    resolveBetterAuthSecret();
+    await verifyProductionDatabaseRole();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown startup validation error";
+    console.error(`Cliqero production startup validation failed: ${message}`);
+    process.exit(1);
+  }
 }
