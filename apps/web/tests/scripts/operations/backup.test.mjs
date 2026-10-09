@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assertExternalDirectory,
   assertFilesystemProviderCoverage,
@@ -13,6 +13,11 @@ import {
   verifyBackupDirectory,
 } from "../../../../../scripts/operations/backup-format.mjs";
 import { archiveMedia, snapshotStores } from "../../../../../scripts/operations/backup-stores.mjs";
+import {
+  composeArgumentsForEnvironment,
+  postgresArchiveInspectionArguments,
+  resolvePostgresImage,
+} from "../../../../../scripts/operations/backup-verification.mjs";
 
 const temporaryDirectories = [];
 
@@ -36,6 +41,62 @@ describe("backup artifact safety", () => {
     expect(assertExternalDirectory(path.join(os.tmpdir(), "cliqero-backups"), process.cwd())).toBe(
       path.join(os.tmpdir(), "cliqero-backups"),
     );
+  });
+
+  it.each([
+    ["development", ["compose"]],
+    ["production", ["compose", "-p", "cliqero-prod", "-f", "compose.yaml"]],
+  ])("selects the %s Compose configuration explicitly", (environment, expectedArguments) => {
+    const run = vi.fn(() =>
+      JSON.stringify({
+        services: {
+          postgres: {
+            image: "postgres:17",
+            environment: { CLIQERO_DEPLOYMENT_MODE: environment },
+          },
+        },
+      }),
+    );
+    expect(resolvePostgresImage(environment, run)).toBe("postgres:17");
+    expect(run).toHaveBeenCalledWith(
+      "docker",
+      [...expectedArguments, "config", "--format", "json"],
+      { capture: true },
+    );
+  });
+
+  it("inspects PostgreSQL archives without Compose services or database volumes", () => {
+    expect(postgresArchiveInspectionArguments("/backups/bundle", "postgres:17")).toEqual([
+      "run",
+      "--rm",
+      "--network",
+      "none",
+      "-v",
+      "/backups/bundle:/verify:ro",
+      "--entrypoint",
+      "pg_restore",
+      "postgres:17",
+      "--list",
+      "/verify/postgres.dump",
+    ]);
+  });
+
+  it("rejects an unknown environment or mismatched Compose mode", () => {
+    expect(() => composeArgumentsForEnvironment("staging")).toThrow(
+      "must be development or production",
+    );
+    expect(() =>
+      resolvePostgresImage("production", () =>
+        JSON.stringify({
+          services: {
+            postgres: {
+              image: "postgres:17",
+              environment: { CLIQERO_DEPLOYMENT_MODE: "development" },
+            },
+          },
+        }),
+      ),
+    ).toThrow("does not match the verification environment");
   });
 
   it("accepts only known filesystem-backed persisted object providers", () => {

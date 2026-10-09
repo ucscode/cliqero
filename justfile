@@ -223,5 +223,5 @@ backup-prod output="../cliqero-backups" confirm="" production_confirm="":
 	node scripts/operations/backup.mjs --production --output {{quote(output)}} --confirm-quiescence {{quote(confirm)}} --confirm-production {{quote(production_confirm)}}
 
 # Verify manifest hashes, the SQLite database, media archive, and PostgreSQL dump.
-backup-verify directory:
-	node scripts/operations/verify-backup.mjs {{quote(directory)}}
+backup-verify directory environment="development":
+	node scripts/operations/verify-backup.mjs {{quote(directory)}} --environment {{quote(environment)}}

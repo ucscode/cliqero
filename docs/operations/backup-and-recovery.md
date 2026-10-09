@@ -54,6 +54,8 @@ just backup confirm='NO OTHER WRITERS'
 just backup output=/secure/off-host/cliqero confirm='NO OTHER WRITERS'
 
 just backup-verify /secure/off-host/cliqero/cliqero-<UTC timestamp>
+# Production artifacts use only the base Compose configuration:
+just backup-verify /secure/off-host/cliqero/cliqero-<UTC timestamp> production
 ```
 
 The recipe creates a private staging directory and publishes a timestamped
@@ -67,6 +69,14 @@ postgres.dump       PostgreSQL custom-format database dump
 blog.sqlite         standalone consistent SQLite snapshot
 media.tar.gz        filesystem media archive
 ```
+
+Verification resolves the PostgreSQL utility image from the explicitly chosen
+Compose configuration but inspects the archive with an isolated `docker run`
+container (`--network none`) mounting only the backup directory read-only. It
+does not run `docker compose run`, mount the database volume, or start the
+application/database services. Development is the default for compatibility
+with existing commands; pass `production` as the recipe's environment argument for production bundles,
+which reads only root `compose.yaml` and excludes all development overrides.
 
 There is no success manifest in a partial bundle. Failed staging data is
 removed, and the command exits unsuccessfully. Verification checks each
@@ -94,10 +104,13 @@ run development reset recipes as production recovery.
    intended release:
 
    ```bash
-   just backup-verify /secure/off-host/cliqero/cliqero-<UTC timestamp>
+   just backup-verify /secure/off-host/cliqero/cliqero-<UTC timestamp> production
    ```
 
-2. Restore the PostgreSQL archive to a **new, non-existing** database. Use the
+2. Restore the PostgreSQL archive to a **new, non-existing** database. The
+   following commands show the development Compose invocation; for production,
+   add `-p cliqero-prod -f compose.yaml` to both `docker compose` commands so
+   the development override is never loaded. Use the
    cluster's bootstrap/schema-owner connection only for this controlled
    provisioning; keep its password in the normal secret mechanism, not shell
    history. Substitute the selected database name in the commands, and check
