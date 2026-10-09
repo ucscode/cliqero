@@ -212,3 +212,16 @@ dev-compose-config:
 # Validate compose.yaml without the development override
 prod-compose-config:
 	docker compose -p cliqero-prod -f compose.yaml config
+
+# Back up PostgreSQL, Blog SQLite, and filesystem media after stopping known writers.
+# Supply the exact quiescence confirmation and store artifacts outside this checkout.
+backup output="../cliqero-backups" confirm="":
+	node scripts/operations/backup.mjs --output {{quote(output)}} --confirm-quiescence {{quote(confirm)}}
+
+# Production backup is deliberately explicit and is never used by development validation.
+backup-prod output="../cliqero-backups" confirm="" production_confirm="":
+	node scripts/operations/backup.mjs --production --output {{quote(output)}} --confirm-quiescence {{quote(confirm)}} --confirm-production {{quote(production_confirm)}}
+
+# Verify manifest hashes, the SQLite database, media archive, and PostgreSQL dump.
+backup-verify directory:
+	node scripts/operations/verify-backup.mjs {{quote(directory)}}
