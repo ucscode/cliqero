@@ -70,17 +70,9 @@ describe("canonical withdrawal schema", () => {
     expect(schema).not.toMatch(/INSERT INTO withdrawal_capability\.payout_initiations/i);
   });
 
-  it("provides a versioned additive upgrade for installations on the prior 001 baseline", () => {
-    const migration = readFileSync(
-      resolve(process.cwd(), "../../database/migrations/002_withdrawal_payout_initiation.sql"),
-      "utf8",
-    );
-    expect(migration).toContain("BEGIN;");
-    expect(migration).toContain(
-      "CREATE TABLE IF NOT EXISTS withdrawal_capability.payout_initiations",
-    );
-    expect(migration).toContain("CREATE TABLE IF NOT EXISTS withdrawal_capability.payout_failures");
-    expect(migration).toContain("COMMIT;");
-    expect(migration).not.toMatch(/INSERT INTO withdrawal_capability\.payout_initiations/i);
+  it("keeps 001 as the sole application schema bootstrap", () => {
+    expect(schema).toContain("CREATE TABLE withdrawal_capability.payout_initiations");
+    expect(schema).toContain("CREATE TABLE withdrawal_capability.payout_failures");
+    expect(schema).not.toMatch(/INSERT INTO withdrawal_capability\.payout_initiations/i);
   });
 });

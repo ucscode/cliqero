@@ -161,11 +161,6 @@ function resetLocalTestDatabase(configuration) {
   ]);
   const baseline = readFileSync(resolve(root, "database/migrations/001_initial_schema.sql"));
   runPsql(settings, testDatabase, ["-f", "-"], { input: baseline });
-  const payoutMigration = readFileSync(
-    resolve(root, "database/migrations/002_withdrawal_payout_initiation.sql"),
-  );
-  runPsql(settings, testDatabase, ["-f", "-"], { input: payoutMigration });
-  runPsql(settings, testDatabase, ["-f", "-"], { input: payoutMigration });
   return settings;
 }
 

@@ -31,7 +31,7 @@ just dev-seed-blog
 just dev-seed
 ```
 
-The catalogue seed creates 16 listings (published, draft, archived, varied
+The catalogue seed creates 29 listings (published, draft, archived, varied
 lengths/prices/media metadata). The blog seed creates 20 SQLite posts (19
 published, one draft) across categories and tags. Seeds refuse production
 mode, are not run by `just dev`, and update deterministic fixture slugs/keys.

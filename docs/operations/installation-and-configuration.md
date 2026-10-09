@@ -92,32 +92,14 @@ or assume the bootstrap role. Append-only triggers reject runtime update/delete
 even if a caller sets `cliqero.root_delete`; only the table owner may use that
 maintenance escape hatch.
 
-For an existing production database, take the deployment's normal verified
-backup first. Apply the reviewed additive migration as the bootstrap identity
-before deploying the application version that uses payout evidence:
-
-```bash
-docker compose -p cliqero-prod -f compose.yaml exec -T postgres \\
-  bash -ec 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /opt/cliqero/migrations/002_withdrawal_payout_initiation.sql'
-```
-
-Then explicitly rerun the mounted runtime-role provisioning and trigger-hardening
-scripts as the bootstrap identity so the restricted role receives access to the
-new tables:
-
-```bash
-docker compose -p cliqero-prod -f compose.yaml exec -T postgres \\
-  bash -ec 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /opt/cliqero/roles/provision-runtime-role.sql && psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /opt/cliqero/roles/harden-runtime-triggers.sql'
-```
-
-The script creates the runtime role if absent, tightens its privilege flags,
-adds the grants/default grants, and applies the root-delete trigger guard. It
-does not reset tables, alter financial rows, or change an existing role's
-password. Configure `POSTGRES_APP_PASSWORD` to match the existing login; if
-that password must be replaced, treat rotation as a separate approved
-credential operation. Restart the app/worker only after the restricted login
-has been verified. Never run this production procedure against the local
-development database without explicit approval.
+The runtime-role provisioning script creates the runtime role if absent,
+tightens its privilege flags, adds grants/default grants, and applies the
+root-delete trigger guard. It does not reset tables, alter financial rows, or
+change an existing role's password. Configure `POSTGRES_APP_PASSWORD` to match
+the existing login; if that password must be replaced, treat rotation as a
+separate approved credential operation. Restart the app/worker only after the
+restricted login has been verified. Never run production provisioning against
+the local development database without explicit approval.
 
 The Docker blog database path is `/workspace/data/blog/blog.sqlite` and is persisted through the `blog-data` named volume.
 
@@ -280,21 +262,20 @@ and confirmed-failure evidence. Blog content has its own independent SQLite
 migration under the web application and is never part of this PostgreSQL
 bootstrap.
 
-Persistent installations must use additive, versioned PostgreSQL migrations
-when a schema change must preserve existing data. For example,
-`database/migrations/002_withdrawal_payout_initiation.sql` adds the payout
-evidence tables for databases created from the earlier 001 baseline. Back up
-the database, review the migration, and apply it as the schema-owner/bootstrap
-identity before deploying code that reads or writes those tables. The migration
-does not synthesize initiation evidence for historical withdrawals; those
-records remain explicitly unknown until authoritative external evidence is
-available. Do not infer initiation from approval or completion timestamps.
+During active development, `database/migrations/001_initial_schema.sql` is the
+only PostgreSQL application-schema definition. Destructive local reset is
+supported, so schema changes are consolidated into this canonical baseline;
+there are no numbered incremental application migrations. The payout
+initiation/failure evidence tables are part of 001 and do not synthesize
+historical initiation evidence. Old withdrawals without that evidence remain
+unknown; do not infer initiation from approval or completion timestamps.
 
-After applying a migration that adds tables, refresh restricted runtime-role
-grants using the documented schema-owner provisioning procedure. Do not run
-privileged migration or grant changes automatically against an existing
-populated database. Fresh installations use 001 and then the normal runtime-role
-provisioning procedure; they do not need to replay 002.
+Before a persistent production database must be upgraded without data loss, the
+project must deliberately establish an additive migration history and provide
+a reviewed upgrade path for the then-current deployed schema. Until that stage,
+do not apply the destructive development reset or treat 001 as an upgrade script
+for a populated database. Role grants continue to be provisioned separately
+through `database/roles/` by the schema owner.
 
 Normal `just dev-down` / `just prod-down` stops containers without deleting
 persistent volumes. `just dev-clean` is destructive and removes all volumes
@@ -380,7 +361,7 @@ just format-check
 just build
 ```
 
-The PostgreSQL integration suite is intentionally run without file parallelism because shared integration fixtures are not safe for parallel truncation. `just test-integration` starts the existing Compose PostgreSQL service if needed, resets the separate `cliqero_test` database from `database/migrations/001_initial_schema.sql`, applies numbered additive migration scripts (including 002) twice to check idempotency, then runs the suite. It never resets the normal `cliqero` development database. Use `just test-db-reset` to prepare the disposable test database without running tests. Set `TEST_DATABASE_URL` only to override the managed local test database, such as in CI or when using an external PostgreSQL test instance.
+The PostgreSQL integration suite is intentionally run without file parallelism because shared integration fixtures are not safe for parallel truncation. `just test-integration` starts the existing Compose PostgreSQL service if needed, resets the separate `cliqero_test` database from `database/migrations/001_initial_schema.sql`, then runs the suite. It never resets the normal `cliqero` development database. Use `just test-db-reset` to prepare the disposable test database without running tests. Set `TEST_DATABASE_URL` only to override the managed local test database, such as in CI or when using an external PostgreSQL test instance.
 
 ## Useful container access
 
