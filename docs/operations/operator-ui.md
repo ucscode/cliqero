@@ -51,10 +51,15 @@ credentials/capabilities, revokes active referrals and sessions, redacts the
 profile, and detaches the hierarchy edge in one transaction. This is the
 account domain's explicit tombstone model, not a general root-delete restriction.
 
-In local Compose development, Node dependencies live in the named
-`cliqero-node-modules` and `cliqero-web-node-modules` volumes, not host
-`node_modules`. Use `just dev-deps` after synchronizing a lockfile or
-`just dev-npm-add` and `just dev-npm-remove` for dependency edits; these do not rebuild the image.
+In local Compose development, Node dependencies live in Linux-native named
+volumes, not host `node_modules`. The main app and outbox worker have separate
+dependency volumes so Docker does not concurrently copy the same populated,
+nested `node_modules` tree into a shared volume when both containers are first
+created. A fresh volume is initialized from the dependencies baked into its
+development image; ordinary starts do not reinstall packages. Use
+`just dev-deps` after synchronizing a lockfile or `just dev-npm-add` and
+`just dev-npm-remove` for dependency edits; these update both services without
+rebuilding the image.
 `just dev-build` is reserved for Dockerfile, base-image, OS-package, and image
 build-stage changes. `just dev-deps-clean` removes only dependency volumes, while
 `just dev-clean` removes every development volume, including database and

@@ -11,6 +11,12 @@ services:
     volumes:
       # Keep worker source and local configuration live during development.
       - ../..:/workspace
-      # Share explicit Linux-native dependency volumes with the main service.
-      - cliqero-node-modules:/workspace/node_modules
-      - cliqero-web-node-modules:/workspace/apps/web/node_modules
+      # Keep Linux-native dependencies service-local. Docker must not copy the
+      # same image dependency trees into shared, nested volumes concurrently
+      # when main and outbox-worker are first created together.
+      - outbox-worker-node-modules:/workspace/node_modules
+      - outbox-worker-web-node-modules:/workspace/apps/web/node_modules
+
+volumes:
+  outbox-worker-node-modules:
+  outbox-worker-web-node-modules:

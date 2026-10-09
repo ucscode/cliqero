@@ -60,18 +60,23 @@ dev-blog-reset:
 
 # Destructive: remove only the named development dependency volumes.
 dev-deps-clean:
-	docker compose stop main outbox-worker
-	@docker volume rm $$(docker volume ls -q --filter label=com.docker.compose.volume=cliqero-node-modules) $$(docker volume ls -q --filter label=com.docker.compose.volume=cliqero-web-node-modules)
+	docker compose rm --stop --force main outbox-worker
+	docker volume ls -q --filter label=com.docker.compose.project=cliqero --filter label=com.docker.compose.volume=cliqero-node-modules | xargs -r docker volume rm
+	docker volume ls -q --filter label=com.docker.compose.project=cliqero --filter label=com.docker.compose.volume=cliqero-web-node-modules | xargs -r docker volume rm
+	docker volume ls -q --filter label=com.docker.compose.project=cliqero --filter label=com.docker.compose.volume=outbox-worker-node-modules | xargs -r docker volume rm
+	docker volume ls -q --filter label=com.docker.compose.project=cliqero --filter label=com.docker.compose.volume=outbox-worker-web-node-modules | xargs -r docker volume rm
 
 # Add/remove npm dependencies in the Linux development container without a build.
 dev-npm-add package workspace="@cliqero/web":
 	docker compose stop main outbox-worker
 	docker compose run --rm --no-deps main npm install {{package}} --workspace {{workspace}}
+	docker compose run --rm --no-deps outbox-worker npm ci
 	docker compose up -d --no-build main outbox-worker
 
 dev-npm-remove package workspace="@cliqero/web":
 	docker compose stop main outbox-worker
 	docker compose run --rm --no-deps main npm uninstall {{package}} --workspace {{workspace}}
+	docker compose run --rm --no-deps outbox-worker npm ci
 	docker compose up -d --no-build main outbox-worker
 
 # Follow development service logs
@@ -136,6 +141,7 @@ dev-npm *args:
 dev-deps:
 	docker compose stop main outbox-worker
 	docker compose run --rm --no-deps main npm ci
+	docker compose run --rm --no-deps outbox-worker npm ci
 	docker compose up -d --no-build main outbox-worker
 
 # Run the web application's full test command
