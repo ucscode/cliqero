@@ -57,4 +57,30 @@ describe("canonical withdrawal schema", () => {
     expect(schema).toContain("withdrawals_fee_amounts_valid CHECK");
     expect(schema).toContain("amount_minor = fee_minor + net_amount_minor");
   });
+
+  it("stores append-only initiation and evidence-backed non-delivery facts without backfilling history", () => {
+    expect(schema).toContain("CREATE TABLE withdrawal_capability.payout_initiations");
+    expect(schema).toContain("payout_initiations_withdrawal_unique UNIQUE (withdrawal_id)");
+    expect(schema).toContain("payout_initiations_idempotency_unique UNIQUE (idempotency_key)");
+    expect(schema).toContain("payout_initiations_append_only");
+    expect(schema).toContain("not evidence of provider acceptance or settlement");
+    expect(schema).toContain("CREATE TABLE withdrawal_capability.payout_failures");
+    expect(schema).toContain("payout_failures_append_only");
+    expect(schema).toContain("payout_failures_withdrawal_fk");
+    expect(schema).not.toMatch(/INSERT INTO withdrawal_capability\.payout_initiations/i);
+  });
+
+  it("provides a versioned additive upgrade for installations on the prior 001 baseline", () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), "../../database/migrations/002_withdrawal_payout_initiation.sql"),
+      "utf8",
+    );
+    expect(migration).toContain("BEGIN;");
+    expect(migration).toContain(
+      "CREATE TABLE IF NOT EXISTS withdrawal_capability.payout_initiations",
+    );
+    expect(migration).toContain("CREATE TABLE IF NOT EXISTS withdrawal_capability.payout_failures");
+    expect(migration).toContain("COMMIT;");
+    expect(migration).not.toMatch(/INSERT INTO withdrawal_capability\.payout_initiations/i);
+  });
 });

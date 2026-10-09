@@ -35,6 +35,20 @@ export const withdrawalOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     scope: "withdrawals:manage",
   },
   {
+    path: "/api/withdrawals/{withdrawalId}/payout-initiation",
+    method: "post",
+    mode: "account",
+    capability: "withdrawals.manage",
+    scope: "withdrawals:manage",
+  },
+  {
+    path: "/api/withdrawals/{withdrawalId}/payout-failure",
+    method: "post",
+    mode: "account",
+    capability: "withdrawals.manage",
+    scope: "withdrawals:manage",
+  },
+  {
     path: "/api/withdrawals/{withdrawalId}/payout-return",
     method: "post",
     mode: "account",

@@ -80,6 +80,36 @@ export type OperatorWithdrawal = {
   completionNote: string | null;
   completedBy: string | null;
   completedAt: string | null;
+  payoutReturn: {
+    id: string;
+    amountMinor: string;
+    restoredMinor: string;
+    reason: string;
+    externalReference: string;
+    actorId: string;
+    correlationId: string;
+    idempotencyKey: string;
+    createdAt: string;
+  } | null;
+  payoutInitiation: {
+    id: string;
+    actorId: string;
+    actorUsername: string;
+    correlationId: string;
+    idempotencyKey: string;
+    externalReference: string | null;
+    createdAt: string;
+  } | null;
+  payoutFailure: {
+    id: string;
+    actorId: string;
+    actorUsername: string;
+    correlationId: string;
+    idempotencyKey: string;
+    externalReference: string;
+    reason: string;
+    createdAt: string;
+  } | null;
   attention: OperatorWithdrawalAttention;
 };
 export type OperatorWithdrawalPage = { items: OperatorWithdrawal[]; nextCursor: string | null };

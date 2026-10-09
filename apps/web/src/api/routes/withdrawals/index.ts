@@ -15,6 +15,10 @@ import {
   operatorWithdrawalPatchSchema,
   operatorPayoutReturnRequestSchema,
   operatorPayoutReturnResponseSchema,
+  operatorPayoutInitiationRequestSchema,
+  operatorPayoutInitiationResponseSchema,
+  operatorPayoutFailureRequestSchema,
+  operatorPayoutFailureResponseSchema,
   withdrawalCollectionSchema,
   withdrawalResourceSchema,
   operatorWithdrawalStateSchema,
@@ -268,6 +272,14 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           description: "Withdrawal management permission required",
           content: { "application/json": { schema: errorSchema } },
         },
+        404: {
+          description: "Withdrawal not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Withdrawal cannot be updated in its current state or violates debt policy",
+          content: { "application/json": { schema: errorSchema } },
+        },
       },
     }),
     async (c) => {
@@ -328,6 +340,10 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
     createRoute({
       method: "post",
       path: "/api/withdrawals/{withdrawalId}/complete",
+      tags: ["Withdrawals"],
+      summary: "Record confirmed payout completion",
+      description:
+        "Finalizes an approved withdrawal only after durable payout-initiation evidence exists and an Operator has authoritative confirmation of delivery. Completion settles the existing reservation; it does not initiate a payout.",
       request: {
         ...withdrawalParam,
         body: {
@@ -345,6 +361,14 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
         },
         403: {
           description: "Withdrawal management permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Withdrawal not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Payout initiation is missing or withdrawal is not approved",
           content: { "application/json": { schema: errorSchema } },
         },
       },
@@ -365,6 +389,169 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           },
         );
         return c.json(withdrawalMutationResponseSchema.parse(jsonSafe(result)), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/withdrawals/{withdrawalId}/payout-initiation",
+      tags: ["Withdrawals"],
+      summary: "Record external payout initiation",
+      description:
+        "Records an Operator's attestation that they are starting the approved payout workflow before submitting the instruction outside Cliqero. The account debt check runs before this step. This is not proof of provider acceptance or settlement; the reservation remains held until an external outcome is reconciled.",
+      request: {
+        params: withdrawalParam.params,
+        headers: z.object({ "idempotency-key": z.string().trim().min(1).max(200) }),
+        body: {
+          content: {
+            "application/json": {
+              schema: operatorPayoutInitiationRequestSchema,
+              examples: {
+                manualSubmission: {
+                  summary: "Operator submitted payout instruction",
+                  value: { external_reference: "BANK-INSTRUCTION-58204" },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "External initiation evidence persisted or idempotently replayed",
+          content: {
+            "application/json": {
+              schema: operatorPayoutInitiationResponseSchema,
+              examples: {
+                initiated: {
+                  summary: "Awaiting external payout outcome",
+                  value: {
+                    initiation: {
+                      id: "f2f44789-287a-4bfe-a75f-894aa25322fc",
+                      withdrawalId: "1d21c4d2-a19b-40d4-978d-f4834906a5ed",
+                      actorId: "fc1c4616-29cb-4bdb-bf12-ff86d5e740ab",
+                      correlationId: "a11bff5a-636f-42c5-8cf0-6bc0789d7475",
+                      idempotencyKey: "withdrawal-initiation-2048",
+                      externalReference: "BANK-INSTRUCTION-58204",
+                      createdAt: "2026-10-09T12:00:00.000Z",
+                    },
+                    changed: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Withdrawal management permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Withdrawal not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Debt, prior initiation, invalid withdrawal state, or idempotency conflict",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
+      if (denied) return denied;
+      try {
+        const body = c.req.valid("json");
+        const result = await container.withdrawals.initiatePayout(
+          p.accountId,
+          c.req.valid("param").withdrawalId,
+          {
+            idempotencyKey: c.req.valid("header")["idempotency-key"],
+            externalReference: body.external_reference ?? undefined,
+          },
+        );
+        return c.json(operatorPayoutInitiationResponseSchema.parse(jsonSafe(result)), 200);
+      } catch (error) {
+        return domainError(c, error);
+      }
+    },
+  );
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/withdrawals/{withdrawalId}/payout-failure",
+      tags: ["Withdrawals"],
+      summary: "Reconcile a failed external payout",
+      description:
+        "Records an Operator's evidence-backed confirmation that an initiated external payout was not delivered. The reservation is released and the request fee reversed atomically; an uncertain outcome must not be recorded as failed.",
+      request: {
+        params: withdrawalParam.params,
+        headers: z.object({ "idempotency-key": z.string().trim().min(1).max(200) }),
+        body: {
+          content: {
+            "application/json": {
+              schema: operatorPayoutFailureRequestSchema,
+              examples: {
+                confirmedFailure: {
+                  summary: "External transfer confirmed not delivered",
+                  value: {
+                    reason: "Receiving bank confirmed the instruction was rejected before delivery",
+                    external_reference: "BANK-REJECT-58204",
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Non-delivery evidence persisted or idempotently replayed",
+          content: { "application/json": { schema: operatorPayoutFailureResponseSchema } },
+        },
+        401: {
+          description: "Authentication required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Withdrawal management permission required",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        404: {
+          description: "Withdrawal not found",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        409: {
+          description: "Initiation is absent, outcome already exists, or idempotency conflicts",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const p = requirePrincipal(c);
+      if (!(p instanceof Object) || !("accountId" in p)) return p;
+      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
+      if (denied) return denied;
+      try {
+        const body = c.req.valid("json");
+        const result = await container.withdrawals.recordPayoutFailure(
+          p.accountId,
+          c.req.valid("param").withdrawalId,
+          {
+            reason: body.reason,
+            externalReference: body.external_reference,
+            idempotencyKey: c.req.valid("header")["idempotency-key"],
+          },
+        );
+        return c.json(operatorPayoutFailureResponseSchema.parse(jsonSafe(result)), 200);
       } catch (error) {
         return domainError(c, error);
       }

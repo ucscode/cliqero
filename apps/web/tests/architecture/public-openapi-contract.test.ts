@@ -485,6 +485,24 @@ describe("public OpenAPI contract quality", () => {
       expect(resultSchema.properties.destination.properties).toHaveProperty("savedDestinationId");
       expect(resultSchema.properties).toHaveProperty("idempotencyKey");
     }
+
+    for (const [path, summary] of [
+      ["/api/withdrawals/{withdrawalId}/payout-initiation", "Record external payout initiation"],
+      ["/api/withdrawals/{withdrawalId}/payout-failure", "Reconcile a failed external payout"],
+    ]) {
+      const operation = document.paths[path]?.post as any;
+      expect(operation.tags).toEqual(["Withdrawals"]);
+      expect(operation.summary).toBe(summary);
+      expect(operation.parameters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "idempotency-key", in: "header", required: true }),
+        ]),
+      );
+      expect(operation.requestBody.content["application/json"].schema.properties).toBeDefined();
+      expect(
+        operation.responses["200"].content["application/json"].schema.properties,
+      ).toHaveProperty(path.endsWith("payout-initiation") ? "initiation" : "failure");
+    }
   });
 
   it("keeps compatibility request/response documentation aligned with runtime contracts", () => {

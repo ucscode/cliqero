@@ -16,6 +16,8 @@ export function presentOwnedWithdrawal(withdrawal: Withdrawal) {
     completed_by: null,
     completed_at: null,
     payout_return: null,
+    payout_initiation: null,
+    payout_failure: null,
     attention: null,
     payout_details: null,
   };
@@ -76,6 +78,29 @@ export function presentOperatorWithdrawal(
           correlation_id: withdrawal.payoutReturn.correlationId,
           idempotency_key: withdrawal.payoutReturn.idempotencyKey,
           created_at: withdrawal.payoutReturn.createdAt,
+        }
+      : null,
+    payout_initiation: withdrawal.payoutInitiation
+      ? {
+          id: withdrawal.payoutInitiation.id,
+          actor_id: withdrawal.payoutInitiation.actorId,
+          actor_username: withdrawal.payoutInitiation.actorUsername,
+          correlation_id: withdrawal.payoutInitiation.correlationId,
+          idempotency_key: withdrawal.payoutInitiation.idempotencyKey,
+          external_reference: withdrawal.payoutInitiation.externalReference,
+          created_at: withdrawal.payoutInitiation.createdAt,
+        }
+      : null,
+    payout_failure: withdrawal.payoutFailure
+      ? {
+          id: withdrawal.payoutFailure.id,
+          actor_id: withdrawal.payoutFailure.actorId,
+          actor_username: withdrawal.payoutFailure.actorUsername,
+          correlation_id: withdrawal.payoutFailure.correlationId,
+          idempotency_key: withdrawal.payoutFailure.idempotencyKey,
+          external_reference: withdrawal.payoutFailure.externalReference,
+          reason: withdrawal.payoutFailure.reason,
+          created_at: withdrawal.payoutFailure.createdAt,
         }
       : null,
     attention: withdrawal.attention,

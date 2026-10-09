@@ -1969,6 +1969,101 @@ describe("Hono API foundation", () => {
       ).status,
     ).toBe(400);
   });
+  it("authorizes payout initiation and confirmed-failure reconciliation with management scope", async () => {
+    const actor = {
+      accountId: "00000000-0000-4000-8000-000000000001",
+      account: {},
+      kind: "api_key" as const,
+      capabilities: ["system.root"],
+      scopes: new Set<string>(),
+    };
+    const initiationInput = { external_reference: "BANK-SUBMIT-12" };
+    const initiation = vi.fn(async (_actor: string, _id: string, input: any) => ({
+      initiation: {
+        id: "00000000-0000-4000-8000-000000000020",
+        withdrawalId: "00000000-0000-4000-8000-000000000010",
+        actorId: actor.accountId,
+        correlationId: "00000000-0000-4000-8000-000000000021",
+        idempotencyKey: input.idempotencyKey,
+        externalReference: input.externalReference ?? null,
+        createdAt: new Date("2026-10-09T12:00:00.000Z"),
+      },
+      changed: true,
+    }));
+    const failure = vi.fn(async (_actor: string, _id: string, input: any) => ({
+      failure: {
+        id: "00000000-0000-4000-8000-000000000022",
+        withdrawalId: "00000000-0000-4000-8000-000000000010",
+        actorId: actor.accountId,
+        correlationId: "00000000-0000-4000-8000-000000000023",
+        idempotencyKey: input.idempotencyKey,
+        externalReference: input.externalReference,
+        reason: input.reason,
+        createdAt: new Date("2026-10-09T12:01:00.000Z"),
+      },
+      changed: true,
+    }));
+    const base = "/api/withdrawals/00000000-0000-4000-8000-000000000010";
+    const makeRequest = (suffix: string, body: unknown) =>
+      new Request(`http://localhost${base}/${suffix}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": "payout-op-12" },
+        body: JSON.stringify(body),
+      });
+
+    expect(
+      (await appWith(actor).fetch(makeRequest("payout-initiation", initiationInput))).status,
+    ).toBe(403);
+    expect(
+      (
+        await appWith(actor).fetch(
+          makeRequest("payout-failure", {
+            reason: "Bank confirmed non-delivery",
+            external_reference: "BANK-REJECT-12",
+          }),
+        )
+      ).status,
+    ).toBe(403);
+
+    const manager = { ...actor, scopes: new Set(["withdrawals:manage"]) };
+    const initiationResponse = await appWith(
+      manager,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { initiatePayout: initiation },
+    ).fetch(makeRequest("payout-initiation", initiationInput));
+    expect(initiationResponse.status).toBe(200);
+    expect(initiation).toHaveBeenCalledWith(actor.accountId, `${base.split("/").at(-1)}`, {
+      idempotencyKey: "payout-op-12",
+      externalReference: "BANK-SUBMIT-12",
+    });
+
+    const failureResponse = await appWith(
+      manager,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { recordPayoutFailure: failure },
+    ).fetch(
+      makeRequest("payout-failure", {
+        reason: "Bank confirmed non-delivery",
+        external_reference: "BANK-REJECT-12",
+      }),
+    );
+    expect(failureResponse.status).toBe(200);
+    expect(failure).toHaveBeenCalledWith(actor.accountId, "00000000-0000-4000-8000-000000000010", {
+      reason: "Bank confirmed non-delivery",
+      externalReference: "BANK-REJECT-12",
+      idempotencyKey: "payout-op-12",
+    });
+  });
   it("exposes payout-return recovery only to the withdrawals management capability and scope", async () => {
     const actor = {
       accountId: "00000000-0000-4000-8000-000000000001",

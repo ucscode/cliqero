@@ -9,7 +9,7 @@ import {
 const source = readFileSync(
   resolve(__dirname, "../../../src/components/operator/withdrawals.tsx"),
   "utf8",
-);
+).replace(/\s+/g, " ");
 
 describe("operator manual withdrawal workflow", () => {
   it("exposes only legitimate edit fields and transitions for each withdrawal state", () => {
@@ -23,20 +23,32 @@ describe("operator manual withdrawal workflow", () => {
       amountAndDestinationLocked: true,
       stateOptions: ["approved", "rejected"],
     });
+    expect(operatorWithdrawalEditPolicy("approved", true)).toEqual({
+      editable: false,
+      amountAndDestinationLocked: true,
+      stateOptions: [],
+    });
+    expect(operatorWithdrawalDeleteAllowed("completed", true, true, true)).toBe(false);
+    expect(operatorWithdrawalDeleteAllowed("approved", true, true)).toBe(true);
     for (const state of ["completed", "rejected", "cancelled", "failed"] as const)
       expect(operatorWithdrawalEditPolicy(state)).toMatchObject({
         editable: false,
         stateOptions: [],
       });
-    expect(source).toContain("Complete payout");
+    expect(source).toContain("Record confirmed payout");
   });
-  it("records already-sent payments through the explicit completion command", () => {
-    expect(source).toContain('method: "POST"');
-    expect(source).toContain("/internal/withdrawals/${withdrawalId}/complete");
-    expect(source).toContain("external_reference: externalReference");
-    expect(source).toContain("note: completionNote");
-    expect(source).toContain("Completion records payout evidence, settles the reservation");
-    expect(source).toContain("Complete payout");
+  it("separates initiation from outcome reconciliation in the Operator detail workflow", () => {
+    expect(source).toContain("Approved, payout initiation not recorded.");
+    expect(source).toContain("Recording initiation runs the debt check and attests that you are");
+    expect(source).toContain(
+      "starting the payout workflow; it does not prove provider acceptance or settlement.",
+    );
+    expect(source).toContain("/api/withdrawals/${withdrawalId}/${operation}");
+    expect(source).toContain("Start payout workflow");
+    expect(source).toContain("Payout workflow started, awaiting authoritative external outcome.");
+    expect(source).toContain("Record confirmed payout");
+    expect(source).toContain("Record confirmed payout failure");
+    expect(source).not.toContain("/internal/withdrawals/${withdrawalId}/complete");
   });
 
   it("does not render automatic execution, retry, reconciliation, or attempt history", () => {

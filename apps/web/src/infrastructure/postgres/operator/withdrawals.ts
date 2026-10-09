@@ -43,6 +43,25 @@ export type OperatorWithdrawal = {
     idempotencyKey: string;
     createdAt: string;
   } | null;
+  payoutInitiation: {
+    id: string;
+    actorId: string;
+    actorUsername: string;
+    correlationId: string;
+    idempotencyKey: string;
+    externalReference: string | null;
+    createdAt: string;
+  } | null;
+  payoutFailure: {
+    id: string;
+    actorId: string;
+    actorUsername: string;
+    correlationId: string;
+    idempotencyKey: string;
+    externalReference: string;
+    reason: string;
+    createdAt: string;
+  } | null;
   attention: "review" | "action_required" | "none";
 };
 
@@ -90,6 +109,29 @@ function map(row: any, detail = false): OperatorWithdrawal {
           createdAt: new Date(row.payout_return_created_at).toISOString(),
         }
       : null,
+    payoutInitiation: row.payout_initiation_id
+      ? {
+          id: row.payout_initiation_id,
+          actorId: row.payout_initiation_actor_id,
+          actorUsername: row.payout_initiation_actor_username,
+          correlationId: row.payout_initiation_correlation_id,
+          idempotencyKey: row.payout_initiation_idempotency_key,
+          externalReference: row.payout_initiation_external_reference,
+          createdAt: new Date(row.payout_initiation_created_at).toISOString(),
+        }
+      : null,
+    payoutFailure: row.payout_failure_id
+      ? {
+          id: row.payout_failure_id,
+          actorId: row.payout_failure_actor_id,
+          actorUsername: row.payout_failure_actor_username,
+          correlationId: row.payout_failure_correlation_id,
+          idempotencyKey: row.payout_failure_idempotency_key,
+          externalReference: row.payout_failure_external_reference,
+          reason: row.payout_failure_reason,
+          createdAt: new Date(row.payout_failure_created_at).toISOString(),
+        }
+      : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     reservation: row.reservation_id
@@ -110,12 +152,22 @@ const projection = `
     pr.uuid payout_return_id,pr.amount_minor payout_return_amount_minor,pr.restored_minor payout_return_restored_minor,
     pr.reason payout_return_reason,pr.external_reference payout_return_external_reference,pra.uuid payout_return_actor_id,
     pr.correlation_id payout_return_correlation_id,pr.idempotency_key payout_return_idempotency_key,
-    pr.created_at payout_return_created_at
+    pr.created_at payout_return_created_at,
+    pi.uuid payout_initiation_id,pia.uuid payout_initiation_actor_id,pia.username payout_initiation_actor_username,
+    pi.correlation_id payout_initiation_correlation_id,pi.idempotency_key payout_initiation_idempotency_key,
+    pi.external_reference payout_initiation_external_reference,pi.created_at payout_initiation_created_at,
+    pf.uuid payout_failure_id,pfa.uuid payout_failure_actor_id,pfa.username payout_failure_actor_username,
+    pf.correlation_id payout_failure_correlation_id,pf.idempotency_key payout_failure_idempotency_key,
+    pf.external_reference payout_failure_external_reference,pf.reason payout_failure_reason,pf.created_at payout_failure_created_at
    from withdrawal_capability.withdrawals w
    join identity_capability.account_profiles a on a.id=w.account_id
    left join ledger_capability.withdrawal_reservations r on r.withdrawal_id=w.id
    left join withdrawal_capability.payout_returns pr on pr.withdrawal_id=w.id
    left join identity_capability.accounts pra on pra.id=pr.actor_id
+   left join withdrawal_capability.payout_initiations pi on pi.withdrawal_id=w.id
+   left join identity_capability.accounts pia on pia.id=pi.actor_id
+   left join withdrawal_capability.payout_failures pf on pf.withdrawal_id=w.id
+   left join identity_capability.accounts pfa on pfa.id=pf.actor_id
 `;
 
 export class OperatorWithdrawalService {

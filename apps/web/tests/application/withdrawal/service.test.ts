@@ -49,6 +49,34 @@ function fixture(
   const findByIdempotencyKey = vi.fn<
     (accountId: string, key: string) => Promise<WithdrawalIdempotencyMatch | null>
   >(async () => null);
+  let payoutInitiation:
+    import("@/modules/withdrawal/withdrawal").WithdrawalPayoutInitiationRecord | null = null;
+  let payoutFailure:
+    import("@/modules/withdrawal/withdrawal").WithdrawalPayoutFailureRecord | null = null;
+  const recordPayoutInitiation = vi.fn(
+    async (record: Omit<NonNullable<typeof payoutInitiation>, "createdAt">) => {
+      payoutInitiation = { ...record, createdAt: new Date("2026-02-01T00:00:00Z") };
+    },
+  );
+  const findPayoutInitiationByIdempotencyKey = vi.fn(async (key: string) =>
+    payoutInitiation?.idempotencyKey === key ? payoutInitiation : null,
+  );
+  const findPayoutInitiationByWithdrawalId = vi.fn(async (id: string) =>
+    payoutInitiation?.withdrawalId === id ? payoutInitiation : null,
+  );
+  const recordPayoutFailure = vi.fn(
+    async (record: Omit<NonNullable<typeof payoutFailure>, "createdAt">) => {
+      payoutFailure = { ...record, createdAt: new Date("2026-02-02T00:00:00Z") };
+    },
+  );
+  const findPayoutFailureByIdempotencyKey = vi.fn(async (key: string) =>
+    payoutFailure?.idempotencyKey === key ? payoutFailure : null,
+  );
+  const findPayoutFailureByWithdrawalId = vi.fn(async (id: string) =>
+    payoutFailure?.withdrawalId === id ? payoutFailure : null,
+  );
+  const update = vi.fn(async () => undefined);
+  const markPayoutFailed = vi.fn(async () => undefined);
   let payoutReturn: import("@/modules/withdrawal/withdrawal").WithdrawalPayoutReturnRecord | null =
     null;
   const recordPayoutReturn = vi.fn(
@@ -70,7 +98,7 @@ function fixture(
       listForAccount: async () => ({ items: [], nextCursor: null }),
       listForOperator: async () => [],
       create,
-      update: async () => undefined,
+      update,
       delete: async () => undefined,
       deleteForRoot: async () => undefined,
       complete,
@@ -79,6 +107,15 @@ function fixture(
       findPayoutReturnByWithdrawalId: async () => null,
       lockPayoutReturnKey: async () => undefined,
       markPayoutReturned: vi.fn(async () => undefined),
+      lockPayoutInitiationKey: vi.fn(async () => undefined),
+      findPayoutInitiationByIdempotencyKey,
+      findPayoutInitiationByWithdrawalId,
+      recordPayoutInitiation,
+      lockPayoutFailureKey: vi.fn(async () => undefined),
+      findPayoutFailureByIdempotencyKey,
+      findPayoutFailureByWithdrawalId,
+      recordPayoutFailure,
+      markPayoutFailed,
     },
     {
       getActive: async () => ({
@@ -136,6 +173,13 @@ function fixture(
     findByIdempotencyKey,
     recordPayoutReturn,
     findPayoutReturnByIdempotencyKey,
+    findPayoutInitiationByIdempotencyKey,
+    findPayoutInitiationByWithdrawalId,
+    recordPayoutInitiation,
+    findPayoutFailureByIdempotencyKey,
+    recordPayoutFailure,
+    markPayoutFailed,
+    update,
     settleInflow,
     requireNoOutstandingUnderLock,
   };
@@ -321,6 +365,7 @@ describe("WithdrawalService manual completion", () => {
       auditRecord,
     } = fixture();
 
+    await service.initiatePayout("operator-1", withdrawal.id, { idempotencyKey: "init-1" });
     const result = await service.complete("operator-1", withdrawal.id, {
       externalReference: "transfer-abc",
       note: "Sent from the bank portal",
@@ -410,6 +455,93 @@ describe("WithdrawalService manual completion", () => {
     );
     expect(complete).not.toHaveBeenCalled();
     expect(releaseOrComplete).not.toHaveBeenCalled();
+  });
+
+  it("requires initiation evidence before completion", async () => {
+    const { service, withdrawal, complete, releaseOrComplete } = fixture();
+    await expect(service.complete("operator-1", withdrawal.id)).rejects.toMatchObject({
+      code: "payout_not_initiated",
+    });
+    expect(complete).not.toHaveBeenCalled();
+    expect(releaseOrComplete).not.toHaveBeenCalled();
+  });
+
+  it("blocks initiation under debt while preserving approval and reservation", async () => {
+    const {
+      service,
+      withdrawal,
+      requireNoOutstandingUnderLock,
+      recordPayoutInitiation,
+      releaseOrComplete,
+    } = fixture();
+    requireNoOutstandingUnderLock.mockRejectedValue(
+      Object.assign(new Error("Outstanding debt blocks withdrawal."), {
+        code: "account_debt_blocks_operation",
+      }),
+    );
+    await expect(
+      service.initiatePayout("operator-1", withdrawal.id, { idempotencyKey: "payout-init-1" }),
+    ).rejects.toMatchObject({ code: "account_debt_blocks_operation" });
+    expect(recordPayoutInitiation).not.toHaveBeenCalled();
+    expect(releaseOrComplete).not.toHaveBeenCalled();
+    expect(withdrawal.state).toBe("approved");
+    expect(requireNoOutstandingUnderLock).toHaveBeenCalledWith("account-1", "withdrawal");
+  });
+
+  it("records authorized initiation idempotently and blocks a second key", async () => {
+    const { service, withdrawal, recordPayoutInitiation, findPayoutInitiationByIdempotencyKey } =
+      fixture();
+    const input = { idempotencyKey: "init-key", externalReference: "bank-batch-4" };
+    const first = await service.initiatePayout("operator-1", withdrawal.id, input);
+    const replay = await service.initiatePayout("operator-1", withdrawal.id, input);
+    expect(first.changed).toBe(true);
+    expect(replay).toMatchObject({ changed: false, initiation: first.initiation });
+    expect(recordPayoutInitiation).toHaveBeenCalledTimes(1);
+    await expect(
+      service.initiatePayout("operator-1", withdrawal.id, {
+        idempotencyKey: "another-key",
+        externalReference: "bank-batch-4",
+      }),
+    ).rejects.toMatchObject({ code: "payout_already_initiated" });
+    await expect(
+      service.initiatePayout("operator-1", withdrawal.id, {
+        idempotencyKey: "init-key",
+        externalReference: "different-intent",
+      }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict" });
+    expect(findPayoutInitiationByIdempotencyKey).toHaveBeenCalled();
+  });
+
+  it("records authoritative non-delivery once and releases the reservation atomically", async () => {
+    const { service, withdrawal, recordPayoutFailure, markPayoutFailed, releaseOrComplete } =
+      fixture();
+    await service.initiatePayout("operator-1", withdrawal.id, { idempotencyKey: "init-fail" });
+    const input = {
+      reason: "Bank confirmed rejected before delivery",
+      externalReference: "bank-reject-4",
+      idempotencyKey: "failure-4",
+    };
+    const result = await service.recordPayoutFailure("operator-1", withdrawal.id, input);
+    const retry = await service.recordPayoutFailure("operator-1", withdrawal.id, input);
+    expect(result.changed).toBe(true);
+    expect(retry).toMatchObject({ changed: false, failure: result.failure });
+    expect(recordPayoutFailure).toHaveBeenCalledTimes(1);
+    expect(markPayoutFailed).toHaveBeenCalledWith(withdrawal.id, input.reason);
+    expect(releaseOrComplete).toHaveBeenCalledTimes(1);
+    expect(releaseOrComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "released", withdrawalId: withdrawal.id }),
+    );
+  });
+
+  it("requires withdrawal management authorization for initiation and completion", async () => {
+    const { service, withdrawal, requireCapability, recordPayoutInitiation } = fixture();
+    requireCapability.mockRejectedValueOnce(new Error("Forbidden"));
+    await expect(
+      service.initiatePayout("customer-1", withdrawal.id, { idempotencyKey: "no-access" }),
+    ).rejects.toThrow("Forbidden");
+    expect(recordPayoutInitiation).not.toHaveBeenCalled();
+    requireCapability.mockRejectedValueOnce(new Error("Forbidden"));
+    await expect(service.complete("customer-1", withdrawal.id)).rejects.toThrow("Forbidden");
   });
 
   it("allows an approved withdrawal to be rejected without execution-provider state", async () => {

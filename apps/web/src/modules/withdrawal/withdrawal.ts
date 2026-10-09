@@ -47,9 +47,30 @@ export interface Withdrawal {
   completionNote?: string | null;
   completedBy?: string | null;
   completedAt?: Date | null;
+  payoutInitiation?: WithdrawalPayoutInitiationRecord | null;
+  payoutFailure?: WithdrawalPayoutFailureRecord | null;
   createdAt: Date;
   updatedAt: Date;
 }
+export type WithdrawalPayoutInitiationRecord = {
+  id: string;
+  withdrawalId: string;
+  actorId: string;
+  correlationId: string;
+  idempotencyKey: string;
+  externalReference: string | null;
+  createdAt: Date;
+};
+export type WithdrawalPayoutFailureRecord = {
+  id: string;
+  withdrawalId: string;
+  actorId: string;
+  correlationId: string;
+  idempotencyKey: string;
+  externalReference: string;
+  reason: string;
+  createdAt: Date;
+};
 export type WithdrawalPayoutReturnRecord = {
   id: string;
   withdrawalId: string;
@@ -125,6 +146,27 @@ export abstract class WithdrawalRepository extends CrudRepository<
   abstract findPayoutReturnByWithdrawalId(id: string): Promise<WithdrawalPayoutReturnRecord | null>;
   abstract lockPayoutReturnKey(key: string): Promise<void>;
   abstract markPayoutReturned(id: string, reason: string): Promise<void>;
+  abstract lockPayoutInitiationKey(key: string): Promise<void>;
+  abstract findPayoutInitiationByIdempotencyKey(
+    key: string,
+  ): Promise<WithdrawalPayoutInitiationRecord | null>;
+  abstract findPayoutInitiationByWithdrawalId(
+    id: string,
+  ): Promise<WithdrawalPayoutInitiationRecord | null>;
+  abstract recordPayoutInitiation(
+    input: Omit<WithdrawalPayoutInitiationRecord, "createdAt">,
+  ): Promise<void>;
+  abstract lockPayoutFailureKey(key: string): Promise<void>;
+  abstract findPayoutFailureByIdempotencyKey(
+    key: string,
+  ): Promise<WithdrawalPayoutFailureRecord | null>;
+  abstract findPayoutFailureByWithdrawalId(
+    id: string,
+  ): Promise<WithdrawalPayoutFailureRecord | null>;
+  abstract recordPayoutFailure(
+    input: Omit<WithdrawalPayoutFailureRecord, "createdAt">,
+  ): Promise<void>;
+  abstract markPayoutFailed(id: string, reason: string): Promise<void>;
 }
 
 export interface WithdrawalDestinationRepository {

@@ -27,6 +27,40 @@ export const operatorPayoutReturnRequestSchema = z
     external_reference: z.string().trim().min(1).max(200),
   })
   .strict();
+export const operatorPayoutInitiationRequestSchema = z
+  .object({ external_reference: z.string().trim().max(200).nullable().optional() })
+  .strict();
+export const operatorPayoutInitiationResponseSchema = z.object({
+  initiation: z.object({
+    id: z.string().uuid(),
+    withdrawalId: z.string().uuid(),
+    actorId: z.string().uuid(),
+    correlationId: z.string().uuid(),
+    idempotencyKey: z.string(),
+    externalReference: z.string().nullable(),
+    createdAt: z.string(),
+  }),
+  changed: z.boolean(),
+});
+export const operatorPayoutFailureRequestSchema = z
+  .object({
+    reason: z.string().trim().min(3).max(1000),
+    external_reference: z.string().trim().min(1).max(200),
+  })
+  .strict();
+export const operatorPayoutFailureResponseSchema = z.object({
+  failure: z.object({
+    id: z.string().uuid(),
+    withdrawalId: z.string().uuid(),
+    actorId: z.string().uuid(),
+    correlationId: z.string().uuid(),
+    idempotencyKey: z.string(),
+    externalReference: z.string(),
+    reason: z.string(),
+    createdAt: z.string(),
+  }),
+  changed: z.boolean(),
+});
 export const operatorPayoutReturnResponseSchema = z.object({
   payoutReturn: z.object({
     id: z.string().uuid(),
@@ -72,6 +106,29 @@ export const operatorWithdrawalSchema = z.object({
       actorId: z.string().uuid(),
       correlationId: z.string().uuid(),
       idempotencyKey: z.string(),
+      createdAt: z.string(),
+    })
+    .nullable(),
+  payoutInitiation: z
+    .object({
+      id: z.string().uuid(),
+      actorId: z.string().uuid(),
+      actorUsername: z.string(),
+      correlationId: z.string().uuid(),
+      idempotencyKey: z.string(),
+      externalReference: z.string().nullable(),
+      createdAt: z.string(),
+    })
+    .nullable(),
+  payoutFailure: z
+    .object({
+      id: z.string().uuid(),
+      actorId: z.string().uuid(),
+      actorUsername: z.string(),
+      correlationId: z.string().uuid(),
+      idempotencyKey: z.string(),
+      externalReference: z.string(),
+      reason: z.string(),
       createdAt: z.string(),
     })
     .nullable(),
@@ -131,6 +188,29 @@ export const withdrawalResourceSchema = withdrawalResponseSchema.extend({
       actor_id: z.string().uuid(),
       correlation_id: z.string().uuid(),
       idempotency_key: z.string(),
+      created_at: z.string(),
+    })
+    .nullable(),
+  payout_initiation: z
+    .object({
+      id: z.string().uuid(),
+      actor_id: z.string().uuid(),
+      actor_username: z.string(),
+      correlation_id: z.string().uuid(),
+      idempotency_key: z.string(),
+      external_reference: z.string().nullable(),
+      created_at: z.string(),
+    })
+    .nullable(),
+  payout_failure: z
+    .object({
+      id: z.string().uuid(),
+      actor_id: z.string().uuid(),
+      actor_username: z.string(),
+      correlation_id: z.string().uuid(),
+      idempotency_key: z.string(),
+      external_reference: z.string(),
+      reason: z.string(),
       created_at: z.string(),
     })
     .nullable(),

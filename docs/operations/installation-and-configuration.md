@@ -93,8 +93,17 @@ even if a caller sets `cliqero.root_delete`; only the table owner may use that
 maintenance escape hatch.
 
 For an existing production database, take the deployment's normal verified
-backup first, then run the mounted provisioning script explicitly as the
-bootstrap identity:
+backup first. Apply the reviewed additive migration as the bootstrap identity
+before deploying the application version that uses payout evidence:
+
+```bash
+docker compose -p cliqero-prod -f compose.yaml exec -T postgres \\
+  bash -ec 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /opt/cliqero/migrations/002_withdrawal_payout_initiation.sql'
+```
+
+Then explicitly rerun the mounted runtime-role provisioning and trigger-hardening
+scripts as the bootstrap identity so the restricted role receives access to the
+new tables:
 
 ```bash
 docker compose -p cliqero-prod -f compose.yaml exec -T postgres \\
@@ -264,18 +273,28 @@ PostgreSQL stores the commercial/accounting/identity domain. The blog uses a sep
 
 ## PostgreSQL initialization
 
-An empty PostgreSQL volume is initialized directly from the single canonical
-`database/migrations/001_initial_schema.sql` file mounted by Compose. The
-development database is intentionally resettable before launch; recreating the
-PostgreSQL volume applies this baseline without replaying historical migration
-steps. Blog content has its own independent SQLite migration under the web
-application and is never part of this PostgreSQL bootstrap.
+An empty PostgreSQL volume is initialized from the canonical
+`database/migrations/001_initial_schema.sql` baseline mounted by Compose. This
+baseline includes the current schema, including append-only payout initiation
+and confirmed-failure evidence. Blog content has its own independent SQLite
+migration under the web application and is never part of this PostgreSQL
+bootstrap.
 
-During active development, while destructive database reset is acceptable,
-schema changes must be folded into `database/migrations/001_initial_schema.sql`.
-Do not add numbered incremental migrations. Start preserving incremental
-migration history only when the project reaches a stage where existing deployed
-database state must be upgraded non-destructively.
+Persistent installations must use additive, versioned PostgreSQL migrations
+when a schema change must preserve existing data. For example,
+`database/migrations/002_withdrawal_payout_initiation.sql` adds the payout
+evidence tables for databases created from the earlier 001 baseline. Back up
+the database, review the migration, and apply it as the schema-owner/bootstrap
+identity before deploying code that reads or writes those tables. The migration
+does not synthesize initiation evidence for historical withdrawals; those
+records remain explicitly unknown until authoritative external evidence is
+available. Do not infer initiation from approval or completion timestamps.
+
+After applying a migration that adds tables, refresh restricted runtime-role
+grants using the documented schema-owner provisioning procedure. Do not run
+privileged migration or grant changes automatically against an existing
+populated database. Fresh installations use 001 and then the normal runtime-role
+provisioning procedure; they do not need to replay 002.
 
 Normal `just dev-down` / `just prod-down` stops containers without deleting
 persistent volumes. `just dev-clean` is destructive and removes all volumes
@@ -361,7 +380,7 @@ just format-check
 just build
 ```
 
-The PostgreSQL integration suite is intentionally run without file parallelism because shared integration fixtures are not safe for parallel truncation. `just test-integration` starts the existing Compose PostgreSQL service if needed, resets the separate `cliqero_test` database from `database/migrations/001_initial_schema.sql`, then runs the suite. It never resets the normal `cliqero` development database. Use `just test-db-reset` to prepare the disposable test database without running tests. Set `TEST_DATABASE_URL` only to override the managed local test database, such as in CI or when using an external PostgreSQL test instance.
+The PostgreSQL integration suite is intentionally run without file parallelism because shared integration fixtures are not safe for parallel truncation. `just test-integration` starts the existing Compose PostgreSQL service if needed, resets the separate `cliqero_test` database from `database/migrations/001_initial_schema.sql`, applies numbered additive migration scripts (including 002) twice to check idempotency, then runs the suite. It never resets the normal `cliqero` development database. Use `just test-db-reset` to prepare the disposable test database without running tests. Set `TEST_DATABASE_URL` only to override the managed local test database, such as in CI or when using an external PostgreSQL test instance.
 
 ## Useful container access
 

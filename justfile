@@ -146,7 +146,7 @@ test:
 test-unit:
 	APP_URL=http://localhost:3000 npm test --workspace @cliqero/web -- --exclude src/integration/**
 
-# Reset only the disposable local integration database from the canonical schema
+# Reset the disposable local integration database from the canonical schema and additive upgrades
 test-db-reset:
 	node scripts/test-database.mjs reset
 

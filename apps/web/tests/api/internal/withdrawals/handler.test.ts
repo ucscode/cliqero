@@ -25,7 +25,6 @@ function harness() {
       })),
       delete: remove,
       update: vi.fn(async (_actor: string, id: string, input: unknown) => ({ id, input })),
-      complete: vi.fn(async (_actor: string, id: string, input: unknown) => ({ id, input })),
     },
     withdrawalDestinations: { list: vi.fn() },
     operatorAccounts: { list: vi.fn() },
@@ -61,7 +60,6 @@ describe("internal Operator withdrawal routes", () => {
       state: "approved",
       reason: undefined,
     });
-    expect(container.withdrawals.complete).not.toHaveBeenCalled();
 
     for (const payload of [
       { external_reference: "ignored" },
@@ -74,24 +72,6 @@ describe("internal Operator withdrawal routes", () => {
       );
       expect(response.status).toBe(400);
     }
-    expect(container.withdrawals.complete).not.toHaveBeenCalled();
-  });
-
-  it("records completion through the explicit command with evidence metadata", async () => {
-    const { routes, container } = harness();
-    const response = await routes.complete(
-      sameOriginJson(`http://localhost/internal/withdrawals/${uuid("1")}/complete`, "POST", {
-        external_reference: "transfer-1",
-        note: "Sent from bank portal",
-      }),
-      uuid("1"),
-    );
-    expect(response.status).toBe(200);
-    expect(container.withdrawals.complete).toHaveBeenCalledWith(accountId, uuid("1"), {
-      externalReference: "transfer-1",
-      note: "Sent from bank portal",
-    });
-    expect(container.withdrawals.update).not.toHaveBeenCalled();
   });
 
   it("creates requested/approved/rejected records through ordinary create semantics without a follow-up read", async () => {

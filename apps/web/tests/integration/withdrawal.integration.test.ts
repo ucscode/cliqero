@@ -74,6 +74,16 @@ suite("withdrawal lifecycle", () => {
     });
     return { seller, buyer, destinationId: savedDestination.id, purchaseId: checkout.purchaseId! };
   }
+  async function recordInitiation(
+    withdrawalId: string,
+    actorId: string,
+    idempotencyKey = `payout-init-${newId()}`,
+  ) {
+    return app.withdrawals.initiatePayout(actorId, withdrawalId, {
+      idempotencyKey,
+      externalReference: `test-instruction-${newId()}`,
+    });
+  }
 
   it("does not treat an active withdrawal reservation as recoverable Earnings", async () => {
     const { seller, destinationId, purchaseId } = await setup();
@@ -165,6 +175,248 @@ suite("withdrawal lifecycle", () => {
     expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(5_000n);
   });
 
+  it("blocks payout initiation when debt exists and preserves the approved reservation", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 2_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await app.accountDebt.increase({
+      accountId: seller.id,
+      amountMinor: 100n,
+      wallet: "account",
+      sourceKind: "payout-initiation-test",
+      sourceId: withdrawal.id,
+      reason: "Debt before external submission",
+      actor: { kind: "system", id: "withdrawal-integration" },
+      correlationId: newId(),
+      idempotencyKey: newId(),
+    });
+
+    await expect(recordInitiation(withdrawal.id, seller.id)).rejects.toMatchObject({
+      code: "account_debt_blocks_operation",
+    });
+    expect(await app.withdrawalRepository.findById(withdrawal.id)).toMatchObject({
+      state: "approved",
+      payoutInitiation: null,
+    });
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(2_000n);
+  });
+
+  it("keeps initiation idempotent and rejects unauthorized or conflicting retries", async () => {
+    const { seller, buyer, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 2_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await expect(app.withdrawals.complete(buyer.id, withdrawal.id)).rejects.toMatchObject({
+      status: 403,
+    });
+    await expect(
+      app.withdrawals.initiatePayout(buyer.id, withdrawal.id, { idempotencyKey: newId() }),
+    ).rejects.toMatchObject({ status: 403 });
+
+    const key = `init-idempotent-${newId()}`;
+    const input = { idempotencyKey: key, externalReference: "BANK-SUBMIT-IDEMPOTENT" };
+    const first = await app.withdrawals.initiatePayout(seller.id, withdrawal.id, input);
+    const replay = await app.withdrawals.initiatePayout(seller.id, withdrawal.id, input);
+    expect(first.changed).toBe(true);
+    expect(replay).toMatchObject({ changed: false, initiation: first.initiation });
+    await expect(
+      app.withdrawals.initiatePayout(seller.id, withdrawal.id, {
+        idempotencyKey: key,
+        externalReference: "DIFFERENT-INTENT",
+      }),
+    ).rejects.toMatchObject({ code: "idempotency_conflict" });
+    await expect(recordInitiation(withdrawal.id, seller.id)).rejects.toMatchObject({
+      code: "payout_already_initiated",
+    });
+    expect(
+      await app.database.query<{ count: string }>(
+        `select count(*)::text count from withdrawal_capability.payout_initiations where withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)`,
+        [withdrawal.id],
+      ),
+    ).toMatchObject({ rows: [{ count: "1" }] });
+  });
+
+  it("serializes concurrent debt creation and initiation on the shared account lock", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 2_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    const [debtResult, initiationResult] = await Promise.allSettled([
+      app.accountDebt.increase({
+        accountId: seller.id,
+        amountMinor: 100n,
+        wallet: "account",
+        sourceKind: "payout-initiation-race",
+        sourceId: withdrawal.id,
+        reason: "Concurrent debt/initiation race",
+        actor: { kind: "system", id: "withdrawal-integration" },
+        correlationId: newId(),
+        idempotencyKey: newId(),
+      }),
+      recordInitiation(withdrawal.id, seller.id),
+    ]);
+    expect(debtResult.status).toBe("fulfilled");
+    const persisted = await app.withdrawalRepository.findById(withdrawal.id);
+    if (initiationResult.status === "fulfilled") {
+      expect(persisted?.payoutInitiation).toMatchObject({ actorId: seller.id });
+      expect(persisted?.state).toBe("approved");
+      expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(2_000n);
+    } else {
+      expect(initiationResult.reason).toMatchObject({ code: "account_debt_blocks_operation" });
+      expect(persisted?.payoutInitiation).toBeNull();
+      expect(persisted?.state).toBe("approved");
+      expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(2_000n);
+    }
+  });
+
+  it("keeps an initiated reservation despite later debt and allows confirmed completion", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 2_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await recordInitiation(withdrawal.id, seller.id);
+    await app.accountDebt.increase({
+      accountId: seller.id,
+      amountMinor: 100n,
+      wallet: "account",
+      sourceKind: "post-initiation-debt",
+      sourceId: withdrawal.id,
+      reason: "Debt recorded after external submission",
+      actor: { kind: "system", id: "withdrawal-integration" },
+      correlationId: newId(),
+      idempotencyKey: newId(),
+    });
+    expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("approved");
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(2_000n);
+    await expect(
+      app.withdrawals.complete(seller.id, withdrawal.id, { externalReference: "delivery-proof" }),
+    ).resolves.toMatchObject({ state: "completed" });
+    expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("completed");
+  });
+
+  it("records payout failure once and releases/reverses only after authoritative non-delivery", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 2_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await recordInitiation(withdrawal.id, seller.id);
+    const input = {
+      reason: "Bank confirmed the transfer was rejected before delivery",
+      externalReference: `bank-reject-${newId()}`,
+      idempotencyKey: `payout-failure-${newId()}`,
+    };
+    const before = (await app.treasuryRepository.summary()).balanceMinor;
+    const first = await app.withdrawals.recordPayoutFailure(seller.id, withdrawal.id, input);
+    const replay = await app.withdrawals.recordPayoutFailure(seller.id, withdrawal.id, input);
+    expect(first.changed).toBe(true);
+    expect(replay.changed).toBe(false);
+    expect(await app.withdrawalRepository.findById(withdrawal.id)).toMatchObject({
+      state: "failed",
+      payoutInitiation: expect.objectContaining({ actorId: seller.id }),
+      payoutFailure: expect.objectContaining({
+        actorId: seller.id,
+        reason: input.reason,
+        externalReference: input.externalReference,
+      }),
+    });
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(0n);
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(
+      before - (withdrawal.fee?.minorAmount ?? 0n),
+    );
+    await expect(
+      app.withdrawals.recordPayoutFailure(seller.id, withdrawal.id, {
+        ...input,
+        idempotencyKey: `second-failure-${newId()}`,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_transition" });
+  });
+
+  it("rolls back payout failure evidence, state, reservation, and Treasury reversal together", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 2_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await recordInitiation(withdrawal.id, seller.id);
+    const treasuryBefore = (await app.treasuryRepository.summary()).balanceMinor;
+    await app.database.query(`
+      CREATE FUNCTION public.reject_test_withdrawal_payout_failure_outbox() RETURNS trigger
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.event_name = 'withdrawal.payout-failed' THEN
+          RAISE EXCEPTION 'forced payout-failure outbox failure';
+        END IF;
+        RETURN NEW;
+      END
+      $$;
+      CREATE TRIGGER reject_test_withdrawal_payout_failure_outbox
+      BEFORE INSERT ON kernel.outbox_events
+      FOR EACH ROW EXECUTE FUNCTION public.reject_test_withdrawal_payout_failure_outbox();
+    `);
+    try {
+      await expect(
+        app.withdrawals.recordPayoutFailure(seller.id, withdrawal.id, {
+          reason: "Bank confirmed non-delivery",
+          externalReference: "BANK-REJECT-ROLLBACK",
+          idempotencyKey: `failure-rollback-${newId()}`,
+        }),
+      ).rejects.toThrow("forced payout-failure outbox failure");
+    } finally {
+      await app.database.query(`
+        DROP TRIGGER reject_test_withdrawal_payout_failure_outbox ON kernel.outbox_events;
+        DROP FUNCTION public.reject_test_withdrawal_payout_failure_outbox();
+      `);
+    }
+    expect(await app.withdrawalRepository.findById(withdrawal.id)).toMatchObject({
+      state: "approved",
+      payoutFailure: null,
+      payoutInitiation: expect.any(Object),
+    });
+    const evidence = await app.database.query<{ count: string }>(
+      `select count(*)::text count from withdrawal_capability.payout_failures where withdrawal_id=(select id from withdrawal_capability.withdrawals where uuid=$1)`,
+      [withdrawal.id],
+    );
+    expect(evidence.rows[0]?.count).toBe("0");
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(2_000n);
+    expect((await app.treasuryRepository.summary()).balanceMinor).toBe(treasuryBefore);
+  });
+
   it("serializes a source correction with a competing withdrawal reservation", async () => {
     const { seller, destinationId, purchaseId } = await setup();
     const source = (await app.ledger.findEntriesByPurchaseId(purchaseId)).find(
@@ -222,6 +474,7 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await recordInitiation(withdrawal.id, seller.id);
     await app.withdrawals.complete(seller.id, withdrawal.id);
     const fundingBefore = (await app.wallet.summary(seller.id)).available.minorAmount;
     const correction = await app.earningsCorrections.create(seller.id, {
@@ -290,6 +543,7 @@ suite("withdrawal lifecycle", () => {
     });
     activeFees = enabledFees;
     await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await recordInitiation(withdrawal.id, seller.id);
     await app.withdrawals.complete(seller.id, withdrawal.id);
     expect(await app.withdrawalRepository.findById(withdrawal.id)).toMatchObject({
       fee: { minorAmount: 0n },
@@ -578,6 +832,27 @@ suite("withdrawal lifecycle", () => {
       creation_reason: "customer request",
     });
   });
+
+  it("requires initiation before completing and leaves funds reserved while outcome is unknown", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 2_000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await expect(app.withdrawals.complete(seller.id, withdrawal.id)).rejects.toMatchObject({
+      code: "payout_not_initiated",
+    });
+    expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("approved");
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(2_000n);
+    await recordInitiation(withdrawal.id, seller.id);
+    expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("approved");
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(2_000n);
+  });
   it("converges concurrent identical requests on one withdrawal", async () => {
     const { seller, destinationId } = await setup();
     const idempotencyKey = "concurrent-same-key";
@@ -652,6 +927,7 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await app.withdrawals.update(seller.id, completed.id, { state: "approved" });
+    await recordInitiation(completed.id, seller.id);
     await app.withdrawals.complete(seller.id, completed.id, {
       externalReference: "manual-transfer-001",
       note: "Paid after manual bank review",
@@ -822,22 +1098,13 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await app.withdrawals.update(seller.id, completed.id, { state: "approved" });
+    await recordInitiation(completed.id, seller.id);
     await app.withdrawals.complete(seller.id, completed.id, { externalReference: "payout-proof" });
-    await expect(app.withdrawals.delete(seller.id, completed.id)).resolves.toEqual({
-      id: completed.id,
-      deleted: true,
+    await expect(app.withdrawals.delete(seller.id, completed.id)).rejects.toMatchObject({
+      code: "withdrawal_immutable",
     });
-    expect(await app.withdrawalRepository.findById(completed.id)).toBeNull();
-    expect(
-      await app.database.query(
-        `select previous_state->>'state' state,previous_state->>'amountMinor' amount_minor,
-                new_state->>'mode' mode
-           from kernel.audit_records
-          where action='root.delete' and subject_type='withdrawal' and subject_id=$1`,
-        [completed.id],
-      ),
-    ).toMatchObject({
-      rows: [{ state: "completed", amount_minor: "1000", mode: "physical" }],
+    expect(await app.withdrawalRepository.findById(completed.id)).toMatchObject({
+      state: "completed",
     });
   });
   it("reflects reserved, released, and completed amounts in withdrawable earnings", async () => {
@@ -868,6 +1135,7 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await app.withdrawals.update(seller.id, completed.id, { state: "approved" });
+    await recordInitiation(completed.id, seller.id);
     await app.withdrawals.complete(seller.id, completed.id);
     expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initial - 1100n);
   });
@@ -910,6 +1178,7 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await recordInitiation(withdrawal.id, seller.id);
     await app.withdrawals.complete(seller.id, withdrawal.id, { externalReference: "payout-777" });
     await app.accountDebt.increase({
       accountId: seller.id,
@@ -1030,6 +1299,7 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await recordInitiation(withdrawal.id, seller.id);
     await app.withdrawals.complete(seller.id, withdrawal.id, {
       externalReference: "payout-rollback",
     });

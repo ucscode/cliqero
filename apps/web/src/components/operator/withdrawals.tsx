@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import {
   apiFetch,
   formatMinorUsd,
@@ -38,7 +38,12 @@ function minorToMajor(value: string) {
   return `${amount / 100n}.${(amount % 100n).toString().padStart(2, "0")}`;
 }
 
-export function operatorWithdrawalEditPolicy(state: OperatorWithdrawalState) {
+export function operatorWithdrawalEditPolicy(
+  state: OperatorWithdrawalState,
+  payoutInitiated = false,
+) {
+  if (state === "approved" && payoutInitiated)
+    return { editable: false, amountAndDestinationLocked: true, stateOptions: [] as const };
   if (state === "requested")
     return {
       editable: true,
@@ -58,7 +63,9 @@ export function operatorWithdrawalDeleteAllowed(
   state: OperatorWithdrawalState,
   canManage: boolean,
   canDelete: boolean,
+  payoutInitiated = false,
 ) {
+  if (payoutInitiated) return false;
   return (
     canDelete || (canManage && ["requested", "rejected", "cancelled", "failed"].includes(state))
   );
@@ -73,8 +80,6 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
   const [amount, setAmount] = useState("");
   const [state, setState] = useState<"requested" | "approved" | "rejected">("requested");
   const [reason, setReason] = useState("");
-  const [externalReference, setExternalReference] = useState("");
-  const [completionNote, setCompletionNote] = useState("");
   const [loading, setLoading] = useState(Boolean(withdrawalId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +108,9 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
             detail.state === "approved" || detail.state === "rejected" ? detail.state : "requested",
           );
           setReason(detail.reason ?? "");
-          if (!operatorWithdrawalEditPolicy(detail.state).editable)
+          if (
+            !operatorWithdrawalEditPolicy(detail.state, Boolean(detail.payoutInitiation)).editable
+          )
             throw new Error("This withdrawal has no editable fields.");
         }
       } catch (cause) {
@@ -188,24 +195,6 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
     }
   }
 
-  async function completeWithdrawal() {
-    if (!withdrawalId) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await apiFetch(`/internal/withdrawals/${withdrawalId}/complete`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ external_reference: externalReference, note: completionNote }),
-      });
-      router.push(`/operator/withdrawals/${withdrawalId}`);
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setSaving(false);
-    }
-  }
-
   if (loading) return <CrudDetail eyebrow="Withdrawal operations" title="Withdrawal" loading />;
   return (
     <CrudDetail
@@ -238,7 +227,10 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                 onChange={(event) => setAmount(event.target.value)}
                 required
                 disabled={
-                  item ? operatorWithdrawalEditPolicy(item.state).amountAndDestinationLocked : false
+                  item
+                    ? operatorWithdrawalEditPolicy(item.state, Boolean(item.payoutInitiation))
+                        .amountAndDestinationLocked
+                    : false
                 }
               />
             </label>
@@ -250,7 +242,8 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                 required
                 disabled={
                   (item
-                    ? operatorWithdrawalEditPolicy(item.state).amountAndDestinationLocked
+                    ? operatorWithdrawalEditPolicy(item.state, Boolean(item.payoutInitiation))
+                        .amountAndDestinationLocked
                     : false) || !destinations.length
                 }
               >
@@ -271,13 +264,14 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                   value={state}
                   onChange={(event) => setState(event.target.value as typeof state)}
                 >
-                  {operatorWithdrawalEditPolicy(item?.state ?? "requested").stateOptions.map(
-                    (option) => (
-                      <option key={option} value={option}>
-                        {option[0].toUpperCase() + option.slice(1)}
-                      </option>
-                    ),
-                  )}
+                  {operatorWithdrawalEditPolicy(
+                    item?.state ?? "requested",
+                    Boolean(item?.payoutInitiation),
+                  ).stateOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option[0].toUpperCase() + option.slice(1)}
+                    </option>
+                  ))}
                 </Select>
               </label>
             }
@@ -295,41 +289,6 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                 />
               </label>
             }
-            {item?.state === "approved" && (
-              <OperatorSection
-                title="Complete payout"
-                description="Completion records payout evidence, settles the reservation, and emits the completion event."
-                surface
-              >
-                <div className="grid gap-3">
-                  <label className="grid gap-1 text-sm font-medium">
-                    External reference (optional)
-                    <Input
-                      value={externalReference}
-                      onChange={(event) => setExternalReference(event.target.value)}
-                      maxLength={200}
-                    />
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium">
-                    Completion note (optional)
-                    <Textarea
-                      value={completionNote}
-                      onChange={(event) => setCompletionNote(event.target.value)}
-                      maxLength={500}
-                    />
-                  </label>
-                  <div>
-                    <Button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => void completeWithdrawal()}
-                    >
-                      Complete payout
-                    </Button>
-                  </div>
-                </div>
-              </OperatorSection>
-            )}
             <div className="flex gap-2">
               <Button
                 type="submit"
@@ -574,7 +533,7 @@ export function OperatorWithdrawalList({
       }
       actions={(item) => [
         { type: "link", label: "View", href: `/operator/withdrawals/${item.id}` },
-        ...(canDelete
+        ...(canDelete && !item.payoutInitiation
           ? [
               {
                 type: "action" as const,
@@ -596,7 +555,8 @@ export function OperatorWithdrawalList({
               },
             ]
           : []),
-        ...(canManage && operatorWithdrawalEditPolicy(item.state).editable
+        ...(canManage &&
+        operatorWithdrawalEditPolicy(item.state, Boolean(item.payoutInitiation)).editable
           ? [
               {
                 type: "link" as const,
@@ -635,6 +595,14 @@ export function OperatorWithdrawalDetail({
   const [item, setItem] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [initiationReference, setInitiationReference] = useState("");
+  const [completionReference, setCompletionReference] = useState("");
+  const [completionNote, setCompletionNote] = useState("");
+  const [failureReference, setFailureReference] = useState("");
+  const [failureReason, setFailureReason] = useState("");
+  const initiationKey = useRef<string | null>(null);
+  const failureKey = useRef<string | null>(null);
   async function load() {
     setLoading(true);
     setError(null);
@@ -651,6 +619,49 @@ export function OperatorWithdrawalDetail({
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [withdrawalId]);
+  async function submitPayoutCommand(
+    operation: "payout-initiation" | "payout-failure",
+    key: MutableRefObject<string | null>,
+    body: Record<string, string | null>,
+  ) {
+    if (!canManage) return;
+    setSaving(true);
+    setError(null);
+    key.current ??= crypto.randomUUID();
+    try {
+      await apiFetch(`/api/withdrawals/${withdrawalId}/${operation}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key.current },
+        body: JSON.stringify(body),
+      });
+      key.current = null;
+      await load();
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function completePayout() {
+    if (!canManage) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/withdrawals/${withdrawalId}/complete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          external_reference: completionReference.trim() || undefined,
+          note: completionNote.trim() || undefined,
+        }),
+      });
+      await load();
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
   if (loading && !item) return <CrudDetail eyebrow="Withdrawal fact" title="Withdrawal" loading />;
   if (!item)
     return (
@@ -671,11 +682,12 @@ export function OperatorWithdrawalDetail({
       description={item.id}
       headerActions={
         <>
-          {canManage && operatorWithdrawalEditPolicy(item.state).editable && (
-            <Button asChild>
-              <Link href={`/operator/withdrawals/${item.id}/edit`}>Edit</Link>
-            </Button>
-          )}
+          {canManage &&
+            operatorWithdrawalEditPolicy(item.state, Boolean(item.payoutInitiation)).editable && (
+              <Button asChild>
+                <Link href={`/operator/withdrawals/${item.id}/edit`}>Edit</Link>
+              </Button>
+            )}
           <OperatorStatusCell status={item.state} />
         </>
       }
@@ -730,6 +742,145 @@ export function OperatorWithdrawalDetail({
               <p>
                 Completed at: {item.completedAt ? new Date(item.completedAt).toLocaleString() : "—"}
               </p>
+            </OperatorSection>
+          )}
+          {item.state === "approved" && (
+            <OperatorSection
+              title="Payout outcome"
+              description="Approval reserves funds; it does not mean an external payout has started."
+              surface
+            >
+              {!item.payoutInitiation ? (
+                <div className="grid gap-3">
+                  <p>
+                    Approved, payout initiation not recorded. This does not establish whether an
+                    external instruction was previously submitted. Verify the external status before
+                    proceeding. Recording initiation runs the debt check and attests that you are
+                    starting the payout workflow; it does not prove provider acceptance or
+                    settlement.
+                  </p>
+                  <label className="grid gap-1 text-sm font-medium">
+                    Payout instruction reference (if already assigned)
+                    <Input
+                      value={initiationReference}
+                      onChange={(event) => setInitiationReference(event.target.value)}
+                      maxLength={200}
+                    />
+                  </label>
+                  {canManage && (
+                    <Button
+                      type="button"
+                      disabled={saving}
+                      onClick={() =>
+                        void submitPayoutCommand("payout-initiation", initiationKey, {
+                          external_reference: initiationReference.trim() || null,
+                        })
+                      }
+                    >
+                      Start payout workflow
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  <p className="font-medium">
+                    Payout workflow started, awaiting authoritative external outcome.
+                  </p>
+                  <p>
+                    Initiated by @{item.payoutInitiation.actorUsername} on{" "}
+                    {new Date(item.payoutInitiation.createdAt).toLocaleString()}.
+                    {item.payoutInitiation.externalReference
+                      ? ` Reference: ${item.payoutInitiation.externalReference}.`
+                      : ""}
+                  </p>
+                  {canManage && (
+                    <>
+                      <p>
+                        Continue the external submission now, if it has not already been submitted.
+                        The stored initiation records the workflow start, not provider execution.
+                        Record completion only after authoritative confirmation of delivery. If
+                        delivery is confirmed not to have occurred, use the failure reconciliation
+                        below. Do not resolve an uncertain outcome as failed.
+                      </p>
+                      <label className="grid gap-1 text-sm font-medium">
+                        Delivery confirmation reference (optional)
+                        <Input
+                          value={completionReference}
+                          onChange={(event) => setCompletionReference(event.target.value)}
+                          maxLength={200}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-sm font-medium">
+                        Completion note (optional)
+                        <Textarea
+                          value={completionNote}
+                          onChange={(event) => setCompletionNote(event.target.value)}
+                          maxLength={500}
+                        />
+                      </label>
+                      <Button type="button" disabled={saving} onClick={() => void completePayout()}>
+                        Record confirmed payout
+                      </Button>
+                      <div className="grid gap-3 border-t border-slate-200 pt-3">
+                        <p className="font-medium">Confirmed non-delivery</p>
+                        <label className="grid gap-1 text-sm font-medium">
+                          Provider/bank outcome reference
+                          <Input
+                            value={failureReference}
+                            onChange={(event) => setFailureReference(event.target.value)}
+                            maxLength={200}
+                            required
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-medium">
+                          Evidence-backed reason
+                          <Textarea
+                            value={failureReason}
+                            onChange={(event) => setFailureReason(event.target.value)}
+                            maxLength={1000}
+                            required
+                          />
+                        </label>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={
+                            saving || !failureReference.trim() || failureReason.trim().length < 3
+                          }
+                          onClick={() =>
+                            void submitPayoutCommand("payout-failure", failureKey, {
+                              external_reference: failureReference.trim(),
+                              reason: failureReason.trim(),
+                            })
+                          }
+                        >
+                          Record confirmed payout failure
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </OperatorSection>
+          )}
+          {item.payoutFailure && (
+            <OperatorSection title="Confirmed payout failure" surface>
+              <p>{item.payoutFailure.reason}</p>
+              <p>External outcome reference: {item.payoutFailure.externalReference}</p>
+              <p>
+                Recorded by @{item.payoutFailure.actorUsername} on{" "}
+                {new Date(item.payoutFailure.createdAt).toLocaleString()}
+              </p>
+              <p>
+                The external instruction was confirmed not delivered; the reservation was released.
+              </p>
+            </OperatorSection>
+          )}
+          {item.payoutReturn && (
+            <OperatorSection title="Returned payout" surface>
+              <p>{item.payoutReturn.reason}</p>
+              <p>External return reference: {item.payoutReturn.externalReference}</p>
+              <p>The payout was returned after completion; the return was recorded separately.</p>
             </OperatorSection>
           )}
         </>

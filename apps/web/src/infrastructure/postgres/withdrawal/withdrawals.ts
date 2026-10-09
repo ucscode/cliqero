@@ -30,6 +30,19 @@ interface Row {
   completion_note: string | null;
   completed_by: string | null;
   completed_at: Date | null;
+  payout_initiation_id?: string | null;
+  payout_initiation_actor_id?: string | null;
+  payout_initiation_correlation_id?: string | null;
+  payout_initiation_idempotency_key?: string | null;
+  payout_initiation_external_reference?: string | null;
+  payout_initiation_created_at?: Date | null;
+  payout_failure_id?: string | null;
+  payout_failure_actor_id?: string | null;
+  payout_failure_correlation_id?: string | null;
+  payout_failure_idempotency_key?: string | null;
+  payout_failure_external_reference?: string | null;
+  payout_failure_reason?: string | null;
+  payout_failure_created_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -54,7 +67,7 @@ export class PostgresWithdrawalRepository extends WithdrawalRepository {
           creation_reason: string | null;
         }
       >(
-        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.fee_minor,w.net_amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.idempotency_key,w.correlation_id,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) as completed_by,w.completed_at,w.created_at,w.updated_at,w.creation_state,w.creation_reason from withdrawal_capability.withdrawals w where w.account_id=(select id from identity_capability.accounts where uuid=$1) and w.idempotency_key=$2`,
+        `select ${withdrawalColumns} ,w.creation_state,w.creation_reason from withdrawal_capability.withdrawals w where w.account_id=(select id from identity_capability.accounts where uuid=$1) and w.idempotency_key=$2`,
         [accountId, key],
       )
     ).rows[0];
@@ -70,7 +83,7 @@ export class PostgresWithdrawalRepository extends WithdrawalRepository {
     const cursor = decodeAccountCursor(page.cursor);
     const rows = (
       await this.sql.query<Row>(
-        `select w.uuid as id,w.id::text as cursor_id,w.created_at::text as cursor_created_at,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.fee_minor,w.net_amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.idempotency_key,w.correlation_id,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) as completed_by,w.completed_at,w.created_at,w.updated_at
+        `select ${withdrawalColumns},w.id::text as cursor_id,w.created_at::text as cursor_created_at
           from withdrawal_capability.withdrawals w
          where w.account_id=(select id from identity_capability.accounts where uuid=$1)
            and ($2::timestamptz is null or (w.created_at,w.id)<($2::timestamptz,$3::bigint))
@@ -266,10 +279,152 @@ export class PostgresWithdrawalRepository extends WithdrawalRepository {
     );
     if (result.rowCount !== 1) throw new Error("Only a completed withdrawal can be returned");
   }
+  async lockPayoutInitiationKey(key: string) {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `withdrawal:payout-initiation:${key}`,
+    ]);
+  }
+  async findPayoutInitiationByIdempotencyKey(key: string) {
+    return this.findPayoutInitiation("i.idempotency_key=$1", [key]);
+  }
+  async findPayoutInitiationByWithdrawalId(id: string) {
+    return this.findPayoutInitiation("w.uuid=$1", [id]);
+  }
+  async recordPayoutInitiation(input: {
+    id: string;
+    withdrawalId: string;
+    actorId: string;
+    correlationId: string;
+    idempotencyKey: string;
+    externalReference: string | null;
+  }) {
+    await this.sql.query(
+      `insert into withdrawal_capability.payout_initiations
+        (uuid,withdrawal_id,actor_id,correlation_id,idempotency_key,external_reference)
+       values($1,(select id from withdrawal_capability.withdrawals where uuid=$2),
+         (select id from identity_capability.accounts where uuid=$3),$4,$5,$6)`,
+      [
+        input.id,
+        input.withdrawalId,
+        input.actorId,
+        input.correlationId,
+        input.idempotencyKey,
+        input.externalReference,
+      ],
+    );
+  }
+  async lockPayoutFailureKey(key: string) {
+    await this.sql.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `withdrawal:payout-failure:${key}`,
+    ]);
+  }
+  async findPayoutFailureByIdempotencyKey(key: string) {
+    return this.findPayoutFailure("f.idempotency_key=$1", [key]);
+  }
+  async findPayoutFailureByWithdrawalId(id: string) {
+    return this.findPayoutFailure("w.uuid=$1", [id]);
+  }
+  async recordPayoutFailure(input: {
+    id: string;
+    withdrawalId: string;
+    actorId: string;
+    correlationId: string;
+    idempotencyKey: string;
+    externalReference: string;
+    reason: string;
+  }) {
+    await this.sql.query(
+      `insert into withdrawal_capability.payout_failures
+        (uuid,withdrawal_id,actor_id,correlation_id,idempotency_key,external_reference,reason)
+       values($1,(select id from withdrawal_capability.withdrawals where uuid=$2),
+         (select id from identity_capability.accounts where uuid=$3),$4,$5,$6,$7)`,
+      [
+        input.id,
+        input.withdrawalId,
+        input.actorId,
+        input.correlationId,
+        input.idempotencyKey,
+        input.externalReference,
+        input.reason,
+      ],
+    );
+  }
+  async markPayoutFailed(id: string, reason: string) {
+    const result = await this.sql.query(
+      `update withdrawal_capability.withdrawals set state='failed',reason=$2,updated_at=now()
+        where uuid=$1 and state='approved'`,
+      [id, reason],
+    );
+    if (result.rowCount !== 1) throw new Error("Only an approved withdrawal can fail payout");
+  }
+  private async findPayoutInitiation(where: string, values: readonly unknown[]) {
+    const row = (
+      await this.sql.query<{
+        id: string;
+        withdrawal_id: string;
+        actor_id: string;
+        correlation_id: string;
+        idempotency_key: string;
+        external_reference: string | null;
+        created_at: Date;
+      }>(
+        `select i.uuid id,w.uuid withdrawal_id,a.uuid actor_id,i.correlation_id,i.idempotency_key,
+                i.external_reference,i.created_at
+           from withdrawal_capability.payout_initiations i
+           join withdrawal_capability.withdrawals w on w.id=i.withdrawal_id
+           join identity_capability.accounts a on a.id=i.actor_id where ${where}`,
+        values,
+      )
+    ).rows[0];
+    return row
+      ? {
+          id: row.id,
+          withdrawalId: row.withdrawal_id,
+          actorId: row.actor_id,
+          correlationId: row.correlation_id,
+          idempotencyKey: row.idempotency_key,
+          externalReference: row.external_reference,
+          createdAt: row.created_at,
+        }
+      : null;
+  }
+  private async findPayoutFailure(where: string, values: readonly unknown[]) {
+    const row = (
+      await this.sql.query<{
+        id: string;
+        withdrawal_id: string;
+        actor_id: string;
+        correlation_id: string;
+        idempotency_key: string;
+        external_reference: string;
+        reason: string;
+        created_at: Date;
+      }>(
+        `select f.uuid id,w.uuid withdrawal_id,a.uuid actor_id,f.correlation_id,f.idempotency_key,
+                f.external_reference,f.reason,f.created_at
+           from withdrawal_capability.payout_failures f
+           join withdrawal_capability.withdrawals w on w.id=f.withdrawal_id
+           join identity_capability.accounts a on a.id=f.actor_id where ${where}`,
+        values,
+      )
+    ).rows[0];
+    return row
+      ? {
+          id: row.id,
+          withdrawalId: row.withdrawal_id,
+          actorId: row.actor_id,
+          correlationId: row.correlation_id,
+          idempotencyKey: row.idempotency_key,
+          externalReference: row.external_reference,
+          reason: row.reason,
+          createdAt: row.created_at,
+        }
+      : null;
+  }
   private async find(where: string, values: readonly unknown[], lock = false) {
     const row = (
       await this.sql.query<Row>(
-        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.fee_minor,w.net_amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.idempotency_key,w.correlation_id,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) as completed_by,w.completed_at,w.created_at,w.updated_at from withdrawal_capability.withdrawals w where ${where}${lock ? " for update" : ""}`,
+        `select ${withdrawalColumns} from withdrawal_capability.withdrawals w where ${where}${lock ? " for update" : ""}`,
         values,
       )
     ).rows[0];
@@ -278,7 +433,7 @@ export class PostgresWithdrawalRepository extends WithdrawalRepository {
   private async list(where: string, values: readonly unknown[], limit = 100) {
     const rows = (
       await this.sql.query<Row>(
-        `select w.uuid as id,(select uuid from identity_capability.accounts where id=w.account_id) as account_id,w.amount_minor,w.fee_minor,w.net_amount_minor,w.currency,w.saved_destination_id,w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,w.state,w.idempotency_key,w.correlation_id,w.reason,w.external_reference,w.completion_note,(select uuid from identity_capability.accounts where id=w.completed_by) as completed_by,w.completed_at,w.created_at,w.updated_at from withdrawal_capability.withdrawals w where ${where} order by w.created_at desc,w.id desc limit $${values.length + 1}`,
+        `select ${withdrawalColumns} from withdrawal_capability.withdrawals w where ${where} order by w.created_at desc,w.id desc limit $${values.length + 1}`,
         [...values, limit],
       )
     ).rows;
@@ -306,11 +461,55 @@ export class PostgresWithdrawalRepository extends WithdrawalRepository {
       completionNote: row.completion_note,
       completedBy: row.completed_by,
       completedAt: row.completed_at,
+      payoutInitiation: row.payout_initiation_id
+        ? {
+            id: row.payout_initiation_id,
+            withdrawalId: row.id,
+            actorId: row.payout_initiation_actor_id!,
+            correlationId: row.payout_initiation_correlation_id!,
+            idempotencyKey: row.payout_initiation_idempotency_key!,
+            externalReference: row.payout_initiation_external_reference ?? null,
+            createdAt: row.payout_initiation_created_at!,
+          }
+        : null,
+      payoutFailure: row.payout_failure_id
+        ? {
+            id: row.payout_failure_id,
+            withdrawalId: row.id,
+            actorId: row.payout_failure_actor_id!,
+            correlationId: row.payout_failure_correlation_id!,
+            idempotencyKey: row.payout_failure_idempotency_key!,
+            externalReference: row.payout_failure_external_reference!,
+            reason: row.payout_failure_reason!,
+            createdAt: row.payout_failure_created_at!,
+          }
+        : null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   }
 }
+
+const withdrawalColumns = `w.uuid as id,
+  (select uuid from identity_capability.accounts where id=w.account_id) as account_id,
+  w.amount_minor,w.fee_minor,w.net_amount_minor,w.currency,w.saved_destination_id,
+  w.destination_method,w.destination_method_name,w.destination_name,w.destination_details,
+  w.state,w.idempotency_key,w.correlation_id,w.reason,w.external_reference,w.completion_note,
+  (select uuid from identity_capability.accounts where id=w.completed_by) as completed_by,
+  w.completed_at,w.created_at,w.updated_at,
+  (select i.uuid from withdrawal_capability.payout_initiations i where i.withdrawal_id=w.id) as payout_initiation_id,
+  (select a.uuid from withdrawal_capability.payout_initiations i join identity_capability.accounts a on a.id=i.actor_id where i.withdrawal_id=w.id) as payout_initiation_actor_id,
+  (select i.correlation_id from withdrawal_capability.payout_initiations i where i.withdrawal_id=w.id) as payout_initiation_correlation_id,
+  (select i.idempotency_key from withdrawal_capability.payout_initiations i where i.withdrawal_id=w.id) as payout_initiation_idempotency_key,
+  (select i.external_reference from withdrawal_capability.payout_initiations i where i.withdrawal_id=w.id) as payout_initiation_external_reference,
+  (select i.created_at from withdrawal_capability.payout_initiations i where i.withdrawal_id=w.id) as payout_initiation_created_at,
+  (select f.uuid from withdrawal_capability.payout_failures f where f.withdrawal_id=w.id) as payout_failure_id,
+  (select a.uuid from withdrawal_capability.payout_failures f join identity_capability.accounts a on a.id=f.actor_id where f.withdrawal_id=w.id) as payout_failure_actor_id,
+  (select f.correlation_id from withdrawal_capability.payout_failures f where f.withdrawal_id=w.id) as payout_failure_correlation_id,
+  (select f.idempotency_key from withdrawal_capability.payout_failures f where f.withdrawal_id=w.id) as payout_failure_idempotency_key,
+  (select f.external_reference from withdrawal_capability.payout_failures f where f.withdrawal_id=w.id) as payout_failure_external_reference,
+  (select f.reason from withdrawal_capability.payout_failures f where f.withdrawal_id=w.id) as payout_failure_reason,
+  (select f.created_at from withdrawal_capability.payout_failures f where f.withdrawal_id=w.id) as payout_failure_created_at`;
 
 function encodeAccountCursor(createdAt: string, id: string) {
   return Buffer.from(JSON.stringify({ created_at: createdAt, id }), "utf8").toString("base64url");

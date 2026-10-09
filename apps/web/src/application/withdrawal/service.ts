@@ -345,6 +345,13 @@ export class WithdrawalService extends CrudService<
           "invalid_transition",
           409,
         );
+      const payoutInitiation = await this.withdrawals.findPayoutInitiationByWithdrawalId(id);
+      if (!payoutInitiation)
+        throw new PublicApplicationError(
+          "Payout completion requires recorded external initiation evidence.",
+          "payout_not_initiated",
+          409,
+        );
       const correlationId = newId();
       const completedAt = await this.withdrawals.complete(id, actorId, externalReference, note);
       await this.funds.releaseOrComplete({
@@ -385,6 +392,236 @@ export class WithdrawalService extends CrudService<
         completedAt,
         updatedAt: completedAt,
       };
+    });
+  }
+  async initiatePayout(
+    actorId: string,
+    id: string,
+    input: { idempotencyKey: string; externalReference?: string },
+  ) {
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
+    const idempotencyKey = input.idempotencyKey.trim();
+    const externalReference = input.externalReference?.trim() || null;
+    if (!idempotencyKey || idempotencyKey.length > 200)
+      throw new PublicApplicationError(
+        "A valid idempotency key is required.",
+        "invalid_idempotency_key",
+        400,
+      );
+    if (externalReference && externalReference.length > 200)
+      throw new PublicApplicationError(
+        "External reference must be 200 characters or fewer.",
+        "invalid_reference",
+        400,
+      );
+
+    return this.uow.transaction(async () => {
+      await this.withdrawals.lockPayoutInitiationKey(idempotencyKey);
+      const previous = await this.withdrawals.findPayoutInitiationByIdempotencyKey(idempotencyKey);
+      if (previous) {
+        if (
+          previous.withdrawalId !== id ||
+          previous.actorId !== actorId ||
+          previous.externalReference !== externalReference
+        )
+          throw new PublicApplicationError(
+            "Idempotency key was used for a different payout initiation.",
+            "idempotency_conflict",
+            409,
+          );
+        return { initiation: previous, changed: false };
+      }
+
+      const withdrawal = await this.withdrawals.findByIdForUpdate(id);
+      if (!withdrawal) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
+      if (withdrawal.state !== "approved")
+        throw new PublicApplicationError(
+          `Only approved withdrawals can be initiated; this one is ${withdrawal.state}.`,
+          "invalid_transition",
+          409,
+        );
+      if (await this.withdrawals.findPayoutInitiationByWithdrawalId(id))
+        throw new PublicApplicationError(
+          "This withdrawal already has recorded payout initiation.",
+          "payout_already_initiated",
+          409,
+        );
+      if (!this.debt)
+        throw new Error(
+          "Payout initiation requires the account debt service for locked policy checks.",
+        );
+      await this.debt.requireNoOutstandingUnderLock(withdrawal.accountId, "withdrawal");
+
+      const correlationId = newId();
+      const initiationId = newId();
+      await this.withdrawals.recordPayoutInitiation({
+        id: initiationId,
+        withdrawalId: id,
+        actorId,
+        correlationId,
+        idempotencyKey,
+        externalReference,
+      });
+      const initiation =
+        await this.withdrawals.findPayoutInitiationByIdempotencyKey(idempotencyKey);
+      if (!initiation) throw new Error("Payout initiation evidence was not persisted");
+      await this.audit.record({
+        actorId,
+        correlationId,
+        action: "withdrawal.payout_initiated",
+        subjectType: "withdrawal",
+        subjectId: id,
+        previousState: { state: "approved", payoutInitiation: null },
+        newState: {
+          state: "approved",
+          payoutInitiationId: initiationId,
+          externalReference,
+          meaning:
+            "operator_attests_starting_external_payout_before_submission_not_acceptance_or_settlement",
+          idempotencyKey,
+        },
+      });
+      await this.outbox.append([
+        {
+          id: newId(),
+          name: "withdrawal.payout-initiated",
+          aggregateId: id,
+          correlationId,
+          occurredAt: initiation.createdAt,
+          payload: {
+            withdrawalId: id,
+            payoutInitiationId: initiationId,
+            actorId,
+            externalReference,
+          },
+        },
+      ]);
+      return { initiation, changed: true };
+    });
+  }
+
+  async recordPayoutFailure(
+    actorId: string,
+    id: string,
+    input: {
+      reason: string;
+      externalReference: string;
+      idempotencyKey: string;
+    },
+  ) {
+    await this.operators.requireCapability(actorId, "withdrawals.manage");
+    const reason = input.reason.trim();
+    const externalReference = input.externalReference.trim();
+    const idempotencyKey = input.idempotencyKey.trim();
+    if (!reason || reason.length > 1000 || !externalReference || externalReference.length > 200)
+      throw new PublicApplicationError(
+        "Confirmed non-delivery reason and external reference are required.",
+        "invalid_payout_failure",
+        400,
+      );
+    if (!idempotencyKey || idempotencyKey.length > 200)
+      throw new PublicApplicationError(
+        "A valid idempotency key is required.",
+        "invalid_idempotency_key",
+        400,
+      );
+    return this.uow.transaction(async () => {
+      await this.withdrawals.lockPayoutFailureKey(idempotencyKey);
+      const previous = await this.withdrawals.findPayoutFailureByIdempotencyKey(idempotencyKey);
+      if (previous) {
+        if (
+          previous.withdrawalId !== id ||
+          previous.actorId !== actorId ||
+          previous.reason !== reason ||
+          previous.externalReference !== externalReference
+        )
+          throw new PublicApplicationError(
+            "Idempotency key was used for a different payout failure.",
+            "idempotency_conflict",
+            409,
+          );
+        return { failure: previous, changed: false };
+      }
+      const withdrawal = await this.withdrawals.findByIdForUpdate(id);
+      if (!withdrawal) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
+      if (withdrawal.state !== "approved")
+        throw new PublicApplicationError(
+          "Only an approved payout in progress can be reconciled as failed.",
+          "invalid_transition",
+          409,
+        );
+      if (!(await this.withdrawals.findPayoutInitiationByWithdrawalId(id)))
+        throw new PublicApplicationError(
+          "Payout failure requires recorded initiation and authoritative non-delivery evidence.",
+          "payout_not_initiated",
+          409,
+        );
+      if (await this.withdrawals.findPayoutFailureByWithdrawalId(id))
+        throw new PublicApplicationError(
+          "This payout already has a failure outcome recorded.",
+          "payout_outcome_exists",
+          409,
+        );
+
+      const failureId = newId();
+      const correlationId = newId();
+      await this.withdrawals.recordPayoutFailure({
+        id: failureId,
+        withdrawalId: id,
+        actorId,
+        correlationId,
+        idempotencyKey,
+        externalReference,
+        reason,
+      });
+      await this.withdrawals.markPayoutFailed(id, reason);
+      await this.funds.releaseOrComplete({
+        withdrawalId: id,
+        accountId: withdrawal.accountId,
+        kind: "released",
+        correlationId,
+      });
+      await this.reconcileTreasuryFee(
+        withdrawal,
+        withdrawal.fee?.minorAmount ?? 0n,
+        0n,
+        correlationId,
+        "reversal",
+        actorId,
+        "operator",
+      );
+      await this.audit.record({
+        actorId,
+        correlationId,
+        action: "withdrawal.payout_failed",
+        subjectType: "withdrawal",
+        subjectId: id,
+        previousState: { state: "approved", payoutOutcome: "initiated" },
+        newState: {
+          state: "failed",
+          payoutFailureId: failureId,
+          reason,
+          externalReference,
+          idempotencyKey,
+        },
+      });
+      await this.outbox.append([
+        {
+          id: newId(),
+          name: "withdrawal.payout-failed",
+          aggregateId: id,
+          correlationId,
+          occurredAt: new Date(),
+          payload: {
+            withdrawalId: id,
+            payoutFailureId: failureId,
+            accountId: withdrawal.accountId,
+          },
+        },
+      ]);
+      const failure = await this.withdrawals.findPayoutFailureByIdempotencyKey(idempotencyKey);
+      if (!failure) throw new Error("Payout failure evidence was not persisted");
+      return { failure, changed: true };
     });
   }
   async recordPayoutReturn(
@@ -704,6 +941,12 @@ export class WithdrawalService extends CrudService<
         return result;
       }
       if (current.state === "approved" && targetState === "rejected") {
+        if (await this.withdrawals.findPayoutInitiationByWithdrawalId(id))
+          throw new PublicApplicationError(
+            "An initiated payout cannot be rejected before its external outcome is reconciled.",
+            "payout_outcome_pending",
+            409,
+          );
         await this.withdrawals.update({ ...updated, state: "rejected" }, "approved");
         await this.reconcileTreasuryFee(
           current,
@@ -771,6 +1014,12 @@ export class WithdrawalService extends CrudService<
     return this.uow.transaction(async () => {
       const current = await this.withdrawals.findByIdForUpdate(id);
       if (!current) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
+      if (await this.withdrawals.findPayoutInitiationByWithdrawalId(id))
+        throw new PublicApplicationError(
+          "A withdrawal with external payout evidence cannot be deleted.",
+          "withdrawal_immutable",
+          409,
+        );
       const operationCorrelationId = newId();
       if (!root && !["requested", "rejected", "cancelled", "failed"].includes(current.state))
         throw new PublicApplicationError(

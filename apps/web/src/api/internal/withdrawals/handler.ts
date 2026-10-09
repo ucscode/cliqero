@@ -51,12 +51,6 @@ const updateSchema = z
         message: "A rejection reason is required.",
       });
   });
-const completeSchema = z
-  .object({
-    external_reference: z.string().trim().max(200).optional(),
-    note: z.string().trim().max(500).optional(),
-  })
-  .strict();
 const querySchema = z.object({
   search: z.string().max(200).optional(),
   state: z
@@ -163,21 +157,6 @@ export class InternalWithdrawalRoutes {
     }
   }
 
-  async complete(request: Request, id: string) {
-    const principal = await this.session(request, "withdrawals.manage", true);
-    if (principal instanceof Response) return principal;
-    try {
-      const body = completeSchema.parse(await this.json(request));
-      await this.container.withdrawals.complete(principal.accountId, id, {
-        externalReference: body.external_reference,
-        note: body.note,
-      });
-      return this.respond(await this.container.operatorWithdrawals.get(id));
-    } catch (error) {
-      return apiError(error, request);
-    }
-  }
-
   async delete(request: Request, id: string) {
     const principal = await this.session(request, "withdrawals.manage", true);
     if (principal instanceof Response) return principal;
@@ -258,8 +237,6 @@ export const internalWithdrawalCreate = (request: Request) =>
   new InternalWithdrawalRoutes(getContainer()).create(request);
 export const internalWithdrawalUpdate = (request: Request, id: string) =>
   new InternalWithdrawalRoutes(getContainer()).update(request, id);
-export const internalWithdrawalComplete = (request: Request, id: string) =>
-  new InternalWithdrawalRoutes(getContainer()).complete(request, id);
 export const internalWithdrawalDelete = (request: Request, id: string) =>
   new InternalWithdrawalRoutes(getContainer()).delete(request, id);
 export const internalWithdrawalBulkDelete = (request: Request) =>
