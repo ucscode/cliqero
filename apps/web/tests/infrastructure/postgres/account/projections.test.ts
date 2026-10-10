@@ -9,11 +9,30 @@ function result<T extends object>(rows: T[]): QueryResult<T> {
 describe("account projection pagination", () => {
   it("preserves raw ledger available balances without reservation semantics", async () => {
     const service = new AccountProjectionService({
-      query: async <T extends object>() =>
-        result([
-          { currency: "USD", balance_state: "available", amount_minor: "340" },
-          { currency: "USD", balance_state: "pending", amount_minor: "50" },
-        ] as T[]),
+      query: async <T extends object>(sql: string) =>
+        result(
+          (sql.includes("available_earnings_minor")
+            ? [
+                {
+                  available_minor: "340",
+                  purchase_earnings_minor: "500",
+                  purchase_reversals_minor: "-60",
+                  earnings_corrections_minor: "-20",
+                  manual_adjustments_minor: "-80",
+                  balance_transfers_minor: "0",
+                  funding_reversals_minor: "0",
+                  transfer_compensations_minor: "0",
+                  debt_settlements_minor: "0",
+                  withdrawal_reserved_minor: "0",
+                  completed_withdrawals_minor: "0",
+                  settled_purchase_earnings_minor: "0",
+                },
+              ]
+            : [
+                { currency: "USD", balance_state: "available", amount_minor: "340" },
+                { currency: "USD", balance_state: "pending", amount_minor: "50" },
+              ]) as T[],
+        ),
     });
 
     await expect(service.earnings("account")).resolves.toEqual({
@@ -21,7 +40,65 @@ describe("account projection pagination", () => {
         { currency: "USD", state: "available", amount_minor: "340" },
         { currency: "USD", state: "pending", amount_minor: "50" },
       ],
+      reconciliation: {
+        available_minor: "340",
+        purchase_earnings_minor: "500",
+        purchase_reversals_minor: "-60",
+        earnings_corrections_minor: "-20",
+        manual_adjustments_minor: "-80",
+        balance_transfers_minor: "0",
+        funding_reversals_minor: "0",
+        transfer_compensations_minor: "0",
+        debt_settlements_minor: "0",
+        withdrawal_reserved_minor: "0",
+        completed_withdrawals_minor: "0",
+        settled_purchase_earnings_minor: "0",
+      },
     });
+  });
+
+  it("uses the ledger's authoritative available balance and exposes source movements without deriving a second total", async () => {
+    const statements: string[] = [];
+    const service = new AccountProjectionService({
+      query: async <T extends object>(sql: string) => {
+        statements.push(sql);
+        if (sql.includes("available_earnings_minor"))
+          return result([
+            {
+              available_minor: "1250",
+              purchase_earnings_minor: "2000",
+              purchase_reversals_minor: "-250",
+              earnings_corrections_minor: "-100",
+              manual_adjustments_minor: "200",
+              balance_transfers_minor: "-100",
+              funding_reversals_minor: "-100",
+              transfer_compensations_minor: "0",
+              debt_settlements_minor: "-100",
+              withdrawal_reserved_minor: "-200",
+              completed_withdrawals_minor: "-100",
+              settled_purchase_earnings_minor: "1500",
+            } as T,
+          ]);
+        return result<T>([]);
+      },
+    });
+
+    const projection = await service.earnings("account");
+    expect(projection.reconciliation).toMatchObject({
+      available_minor: "1250",
+      purchase_earnings_minor: "2000",
+      purchase_reversals_minor: "-250",
+      earnings_corrections_minor: "-100",
+      manual_adjustments_minor: "200",
+      balance_transfers_minor: "-100",
+      funding_reversals_minor: "-100",
+      debt_settlements_minor: "-100",
+      withdrawal_reserved_minor: "-200",
+      completed_withdrawals_minor: "-100",
+      settled_purchase_earnings_minor: "1500",
+    });
+    expect(statements[1]).toContain("ledger_capability.available_earnings_minor");
+    expect(statements[1]).not.toContain("greatest(0");
   });
 
   it("uses a created_at/id keyset cursor for purchases", async () => {

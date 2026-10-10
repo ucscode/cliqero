@@ -67,8 +67,8 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
 
   async list(input: { search?: string; cursor?: string; limit: number }) {
     const cursor = input.cursor ? this.decodeCursor(input.cursor) : null;
-    const rows = (
-      await this.sql.query<Row & { cursor_id: string }>(
+    const [rows, summary] = await Promise.all([
+      this.sql.query<Row & { cursor_id: string }>(
         `select e.uuid id,e.id cursor_id,a.uuid account_id,a.username,e.amount_minor,e.reason,e.reference,
               actor.uuid created_by,e.created_at,
               ledger_capability.available_earnings_minor(a.id,'USD')::bigint current_balance_minor
@@ -84,13 +84,22 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
           cursor?.id ?? null,
           input.limit + 1,
         ],
-      )
-    ).rows;
-    const visible = rows.slice(0, input.limit);
+      ),
+      this.sql.query<{ credit_minor: string; debit_minor: string; net_minor: string }>(
+        `select coalesce(sum(amount_minor) filter (where amount_minor > 0),0)::text credit_minor,
+                coalesce(-sum(amount_minor) filter (where amount_minor < 0),0)::text debit_minor,
+                coalesce(sum(amount_minor),0)::text net_minor
+           from ledger_capability.earnings_adjustments e
+           join identity_capability.accounts a on a.id=e.account_id
+          where ($1::text is null or a.username ilike '%'||$1||'%' or e.reason ilike '%'||$1||'%' or e.reference ilike '%'||$1||'%')`,
+        [input.search?.trim() || null],
+      ),
+    ]);
+    const visible = rows.rows.slice(0, input.limit);
     return {
       items: visible.map((row) => this.project(row)),
       nextCursor:
-        rows.length > input.limit
+        rows.rows.length > input.limit
           ? Buffer.from(
               JSON.stringify({
                 createdAt: String(visible.at(-1)!.created_at),
@@ -98,6 +107,11 @@ export class PostgresEarningsAdjustmentRepository implements EarningsAdjustmentR
               }),
             ).toString("base64url")
           : null,
+      summary: {
+        creditMinor: summary.rows[0]?.credit_minor ?? "0",
+        debitMinor: summary.rows[0]?.debit_minor ?? "0",
+        netMinor: summary.rows[0]?.net_minor ?? "0",
+      },
     };
   }
 

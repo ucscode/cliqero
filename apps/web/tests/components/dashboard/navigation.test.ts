@@ -22,6 +22,7 @@ describe("dashboard navigation", () => {
     const sections = [
       "overview",
       "wallet",
+      "balance-transfer",
       "purchases",
       "promote",
       "hierarchy",
@@ -35,6 +36,7 @@ describe("dashboard navigation", () => {
     const titles = [
       "Overview",
       "Wallet",
+      "Balance Transfer",
       "Purchases",
       "Promote",
       "Network",

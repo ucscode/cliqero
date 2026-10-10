@@ -18,13 +18,20 @@ type Quote = {
 };
 type KeyedQuote = { key: string; quote: Quote };
 
-export function WalletTransferForm({ onComplete }: { onComplete: () => void }) {
+export function WalletTransferForm({
+  onComplete,
+  availableBalances,
+}: {
+  onComplete: () => void | Promise<void>;
+  availableBalances?: { funding: string; earnings: string };
+}) {
   const [from, setFrom] = useState<WalletName>("funding");
   const to: WalletName = from === "funding" ? "earnings" : "funding";
   const [amount, setAmount] = useState("");
   const [transactionPin, setTransactionPin] = useState("");
   const [keyedQuote, setKeyedQuote] = useState<KeyedQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const quoteKey = `${from}:${amount}`;
   const quote = keyedQuote?.key === quoteKey ? keyedQuote.quote : null;
@@ -49,8 +56,11 @@ export function WalletTransferForm({ onComplete }: { onComplete: () => void }) {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setSuccess(null);
     try {
       const amountMinor = parseUsdMinor(amount);
+      if (availableBalances && BigInt(amountMinor) > BigInt(availableBalances[from]))
+        throw new Error("The amount exceeds the available source balance.");
       await apiFetch("/api/wallet/transfers", {
         method: "POST",
         headers: {
@@ -67,7 +77,8 @@ export function WalletTransferForm({ onComplete }: { onComplete: () => void }) {
       setAmount("");
       setTransactionPin("");
       setKeyedQuote(null);
-      onComplete();
+      await onComplete();
+      setSuccess("Transfer complete. Your updated balances are shown above.");
     } catch (cause) {
       setError(
         cause instanceof ApiClientError ? cause.message : "The transfer could not be completed.",
@@ -97,6 +108,14 @@ export function WalletTransferForm({ onComplete }: { onComplete: () => void }) {
             <option value="funding">Funding</option>
             <option value="earnings">Earnings</option>
           </Select>
+        </div>
+        <div className="grid content-center gap-1 rounded-lg bg-slate-50 px-3 py-2 text-sm md:col-span-2">
+          <span className="text-slate-600">
+            Available in {from === "funding" ? "Funding" : "Earnings"}
+          </span>
+          <strong>
+            {availableBalances ? formatMinorUsd(availableBalances[from]) : "Loading…"}
+          </strong>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="transfer-transaction-pin">Transaction PIN</Label>
@@ -149,8 +168,15 @@ export function WalletTransferForm({ onComplete }: { onComplete: () => void }) {
             <Alert>{error}</Alert>
           </div>
         )}
+        {success && (
+          <div className="md:col-span-2">
+            <Alert role="status">{success}</Alert>
+          </div>
+        )}
         <div className="md:col-span-2">
-          <Button disabled={busy || !quote}>{busy ? "Transferring…" : "Transfer balance"}</Button>
+          <Button disabled={busy || !quote || !availableBalances}>
+            {busy ? "Transferring…" : "Transfer balance"}
+          </Button>
         </div>
       </form>
     </Card>

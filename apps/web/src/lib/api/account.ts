@@ -13,6 +13,20 @@ export type EarningsSummary = {
   balances: EarningsBalance[];
   withdrawal_currency: string;
   withdrawable_balances: WithdrawableBalance[];
+  reconciliation: {
+    available_minor: string;
+    purchase_earnings_minor: string;
+    purchase_reversals_minor: string;
+    earnings_corrections_minor: string;
+    manual_adjustments_minor: string;
+    balance_transfers_minor: string;
+    funding_reversals_minor: string;
+    transfer_compensations_minor: string;
+    debt_settlements_minor: string;
+    withdrawal_reserved_minor: string;
+    completed_withdrawals_minor: string;
+    settled_purchase_earnings_minor: string;
+  };
 };
 
 export type EarningsEntry = {

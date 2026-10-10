@@ -22,6 +22,7 @@ import { EmptyState } from "../empty-state";
 import { Alert } from "../ui/alert";
 import { PurchasesPanel } from "../purchase/panel";
 import { WalletPanel } from "../wallet/panel";
+import { BalanceTransferPanel } from "../wallet/transfer-page";
 import { FundingHistoryPanel } from "../funding/history";
 import { PromotePanel } from "../promote-panel";
 import { HierarchyPanel } from "../hierarchy/panel";
@@ -257,6 +258,8 @@ export function DashboardShell({
       fundingId={fundingId}
       returnTo={returnTo || checkoutContinuation}
     />
+  ) : section === "balance-transfer" ? (
+    <BalanceTransferPanel />
   ) : section === "purchases" ? (
     <PurchasesPanel />
   ) : section === "promote" ? (

@@ -109,7 +109,25 @@ describe("dashboard recent purchases card", () => {
     const data = loadingDashboardOverview();
     data.earnings = {
       status: "success",
-      data: { balances: [], withdrawal_currency: "USD", withdrawable_balances: [] },
+      data: {
+        balances: [],
+        withdrawal_currency: "USD",
+        withdrawable_balances: [],
+        reconciliation: {
+          available_minor: "0",
+          purchase_earnings_minor: "0",
+          purchase_reversals_minor: "0",
+          earnings_corrections_minor: "0",
+          manual_adjustments_minor: "0",
+          balance_transfers_minor: "0",
+          funding_reversals_minor: "0",
+          transfer_compensations_minor: "0",
+          debt_settlements_minor: "0",
+          withdrawal_reserved_minor: "0",
+          completed_withdrawals_minor: "0",
+          settled_purchase_earnings_minor: "0",
+        },
+      },
     };
     const markup = renderToStaticMarkup(createElement(DashboardOverviewCards, { data }));
     expect(markup).toContain("No available earnings");

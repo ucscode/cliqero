@@ -41,7 +41,6 @@ import {
 import { LoaderCircle } from "lucide-react";
 import { PaymentProviderComponent } from "../payment/provider";
 import { FundingSettlementPolling } from "../payment/shared/status";
-import { WalletTransferForm } from "./transfers";
 
 export {
   createFundingStatusPoller,
@@ -120,6 +119,12 @@ export function walletActivityState(state: WalletTransaction["state"]) {
       : state === "cancelled"
         ? "Cancelled"
         : "Pending";
+}
+
+export function walletActivityDirection(direction: WalletTransaction["direction"]) {
+  return direction === "credit"
+    ? { sign: "+" as const, label: "Credit" as const, className: "bg-emerald-50 text-emerald-800" }
+    : { sign: "−" as const, label: "Debit" as const, className: "bg-red-50 text-red-700" };
 }
 
 export function WalletPanel({
@@ -521,7 +526,19 @@ export function WalletPanel({
           </Card>
         </section>
       )}
-      {composition.showOverview && <WalletTransferForm onComplete={() => void loadWallet(true)} />}
+      {composition.showOverview && (
+        <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Move balance</h2>
+            <p className="text-sm text-slate-600">
+              Transfer between Funding and Earnings with a clear fee and receiving amount.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/dashboard?section=balance-transfer">Transfer balance</Link>
+          </Button>
+        </Card>
+      )}
 
       {persistedFunding && !funding && (
         <Card className="flex items-center gap-3 p-5" aria-live="polite">
@@ -603,36 +620,50 @@ export function WalletPanel({
           ) : (
             <>
               <div className="grid gap-2">
-                {transactions.map((transaction) => (
-                  <article
-                    className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-slate-200 bg-white p-4"
-                    key={transaction.id}
-                  >
-                    <div
-                      className="grid h-8 w-8 place-items-center rounded-full bg-emerald-50 text-emerald-800"
-                      aria-hidden="true"
+                {transactions.map((transaction) => {
+                  const direction = walletActivityDirection(transaction.direction);
+                  return (
+                    <article
+                      className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-slate-200 bg-white p-4"
+                      key={transaction.id}
                     >
-                      {transaction.direction === "credit" ? "+" : "−"}
-                    </div>
-                    <div className="grid gap-1">
-                      <strong>{walletActivityLabel(transaction)}</strong>
-                      {walletActivityReference(transaction) && (
-                        <code className="break-all text-xs text-slate-500">
-                          {walletActivityReference(transaction)}
-                        </code>
-                      )}
-                      <span className="text-xs text-slate-500">
-                        {new Date(transaction.created_at).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="grid justify-items-end gap-1">
-                      <Money minor={transaction.amount_minor} currency={transaction.currency} />
-                      <Badge variant={transaction.state === "available" ? "default" : "secondary"}>
-                        {walletActivityState(transaction.state)}
-                      </Badge>
-                    </div>
-                  </article>
-                ))}
+                      <div
+                        className={`grid h-8 w-8 place-items-center rounded-full ${direction.className}`}
+                        aria-hidden="true"
+                        title={direction.label}
+                      >
+                        {direction.sign}
+                      </div>
+                      <span className="sr-only">{direction.label}</span>
+                      <div className="grid gap-1">
+                        <strong>{walletActivityLabel(transaction)}</strong>
+                        {walletActivityReference(transaction) && (
+                          <code className="break-all text-xs text-slate-500">
+                            {walletActivityReference(transaction)}
+                          </code>
+                        )}
+                        <span className="text-xs text-slate-500">
+                          {new Date(transaction.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="grid justify-items-end gap-1">
+                        <span
+                          className={
+                            direction.label === "Debit" ? "text-red-700" : "text-emerald-800"
+                          }
+                        >
+                          {direction.sign}{" "}
+                          <Money minor={transaction.amount_minor} currency={transaction.currency} />
+                        </span>
+                        <Badge
+                          variant={transaction.state === "available" ? "default" : "secondary"}
+                        >
+                          {walletActivityState(transaction.state)}
+                        </Badge>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
               {activityCursor && (
                 <Button

@@ -153,6 +153,7 @@ export function EarningsPanel() {
               </p>
             </Card>
           </div>
+          {summary?.reconciliation && <EarningsReconciliation data={summary.reconciliation} />}
           <Card className="p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -175,6 +176,60 @@ export function EarningsPanel() {
         </>
       )}
     </section>
+  );
+}
+
+function EarningsReconciliation({
+  data,
+}: {
+  data: NonNullable<EarningsSummary["reconciliation"]>;
+}) {
+  const rows: Array<[string, string]> = [
+    ["Available after reservations", data.available_minor],
+    ["Purchase earnings", data.purchase_earnings_minor],
+    ["Purchase reversals", data.purchase_reversals_minor],
+    ["Source-linked corrections", data.earnings_corrections_minor],
+    ["Manual adjustments", data.manual_adjustments_minor],
+    ["Balance transfers", data.balance_transfers_minor],
+    ["Funding reversals", data.funding_reversals_minor],
+    ["Transfer compensations", data.transfer_compensations_minor],
+    ["Debt settled from Earnings", data.debt_settlements_minor],
+    ["Active withdrawal reservations", data.withdrawal_reserved_minor],
+    ["Completed withdrawals", data.completed_withdrawals_minor],
+  ];
+  return (
+    <Card className="grid gap-4 p-5">
+      <div>
+        <h3 className="text-lg font-semibold tracking-tight">Earnings reconciliation</h3>
+        <p className="text-sm text-slate-600">
+          Available now is the authoritative ledger result. The source movements explain that
+          result; they are not a separate balance calculation.
+        </p>
+      </div>
+      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+        {rows.map(([label, amount]) => (
+          <div
+            className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-2"
+            key={label}
+          >
+            <dt className="text-sm text-slate-600">{label}</dt>
+            <dd
+              className={
+                amount.startsWith("-")
+                  ? "text-sm font-medium text-red-700"
+                  : "text-sm font-medium text-emerald-800"
+              }
+            >
+              <Money minor={amount} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-xs text-slate-500">
+        <Money minor={data.settled_purchase_earnings_minor} /> of purchase earnings have settled
+        from pending; this amount is already included in Purchase earnings.
+      </p>
+    </Card>
   );
 }
 
@@ -279,7 +334,11 @@ function EarningRow({ entry }: { entry: EarningsEntry }) {
       </div>
       <div className="grid justify-items-end gap-1 whitespace-nowrap">
         <Badge variant={variant}>{label(entry.balance_state)}</Badge>
-        <span className="inline-flex items-baseline gap-0.5">
+        <span
+          className={`inline-flex items-baseline gap-0.5 ${
+            amount.sign === "-" ? "text-red-700" : "text-emerald-800"
+          }`}
+        >
           {amount.sign}
           <Money minor={amount.minor} currency={entry.currency} />
         </span>

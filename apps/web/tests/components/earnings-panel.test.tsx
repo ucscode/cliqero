@@ -17,6 +17,10 @@ const earningsPanelSource = readFileSync(
   resolve(process.cwd(), "src/components/earnings-panel.tsx"),
   "utf8",
 );
+const earningsAdjustmentSource = readFileSync(
+  resolve(process.cwd(), "src/components/operator/earnings-adjustments.tsx"),
+  "utf8",
+);
 
 const entries = {
   items: [
@@ -102,6 +106,20 @@ describe("earnings panel presentation", () => {
     });
   });
 
+  it("presents reconciliation as explanatory source movements and adjustment totals as server summaries", () => {
+    expect(earningsPanelSource).toContain("Available now is the authoritative ledger result");
+    expect(earningsPanelSource).toContain("data.available_minor");
+    expect(earningsPanelSource).toContain("data.settled_purchase_earnings_minor");
+    expect(earningsPanelSource).toContain(
+      'amount.sign === "-" ? "text-red-700" : "text-emerald-800"',
+    );
+    expect(earningsAdjustmentSource).toContain('"/api/earnings/adjustments?limit=50"');
+    expect(earningsAdjustmentSource).toContain("summary.creditMinor");
+    expect(earningsAdjustmentSource).toContain("summary.debitMinor");
+    expect(earningsAdjustmentSource).toContain("summary.netMinor");
+    expect(earningsAdjustmentSource).toContain("parseUsdMinor(amount)");
+  });
+
   it("highlights the withdrawable amount using its projected currency", () => {
     const output = renderToStaticMarkup(
       createElement(EarningsHighlight, {
@@ -128,6 +146,20 @@ describe("earnings panel presentation", () => {
             balances: [{ currency: "USD", state: "available", amount_minor: "340" }],
             withdrawal_currency: "USD",
             withdrawable_balances: [{ currency: "USD", amount_minor: "230" }],
+            reconciliation: {
+              available_minor: "230",
+              purchase_earnings_minor: "0",
+              purchase_reversals_minor: "0",
+              earnings_corrections_minor: "0",
+              manual_adjustments_minor: "0",
+              balance_transfers_minor: "0",
+              funding_reversals_minor: "0",
+              transfer_compensations_minor: "0",
+              debt_settlements_minor: "0",
+              withdrawal_reserved_minor: "0",
+              completed_withdrawals_minor: "0",
+              settled_purchase_earnings_minor: "0",
+            },
           },
         },
       }),
@@ -213,6 +245,20 @@ describe("earnings panel presentation", () => {
               { currency: "NGN", amount_minor: "230" },
               { currency: "USD", amount_minor: "800" },
             ],
+            reconciliation: {
+              available_minor: "230",
+              purchase_earnings_minor: "0",
+              purchase_reversals_minor: "0",
+              earnings_corrections_minor: "0",
+              manual_adjustments_minor: "0",
+              balance_transfers_minor: "0",
+              funding_reversals_minor: "0",
+              transfer_compensations_minor: "0",
+              debt_settlements_minor: "0",
+              withdrawal_reserved_minor: "0",
+              completed_withdrawals_minor: "0",
+              settled_purchase_earnings_minor: "0",
+            },
           },
         },
       }),

@@ -107,12 +107,106 @@ export class AccountProjectionService {
         [accountId],
       )
     ).rows;
+    const reconciliation = (
+      await this.sql.query<{
+        available_minor: string;
+        purchase_earnings_minor: string;
+        purchase_reversals_minor: string;
+        earnings_corrections_minor: string;
+        manual_adjustments_minor: string;
+        balance_transfers_minor: string;
+        funding_reversals_minor: string;
+        transfer_compensations_minor: string;
+        debt_settlements_minor: string;
+        withdrawal_reserved_minor: string;
+        completed_withdrawals_minor: string;
+        settled_purchase_earnings_minor: string;
+      }>(
+        `with account as (
+          select id from identity_capability.accounts where uuid=$1
+        ), effective_purchase as (
+          select entry.* from ledger_capability.entries entry,account
+           where entry.account_id=account.id and entry.currency='USD'
+             and entry.entry_type in ('purchase-earnings','purchase-reversal')
+             and (entry.balance_state='available' or exists (
+               select 1 from ledger_capability.entry_settlements settlement
+                where settlement.original_entry_id=entry.id and settlement.to_state='available'
+             ) or (entry.direction='debit' and entry.basis='earnings-correction' and exists (
+               select 1 from ledger_capability.entry_settlements source_settlement
+                where source_settlement.original_entry_id=entry.original_entry_id
+                  and source_settlement.to_state='available'
+             )))
+        ), latest_reservations as (
+          select distinct on (event.reservation_id) event.reservation_id,event.kind,event.amount_minor
+            from ledger_capability.withdrawal_reservation_events event,account
+           where event.account_id=account.id and event.currency='USD'
+           order by event.reservation_id,event.created_at desc,event.id desc
+        )
+        select
+          ledger_capability.available_earnings_minor((select id from account),'USD')::text available_minor,
+          coalesce((select sum(amount_minor) from effective_purchase
+                     where entry_type='purchase-earnings' and direction='credit'),0)::text purchase_earnings_minor,
+          coalesce(-(select sum(amount_minor) from effective_purchase
+                      where entry_type='purchase-reversal' and direction='debit'
+                        and basis is distinct from 'earnings-correction'),0)::text purchase_reversals_minor,
+          coalesce(-(select sum(amount_minor) from effective_purchase
+                      where entry_type='purchase-reversal' and direction='debit'
+                        and basis='earnings-correction'),0)::text earnings_corrections_minor,
+          coalesce((select sum(adjustment.amount_minor)
+                      from ledger_capability.earnings_adjustments adjustment,account
+                     where adjustment.account_id=account.id and not exists (
+                       select 1 from wallet_capability.transfers transfer
+                        where transfer.uuid::text=adjustment.reference
+                     )),0)::text manual_adjustments_minor,
+          coalesce((select sum(adjustment.amount_minor)
+                      from ledger_capability.earnings_adjustments adjustment,account
+                     where adjustment.account_id=account.id and exists (
+                       select 1 from wallet_capability.transfers transfer
+                        where transfer.uuid::text=adjustment.reference
+                     )),0)::text balance_transfers_minor,
+          coalesce(-(select sum(reversal.earnings_wallet_minor)
+                       from funding_capability.funding_reversals reversal,account
+                      where reversal.account_id=account.id),0)::text funding_reversals_minor,
+          coalesce((select sum(case when compensation.from_wallet='earnings'
+                                    then compensation.gross_minor else -compensation.net_minor end)
+                      from wallet_capability.transfer_compensations compensation,account
+                     where compensation.account_id=account.id),0)::text transfer_compensations_minor,
+          coalesce(-(select sum(debt.amount_minor) from ledger_capability.account_debt_entries debt,account
+                     where debt.account_id=account.id and debt.wallet='earnings' and debt.kind='settlement'),0)::text debt_settlements_minor,
+          coalesce(-(select sum(amount_minor) from latest_reservations where kind='reserved'),0)::text withdrawal_reserved_minor,
+          coalesce(-(select sum(amount_minor) from latest_reservations where kind='completed'),0)::text completed_withdrawals_minor,
+          coalesce((select sum(entry.amount_minor) from ledger_capability.entries entry,account
+                     where entry.account_id=account.id and entry.currency='USD'
+                       and entry.entry_type='purchase-earnings' and entry.direction='credit'
+                       and entry.balance_state='pending' and exists (
+                         select 1 from ledger_capability.entry_settlements settlement
+                          where settlement.original_entry_id=entry.id and settlement.to_state='available'
+                       )),0)::text settled_purchase_earnings_minor`,
+        [accountId],
+      )
+    ).rows[0];
     return {
       balances: rows.map((row) => ({
         currency: row.currency,
         state: row.balance_state,
         amount_minor: String(row.amount_minor),
       })),
+      reconciliation: {
+        available_minor: String(reconciliation?.available_minor ?? "0"),
+        purchase_earnings_minor: String(reconciliation?.purchase_earnings_minor ?? "0"),
+        purchase_reversals_minor: String(reconciliation?.purchase_reversals_minor ?? "0"),
+        earnings_corrections_minor: String(reconciliation?.earnings_corrections_minor ?? "0"),
+        manual_adjustments_minor: String(reconciliation?.manual_adjustments_minor ?? "0"),
+        balance_transfers_minor: String(reconciliation?.balance_transfers_minor ?? "0"),
+        funding_reversals_minor: String(reconciliation?.funding_reversals_minor ?? "0"),
+        transfer_compensations_minor: String(reconciliation?.transfer_compensations_minor ?? "0"),
+        debt_settlements_minor: String(reconciliation?.debt_settlements_minor ?? "0"),
+        withdrawal_reserved_minor: String(reconciliation?.withdrawal_reserved_minor ?? "0"),
+        completed_withdrawals_minor: String(reconciliation?.completed_withdrawals_minor ?? "0"),
+        settled_purchase_earnings_minor: String(
+          reconciliation?.settled_purchase_earnings_minor ?? "0",
+        ),
+      },
     };
   }
   async earningEntries(accountId: string, input: { cursor?: string; limit: number }) {

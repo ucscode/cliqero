@@ -24,6 +24,7 @@ export interface EarningsAdjustmentRepository {
   list(input: { search?: string; cursor?: string; limit: number }): Promise<{
     items: EarningsAdjustment[];
     nextCursor: string | null;
+    summary: { creditMinor: string; debitMinor: string; netMinor: string };
   }>;
   get(id: string): Promise<EarningsAdjustment | null>;
   deleteForRoot(id: string, actorId: string): Promise<boolean>;

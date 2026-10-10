@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
-import { ApiClientError, apiFetch, type OperatorEarningsPage } from "@/lib/api-client";
+import {
+  ApiClientError,
+  apiFetch,
+  parseUsdMinor,
+  type OperatorEarningsPage,
+} from "@/lib/api-client";
 import { Money } from "../money";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -192,9 +197,16 @@ export function OperatorEarningsList({
   async function createCorrection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!correctionSource) return;
+    let amountMinor: string;
+    try {
+      amountMinor = parseUsdMinor(correctionAmount);
+    } catch (cause) {
+      setCorrectionError(cause instanceof Error ? cause.message : "Enter a valid USD amount.");
+      return;
+    }
     const payload = {
       source_entry_id: correctionSource.id,
-      amount_minor: correctionAmount.trim(),
+      amount_minor: amountMinor,
       reason: correctionReason.trim(),
     };
     const intent = JSON.stringify(payload);
@@ -345,13 +357,11 @@ export function OperatorEarningsList({
                   onSubmit={createCorrection}
                 >
                   <div className="grid gap-2">
-                    <RequiredLabel htmlFor="earning-correction-amount">
-                      Amount (USD minor units)
-                    </RequiredLabel>
+                    <RequiredLabel htmlFor="earning-correction-amount">Amount (USD)</RequiredLabel>
                     <Input
                       id="earning-correction-amount"
-                      inputMode="numeric"
-                      pattern="[1-9][0-9]*"
+                      inputMode="decimal"
+                      placeholder="e.g. 15.00"
                       value={correctionAmount}
                       onChange={(event) => setCorrectionAmount(event.target.value)}
                       required

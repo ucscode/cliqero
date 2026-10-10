@@ -137,6 +137,14 @@ suite("atomic Funding and Earnings transfers", () => {
       idempotencyKey: newId(),
     });
     await insertEarningsSpendFixture(user.id, 400n, "Support correction fixture");
+    const earningsProjection = await app.accountProjections.earnings(user.id);
+    expect(earningsProjection.reconciliation).toMatchObject({
+      available_minor: "5400",
+      balance_transfers_minor: "4800",
+      manual_adjustments_minor: "600",
+      withdrawal_reserved_minor: "0",
+      completed_withdrawals_minor: "0",
+    });
     const earningsItems = [] as Array<{
       id: string;
       reason: string | null;

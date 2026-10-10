@@ -19,6 +19,7 @@ import {
   verificationObservationHeading,
   validatedPreparationAmount,
   walletActivityLabel,
+  walletActivityDirection,
   walletActivityReference,
   walletActivityState,
   walletPanelComposition,
@@ -261,6 +262,18 @@ describe("provider preparation context", () => {
 });
 
 describe("customer-facing funding presentation", () => {
+  it("communicates wallet activity direction with both a sign and distinct tone", () => {
+    expect(walletActivityDirection("credit")).toMatchObject({
+      sign: "+",
+      label: "Credit",
+      className: "bg-emerald-50 text-emerald-800",
+    });
+    expect(walletActivityDirection("debit")).toMatchObject({
+      sign: "−",
+      label: "Debit",
+      className: "bg-red-50 text-red-700",
+    });
+  });
   it("keeps the transfer copy value separate from its formatted display", () => {
     const collectionAmountMinor = "3316200";
     const collectionCurrency = "NGN";

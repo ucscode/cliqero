@@ -40,7 +40,11 @@ const apiKey = (scopes: string[]) => ({
 describe("public earnings adjustment resource", () => {
   it("lists and gets immutable facts with finance.read", async () => {
     const methods = {
-      list: vi.fn(async () => ({ items: [item], nextCursor: null })),
+      list: vi.fn(async () => ({
+        items: [item],
+        nextCursor: null,
+        summary: { creditMinor: "100", debitMinor: "20", netMinor: "80" },
+      })),
       get: vi.fn(async () => item),
       create: vi.fn(),
     };

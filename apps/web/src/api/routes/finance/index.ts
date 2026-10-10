@@ -191,6 +191,11 @@ export function registerFinanceRoutes(app: OpenAPIHono<Env>, container: Applicat
               schema: z.object({
                 items: z.array(earningsAdjustmentSchema),
                 nextCursor: z.string().nullable(),
+                summary: z.object({
+                  creditMinor: z.string(),
+                  debitMinor: z.string(),
+                  netMinor: z.string(),
+                }),
               }),
             },
           },

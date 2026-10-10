@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ApiClientError, apiFetch, type OperatorAccountSummary } from "@/lib/api-client";
+import {
+  ApiClientError,
+  apiFetch,
+  parseUsdMinor,
+  type OperatorAccountSummary,
+} from "@/lib/api-client";
 import { Input } from "../ui/input";
 import { RequiredLabel, Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
+import { Card } from "../ui/card";
 import { useToast } from "../toast/provider";
 import { Money } from "../money";
 import { CrudEdit } from "@/components/crud/edit";
@@ -33,6 +39,7 @@ type Adjustment = {
   createdAt: string;
   currentBalanceMinor?: string | null;
 };
+type AdjustmentSummary = { creditMinor: string; debitMinor: string; netMinor: string };
 
 export function OperatorEarningsAdjustmentForm() {
   const router = useRouter();
@@ -50,9 +57,10 @@ export function OperatorEarningsAdjustmentForm() {
     setSaving(true);
     setError(null);
     try {
+      const amountMinor = parseUsdMinor(amount);
       const payload = {
         account_id: account?.id,
-        amount_minor: amount.trim(),
+        amount_minor: amountMinor,
         reason: reason.trim(),
         reference: reference.trim() || null,
       };
@@ -96,8 +104,8 @@ export function OperatorEarningsAdjustmentForm() {
       widthClassName="max-w-3xl"
     >
       <p className="text-sm text-slate-600">
-        Amounts use USD minor units: 1000 = $10.00. Recoveries must identify the original earning
-        and are recorded from the Earnings ledger.
+        Enter a USD amount. Recoveries must identify the original earning and are recorded from the
+        Earnings ledger.
       </p>
       <div className="grid gap-2">
         <RequiredLabel htmlFor="adjustment-account">Account</RequiredLabel>
@@ -109,13 +117,11 @@ export function OperatorEarningsAdjustmentForm() {
         />
       </div>
       <div className="grid gap-2">
-        <RequiredLabel htmlFor="adjustment-amount">
-          Positive amount in USD minor units
-        </RequiredLabel>
+        <RequiredLabel htmlFor="adjustment-amount">Positive amount (USD)</RequiredLabel>
         <Input
           id="adjustment-amount"
-          inputMode="numeric"
-          placeholder="e.g. 1000"
+          inputMode="decimal"
+          placeholder="e.g. 10.00"
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
           required
@@ -153,6 +159,7 @@ export function OperatorEarningsAdjustments({
 }) {
   const confirm = useOperatorConfirmation();
   const [items, setItems] = useState<Adjustment[]>([]);
+  const [summary, setSummary] = useState<AdjustmentSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [bulkOutcome, setBulkOutcome] = useState<OperatorBulkOutcomeData | null>(null);
@@ -160,8 +167,12 @@ export function OperatorEarningsAdjustments({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await apiFetch<{ items: Adjustment[] }>("/api/earnings/adjustments?limit=50");
+      const result = await apiFetch<{
+        items: Adjustment[];
+        summary: AdjustmentSummary;
+      }>("/api/earnings/adjustments?limit=50");
       setItems(result.items);
+      setSummary(result.summary);
       setError(null);
     } catch (cause) {
       setError(cause instanceof ApiClientError ? cause.message : "Adjustments are unavailable.");
@@ -338,6 +349,28 @@ export function OperatorEarningsAdjustments({
       onRetry={() => void load()}
       beforeTable={
         <>
+          {summary && (
+            <section className="grid gap-3 sm:grid-cols-3" aria-label="Earnings adjustment totals">
+              <Card className="grid gap-2 p-4">
+                <span className="text-sm text-slate-600">Adjustment credits</span>
+                <strong className="text-xl">
+                  <Money minor={summary.creditMinor} />
+                </strong>
+              </Card>
+              <Card className="grid gap-2 p-4">
+                <span className="text-sm text-slate-600">Adjustment debits</span>
+                <strong className="text-xl text-red-700">
+                  <Money minor={`-${summary.debitMinor}`} />
+                </strong>
+              </Card>
+              <Card className="grid gap-2 p-4">
+                <span className="text-sm text-slate-600">Net adjustments</span>
+                <strong className="text-xl">
+                  <Money minor={summary.netMinor} />
+                </strong>
+              </Card>
+            </section>
+          )}
           {error && (
             <p className="text-sm text-red-700" role="alert">
               {error}
