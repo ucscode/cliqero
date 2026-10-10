@@ -107,6 +107,7 @@ export function OnboardingForm() {
         <Label htmlFor="onboarding-username">Username</Label>
         <Input
           id="onboarding-username"
+          name="username"
           value={username}
           onChange={(event) => {
             setUsernameError(null);
@@ -129,6 +130,7 @@ export function OnboardingForm() {
             <div className="relative">
               <Input
                 id="onboarding-password"
+                name="password"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => {

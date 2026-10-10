@@ -81,6 +81,6 @@ export function presentFormApiError(
   );
   return {
     fields,
-    message: hasUnmappedFields ? fallback : Object.keys(fields).length ? null : error.message,
+    message: hasUnmappedFields || Object.keys(fields).length ? fallback : error.message,
   };
 }

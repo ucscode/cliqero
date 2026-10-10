@@ -173,6 +173,7 @@ export function AuthForm({
             <Label htmlFor="username">Username</Label>
             <Input
               id="username"
+              name="username"
               value={username}
               onChange={(event) => {
                 setFieldErrors((current) => ({ ...current, username: "" }));
@@ -194,6 +195,7 @@ export function AuthForm({
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
+          name="email"
           type="email"
           value={email}
           onChange={(event) => {
@@ -211,6 +213,7 @@ export function AuthForm({
         <div className="relative">
           <Input
             id="password"
+            name="password"
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(event) => {

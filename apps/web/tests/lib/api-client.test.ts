@@ -208,7 +208,7 @@ describe("form API error presentation", () => {
 
     expect(presentFormApiError(error, ["username", "email"])).toEqual({
       fields: { username: "That username is already taken." },
-      message: null,
+      message: "Please check your details and try again.",
     });
   });
 

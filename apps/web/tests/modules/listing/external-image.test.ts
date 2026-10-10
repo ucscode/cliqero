@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { externalListingImageUrl } from "@/modules/listing/external-image";
+import {
+  externalListingImageUrl,
+  listingCoverImageUrl,
+  listingImageSource,
+  updateListingImageMetadata,
+} from "@/modules/listing/external-image";
 
 describe("external listing image metadata", () => {
   it("accepts only bounded HTTP(S) image URLs", () => {
@@ -13,5 +18,39 @@ describe("external listing image metadata", () => {
     expect(externalListingImageUrl({ external_image_url: "not a URL" })).toBeNull();
     expect(externalListingImageUrl({ external_image_url: "x".repeat(2001) })).toBeNull();
     expect(externalListingImageUrl({})).toBeNull();
+  });
+
+  it("uses explicit None, Uploaded, and External source selections as authoritative", () => {
+    const metadata = { external_image_url: "https://images.example.test/cover.webp" };
+    expect(
+      listingCoverImageUrl({ ...metadata, image_source: "none" }, "/uploaded.webp"),
+    ).toBeNull();
+    expect(listingCoverImageUrl({ ...metadata, image_source: "uploaded" }, "/uploaded.webp")).toBe(
+      "/uploaded.webp",
+    );
+    expect(listingCoverImageUrl({ ...metadata, image_source: "external" }, "/uploaded.webp")).toBe(
+      "https://images.example.test/cover.webp",
+    );
+    expect(listingCoverImageUrl({ image_source: "external" }, "/uploaded.webp")).toBeNull();
+  });
+
+  it("preserves legacy appearance and stored image references when changing source", () => {
+    const legacyExternal = { external_image_url: "https://images.example.test/legacy.webp" };
+    expect(listingImageSource(legacyExternal, true)).toBe("external");
+    expect(listingImageSource({}, true)).toBe("uploaded");
+    expect(listingImageSource({}, false)).toBe("none");
+    expect(updateListingImageMetadata(legacyExternal, "uploaded", "")).toEqual({
+      image_source: "uploaded",
+      external_image_url: legacyExternal.external_image_url,
+    });
+    expect(
+      updateListingImageMetadata({ image_source: "uploaded" }, "none", "https://e.test/a.png"),
+    ).toEqual({ image_source: "none", external_image_url: "https://e.test/a.png" });
+  });
+
+  it("rejects unsupported external protocols", () => {
+    expect(
+      externalListingImageUrl({ external_image_url: "ftp://images.example.test/a.png" }),
+    ).toBeNull();
   });
 });

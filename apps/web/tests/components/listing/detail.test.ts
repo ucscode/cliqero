@@ -10,16 +10,33 @@ import {
 } from "@/components/listing/detail";
 
 describe("listing detail review visibility", () => {
-  it("uses external imagery as the initial cover without overriding a selected gallery image", () => {
-    const metadata = { external_image_url: "https://images.example.test/cover.webp" };
+  it("uses the selected source as the cover and keeps legacy external listings unchanged", () => {
+    const metadata = {
+      image_source: "external",
+      external_image_url: "https://images.example.test/cover.webp",
+    };
 
     expect(listingDetailImageUrl(metadata, undefined, "/media/gallery-1")).toBe(
       "https://images.example.test/cover.webp",
     );
     expect(listingDetailImageUrl(metadata, "/media/gallery-2", "/media/gallery-1")).toBe(
-      "/media/gallery-2",
+      "https://images.example.test/cover.webp",
     );
     expect(listingDetailImageUrl({}, undefined, "/media/gallery-1")).toBe("/media/gallery-1");
+    expect(
+      listingDetailImageUrl(
+        { image_source: "none", external_image_url: metadata.external_image_url },
+        undefined,
+        "/media/gallery-1",
+      ),
+    ).toBeUndefined();
+    expect(
+      listingDetailImageUrl(
+        { external_image_url: metadata.external_image_url },
+        undefined,
+        "/media/gallery-1",
+      ),
+    ).toBe(metadata.external_image_url);
   });
 
   it("hides review UI when storefront reviews are disabled", () => {

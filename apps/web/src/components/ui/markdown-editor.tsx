@@ -54,12 +54,17 @@ const Editor = dynamic(
 export function MarkdownEditor({
   markdown,
   onChange,
+  fieldName,
 }: {
   markdown: string;
   onChange: (value: string) => void;
+  fieldName?: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-md border border-slate-300 bg-white [&_.mdxeditor]:min-h-64 [&_.mdxeditor]:text-sm [&_.mdxeditor-toolbar]:flex-wrap">
+    <div
+      data-form-field={fieldName}
+      className="overflow-hidden rounded-md border border-slate-300 bg-white [&_.mdxeditor]:min-h-64 [&_.mdxeditor]:text-sm [&_.mdxeditor-toolbar]:flex-wrap"
+    >
       <Editor
         markdown={markdown}
         onChange={onChange}

@@ -56,6 +56,44 @@ describe("catalogue listing card", () => {
     expect(html).not.toContain("fill-amber-400");
   });
 
+  it("renders only the explicitly selected cover source", () => {
+    const media = [
+      {
+        id: "media-1",
+        url: "/uploaded.webp",
+        mime_type: "image/webp",
+        width: 400,
+        height: 300,
+        position: 0,
+        alt_text: "Uploaded cover",
+      },
+    ];
+    const externalUrl = "https://images.example.test/cover.webp";
+    const external = renderToStaticMarkup(
+      createElement(ListingCard, {
+        listing: listing({
+          media,
+          metadata: { image_source: "external", external_image_url: externalUrl },
+        }),
+        reviewsVisible: false,
+      }),
+    );
+    expect(external).toContain(`src="${externalUrl}"`);
+    expect(external).not.toContain('src="/uploaded.webp"');
+
+    const none = renderToStaticMarkup(
+      createElement(ListingCard, {
+        listing: listing({
+          media,
+          metadata: { image_source: "none", external_image_url: externalUrl },
+        }),
+        reviewsVisible: false,
+      }),
+    );
+    expect(none).not.toContain(`src="${externalUrl}"`);
+    expect(none).not.toContain('src="/uploaded.webp"');
+  });
+
   it("never supplies a fallback category and summarizes at most two names", () => {
     expect(compactCategoryLabel([])).toBe("");
     expect(compactCategoryLabel([{ name: "API" }])).toBe("API");

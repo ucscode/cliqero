@@ -20,7 +20,7 @@ import { TextLink } from "../text-link";
 import { ListingReviews } from "./reviews";
 import { ListingPrice, isFreeListingPrice } from "./price";
 import { Star } from "lucide-react";
-import { externalListingImageUrl } from "@/modules/listing/external-image";
+import { listingCoverImageUrl, listingImageSource } from "@/modules/listing/external-image";
 
 export function shouldRenderListingReviews(reviewsVisible: boolean) {
   return reviewsVisible;
@@ -35,7 +35,8 @@ export function listingDetailImageUrl(
   selectedMediaUrl: string | undefined,
   defaultMediaUrl: string | undefined,
 ) {
-  return selectedMediaUrl ?? externalListingImageUrl(metadata) ?? defaultMediaUrl;
+  const uploadedUrl = selectedMediaUrl ?? defaultMediaUrl;
+  return listingCoverImageUrl(metadata, uploadedUrl) ?? undefined;
 }
 
 export function ListingReviewSection({
@@ -133,10 +134,21 @@ export function ListingDetail({
       </main>
     );
   const currentListing = listing;
+  const source = listingImageSource(currentListing.metadata, currentListing.media.length > 0);
   const image =
-    currentListing.media.find((media) => media.id === selectedMediaId) ?? currentListing.media[0];
-  const selectedImage = currentListing.media.find((media) => media.id === selectedMediaId);
-  const imageUrl = listingDetailImageUrl(currentListing.metadata, selectedImage?.url, image?.url);
+    source === "uploaded"
+      ? (currentListing.media.find((media) => media.id === selectedMediaId) ??
+        currentListing.media[0])
+      : undefined;
+  const selectedImage =
+    source === "uploaded"
+      ? currentListing.media.find((media) => media.id === selectedMediaId)
+      : undefined;
+  const imageUrl = listingDetailImageUrl(
+    currentListing.metadata,
+    selectedImage?.url,
+    currentListing.media[0]?.url,
+  );
   const hasApprovedReviews = (currentListing.rating?.count ?? 0) > 0;
   const approvedRating = hasApprovedReviews ? currentListing.rating! : null;
   function buy() {
@@ -187,7 +199,7 @@ export function ListingDetail({
               <span>{currentListing.title.slice(0, 1).toUpperCase()}</span>
             </div>
           )}
-          {currentListing.media.length > 1 && (
+          {source === "uploaded" && currentListing.media.length > 1 && (
             <div className="flex flex-wrap gap-2" aria-label="Listing media">
               {currentListing.media.map((media) => (
                 <button

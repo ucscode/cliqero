@@ -21,7 +21,12 @@ import {
   type OperatorListingPage,
 } from "@/lib/api-client";
 import type { ListingCategory } from "@/modules/listing/category/category";
-import { externalListingImageUrl } from "@/modules/listing/external-image";
+import {
+  externalListingImageUrl,
+  listingImageSource,
+  updateListingImageMetadata,
+  type ListingImageSource,
+} from "@/modules/listing/external-image";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
@@ -735,7 +740,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
     price: "",
     destination: "",
     externalKey: "",
-    imageSource: "uploaded" as "uploaded" | "external",
+    imageSource: "uploaded" as ListingImageSource,
     externalImageUrl: "",
     featuredPosition: "",
     compareAtPrice: "",
@@ -752,6 +757,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   const [stagedMedia, setStagedMedia] = useState<ReturnType<typeof createCatalogueImagePreview>[]>(
     [],
   );
+  const [clearExternalImage, setClearExternalImage] = useState(false);
   const externalKeyTouched = useRef(false);
   const previewIdentity = useRef<string | null>(null);
   const stagedMediaRef = useRef(stagedMedia);
@@ -776,7 +782,13 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         setCategories(result.items);
         setCategoriesLoaded(true);
       })
-      .catch((cause) => setError(errorMessage(cause)));
+      .catch((cause) =>
+        setError(
+          cause instanceof ApiClientError
+            ? cause
+            : "We couldn't load catalogue categories. Reload the page and try again.",
+        ),
+      );
   }, []);
 
   useEffect(() => {
@@ -790,7 +802,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           price: minorToUsdInput(value.price.minor_amount),
           destination: value.destination,
           externalKey: value.external_key ?? "",
-          imageSource: externalListingImageUrl(value.metadata) ? "external" : "uploaded",
+          imageSource: listingImageSource(value.metadata, value.media.length > 0),
           externalImageUrl: externalListingImageUrl(value.metadata) ?? "",
           featuredPosition: value.featured_position?.toString() ?? "",
           compareAtPrice: value.compare_at_price
@@ -801,7 +813,11 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           categoryIds: value.categories.map((category) => category.id),
         });
       })
-      .catch((cause) => setError(errorMessage(cause)))
+      .catch((cause) =>
+        setError(
+          cause instanceof ApiClientError ? cause : "We couldn't load this listing. Try again.",
+        ),
+      )
       .finally(() => setLoading(false));
   }, [listingId]);
 
@@ -818,20 +834,71 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
     setSaving(true);
     setError(null);
     setFieldErrors({});
-    const metadata = { ...(listing?.metadata ?? {}) };
-    if (form.imageSource === "external" && form.externalImageUrl.trim())
-      metadata.external_image_url = form.externalImageUrl.trim();
-    else delete metadata.external_image_url;
     try {
-      const priceMinor = parseUsdMinor(form.price, { allowZero: true });
-      const compareAtMinor = form.compareAtPrice.trim() ? parseUsdMinor(form.compareAtPrice) : null;
+      const uploadedCount = (listing?.media.length ?? 0) + stagedMedia.length;
+      if (form.imageSource === "uploaded" && uploadedCount === 0) {
+        throw new ApiClientError(
+          "Please correct the highlighted fields.",
+          422,
+          "validation_error",
+          { image_source: "Choose an uploaded image or select another image source." },
+        );
+      }
+      if (
+        form.imageSource === "external" &&
+        !externalListingImageUrl({ external_image_url: form.externalImageUrl.trim() })
+      ) {
+        throw new ApiClientError(
+          "Please correct the highlighted fields.",
+          422,
+          "validation_error",
+          { external_image_url: "Enter a valid HTTP or HTTPS image URL." },
+        );
+      }
+      const metadata = updateListingImageMetadata(
+        listing?.metadata ?? {},
+        form.imageSource,
+        form.externalImageUrl,
+      );
+      if (clearExternalImage) delete metadata.external_image_url;
+      let priceMinor: string;
+      try {
+        priceMinor = parseUsdMinor(form.price, { allowZero: true });
+      } catch (cause) {
+        throw new ApiClientError(
+          "Please correct the highlighted fields.",
+          422,
+          "validation_error",
+          {
+            price_minor:
+              cause instanceof Error ? cause.message : "Enter a valid USD listing price.",
+          },
+        );
+      }
+      let compareAtMinor: string | null;
+      try {
+        compareAtMinor = form.compareAtPrice.trim() ? parseUsdMinor(form.compareAtPrice) : null;
+      } catch (cause) {
+        throw new ApiClientError(
+          "Please correct the highlighted fields.",
+          422,
+          "validation_error",
+          {
+            compare_at_price_minor:
+              cause instanceof Error ? cause.message : "Enter a valid USD compare-at price.",
+          },
+        );
+      }
       if (compareAtMinor !== null && BigInt(compareAtMinor) <= BigInt(priceMinor)) {
-        setFieldErrors({
-          compare_at_price_minor: "Compare-at price must be greater than the listing price.",
-        });
-        return;
+        throw new ApiClientError(
+          "Please correct the highlighted fields.",
+          422,
+          "validation_error",
+          { compare_at_price_minor: "Compare-at price must be greater than the listing price." },
+        );
       }
       if (editing) {
+        await uploadStagedMedia(listingId!, honeypotHeaders);
         const next = await apiFetch<OperatorListing>(`/api/listings/${listingId}`, {
           method: "PATCH",
           headers: { ...honeypotHeaders, "content-type": "application/json" },
@@ -870,23 +937,8 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             category_ids: form.categoryIds,
           }),
         });
-        let failedUploads = 0;
-        for (const { file } of stagedMedia) {
-          try {
-            const data = new FormData();
-            data.set("file", file);
-            await apiFetch(`/api/listings/${next.id}/media`, { method: "POST", body: data });
-          } catch {
-            failedUploads++;
-          }
-        }
-        if (failedUploads) {
-          toast.error(
-            `Listing created, but ${failedUploads} image upload${failedUploads === 1 ? "" : "s"} failed. Open the listing to retry.`,
-          );
-        } else {
-          toast.success("Listing created.");
-        }
+        await uploadStagedMedia(next.id, honeypotHeaders);
+        toast.success("Listing created.");
         router.replace(`/operator/catalogue/${next.id}`);
       }
       setFieldErrors({});
@@ -899,11 +951,13 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           "price_minor",
           "compare_at_price_minor",
           "destination",
+          "image_source",
+          "external_image_url",
         ]);
         setFieldErrors(presented.fields);
         setError(cause);
       } else {
-        setError(errorMessage(cause));
+        setError("We couldn't save the listing. Please try again.");
       }
     } finally {
       setSaving(false);
@@ -911,18 +965,69 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   }
 
   function clearFieldErrors(...fields: string[]) {
-    setError(null);
     setFieldErrors((current) => {
       const next = { ...current };
       for (const field of fields) delete next[field];
       return next;
     });
+    setError((current) => {
+      if (!(current instanceof ApiClientError)) return null;
+      const remaining = { ...(current.fields ?? {}) };
+      for (const field of fields) delete remaining[field];
+      return Object.keys(remaining).length
+        ? new ApiClientError(
+            "Please correct the highlighted fields.",
+            current.status,
+            current.code,
+            remaining,
+            current.requestId,
+          )
+        : null;
+    });
+  }
+
+  async function uploadStagedMedia(targetListingId: string, uploadHeaders: Record<string, string>) {
+    for (const item of [...stagedMediaRef.current]) {
+      const data = new FormData();
+      data.set("file", item.file);
+      const uploaded = await apiFetch<ListingMedia>(`/api/listings/${targetListingId}/media`, {
+        method: "POST",
+        headers: Object.keys(uploadHeaders).length ? uploadHeaders : undefined,
+        body: data,
+      });
+      setListing((current) =>
+        current
+          ? {
+              ...current,
+              media: [...current.media, uploaded].sort(
+                (left, right) => left.position - right.position,
+              ),
+            }
+          : current,
+      );
+      item.dispose();
+      setStagedMedia((current) => current.filter((candidate) => candidate !== item));
+    }
   }
 
   function openDraftPreview() {
     try {
       if (!form.title.trim() || !form.shortDescription.trim() || !form.destination.trim()) {
         setError("Enter a title, short description, and access URL before previewing.");
+        return;
+      }
+      if (
+        form.imageSource === "uploaded" &&
+        (listing?.media.length ?? 0) + stagedMedia.length === 0
+      ) {
+        setError("Choose an uploaded listing image or select another image source.");
+        return;
+      }
+      if (
+        form.imageSource === "external" &&
+        !externalListingImageUrl({ external_image_url: form.externalImageUrl.trim() })
+      ) {
+        setError("Enter a valid HTTP or HTTPS image URL before previewing.");
         return;
       }
       previewIdentity.current ??= `editor-${crypto.randomUUID()}`;
@@ -941,24 +1046,29 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           .filter((category) => form.categoryIds.includes(category.id))
           .map(({ id, name, slug }) => ({ id, name, slug })),
         metadata: (() => {
-          const metadata = { ...(listing?.metadata ?? {}) };
-          if (form.imageSource === "external" && form.externalImageUrl.trim())
-            metadata.external_image_url = form.externalImageUrl.trim();
-          else delete metadata.external_image_url;
+          const metadata = updateListingImageMetadata(
+            listing?.metadata ?? {},
+            form.imageSource,
+            form.externalImageUrl,
+          );
+          if (clearExternalImage) delete metadata.external_image_url;
           return metadata;
         })(),
         state: form.state,
         featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
         rating: null,
-        media: stagedMedia.map(({ file, previewUrl }, position) => ({
-          id: `preview-media-${position}`,
-          url: previewUrl,
-          mime_type: file.type,
-          width: null,
-          height: null,
-          position,
-          alt_text: file.name,
-        })),
+        media: [
+          ...(listing?.media ?? []),
+          ...stagedMedia.map(({ file, previewUrl }, position) => ({
+            id: `preview-media-${position}`,
+            url: previewUrl,
+            mime_type: file.type,
+            width: null,
+            height: null,
+            position,
+            alt_text: file.name,
+          })),
+        ],
       };
       saveCataloguePreviewDraft(previewIdentity.current, previewListing);
       const url = `/operator/catalogue/preview?session=${encodeURIComponent(previewIdentity.current)}&revision=${Date.now()}`;
@@ -998,6 +1108,8 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         "price_minor",
         "compare_at_price_minor",
         "destination",
+        "image_source",
+        "external_image_url",
       ]}
       sectionTitle={editing ? "Listing details" : "New listing details"}
       sectionDescription="Save catalogue fields through the existing listing workflow."
@@ -1038,6 +1150,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         <RequiredLabel htmlFor="listing-title">Title</RequiredLabel>
         <Input
           id="listing-title"
+          name="title"
           required
           value={form.title}
           aria-invalid={Boolean(fieldErrors.title)}
@@ -1053,6 +1166,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         <RequiredLabel htmlFor="listing-short-description">Short description</RequiredLabel>
         <Textarea
           id="listing-short-description"
+          name="short_description"
           rows={3}
           maxLength={200}
           required
@@ -1075,6 +1189,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         <Label htmlFor="listing-long-description">Long description</Label>
         <MarkdownEditor
           markdown={form.longDescription}
+          fieldName="long_description"
           onChange={(longDescription) => {
             clearFieldErrors("long_description");
             setForm({ ...form, longDescription });
@@ -1090,6 +1205,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <RequiredLabel htmlFor="listing-price">Price (USD)</RequiredLabel>
           <Input
             id="listing-price"
+            name="price_minor"
             aria-invalid={Boolean(fieldErrors.price_minor)}
             aria-describedby={fieldErrors.price_minor ? "listing-price-error" : undefined}
             required
@@ -1110,6 +1226,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <Label htmlFor="listing-compare-price">Compare-at price (USD, optional)</Label>
           <Input
             id="listing-compare-price"
+            name="compare_at_price_minor"
             aria-invalid={Boolean(fieldErrors.compare_at_price_minor)}
             aria-describedby={
               fieldErrors.compare_at_price_minor ? "listing-compare-price-error" : undefined
@@ -1134,6 +1251,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <RequiredLabel htmlFor="listing-access-url">Access URL</RequiredLabel>
           <Input
             id="listing-access-url"
+            name="destination"
             required
             type="url"
             value={form.destination}
@@ -1151,44 +1269,60 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           </p>
         </div>
       </div>
-      <div className="grid gap-2">
-        <Label htmlFor="listing-image-source">Listing image source</Label>
+      <section className="grid gap-2" aria-label="Listing image">
+        <Label htmlFor="listing-image-source">Image source</Label>
         <Select
           id="listing-image-source"
           value={form.imageSource}
-          onChange={(event) =>
-            setForm({ ...form, imageSource: event.target.value as "uploaded" | "external" })
-          }
+          onChange={(event) => {
+            clearFieldErrors("image_source", "external_image_url");
+            setForm({ ...form, imageSource: event.target.value as ListingImageSource });
+          }}
         >
-          <option value="uploaded">Uploaded image (Cliqero storage)</option>
+          <option value="none">None</option>
+          <option value="uploaded">Uploaded image</option>
           <option value="external">External image URL</option>
         </Select>
-        {form.imageSource === "external" && (
+        <Label htmlFor="listing-image">Listing image</Label>
+        {form.imageSource === "external" ? (
           <>
             <Input
-              id="listing-external-image-url"
+              id="listing-image"
+              name="external_image_url"
               type="url"
               maxLength={2000}
+              required
               placeholder="https://example.test/image.webp"
-              aria-label="External image URL"
               value={form.externalImageUrl}
-              onChange={(event) => setForm({ ...form, externalImageUrl: event.target.value })}
+              aria-invalid={Boolean(fieldErrors.external_image_url)}
+              aria-describedby={
+                fieldErrors.external_image_url ? "listing-external-image-error" : undefined
+              }
+              onChange={(event) => {
+                clearFieldErrors("external_image_url");
+                setClearExternalImage(false);
+                setForm({ ...form, externalImageUrl: event.target.value });
+              }}
             />
             <ExternalImagePreview value={form.externalImageUrl} />
+            <FieldError
+              id="listing-external-image-error"
+              message={fieldErrors.external_image_url}
+            />
           </>
-        )}
-        {form.imageSource === "uploaded" && editing && listing && (
-          <CatalogueMedia listing={listing} onChange={setListing} />
-        )}
-        {form.imageSource === "uploaded" && !editing && (
+        ) : form.imageSource === "uploaded" ? (
           <>
-            <Label htmlFor="listing-staged-media">Listing images (optional)</Label>
             <Input
-              id="listing-staged-media"
+              id="listing-image"
+              name="image_source"
               type="file"
               accept="image/png,image/jpeg,image/gif,image/webp"
               multiple
+              required={!listing?.media.length && !stagedMedia.length}
+              aria-invalid={Boolean(fieldErrors.image_source)}
+              aria-describedby={fieldErrors.image_source ? "listing-image-error" : undefined}
               onChange={(event) => {
+                clearFieldErrors("image_source");
                 const files = [...(event.target.files ?? [])];
                 setStagedMedia((current) => [
                   ...current,
@@ -1197,41 +1331,69 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
                 event.target.value = "";
               }}
             />
+            <p className="text-xs text-slate-500">
+              Existing uploaded images are preserved until you explicitly remove them.
+            </p>
+            {(() => {
+              const staged = stagedMedia[0];
+              const uploaded = listing?.media[0];
+              const coverUrl = staged?.previewUrl ?? uploaded?.url;
+              if (!coverUrl) return null;
+              return (
+                <figure className="grid gap-1">
+                  <img
+                    src={coverUrl}
+                    alt={staged?.file.name ?? uploaded?.alt_text ?? "Listing image"}
+                    className="h-40 w-full rounded-md border border-slate-200 bg-slate-50 object-contain sm:h-48"
+                  />
+                  <figcaption className="text-xs text-slate-500">Uploaded listing image</figcaption>
+                </figure>
+              );
+            })()}
             {stagedMedia.length > 0 && (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {stagedMedia.map((media, index) => (
-                  <figure key={`${media.file.name}-${index}`} className="grid gap-2">
-                    <img
-                      src={media.previewUrl}
-                      alt={`Preview of ${media.file.name}`}
-                      className="h-40 w-full rounded-md border border-slate-200 bg-slate-50 object-contain sm:h-48"
-                    />
-                    <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
-                      <figcaption className="break-all">{media.file.name}</figcaption>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="xs"
-                        onClick={() =>
-                          setStagedMedia((current) => {
-                            current[index]?.dispose();
-                            return current.filter((_, position) => position !== index);
-                          })
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </figure>
+                  <div key={`${media.file.name}-${index}`} className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs text-slate-600">
+                      {media.file.name}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="xs"
+                      onClick={() =>
+                        setStagedMedia((current) => {
+                          current[index]?.dispose();
+                          return current.filter((_, position) => position !== index);
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 ))}
               </div>
             )}
+            <FieldError id="listing-image-error" message={fieldErrors.image_source} />
           </>
+        ) : (
+          <p className="text-sm text-slate-500">No cover image will be shown.</p>
         )}
-        <p className="text-xs leading-5 text-slate-500">
-          Uploaded image files use Cliqero storage; external images load from their URL.
-        </p>
-      </div>
+        {editing && externalListingImageUrl(listing?.metadata ?? {}) && !clearExternalImage && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => {
+              setClearExternalImage(true);
+              setForm({ ...form, externalImageUrl: "" });
+            }}
+          >
+            Clear saved external URL
+          </Button>
+        )}
+        {editing && listing && <CatalogueMedia listing={listing} onChange={setListing} />}
+      </section>
       <div className="grid gap-2">
         <Label htmlFor="listing-visibility">Visibility</Label>
         <Select
@@ -1325,18 +1487,42 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
 
 export function OperatorCatalogueDraftPreview() {
   const [listing, setListing] = useState<Listing | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "unavailable">("loading");
   useEffect(() => {
-    try {
-      const session = new URLSearchParams(window.location.search).get("session");
-      if (!session || !/^(?:listing|editor)-[A-Za-z0-9-]+$/.test(session)) return;
-      // The private draft is external browser state and is only readable after mount.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setListing(readCataloguePreviewDraft(session));
-    } catch {
-      setListing(null);
-    }
+    let active = true;
+    // Defer browser-only storage access until after the initial loading render.
+    void Promise.resolve()
+      .then(() => {
+        const session = new URLSearchParams(window.location.search).get("session");
+        if (!session || !/^(?:listing|editor)-[A-Za-z0-9-]+$/.test(session)) {
+          if (active) setState("unavailable");
+          return;
+        }
+        const draft = readCataloguePreviewDraft(session);
+        if (active) {
+          setListing(draft);
+          setState(draft ? "ready" : "unavailable");
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setListing(null);
+          setState("unavailable");
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, []);
-  if (!listing)
+  if (state === "loading")
+    return (
+      <CrudDetail
+        eyebrow="Private preview"
+        title="Loading preview"
+        description="Opening the saved editor draft…"
+      />
+    );
+  if (state === "unavailable" || !listing)
     return (
       <CrudDetail
         eyebrow="Private preview"
@@ -1518,45 +1704,8 @@ function CatalogueMedia({
   listing: OperatorListing;
   onChange: (value: OperatorListing) => void;
 }) {
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const confirm = useOperatorConfirmation();
-  const [selectedImage, setSelectedImage] = useState<ReturnType<
-    typeof createCatalogueImagePreview
-  > | null>(null);
-  useEffect(() => {
-    if (!selectedImage) return;
-    return () => selectedImage.dispose();
-  }, [selectedImage]);
-  async function upload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const honeypot = String(formData.get(HONEYPOT_FIELD_NAME) ?? "");
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const body = new FormData();
-      body.set("file", file);
-      const media = await apiFetch<ListingMedia>(`/api/listings/${listing.id}/media`, {
-        method: "POST",
-        headers: honeypot ? { [HONEYPOT_HEADER_NAME]: honeypot } : undefined,
-        body,
-      });
-      onChange({
-        ...listing,
-        media: [...listing.media, media].sort((a, b) => a.position - b.position),
-      });
-      setSelectedImage(null);
-      form.reset();
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
   async function remove(media: ListingMedia) {
     if (
       !(await confirm({
@@ -1600,38 +1749,15 @@ function CatalogueMedia({
   return (
     <OperatorSection title="Listing images" surface>
       {error && <OperatorErrorState message={error} />}
-      {selectedImage && (
-        <figure className="grid gap-1">
-          <img
-            src={selectedImage.previewUrl}
-            alt={`Preview of ${selectedImage.file.name}`}
-            className="max-h-64 w-fit max-w-full rounded-md border border-slate-200 object-contain"
-          />
-          <figcaption className="text-xs text-slate-500">Preview before upload</figcaption>
-        </figure>
-      )}
-      <form className="media-upload-form" onSubmit={(event) => void upload(event)}>
-        <Input
-          name="file"
-          type="file"
-          accept="image/*"
-          required
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) setSelectedImage(createCatalogueImagePreview(file));
-            else setSelectedImage(null);
-          }}
-        />
-        <Button type="submit" variant="secondary" disabled={busy}>
-          {busy ? "Uploading…" : "Add image"}
-        </Button>
-        <HoneypotField />
-      </form>
       {listing.media.length ? (
         <div className="catalogue-media-grid">
           {listing.media.map((media, index) => (
             <div className="catalogue-media-item" key={media.id}>
-              <img src={media.url} alt={media.alt_text || "Listing image"} />
+              <img
+                src={media.url}
+                alt={media.alt_text || "Listing image"}
+                className="h-32 w-full rounded-md bg-slate-50 object-contain"
+              />
               <div className="catalogue-media-actions">
                 <Button variant="ghost" disabled={index === 0} onClick={() => void move(media, -1)}>
                   Move up
@@ -1650,12 +1776,12 @@ function CatalogueMedia({
             </div>
           ))}
         </div>
-      ) : !selectedImage ? (
+      ) : (
         <OperatorEmptyState
           title="No media yet"
           description="Add a browser-renderable image to improve the public listing."
         />
-      ) : null}
+      )}
     </OperatorSection>
   );
 }

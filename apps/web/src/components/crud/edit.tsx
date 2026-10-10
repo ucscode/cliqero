@@ -3,7 +3,6 @@
 import { useId, type FormEventHandler, type ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "../ui/button";
-import { OperatorErrorState } from "../operator/ui/error-state";
 import { OperatorLoadingState } from "../operator/ui/loading-state";
 import { OperatorPage, OperatorPageHeader } from "../operator/ui/page";
 import { OperatorSection } from "../operator/ui/section";
@@ -85,12 +84,7 @@ export function CrudEdit({
           </>
         }
       />
-      {error &&
-        (typeof error === "string" ? (
-          <OperatorErrorState message={error} />
-        ) : (
-          <FormErrorSummary error={error} visibleFields={errorFields} />
-        ))}
+      {error && <FormErrorSummary error={error} visibleFields={errorFields} />}
       {success}
       {loading ? (
         <OperatorLoadingState variant="section" label={loadingLabel ?? `Loading ${title}`} />
