@@ -16,14 +16,13 @@ export function saveCataloguePreviewDraft(
   storage.setItem(`${storagePrefix}${identity}`, JSON.stringify(value));
 }
 
-export function takeCataloguePreviewDraft(
+export function readCataloguePreviewDraft(
   identity: string,
   storage: Storage = localStorage,
   now = Date.now(),
 ) {
   const key = `${storagePrefix}${identity}`;
   const raw = storage.getItem(key);
-  storage.removeItem(key);
   pruneCataloguePreviewDrafts(storage, now);
   if (!raw) return null;
   try {
@@ -39,6 +38,10 @@ export function takeCataloguePreviewDraft(
   } catch {
     return null;
   }
+}
+
+export function discardCataloguePreviewDraft(identity: string, storage: Storage = localStorage) {
+  storage.removeItem(`${storagePrefix}${identity}`);
 }
 
 function pruneCataloguePreviewDrafts(storage: Storage, now: number) {

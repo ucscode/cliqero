@@ -535,7 +535,7 @@ export function WalletPanel({
             </p>
           </div>
           <Button asChild>
-            <Link href="/dashboard?section=balance-transfer">Transfer balance</Link>
+            <Link href="/dashboard?section=balance-transfer">Swap balance</Link>
           </Button>
         </Card>
       )}

@@ -28,6 +28,23 @@ const listingFields = {
     .refine((ids) => new Set(ids).size === ids.length, "Category IDs must be unique"),
 };
 
+function validateListingPrices(
+  value: { price_minor?: string; compare_at_price_minor?: string | null },
+  context: z.RefinementCtx,
+) {
+  if (
+    value.price_minor !== undefined &&
+    value.compare_at_price_minor != null &&
+    BigInt(value.compare_at_price_minor) <= BigInt(value.price_minor)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["compare_at_price_minor"],
+      message: "Compare-at price must be greater than the listing price",
+    });
+  }
+}
+
 export const listingCreateSchema = z
   .object({
     ...listingFields,
@@ -45,9 +62,14 @@ export const listingCreateSchema = z
       .refine((ids) => new Set(ids).size === ids.length, "Category IDs must be unique")
       .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(validateListingPrices);
 
-export const listingPatchSchema = z.object(listingFields).partial().strict();
+export const listingPatchSchema = z
+  .object(listingFields)
+  .partial()
+  .strict()
+  .superRefine(validateListingPrices);
 
 const listingProjectionFields = {
   id: z.uuid(),

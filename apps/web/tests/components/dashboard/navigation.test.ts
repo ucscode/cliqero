@@ -36,7 +36,7 @@ describe("dashboard navigation", () => {
     const titles = [
       "Overview",
       "Wallet",
-      "Balance Transfer",
+      "Swap",
       "Purchases",
       "Promote",
       "Network",
@@ -100,6 +100,12 @@ describe("dashboard navigation", () => {
     expect(source).toContain("/dashboard?section=payout-methods");
     expect(dashboardSectionTitle("payout-methods")).toBe("Payout Methods");
     expect(source).not.toContain('label: "Purse"');
+  });
+
+  it("uses Swap Balance as the page title while keeping Swap in navigation", () => {
+    expect(dashboardSectionTitle("balance-transfer")).toBe("Swap");
+    expect(shellSource).toContain('section === "balance-transfer"');
+    expect(shellSource).toContain('"Swap Balance"');
   });
 
   it("defaults active groups open while allowing explicit collapse and reopen", () => {

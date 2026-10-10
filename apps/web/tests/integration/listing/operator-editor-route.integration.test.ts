@@ -13,7 +13,7 @@ vi.mock("@/api/http", async (importOriginal) => {
 import { createContainer } from "@/infrastructure/container";
 import { createApiApp } from "@/api/hono";
 import { DELETE, POST } from "@/api/compat/listings/route";
-import { PATCH } from "@/api/compat/listings/[id]/route";
+import { GET as getListing, PATCH } from "@/api/compat/listings/[id]/route";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -122,6 +122,72 @@ suite("Operator catalogue editor API contract", () => {
     expect(await app.listingService.get(created.id)).toMatchObject({
       featuredPosition: 3,
       state: "archived",
+    });
+  });
+
+  it("returns invalid compare-at pricing as 400 and persists a valid generated-key listing", async () => {
+    const payload = {
+      title: "Browser acceptance listing",
+      short_description: "A valid compact summary.",
+      long_description: "A listing created through the Operator API.",
+      price_minor: "2500",
+      currency: "USD",
+      destination: "https://access.example.test/browser-acceptance",
+      metadata: {},
+      external_key: `listing-${crypto.randomUUID().replaceAll("-", "")}`,
+      featured_position: null,
+      compare_at_price_minor: "2000",
+      visibility: "public",
+      state: "draft",
+      category_ids: [],
+    };
+    const invalid = await POST(
+      new Request("http://localhost/api/listings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({
+      code: "validation_error",
+      fields: { compare_at_price_minor: "Compare-at price must be greater than the listing price" },
+    });
+
+    const validPayload = { ...payload, compare_at_price_minor: null };
+    const createdResponse = await POST(
+      new Request("http://localhost/api/listings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(validPayload),
+      }),
+    );
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    expect(created.external_key).toBe(validPayload.external_key);
+
+    const retrievedResponse = await getListing(
+      new Request(`http://localhost/api/listings/${created.id}`),
+      { params: Promise.resolve({ listingId: created.id }) },
+    );
+    expect(retrievedResponse.status).toBe(200);
+    expect(await retrievedResponse.json()).toMatchObject({ id: created.id, title: payload.title });
+
+    const updatedResponse = await PATCH(
+      new Request(`http://localhost/api/listings/${created.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Edited browser acceptance listing" }),
+      }),
+      { params: Promise.resolve({ listingId: created.id }) },
+    );
+    expect(updatedResponse.status).toBe(200);
+    expect(await updatedResponse.json()).toMatchObject({
+      title: "Edited browser acceptance listing",
+    });
+    expect(await app.listingService.get(created.id)).toMatchObject({
+      title: "Edited browser acceptance listing",
+      externalKey: validPayload.external_key,
     });
   });
 

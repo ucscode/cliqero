@@ -32,7 +32,7 @@ export function BalanceTransferPanel() {
       setBalances({ funding: wallet.available_minor, earnings: earningsAvailable.amount_minor });
     } catch (cause) {
       setError(
-        cause instanceof ApiClientError ? cause.message : "Transfer balances could not be loaded.",
+        cause instanceof ApiClientError ? cause.message : "Swap balances could not be loaded.",
       );
       setBalances(null);
     }
@@ -45,12 +45,12 @@ export function BalanceTransferPanel() {
   }, [load]);
 
   return (
-    <section className="grid max-w-3xl gap-4" aria-label="Balance transfer">
+    <section className="grid max-w-3xl gap-4" aria-label="Swap balance">
       <div>
-        <p className="eyebrow">Move money</p>
-        <h2 className="text-2xl font-semibold tracking-tight">Balance Transfer</h2>
+        <p className="eyebrow">Move balance</p>
+        <h2 className="text-2xl font-semibold tracking-tight">Swap Balance</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Move value between Funding and Earnings. The fee and receiving amount are quoted from the
+          Move value between Wallet and Earnings. The fee and receiving amount are quoted from the
           current transfer policy.
         </p>
       </div>

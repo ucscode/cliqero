@@ -17,7 +17,7 @@ const navigation = [
   { label: "Catalogue", href: "/catalogue", section: "catalogue" },
   { label: "Wallet", href: "/dashboard?section=wallet", section: "wallet" },
   {
-    label: "Balance Transfer",
+    label: "Swap",
     href: "/dashboard?section=balance-transfer",
     section: "balance-transfer",
   },

@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   createCatalogueImagePreview,
   newListingExternalKey,
@@ -28,5 +30,32 @@ describe("catalogue external keys", () => {
     expect(first).toMatch(/^listing-[a-f0-9]{32}$/);
     expect(second).toMatch(/^listing-[a-f0-9]{32}$/);
     expect(second).not.toBe(first);
+  });
+});
+
+describe("catalogue editor image and error behavior", () => {
+  const source = readFileSync(
+    resolve(process.cwd(), "src/components/operator/catalogue.tsx"),
+    "utf8",
+  );
+
+  it("keeps both image-source controls inside one image section before unrelated fields", () => {
+    const sectionStart = source.indexOf('htmlFor="listing-image-source"');
+    const sectionEnd = source.indexOf('htmlFor="listing-visibility"', sectionStart);
+    const imageSection = source.slice(sectionStart, sectionEnd);
+    expect(imageSection).toContain('id="listing-external-image-url"');
+    expect(imageSection).toContain('htmlFor="listing-staged-media"');
+    expect(imageSection).toContain("<ExternalImagePreview value={form.externalImageUrl} />");
+    expect(imageSection).toContain("<CatalogueMedia listing={listing} onChange={setListing} />");
+  });
+
+  it("keeps submitted values in component state when listing creation fails", () => {
+    const save = source.slice(
+      source.indexOf("async function save("),
+      source.indexOf("function openDraftPreview()"),
+    );
+    expect(save).toContain("setError(errorMessage(cause))");
+    expect(save).not.toContain("setForm(");
+    expect(save).not.toContain("form.reset(");
   });
 });

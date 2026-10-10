@@ -4,6 +4,16 @@ import Select, { type MultiValue, type StylesConfig } from "react-select";
 
 export type MultiSelectOption = Readonly<{ value: string; label: string }>;
 
+export function multiSelectInstanceId(inputId: string | undefined, label: string) {
+  return (
+    inputId ??
+    `cliqero-${label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")}`
+  );
+}
+
 const styles: StylesConfig<MultiSelectOption, true> = {
   control: (base, state) => ({
     ...base,
@@ -48,6 +58,7 @@ export function MultiSelect({
     <Select<MultiSelectOption, true>
       aria-label={label}
       inputId={inputId}
+      instanceId={multiSelectInstanceId(inputId, label)}
       isMulti
       closeMenuOnSelect={false}
       hideSelectedOptions

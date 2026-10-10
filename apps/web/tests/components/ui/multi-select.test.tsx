@@ -1,22 +1,25 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { MultiSelect } from "@/components/ui/multi-select";
+import { MultiSelect, multiSelectInstanceId } from "@/components/ui/multi-select";
 
-describe("MultiSelect dependency adapter", () => {
-  it("renders a controlled searchable multi-select with compact neutral selected values", () => {
-    const html = renderToStaticMarkup(
-      <MultiSelect
-        label="Categories"
-        options={[
-          { value: "design", label: "Design" },
-          { value: "tools", label: "Tools" },
-        ]}
-        value={["design"]}
-        onChange={() => undefined}
-      />,
-    );
-    expect(html).toContain("Categories");
-    expect(html).toContain("Design");
-    expect(html).toContain("react-select");
+describe("MultiSelect hydration identity", () => {
+  it("derives a stable react-select instance identifier from the component input id", () => {
+    expect(multiSelectInstanceId("listing-categories", "Categories")).toBe("listing-categories");
+    expect(multiSelectInstanceId(undefined, "Blog Tags")).toBe("cliqero-blog-tags");
+  });
+
+  it("renders matching live-region identifiers on repeated server renders", () => {
+    const props = {
+      label: "Categories",
+      inputId: "listing-categories",
+      options: [{ value: "one", label: "One" }],
+      value: [] as string[],
+      onChange: () => {},
+    };
+    const first = renderToStaticMarkup(<MultiSelect {...props} />);
+    const second = renderToStaticMarkup(<MultiSelect {...props} />);
+    expect(first).toContain('id="react-select-listing-categories-live-region"');
+    expect(second).toContain('id="react-select-listing-categories-live-region"');
+    expect(first).toBe(second);
   });
 });

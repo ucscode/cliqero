@@ -53,7 +53,12 @@ import { useOperatorConfirmation } from "./ui/confirmation";
 import { openResolvedWindow } from "./ui/async-window";
 import { ListingDetail } from "../listing/detail";
 import { openOperatorPreviewWindow, operatorPreviewWindowName } from "./ui/preview-window";
-import { saveCataloguePreviewDraft, takeCataloguePreviewDraft } from "./catalogue/preview-storage";
+import {
+  discardCataloguePreviewDraft,
+  readCataloguePreviewDraft,
+  saveCataloguePreviewDraft,
+} from "./catalogue/preview-storage";
+import { ExternalImagePreview } from "./catalogue/external-image-preview";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -889,9 +894,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         setError("Enter a title, short description, and access URL before previewing.");
         return;
       }
-      previewIdentity.current ??= listingId
-        ? `listing-${listingId}`
-        : `editor-${crypto.randomUUID()}`;
+      previewIdentity.current ??= `editor-${crypto.randomUUID()}`;
       const previewListing: Listing = {
         id: `preview-${previewIdentity.current}`,
         title: form.title.trim(),
@@ -926,7 +929,6 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           alt_text: file.name,
         })),
       };
-      const storageKey = `cliqero.operator.listing-preview:${previewIdentity.current}`;
       saveCataloguePreviewDraft(previewIdentity.current, previewListing);
       const url = `/operator/catalogue/preview?session=${encodeURIComponent(previewIdentity.current)}&revision=${Date.now()}`;
       const tab = openOperatorPreviewWindow(
@@ -934,7 +936,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         operatorPreviewWindowName("catalogue", previewIdentity.current),
       );
       if (!tab) {
-        localStorage.removeItem(storageKey);
+        discardCataloguePreviewDraft(previewIdentity.current);
         setError("Allow pop-ups to open the private preview.");
         return;
       }
@@ -991,16 +993,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         </>
       }
       onSubmit={save}
-      afterFields={
-        editing && listing ? (
-          <>
-            {form.imageSource === "uploaded" && (
-              <CatalogueMedia listing={listing} onChange={setListing} />
-            )}
-            <CatalogueIntegrations listingId={listing.id} />
-          </>
-        ) : null
-      }
+      afterFields={editing && listing ? <CatalogueIntegrations listingId={listing.id} /> : null}
     >
       <div className="grid gap-2">
         <RequiredLabel htmlFor="listing-title">Title</RequiredLabel>
@@ -1091,15 +1084,69 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <option value="external">External image URL</option>
         </Select>
         {form.imageSource === "external" && (
-          <Input
-            id="listing-external-image-url"
-            type="url"
-            maxLength={2000}
-            placeholder="https://example.test/image.webp"
-            aria-label="External image URL"
-            value={form.externalImageUrl}
-            onChange={(event) => setForm({ ...form, externalImageUrl: event.target.value })}
-          />
+          <>
+            <Input
+              id="listing-external-image-url"
+              type="url"
+              maxLength={2000}
+              placeholder="https://example.test/image.webp"
+              aria-label="External image URL"
+              value={form.externalImageUrl}
+              onChange={(event) => setForm({ ...form, externalImageUrl: event.target.value })}
+            />
+            <ExternalImagePreview value={form.externalImageUrl} />
+          </>
+        )}
+        {form.imageSource === "uploaded" && editing && listing && (
+          <CatalogueMedia listing={listing} onChange={setListing} />
+        )}
+        {form.imageSource === "uploaded" && !editing && (
+          <>
+            <Label htmlFor="listing-staged-media">Listing images (optional)</Label>
+            <Input
+              id="listing-staged-media"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              multiple
+              onChange={(event) => {
+                const files = [...(event.target.files ?? [])];
+                setStagedMedia((current) => [
+                  ...current,
+                  ...files.map(createCatalogueImagePreview),
+                ]);
+                event.target.value = "";
+              }}
+            />
+            {stagedMedia.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {stagedMedia.map((media, index) => (
+                  <figure key={`${media.file.name}-${index}`} className="grid gap-2">
+                    <img
+                      src={media.previewUrl}
+                      alt={`Preview of ${media.file.name}`}
+                      className="h-40 w-full rounded-md border border-slate-200 bg-slate-50 object-contain sm:h-48"
+                    />
+                    <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                      <figcaption className="break-all">{media.file.name}</figcaption>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="xs"
+                        onClick={() =>
+                          setStagedMedia((current) => {
+                            current[index]?.dispose();
+                            return current.filter((_, position) => position !== index);
+                          })
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </figure>
+                ))}
+              </div>
+            )}
+          </>
         )}
         <p className="text-xs leading-5 text-slate-500">
           Uploaded image files use Cliqero storage; external images load from their URL.
@@ -1135,51 +1182,6 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           Published listings require a short description.
         </p>
       </div>
-      {!editing && form.imageSource === "uploaded" && (
-        <div className="grid gap-3">
-          <Label htmlFor="listing-staged-media">Listing images (optional)</Label>
-          <Input
-            id="listing-staged-media"
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            multiple
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])];
-              setStagedMedia((current) => [...current, ...files.map(createCatalogueImagePreview)]);
-              event.target.value = "";
-            }}
-          />
-          {stagedMedia.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {stagedMedia.map((media, index) => (
-                <figure key={`${media.file.name}-${index}`} className="grid gap-2">
-                  <img
-                    src={media.previewUrl}
-                    alt={`Preview of ${media.file.name}`}
-                    className="max-h-56 w-fit max-w-full rounded-md border object-contain"
-                  />
-                  <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
-                    <figcaption className="break-all">{media.file.name}</figcaption>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="xs"
-                      onClick={() =>
-                        setStagedMedia((current) => {
-                          current[index]?.dispose();
-                          return current.filter((_, position) => position !== index);
-                        })
-                      }
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </figure>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
       <fieldset className="grid gap-2">
         <legend className="text-sm font-semibold text-slate-800">Categories</legend>
         <MultiSelect
@@ -1249,7 +1251,7 @@ export function OperatorCatalogueDraftPreview() {
       if (!session || !/^(?:listing|editor)-[A-Za-z0-9-]+$/.test(session)) return;
       // The private draft is external browser state and is only readable after mount.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setListing(takeCataloguePreviewDraft(session));
+      setListing(readCataloguePreviewDraft(session));
     } catch {
       setListing(null);
     }

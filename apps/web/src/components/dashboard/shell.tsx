@@ -228,23 +228,25 @@ export function DashboardShell({
   const title =
     section === "checkout"
       ? "Checkout"
-      : section === "wallet" && fundingHistoryPage
-        ? "Funding history"
-        : section === "wallet" && dedicatedWalletFunding
-          ? "Fund wallet"
-          : withdrawalHistoryPage
-            ? "Withdrawal history"
-            : section === "withdrawals"
-              ? "Withdrawals"
-              : section === "payout-methods"
-                ? payoutMethodFormMode === "create"
-                  ? "Add payout method"
-                  : payoutMethodFormMode === "edit"
-                    ? "Edit payout method"
-                    : "Payout Methods"
-                : section === "settings"
-                  ? "Settings"
-                  : dashboardSectionTitle(section);
+      : section === "balance-transfer"
+        ? "Swap Balance"
+        : section === "wallet" && fundingHistoryPage
+          ? "Funding history"
+          : section === "wallet" && dedicatedWalletFunding
+            ? "Fund wallet"
+            : withdrawalHistoryPage
+              ? "Withdrawal history"
+              : section === "withdrawals"
+                ? "Withdrawals"
+                : section === "payout-methods"
+                  ? payoutMethodFormMode === "create"
+                    ? "Add payout method"
+                    : payoutMethodFormMode === "edit"
+                      ? "Edit payout method"
+                      : "Payout Methods"
+                  : section === "settings"
+                    ? "Settings"
+                    : dashboardSectionTitle(section);
   const displayUsername = profile?.username ?? canonicalSession.account.username;
   const content = withdrawalHistoryPage ? (
     <WithdrawalHistoryPanel />
