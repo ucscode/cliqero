@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  operatorWithdrawalCancellationAllowed,
   operatorWithdrawalDeleteAllowed,
   operatorWithdrawalEditPolicy,
 } from "@/components/operator/withdrawals";
@@ -69,5 +70,15 @@ describe("operator manual withdrawal workflow", () => {
     expect(operatorWithdrawalDeleteAllowed("requested", true)).toBe(true);
     expect(operatorWithdrawalDeleteAllowed("requested", false)).toBe(false);
     expect(operatorWithdrawalDeleteAllowed("requested", true, true)).toBe(false);
+  });
+
+  it("allows withdrawal cancellation only before payout initiation", () => {
+    expect(operatorWithdrawalCancellationAllowed("requested")).toBe(true);
+    expect(operatorWithdrawalCancellationAllowed("approved")).toBe(true);
+    expect(operatorWithdrawalCancellationAllowed("approved", true)).toBe(false);
+    expect(operatorWithdrawalCancellationAllowed("completed")).toBe(false);
+    expect(source).toContain(
+      'body: JSON.stringify({ status: "cancelled", reason: "Cancelled by operator" })',
+    );
   });
 });

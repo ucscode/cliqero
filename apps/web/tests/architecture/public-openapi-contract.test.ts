@@ -22,7 +22,6 @@ const bodylessOperations = new Set([
   "POST /api/funding-transactions/{fundingId}/reconcile-credit",
   "POST /api/payment-events/{eventId}/reprocess",
   "POST /api/purchases/{purchaseId}/reconcile-entitlement",
-  "POST /api/withdrawals/{withdrawalId}/cancel",
   "POST /api/checkouts/{checkoutId}/pay",
   "POST /api/checkout/{checkoutId}/pay",
   "POST /api/listings/{listingId}/integrations/{integrationId}/rotate",
@@ -476,7 +475,6 @@ describe("public OpenAPI contract quality", () => {
 
     for (const [path, method] of [
       ["/api/withdrawals/{withdrawalId}", "patch"],
-      ["/api/withdrawals/{withdrawalId}/cancel", "post"],
       ["/api/withdrawals/{withdrawalId}/complete", "post"],
     ]) {
       const resultSchema = (document.paths[path]?.[method]?.responses as any)?.["200"]?.content?.[

@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createContainer } from "@/infrastructure/container";
 import { newId } from "@/kernel/ids";
 import { feePolicyFromYaml } from "@/modules/fee/policy";
@@ -951,8 +951,8 @@ suite("withdrawal lifecycle", () => {
       amount: String(completed.fee?.minorAmount ?? 0n),
     });
     const reversalRows = await app.database.query<{ count: string }>(
-      `select count(*)::text count from treasury_capability.entries where idempotency_key like $1`,
-      [`withdrawal:${withdrawal.id}:fee:reversal:%`],
+      `select count(*)::text count from treasury_capability.entries where idempotency_key=$1`,
+      [`withdrawal:${withdrawal.id}:fee:reversal`],
     );
     expect(reversalRows.rows[0]?.count).toBe("1");
     expect(await app.withdrawalRepository.findById(completed.id)).toMatchObject({
@@ -987,7 +987,9 @@ suite("withdrawal lifecycle", () => {
     });
     const treasuryBeforeCancel = (await app.treasuryRepository.summary()).balanceMinor;
 
-    await expect(app.withdrawals.cancel(seller.id, withdrawal.id)).resolves.toMatchObject({
+    await expect(
+      app.withdrawals.update(seller.id, withdrawal.id, { state: "cancelled" }),
+    ).resolves.toMatchObject({
       state: "cancelled",
     });
     expect((await app.fundsReservation.summarize(seller.id))[0].reservedMinor).toBe(0n);
@@ -1005,6 +1007,126 @@ suite("withdrawal lifecycle", () => {
       [withdrawal.id],
     );
     expect(events.rows[0]?.kind).toBe("released");
+
+    await app.withdrawals.delete(seller.id, withdrawal.id);
+    const reversalTotals = await app.database.query<{ total: string; count: string }>(
+      `select coalesce(sum(amount_minor), 0)::text total, count(*)::text count
+         from treasury_capability.entries
+        where source_kind='withdrawal_fee_reversal' and source_id=$1 and direction='debit'`,
+      [withdrawal.id],
+    );
+    expect(BigInt(reversalTotals.rows[0]!.total)).toBe(withdrawal.fee?.minorAmount ?? 0n);
+    expect(Number(reversalTotals.rows[0]!.count)).toBe(withdrawal.fee?.minorAmount ? 1 : 0);
+  });
+  it("allows Operator revocation after approval only before payout initiation", async () => {
+    const { seller, destinationId } = await setup();
+    const initialAvailable = await app.fundsReservation.available(seller.id, "USD");
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 3000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "cancelled" });
+
+    expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("cancelled");
+    expect(await app.fundsReservation.available(seller.id, "USD")).toBe(initialAvailable);
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(0n);
+    const entries = await app.database.query<{
+      source_kind: string;
+      direction: string;
+      amount_minor: string;
+    }>(
+      `select source_kind,direction,amount_minor::text
+         from treasury_capability.entries where source_id=$1 order by created_at,id`,
+      [withdrawal.id],
+    );
+    expect(
+      entries.rows.map((entry) => [entry.source_kind, entry.direction, entry.amount_minor]),
+    ).toEqual([
+      ["withdrawal_fee", "credit", withdrawal.fee!.minorAmount.toString()],
+      ["withdrawal_fee_reversal", "debit", withdrawal.fee!.minorAmount.toString()],
+    ]);
+
+    const initiated = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 1000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, initiated.id, { state: "approved" });
+    await recordInitiation(initiated.id, seller.id);
+    await expect(
+      app.withdrawals.update(seller.id, initiated.id, { state: "cancelled" }),
+    ).rejects.toMatchObject({ code: "payout_outcome_pending", status: 409 });
+    expect((await app.withdrawalRepository.findById(initiated.id))?.state).toBe("approved");
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(1000n);
+  });
+  it("serializes cancellation against payout initiation so reservation is never released after initiation", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 1500n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
+    const outcomes = await Promise.allSettled([
+      app.withdrawals.update(seller.id, withdrawal.id, { state: "cancelled" }),
+      recordInitiation(withdrawal.id, seller.id),
+    ]);
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    const current = await app.withdrawalRepository.findById(withdrawal.id);
+    const initiation = await app.withdrawalRepository.findPayoutInitiationByWithdrawalId(
+      withdrawal.id,
+    );
+    if (current?.state === "cancelled") {
+      expect(initiation).toBeNull();
+      expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(0n);
+    } else {
+      expect(current?.state).toBe("approved");
+      expect(initiation).not.toBeNull();
+      expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(1500n);
+      expect(outcomes[0]?.status).toBe("rejected");
+    }
+  });
+  it("rolls back cancellation and reservation release if fee compensation fails", async () => {
+    const { seller, destinationId } = await setup();
+    const withdrawal = await app.withdrawals.create({
+      accountId: seller.id,
+      amountMinor: 2000n,
+      currency: "USD",
+      destinationId,
+      idempotencyKey: newId(),
+      correlationId: newId(),
+    });
+    const originalCreate = app.treasuryRepository.create.bind(app.treasuryRepository);
+    const createSpy = vi
+      .spyOn(app.treasuryRepository, "create")
+      .mockImplementation(async (entry) => {
+        if (entry.sourceKind === "withdrawal_fee_reversal")
+          throw new Error("simulated compensation failure");
+        return originalCreate(entry);
+      });
+    await expect(
+      app.withdrawals.update(seller.id, withdrawal.id, { state: "cancelled" }),
+    ).rejects.toThrow("simulated compensation failure");
+    createSpy.mockRestore();
+    expect((await app.withdrawalRepository.findById(withdrawal.id))?.state).toBe("requested");
+    expect((await app.fundsReservation.summarize(seller.id))[0]?.reservedMinor).toBe(2000n);
+    const reversals = await app.database.query<{ count: string }>(
+      `select count(*)::text from treasury_capability.entries
+        where source_kind='withdrawal_fee_reversal' and source_id=$1`,
+      [withdrawal.id],
+    );
+    expect(Number(reversals.rows[0]!.count)).toBe(0);
   });
   it("creates, edits, transitions, and deletes mutable operator withdrawals atomically", async () => {
     const { seller, destinationId } = await setup();
@@ -1198,9 +1320,15 @@ suite("withdrawal lifecycle", () => {
       correlationId: newId(),
     });
     await app.withdrawals.update(seller.id, withdrawal.id, { state: "approved" });
-    await expect(app.withdrawals.cancel(seller.id, withdrawal.id)).rejects.toThrow(
-      "cannot be cancelled",
+    await app.database.query(
+      `delete from identity_capability.account_capabilities
+        where account_id=(select id from identity_capability.accounts where uuid=$1)
+          and capability='system.root'`,
+      [seller.id],
     );
+    await expect(
+      app.withdrawals.update(seller.id, withdrawal.id, { state: "cancelled" }),
+    ).rejects.toThrow("cannot be cancelled");
     await expect(
       app.withdrawals.get(
         (

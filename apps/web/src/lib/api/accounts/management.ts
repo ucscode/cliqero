@@ -6,6 +6,7 @@ export type OperatorAccountSummary = {
   country: string | null;
   createdAt: string;
   directReferralCount: number;
+  availableEarningsMinor?: string;
 };
 
 export type OperatorAccountDetail = OperatorAccountSummary & {

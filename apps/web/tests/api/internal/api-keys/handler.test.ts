@@ -150,6 +150,29 @@ describe("internal API-key management boundary", () => {
     expect(body.items[0].key_prefix).toBeUndefined();
   });
 
+  it("surfaces a missing encryption-key configuration error without disclosing key material", async () => {
+    const boundary = routes();
+    boundary.operatorApiKeys.createForSession.mockRejectedValue(
+      new PublicApplicationError(
+        "APP_ENCRYPTION_KEY is not configured.",
+        "configuration_error",
+        500,
+      ),
+    );
+    const response = await boundary.handler.create(
+      request("/internal/api-keys", {
+        method: "POST",
+        headers: { origin: "https://cliqero.test", "content-type": "application/json" },
+        body: JSON.stringify({ name: "test key", scopes: [] }),
+      }),
+    );
+    expect(response.status).toBe(500);
+    const body = await response.text();
+    expect(body).toContain("APP_ENCRYPTION_KEY is not configured.");
+    expect(body).not.toContain("cliq_live_one_time_secret");
+    expect(body).not.toContain("base64");
+  });
+
   it("limits sensitive mutations per session account in a fixed window", () => {
     let now = 10_000;
     const limiter = new ApiKeyManagementRateLimiter(2, 1_000, () => now);

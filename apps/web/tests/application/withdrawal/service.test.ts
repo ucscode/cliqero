@@ -136,7 +136,7 @@ function fixture(
     { transaction: async (operation) => operation() },
     {
       capabilities: async () => [],
-      hasCapability: async () => false,
+      hasCapability: vi.fn(async () => true),
       requireCapability,
     },
     { withIdempotencyLock: async (_accountId, _key, operation) => operation() },
@@ -149,7 +149,14 @@ function fixture(
         earning_to_funding: { enabled: true, basisPoints: 100n, maximumMinor: 500n },
       }),
     },
-    { create: treasuryCreate, findByIdempotencyKey: async () => null } as any,
+    {
+      create: treasuryCreate,
+      findByIdempotencyKey: async () => null,
+      sumBySource: async ({ sourceKind, direction }: { sourceKind: string; direction: string }) =>
+        sourceKind === "withdrawal_fee" && direction === "credit"
+          ? (withdrawal.fee?.minorAmount ?? 0n)
+          : 0n,
+    } as any,
     { record: auditRecord },
     {
       settleInflow,
@@ -410,11 +417,13 @@ describe("WithdrawalService manual completion", () => {
     );
   });
 
-  it("keeps cancellation as a command that releases funds, reverses fees, and emits an event", async () => {
+  it("cancels through update semantics while releasing funds, reversing fees, and emitting an event", async () => {
     const { service, withdrawal, releaseOrComplete, append, treasuryCreate, auditRecord } =
       fixture("requested");
 
-    await expect(service.cancel("account-1", withdrawal.id)).resolves.toMatchObject({
+    await expect(
+      service.update("account-1", withdrawal.id, { state: "cancelled" }),
+    ).resolves.toMatchObject({
       state: "cancelled",
     });
     const operationCorrelationId = releaseOrComplete.mock.calls[0]![0].correlationId;
@@ -599,7 +608,9 @@ describe("WithdrawalService policy enforcement", () => {
   it("returns a public not-found error when cancellation targets a missing withdrawal", async () => {
     const { service } = fixture("requested", { minimum: 1n, maximum: null }, null);
 
-    await expect(service.cancel("account-1", "missing-withdrawal")).rejects.toMatchObject({
+    await expect(
+      service.update("account-1", "missing-withdrawal", { state: "cancelled" }),
+    ).rejects.toMatchObject({
       code: "not_found",
       status: 404,
     });

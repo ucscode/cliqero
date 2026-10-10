@@ -400,7 +400,6 @@ function appWith(
         get: async () => withdrawalMutationResult("requested"),
         update: async (_actorId: string, _id: string, input: { state: string }) =>
           withdrawalMutationResult(input.state),
-        cancel: async () => withdrawalMutationResult("cancelled"),
         complete: async () => withdrawalMutationResult("completed"),
         ...withdrawalOverrides,
       },
@@ -1253,13 +1252,11 @@ describe("Hono API foundation", () => {
     expect(paths["/api/blog/tags/{tagId}"].patch["x-required-api-scope"]).toBe("blog:write");
     expect(paths["/api/withdrawals/{withdrawalId}"].patch).toMatchObject({
       "x-authentication-mode": "account",
-      "x-required-api-scope": "withdrawals:manage",
+      "x-required-api-scopes-any-of": ["withdrawals:create", "withdrawals:manage"],
     });
     expect(paths["/api/withdrawals/{withdrawalId}/approve"]).toBeUndefined();
     expect(paths["/api/withdrawals/{withdrawalId}/reject"]).toBeUndefined();
-    expect(paths["/api/withdrawals/{withdrawalId}/cancel"].post["x-required-api-scope"]).toBe(
-      "withdrawals:create",
-    );
+    expect(paths["/api/withdrawals/{withdrawalId}/cancel"]).toBeUndefined();
     expect(paths["/api/withdrawals/{withdrawalId}/complete"].post["x-required-api-scope"]).toBe(
       "withdrawals:manage",
     );
@@ -2148,7 +2145,7 @@ describe("Hono API foundation", () => {
       },
     );
   });
-  it("exposes customer cancellation as a command, not a PATCH state", async () => {
+  it("allows owners to cancel through PATCH while protecting Operator transitions", async () => {
     const ownerKey = {
       accountId: "00000000-0000-4000-8000-000000000001",
       account: {},
@@ -2157,7 +2154,9 @@ describe("Hono API foundation", () => {
       scopes: new Set(["withdrawals:create"]),
     };
     const path = "/api/withdrawals/00000000-0000-4000-8000-000000000010";
-    const cancelled = vi.fn(async () => withdrawalMutationResult("cancelled"));
+    const update = vi.fn(async (_actorId: string, _id: string, input: { state: string }) =>
+      withdrawalMutationResult(input.state),
+    );
     const app = appWith(
       ownerKey,
       undefined,
@@ -2166,26 +2165,24 @@ describe("Hono API foundation", () => {
       undefined,
       undefined,
       undefined,
-      { cancel: cancelled },
+      { update },
     );
     const response = await app.fetch(
-      new Request(`http://localhost${path}/cancel`, { method: "POST" }),
-    );
-    expect(response.status).toBe(200);
-    expect(cancelled).toHaveBeenCalledWith(
-      ownerKey.accountId,
-      "00000000-0000-4000-8000-000000000010",
-    );
-
-    const patch = await app.fetch(
       new Request(`http://localhost${path}`, {
         method: "PATCH",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", authorization: "Bearer test" },
         body: JSON.stringify({ status: "cancelled" }),
       }),
     );
-    expect(patch.status).toBe(400);
-    expect(cancelled).toHaveBeenCalledOnce();
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledWith(
+      ownerKey.accountId,
+      "00000000-0000-4000-8000-000000000010",
+      {
+        state: "cancelled",
+        reason: undefined,
+      },
+    );
   });
   it("protects distribution and earnings inspection with the capability and scope intersection", async () => {
     const ordinary = {

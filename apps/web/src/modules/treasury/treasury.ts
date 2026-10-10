@@ -34,6 +34,11 @@ export interface TreasuryRepository {
   create(entry: TreasuryEntryDraft): Promise<TreasuryEntry>;
   findById(id: string): Promise<TreasuryEntry | null>;
   findByIdempotencyKey(key: string): Promise<TreasuryEntry | null>;
+  sumBySource(input: {
+    sourceKind: string;
+    sourceId: string;
+    direction: TreasuryDirection;
+  }): Promise<bigint>;
   list(input: {
     cursor?: string;
     limit: number;

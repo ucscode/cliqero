@@ -18,14 +18,28 @@ export const withdrawalOpenApiMetadata: readonly OpenApiMetadataEntry[] = [
     path: "/api/withdrawals/{withdrawalId}",
     method: "patch",
     mode: "account",
-    capability: "withdrawals.manage",
-    scope: "withdrawals:manage",
-  },
-  {
-    path: "/api/withdrawals/{withdrawalId}/cancel",
-    method: "post",
-    mode: "account",
-    scope: "withdrawals:create",
+    scopeAnyOf: ["withdrawals:create", "withdrawals:manage"],
+    authorizationVariants: [
+      { discriminator: "status", value: "cancelled", scope: "withdrawals:create" },
+      {
+        discriminator: "status",
+        value: "cancelled",
+        scope: "withdrawals:manage",
+        capability: "withdrawals.manage",
+      },
+      {
+        discriminator: "status",
+        value: "approved",
+        scope: "withdrawals:manage",
+        capability: "withdrawals.manage",
+      },
+      {
+        discriminator: "status",
+        value: "rejected",
+        scope: "withdrawals:manage",
+        capability: "withdrawals.manage",
+      },
+    ],
   },
   {
     path: "/api/withdrawals/{withdrawalId}/complete",

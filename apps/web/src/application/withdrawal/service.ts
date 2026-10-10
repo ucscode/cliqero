@@ -33,7 +33,7 @@ export type WithdrawalCreateInput = {
 export type WithdrawalUpdateInput = {
   amountMinor?: string;
   destinationId?: string;
-  state?: "requested" | "approved" | "rejected";
+  state?: "requested" | "approved" | "rejected" | "cancelled";
   reason?: string;
 };
 
@@ -70,8 +70,6 @@ export class WithdrawalService extends CrudService<
       amountMinor: string;
       destinationId: string;
       idempotencyKey: string;
-      state?: "requested" | "approved" | "rejected";
-      reason?: string;
     },
   ) {
     await this.operators.requireCapability(actorId, "withdrawals.manage");
@@ -90,8 +88,7 @@ export class WithdrawalService extends CrudService<
       destinationId: input.destinationId,
       idempotencyKey: input.idempotencyKey,
       correlationId: newId(),
-      initialState: input.state ?? "requested",
-      initialReason: input.reason,
+      initialState: "requested",
     });
   }
   override async create(input: WithdrawalCreateInput): Promise<Withdrawal> {
@@ -262,59 +259,6 @@ export class WithdrawalService extends CrudService<
     const withdrawal = await this.withdrawals.findById(id);
     if (!withdrawal || withdrawal.accountId !== accountId) throw new Error("Withdrawal not found");
     return withdrawal;
-  }
-  async cancel(accountId: string, id: string) {
-    return this.uow.transaction(async () => {
-      const withdrawal = await this.withdrawals.findByIdForUpdate(id);
-      if (!withdrawal || withdrawal.accountId !== accountId)
-        throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
-      if (withdrawal.state !== "requested")
-        throw new PublicApplicationError(
-          "Withdrawal cannot be cancelled in its current state.",
-          "invalid_transition",
-          409,
-        );
-      await this.withdrawals.update(
-        { ...withdrawal, state: "cancelled", reason: "Cancelled by account" },
-        "requested",
-      );
-      const correlationId = newId();
-      await this.funds.releaseOrComplete({
-        withdrawalId: id,
-        accountId,
-        kind: "released",
-        correlationId,
-      });
-      await this.reconcileTreasuryFee(
-        withdrawal,
-        withdrawal.fee?.minorAmount ?? 0n,
-        0n,
-        correlationId,
-        "reversal",
-        accountId,
-        "customer",
-      );
-      await this.outbox.append([
-        {
-          id: newId(),
-          name: "withdrawal.cancelled",
-          aggregateId: id,
-          correlationId,
-          occurredAt: new Date(),
-          payload: { withdrawalId: id },
-        },
-      ]);
-      await this.audit.record({
-        actorId: accountId,
-        correlationId,
-        action: "withdrawal.cancelled",
-        subjectType: "withdrawal",
-        subjectId: id,
-        previousState: { state: "requested" },
-        newState: { state: "cancelled", reason: "Cancelled by account" },
-      });
-      return { ...withdrawal, state: "cancelled" as const };
-    });
   }
   async complete(
     actorId: string,
@@ -783,16 +727,88 @@ export class WithdrawalService extends CrudService<
     });
   }
   override async update(actorId: string, id: string, input: WithdrawalUpdateInput) {
-    await this.operators.requireCapability(actorId, "withdrawals.manage");
+    const canManage = await this.operators.hasCapability(actorId, "withdrawals.manage");
+    if (!canManage && input.state !== "cancelled")
+      throw new PublicApplicationError("Forbidden", "forbidden", 403);
     return this.uow.transaction(async () => {
       const current = await this.withdrawals.findByIdForUpdate(id);
       if (!current) throw new PublicApplicationError("Withdrawal not found.", "not_found", 404);
+      if (
+        !canManage &&
+        (current.accountId !== actorId ||
+          input.amountMinor !== undefined ||
+          input.destinationId !== undefined ||
+          input.reason !== undefined)
+      )
+        throw new PublicApplicationError("Forbidden", "forbidden", 403);
       if (current.state !== "requested" && current.state !== "approved")
         throw new PublicApplicationError(
           "This withdrawal can no longer be edited.",
           "withdrawal_immutable",
           409,
         );
+      const targetState = input.state ?? current.state;
+      if (targetState === "cancelled") {
+        if (!canManage && current.accountId !== actorId)
+          throw new PublicApplicationError("Forbidden", "forbidden", 403);
+        if (!canManage && current.state !== "requested")
+          throw new PublicApplicationError(
+            "This withdrawal cannot be cancelled by its owner after approval.",
+            "invalid_transition",
+            409,
+          );
+        if (await this.withdrawals.findPayoutInitiationByWithdrawalId(id))
+          throw new PublicApplicationError(
+            "An initiated payout cannot be cancelled before its external outcome is reconciled.",
+            "payout_outcome_pending",
+            409,
+          );
+        const reason =
+          input.reason?.trim() || (canManage ? "Cancelled by operator" : "Cancelled by account");
+        const cancellationCorrelationId = newId();
+        const cancelled = {
+          ...current,
+          state: "cancelled" as const,
+          reason,
+          updatedAt: new Date(),
+        };
+        await this.withdrawals.update(cancelled, current.state);
+        await this.funds.releaseOrComplete({
+          withdrawalId: id,
+          accountId: current.accountId,
+          kind: "released",
+          correlationId: cancellationCorrelationId,
+        });
+        await this.reconcileTreasuryFee(
+          current,
+          current.fee?.minorAmount ?? 0n,
+          0n,
+          cancellationCorrelationId,
+          "reversal",
+          actorId,
+          canManage ? "operator" : "customer",
+        );
+        await this.outbox.append([
+          {
+            id: newId(),
+            name: "withdrawal.cancelled",
+            aggregateId: id,
+            correlationId: cancellationCorrelationId,
+            occurredAt: new Date(),
+            payload: { withdrawalId: id, cancelledBy: actorId },
+          },
+        ]);
+        await this.audit.record({
+          actorId,
+          correlationId: cancellationCorrelationId,
+          action: "withdrawal.cancelled",
+          subjectType: "withdrawal",
+          subjectId: id,
+          previousState: { state: current.state },
+          newState: { state: "cancelled", reason },
+        });
+        return cancelled;
+      }
       const amountMinorText = input.amountMinor ?? current.amount.minorAmount.toString();
       if (!/^\d+$/.test(amountMinorText) || BigInt(amountMinorText) <= 0n)
         throw new PublicApplicationError(
@@ -802,8 +818,7 @@ export class WithdrawalService extends CrudService<
         );
       const amountMinor = BigInt(amountMinorText);
       const destinationId = input.destinationId ?? current.destination.savedDestinationId;
-      const targetState = input.state ?? current.state;
-      const reason = input.reason?.trim() ?? current.reason ?? "";
+      const reason = input.reason?.trim() || current.reason || "";
       const policy = await this.policy.getActive();
       if (
         current.state === "approved" &&
@@ -821,9 +836,13 @@ export class WithdrawalService extends CrudService<
           "invalid_transition",
           409,
         );
-      if (current.state === "requested" && !policy.enabled)
+      if (current.state === "requested" && !policy.enabled && targetState !== "rejected")
         throw new PublicApplicationError("Withdrawals are disabled.", "withdrawals_disabled", 409);
-      if (current.state === "requested" && amountMinor < policy.minimumAmount.minorAmount)
+      if (
+        current.state === "requested" &&
+        targetState !== "rejected" &&
+        amountMinor < policy.minimumAmount.minorAmount
+      )
         throw new PublicApplicationError(
           "Withdrawal amount is below the minimum.",
           "invalid_amount",
@@ -831,6 +850,7 @@ export class WithdrawalService extends CrudService<
         );
       if (
         current.state === "requested" &&
+        targetState !== "rejected" &&
         policy.maximumAmount &&
         amountMinor > policy.maximumAmount.minorAmount
       )
@@ -846,7 +866,7 @@ export class WithdrawalService extends CrudService<
         await this.debt?.requireNoOutstandingUnderLock(current.accountId, "withdrawal");
 
       const destination =
-        current.state === "approved"
+        current.state === "approved" || targetState === "rejected"
           ? current.destination
           : await this.destinations.resolveForWithdrawal(current.accountId, destinationId);
       const amount = Money.of(amountMinor, current.amount.currency);
@@ -868,7 +888,11 @@ export class WithdrawalService extends CrudService<
         updatedAt: new Date(),
       };
       const operationCorrelationId = newId();
-      if (current.state === "requested" && amountMinor !== current.amount.minorAmount) {
+      if (
+        current.state === "requested" &&
+        targetState !== "rejected" &&
+        amountMinor !== current.amount.minorAmount
+      ) {
         try {
           await this.funds.resize({
             withdrawalId: id,
@@ -886,7 +910,7 @@ export class WithdrawalService extends CrudService<
           throw cause;
         }
       }
-      if (current.state === "requested" && amountChanged)
+      if (current.state === "requested" && targetState !== "rejected" && amountChanged)
         await this.reconcileTreasuryFee(
           updated,
           current.fee?.minorAmount ?? 0n,
@@ -1078,9 +1102,47 @@ export class WithdrawalService extends CrudService<
   ) {
     const delta = nextFee - previousFee;
     if (delta === 0n) return;
-    const idempotencyKey = `withdrawal:${withdrawal.id}:fee:${operation}:${correlationId}`;
-    if (operation === "reversal" && (await this.treasury.findByIdempotencyKey(idempotencyKey)))
-      return;
+    const idempotencyKey =
+      operation === "reversal"
+        ? `withdrawal:${withdrawal.id}:fee:reversal`
+        : `withdrawal:${withdrawal.id}:fee:${operation}:${correlationId}`;
+    if (operation === "reversal") {
+      const existing = await this.treasury.findByIdempotencyKey(idempotencyKey);
+      if (existing) {
+        if (
+          existing.direction !== "debit" ||
+          existing.amountMinor !== -delta ||
+          existing.sourceKind !== "withdrawal_fee_reversal" ||
+          existing.sourceId !== withdrawal.id
+        )
+          throw new PublicApplicationError(
+            "The withdrawal fee reversal conflicts with its existing accounting record.",
+            "withdrawal_fee_reversal_conflict",
+            409,
+          );
+        return;
+      }
+      const [recognizedFees, reversedFees] = await Promise.all([
+        this.treasury.sumBySource({
+          sourceKind: "withdrawal_fee",
+          sourceId: withdrawal.id,
+          direction: "credit",
+        }),
+        this.treasury.sumBySource({
+          sourceKind: "withdrawal_fee_reversal",
+          sourceId: withdrawal.id,
+          direction: "debit",
+        }),
+      ]);
+      const remainingRecognizedFee = recognizedFees - reversedFees;
+      if (remainingRecognizedFee <= 0n) return;
+      if (-delta !== remainingRecognizedFee)
+        throw new PublicApplicationError(
+          "The withdrawal fee history does not match its current fee; reconcile it before reversal.",
+          "withdrawal_fee_reversal_conflict",
+          409,
+        );
+    }
     await this.treasury.create({
       id: newId(),
       direction: delta > 0n ? "credit" : "debit",

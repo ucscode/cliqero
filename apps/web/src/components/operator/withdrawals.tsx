@@ -12,13 +12,14 @@ import {
   type OperatorWithdrawalPage,
   type OperatorWithdrawalState,
   type WithdrawalDestination,
+  type WithdrawalPolicy,
 } from "@/lib/api-client";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { CopyValue } from "../copy-value";
 import { Money } from "../money";
-import { OperatorPrimaryCell, OperatorStatusCell, OperatorValueCell } from "./ui/data-cells";
+import { OperatorPrimaryCell, OperatorStatusCell } from "./ui/data-cells";
 import { OperatorFilterField } from "./ui/toolbar";
 import { CrudIndex } from "@/components/crud/index-page";
 import { CrudDetail } from "@/components/crud/detail";
@@ -70,10 +71,18 @@ export function operatorWithdrawalDeleteAllowed(
   return canManage && ["requested", "approved", "rejected", "cancelled", "failed"].includes(state);
 }
 
+export function operatorWithdrawalCancellationAllowed(
+  state: OperatorWithdrawalState,
+  payoutInitiated = false,
+) {
+  return !payoutInitiated && (state === "requested" || state === "approved");
+}
+
 export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string }) {
   const router = useRouter();
   const [item, setItem] = useState<Detail | null>(null);
   const [account, setAccount] = useState<OperatorAccountSummary | null>(null);
+  const [policy, setPolicy] = useState<WithdrawalPolicy | null>(null);
   const [destinations, setDestinations] = useState<WithdrawalDestination[]>([]);
   const [destinationId, setDestinationId] = useState("");
   const [amount, setAmount] = useState("");
@@ -123,6 +132,16 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
       active = false;
     };
   }, [withdrawalId]);
+
+  useEffect(() => {
+    let active = true;
+    void apiFetch<WithdrawalPolicy>("/api/withdrawals/policy")
+      .then((result) => active && setPolicy(result))
+      .catch((cause: unknown) => active && setError(message(cause)));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!account?.id) return;
@@ -181,8 +200,6 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
             amount_minor: amountMinor,
             destination_id: destinationId,
             idempotency_key: crypto.randomUUID(),
-            state,
-            reason,
           }),
         });
       }
@@ -211,7 +228,11 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                   inputId="withdrawal-account"
                   endpoint="/internal/withdrawals/accounts"
                   value={account}
-                  onChange={setAccount}
+                  onChange={(nextAccount) => {
+                    setAccount(nextAccount);
+                    setDestinations([]);
+                    setDestinationId("");
+                  }}
                   required
                 />
               </div>
@@ -220,7 +241,12 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
               Amount (USD)
               <Input
                 type="number"
-                min="0.01"
+                min={policy ? minorToMajor(policy.minimum_amount_minor) : "0.01"}
+                max={
+                  policy?.maximum_amount_minor
+                    ? minorToMajor(policy.maximum_amount_minor)
+                    : undefined
+                }
                 step="0.01"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
@@ -233,6 +259,39 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                 }
               />
             </label>
+            {!withdrawalId && account && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p>
+                  Available earnings:{" "}
+                  <strong>{formatMinorUsd(account.availableEarningsMinor ?? "0")}</strong>
+                </p>
+                {policy &&
+                  amount.trim() &&
+                  (() => {
+                    try {
+                      const gross = BigInt(parseUsdMinor(amount));
+                      const rawFee = policy.fee_enabled
+                        ? (gross * BigInt(policy.fee_basis_points) + 5_000n) / 10_000n
+                        : 0n;
+                      const cap =
+                        policy.fee_maximum_amount_minor !== null
+                          ? BigInt(policy.fee_maximum_amount_minor)
+                          : null;
+                      const fee =
+                        cap !== null && rawFee > cap ? cap : rawFee > gross ? gross : rawFee;
+                      return (
+                        <div className="mt-2 grid gap-1 text-slate-600">
+                          <p>Gross commitment: {formatMinorUsd(gross.toString())}</p>
+                          <p>Estimated platform fee: {formatMinorUsd(fee.toString())}</p>
+                          <p>Net payable: {formatMinorUsd((gross - fee).toString())}</p>
+                        </div>
+                      );
+                    } catch {
+                      return null;
+                    }
+                  })()}
+              </div>
+            )}
             <label className="required grid gap-1 text-sm font-medium">
               Payout destination
               <Select
@@ -255,8 +314,14 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                   </option>
                 ))}
               </Select>
+              {!destinations.length && account && (
+                <span className="text-xs text-amber-800">
+                  This account has no eligible saved payout destinations. Add or activate one before
+                  creating a request.
+                </span>
+              )}
             </label>
-            {
+            {withdrawalId && (
               <label className="required grid gap-1 text-sm font-medium">
                 Status
                 <Select
@@ -273,8 +338,8 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                   ))}
                 </Select>
               </label>
-            }
-            {
+            )}
+            {withdrawalId && (
               <label
                 className={`grid gap-1 text-sm font-medium ${state === "rejected" ? "required" : ""}`}
               >
@@ -287,7 +352,7 @@ export function OperatorWithdrawalForm({ withdrawalId }: { withdrawalId?: string
                   required={state === "rejected"}
                 />
               </label>
-            }
+            )}
             <div className="flex gap-2">
               <Button
                 type="submit"
@@ -401,12 +466,20 @@ export function OperatorWithdrawalList({
       render: (item) => new Date(item.createdAt).toLocaleString(),
     },
     {
-      key: "amount",
-      label: "Amount",
+      key: "amounts",
+      label: "Gross / fee / net",
       render: (item) => (
-        <OperatorValueCell>
-          <Money minor={item.amountMinor} />
-        </OperatorValueCell>
+        <div className="grid gap-0.5 text-xs">
+          <span>
+            <strong>Gross</strong> <Money minor={item.amountMinor} />
+          </span>
+          <span className="text-slate-500">
+            Fee <Money minor={item.feeMinor} />
+          </span>
+          <span className="font-semibold text-slate-700">
+            Net <Money minor={item.netAmountMinor} />
+          </span>
+        </div>
       ),
     },
   ];
@@ -540,6 +613,34 @@ export function OperatorWithdrawalList({
       }
       actions={(item) => [
         { type: "link", label: "View", href: `/operator/withdrawals/${item.id}` },
+        ...(canManage &&
+        operatorWithdrawalCancellationAllowed(item.state, Boolean(item.payoutInitiation))
+          ? [
+              {
+                type: "action" as const,
+                label: "Cancel withdrawal",
+                destructive: true,
+                onSelect: async () => {
+                  if (
+                    !(await confirm({
+                      title: "Cancel this withdrawal?",
+                      description:
+                        "The reserved gross amount will be released and the recognized fee reversed. A payout with initiation evidence cannot be cancelled here.",
+                      confirmLabel: "Cancel withdrawal",
+                      destructive: true,
+                    }))
+                  )
+                    return;
+                  await apiFetch(`/api/withdrawals/${item.id}`, {
+                    method: "PATCH",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ status: "cancelled", reason: "Cancelled by operator" }),
+                  });
+                  await collection.retry();
+                },
+              },
+            ]
+          : []),
         ...(operatorWithdrawalDeleteAllowed(item.state, canManage, Boolean(item.payoutInitiation))
           ? [
               {
@@ -606,6 +707,7 @@ export function OperatorWithdrawalDetail({
   canManage?: boolean;
   capabilities?: readonly Capability[];
 }) {
+  const confirm = useOperatorConfirmation();
   const [item, setItem] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -676,6 +778,33 @@ export function OperatorWithdrawalDetail({
       setSaving(false);
     }
   }
+  async function cancelWithdrawal() {
+    if (!item || !canManage) return;
+    if (
+      !(await confirm({
+        title: "Cancel this withdrawal?",
+        description:
+          "The reserved gross amount will be released and the recognized fee reversed. This is unavailable after payout initiation.",
+        confirmLabel: "Cancel withdrawal",
+        destructive: true,
+      }))
+    )
+      return;
+    setSaving(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/withdrawals/${withdrawalId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "cancelled", reason: "Cancelled by operator" }),
+      });
+      await load();
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
   if (loading && !item) return <CrudDetail eyebrow="Withdrawal fact" title="Withdrawal" loading />;
   if (!item)
     return (
@@ -702,6 +831,16 @@ export function OperatorWithdrawalDetail({
                 <Link href={`/operator/withdrawals/${item.id}/edit`}>Edit</Link>
               </Button>
             )}
+          {canManage &&
+            operatorWithdrawalCancellationAllowed(item.state, Boolean(item.payoutInitiation)) && (
+              <Button
+                variant="destructive"
+                disabled={saving}
+                onClick={() => void cancelWithdrawal()}
+              >
+                Cancel withdrawal
+              </Button>
+            )}
           <OperatorStatusCell status={item.state} />
         </>
       }
@@ -709,6 +848,28 @@ export function OperatorWithdrawalDetail({
         <>
           {error && <OperatorErrorState message={error} />}
           <div className="grid gap-4 lg:grid-cols-2">
+            <OperatorSection title="Financial breakdown" surface>
+              <dl className="grid gap-2 text-sm">
+                <div className="flex justify-between gap-3">
+                  <dt>Gross reserved</dt>
+                  <dd>
+                    <Money minor={item.amountMinor} />
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 text-slate-600">
+                  <dt>Platform fee</dt>
+                  <dd>
+                    <Money minor={item.feeMinor} />
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 font-semibold">
+                  <dt>Net payable</dt>
+                  <dd>
+                    <Money minor={item.netAmountMinor} />
+                  </dd>
+                </div>
+              </dl>
+            </OperatorSection>
             <OperatorSection title="Account" surface>
               <p>
                 <strong>@{item.account.username}</strong>

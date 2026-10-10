@@ -83,8 +83,9 @@ describe("withdrawal request UI contract", () => {
     const cancelStart = source.indexOf("async function confirmCancellation()");
     const cancelEnd = source.indexOf("return (", cancelStart);
     const cancelHandler = source.slice(cancelStart, cancelEnd);
-    expect(cancelHandler).toContain("`/api/withdrawals/${withdrawal.id}/cancel`");
-    expect(cancelHandler).toContain('method: "POST"');
+    expect(cancelHandler).toContain("`/api/withdrawals/${withdrawal.id}`");
+    expect(cancelHandler).toContain('method: "PATCH"');
+    expect(cancelHandler).toContain('JSON.stringify({ status: "cancelled" })');
     expect(cancelHandler).toContain("await load(true);");
   });
 

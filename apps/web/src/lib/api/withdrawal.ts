@@ -65,6 +65,8 @@ export type OperatorWithdrawal = {
   id: string;
   account: { id: string; username: string; email: string | null };
   amountMinor: string;
+  feeMinor: string;
+  netAmountMinor: string;
   currency: string;
   destination: { method: string; methodName: string; name: string };
   state: OperatorWithdrawalState;

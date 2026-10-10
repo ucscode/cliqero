@@ -15,6 +15,7 @@ describe("withdrawal API contract", () => {
       operatorWithdrawalPatchSchema.safeParse({ status: "rejected", reason: "Not eligible" })
         .success,
     ).toBe(true);
+    expect(operatorWithdrawalPatchSchema.safeParse({ status: "cancelled" }).success).toBe(true);
     expect(operatorWithdrawalPatchSchema.safeParse({ status: "completed" }).success).toBe(false);
     expect(
       operatorWithdrawalPatchSchema.safeParse({ status: "approved", external_reference: "x" })

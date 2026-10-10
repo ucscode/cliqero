@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { InternalWithdrawalRoutes } from "@/api/internal/withdrawals/handler";
+import { Money } from "@/modules/money/money";
 
 const accountId = "00000000-0000-4000-8000-000000000001";
 const uuid = (suffix: string) => `00000000-0000-4000-8000-${suffix.padStart(12, "0")}`;
@@ -28,6 +29,7 @@ function harness() {
     },
     withdrawalDestinations: { list: vi.fn() },
     operatorAccounts: { list: vi.fn() },
+    fundsReservation: { available: vi.fn(async () => 0n) },
   };
   return { routes: new InternalWithdrawalRoutes(container as never), remove, container };
 }
@@ -74,26 +76,49 @@ describe("internal Operator withdrawal routes", () => {
     }
   });
 
-  it("creates requested/approved/rejected records through ordinary create semantics without a follow-up read", async () => {
+  it("creates only requested records through ordinary create semantics without a follow-up read", async () => {
     const { routes, container } = harness();
+    vi.mocked(container.withdrawals.requestByOperator).mockResolvedValueOnce({
+      id: uuid("9"),
+      accountId: uuid("1"),
+      amount: Money.of(1200n, "USD"),
+      fee: Money.of(120n, "USD"),
+      netAmount: Money.of(1080n, "USD"),
+      destination: {
+        savedDestinationId: uuid("2"),
+        method: "bank_transfer",
+        methodName: "Bank transfer",
+        name: "Primary account",
+        fields: [],
+      },
+      state: "requested",
+      idempotencyKey: uuid("3"),
+      correlationId: uuid("4"),
+      reason: null,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    } as never);
     const response = await routes.create(
       sameOriginJson("http://localhost/internal/withdrawals", "POST", {
         account_id: uuid("1"),
         amount_minor: "1200",
         destination_id: uuid("2"),
         idempotency_key: uuid("3"),
-        state: "rejected",
-        reason: "Not eligible for payout",
       }),
     );
     expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      amount_minor: "1200",
+      fee_minor: "120",
+      net_amount_minor: "1080",
+      currency: "USD",
+      state: "requested",
+    });
     expect(container.withdrawals.requestByOperator).toHaveBeenCalledWith(accountId, {
       accountId: uuid("1"),
       amountMinor: "1200",
       destinationId: uuid("2"),
       idempotencyKey: uuid("3"),
-      state: "rejected",
-      reason: "Not eligible for payout",
     });
     expect(container.operatorWithdrawals.get).not.toHaveBeenCalled();
 
@@ -103,7 +128,7 @@ describe("internal Operator withdrawal routes", () => {
         amount_minor: "1200",
         destination_id: uuid("2"),
         idempotency_key: uuid("4"),
-        state: "rejected",
+        state: "requested",
       }),
     );
     expect(invalid.status).toBe(400);

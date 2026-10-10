@@ -4,6 +4,32 @@ import { Listing } from "@/modules/listing";
 import { Money } from "@/modules/money/money";
 
 describe("PostgresListingRepository descriptions", () => {
+  it("maps a featured-position uniqueness conflict to a structured client error", async () => {
+    const repository = new PostgresListingRepository({
+      query: async <T extends object>(): Promise<{ rows: T[]; rowCount: number }> => {
+        throw Object.assign(new Error("duplicate key value violates unique constraint"), {
+          code: "23505",
+          constraint: "listings_featured_position_unique",
+        });
+      },
+    });
+    const listing = Listing.create({
+      id: "listing-conflict",
+      sellerId: "seller-1",
+      title: "Featured listing",
+      shortDescription: "Summary",
+      longDescription: "Details",
+      price: Money.of(100n, "USD"),
+      destination: "https://example.com",
+      featuredPosition: 1,
+    });
+
+    await expect(repository.create(listing)).rejects.toMatchObject({
+      code: "featured_position_conflict",
+      status: 409,
+    });
+  });
+
   it("persists both descriptions and searches both fields", async () => {
     const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
     const repository = new PostgresListingRepository({

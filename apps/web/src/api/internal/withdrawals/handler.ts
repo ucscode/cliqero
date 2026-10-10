@@ -2,6 +2,7 @@ import { apiError } from "@/api/http";
 import { getContainer, type ApplicationContainer } from "@/infrastructure/container";
 import { hasCapability } from "@/modules/identity/capabilities";
 import { isSameOriginRequest } from "@/api/internal/security/same-origin";
+import { presentOwnedWithdrawal } from "@/api/compat/withdrawals/presentation";
 import { z } from "zod";
 
 type Container = Pick<
@@ -11,6 +12,7 @@ type Container = Pick<
   | "withdrawals"
   | "withdrawalDestinations"
   | "operatorAccounts"
+  | "fundsReservation"
 >;
 const createSchema = z
   .object({
@@ -18,18 +20,8 @@ const createSchema = z
     amount_minor: z.string().regex(/^[1-9]\d*$/),
     destination_id: z.uuid(),
     idempotency_key: z.uuid(),
-    state: z.enum(["requested", "approved", "rejected"]).default("requested"),
-    reason: z.string().trim().max(1000).optional(),
   })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.state === "rejected" && !value.reason)
-      context.addIssue({
-        code: "custom",
-        path: ["reason"],
-        message: "A rejection reason is required.",
-      });
-  });
+  .strict();
 const updateSchema = z
   .object({
     amount_minor: z
@@ -113,7 +105,18 @@ export class InternalWithdrawalRoutes {
     if (principal instanceof Response) return principal;
     try {
       const search = new URL(request.url).searchParams.get("search")?.trim() ?? "";
-      return this.respond(await this.container.operatorAccounts.list({ search, limit: 20 }));
+      const page = await this.container.operatorAccounts.list({ search, limit: 20 });
+      return this.respond({
+        ...page,
+        items: await Promise.all(
+          page.items.map(async (account) => ({
+            ...account,
+            availableEarningsMinor: (
+              await this.container.fundsReservation.available(account.id, "USD")
+            ).toString(),
+          })),
+        ),
+      });
     } catch (error) {
       return apiError(error, request);
     }
@@ -129,12 +132,10 @@ export class InternalWithdrawalRoutes {
         amountMinor: body.amount_minor,
         destinationId: body.destination_id,
         idempotencyKey: body.idempotency_key,
-        state: body.state,
-        reason: body.reason,
       });
       // Return the successfully persisted domain result directly. A second projection
       // read must not turn a successful reservation into an apparent failed POST.
-      return this.respond(created, 201);
+      return this.respond(presentOwnedWithdrawal(created), 201);
     } catch (error) {
       return apiError(error, request);
     }

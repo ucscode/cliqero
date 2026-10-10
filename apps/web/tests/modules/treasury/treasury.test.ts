@@ -44,6 +44,20 @@ class Fake implements TreasuryRepository {
   async findByIdempotencyKey(key: string) {
     return this.items.find((entry) => entry.idempotencyKey === key) ?? null;
   }
+  async sumBySource(input: {
+    sourceKind: string;
+    sourceId: string;
+    direction: "credit" | "debit";
+  }) {
+    return this.items
+      .filter(
+        (entry) =>
+          entry.sourceKind === input.sourceKind &&
+          entry.sourceId === input.sourceId &&
+          entry.direction === input.direction,
+      )
+      .reduce((sum, entry) => sum + entry.amountMinor, 0n);
+  }
   async list() {
     return { items: this.items, nextCursor: null };
   }

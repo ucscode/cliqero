@@ -391,8 +391,6 @@ function operationSummary(path: string, method: string) {
   if (path.endsWith("/reconcile"))
     return method === "get" ? "List payment reconciliation candidates" : "Reconcile a payment";
   if (path.endsWith("/rotate")) return "Rotate integration credential";
-  if (path.startsWith("/api/withdrawals/") && path.endsWith("/cancel"))
-    return "Cancel a withdrawal";
   if (path.endsWith("/verify"))
     return path.includes("/fund") ? "Verify funding" : "Verify resource status";
   if (path.endsWith("/cancel")) return "Cancel funding";

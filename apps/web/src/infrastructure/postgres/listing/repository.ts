@@ -203,20 +203,38 @@ export class PostgresListingRepository extends ListingRepository {
         listing.externalKey,
         listing.featuredPosition,
       ];
-      const result = creating
-        ? await this.sql.query(
-            `insert into listing_capability.listings
+      let result;
+      try {
+        result = creating
+          ? await this.sql.query(
+              `insert into listing_capability.listings
             (uuid, seller_id, title, short_description, long_description, price_minor, price_currency, compare_at_price_minor, visibility, destination_url, metadata, state, external_key, featured_position)
             values ($1,(select id from identity_capability.accounts where uuid=$2),$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14)`,
-            values,
-          )
-        : await this.sql.query(
-            `update listing_capability.listings set title=$3,short_description=$4,long_description=$5,
+              values,
+            )
+          : await this.sql.query(
+              `update listing_capability.listings set title=$3,short_description=$4,long_description=$5,
              price_minor=$6,price_currency=$7,compare_at_price_minor=$8,visibility=$9,destination_url=$10,
              metadata=$11::jsonb,state=$12,external_key=$13,featured_position=$14,updated_at=now()
              where uuid=$1 and seller_id=(select id from identity_capability.accounts where uuid=$2) and deleted_at is null`,
-            values,
+              values,
+            );
+      } catch (cause) {
+        if (
+          typeof cause === "object" &&
+          cause !== null &&
+          "code" in cause &&
+          cause.code === "23505" &&
+          "constraint" in cause &&
+          cause.constraint === "listings_featured_position_unique"
+        )
+          throw new PublicApplicationError(
+            "That featured position is already assigned to another listing.",
+            "featured_position_conflict",
+            409,
           );
+        throw cause;
+      }
       if (!creating && result.rowCount !== 1) return false;
       await this.sql.query(
         "delete from listing_capability.listing_categories where listing_id=(select id from listing_capability.listings where uuid=$1)",

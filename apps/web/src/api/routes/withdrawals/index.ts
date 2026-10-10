@@ -261,7 +261,8 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       },
       responses: {
         200: {
-          description: "Withdrawal state updated",
+          description:
+            "Updates withdrawal state. Customers may cancel their own requested withdrawal with withdrawals:create; withdrawal management capability and withdrawals:manage scope are required to approve, reject, or cancel another eligible withdrawal.",
           content: { "application/json": { schema: withdrawalMutationResponseSchema } },
         },
         401: {
@@ -269,7 +270,8 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
           content: { "application/json": { schema: errorSchema } },
         },
         403: {
-          description: "Withdrawal management permission required",
+          description:
+            "The required customer withdrawal or Operator management authority is missing",
           content: { "application/json": { schema: errorSchema } },
         },
         404: {
@@ -286,50 +288,19 @@ export function registerWithdrawalRoutes(app: OpenAPIHono<Env>, container: Appli
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const body = c.req.valid("json");
-      const denied = requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage");
+      const isManager = hasCapability(p.capabilities, "withdrawals.manage");
+      const denied =
+        isManager || body.status !== "cancelled"
+          ? requireCapabilityScope(c, p, "withdrawals.manage", "withdrawals:manage")
+          : requireScope(c, p, "withdrawals:create");
       if (denied) return denied;
       try {
         const id = c.req.valid("param").withdrawalId;
         const result = await container.withdrawals.update(p.accountId, id, {
           state: body.status,
-          reason: body.status === "rejected" ? body.reason : undefined,
+          reason:
+            body.status === "rejected" || body.status === "cancelled" ? body.reason : undefined,
         });
-        return c.json(withdrawalMutationResponseSchema.parse(jsonSafe(result)), 200);
-      } catch (error) {
-        return domainError(c, error);
-      }
-    },
-  );
-  app.openapi(
-    createRoute({
-      method: "post",
-      path: "/api/withdrawals/{withdrawalId}/cancel",
-      request: withdrawalParam,
-      responses: {
-        200: {
-          description: "Withdrawal cancellation recorded and reservation released",
-          content: { "application/json": { schema: withdrawalMutationResponseSchema } },
-        },
-        401: {
-          description: "Authentication required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-        403: {
-          description: "Withdrawal creation scope required",
-          content: { "application/json": { schema: errorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const p = requirePrincipal(c);
-      if (!(p instanceof Object) || !("accountId" in p)) return p;
-      const denied = requireScope(c, p, "withdrawals:create");
-      if (denied) return denied;
-      try {
-        const result = await container.withdrawals.cancel(
-          p.accountId,
-          c.req.valid("param").withdrawalId,
-        );
         return c.json(withdrawalMutationResponseSchema.parse(jsonSafe(result)), 200);
       } catch (error) {
         return domainError(c, error);

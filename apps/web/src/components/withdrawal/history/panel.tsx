@@ -61,9 +61,10 @@ export function WithdrawalHistoryPanel() {
     await cancellationLock.current.run(async () => {
       setCancelling(true);
       try {
-        await apiFetch<Withdrawal>(`/api/withdrawals/${withdrawal.id}/cancel`, {
-          method: "POST",
+        await apiFetch<Withdrawal>(`/api/withdrawals/${withdrawal.id}`, {
+          method: "PATCH",
           headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: "cancelled" }),
         });
         setWithdrawalToCancel(null);
         await load(cursor);

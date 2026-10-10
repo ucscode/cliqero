@@ -13,6 +13,9 @@ export const operatorWithdrawalAttentionSchema = z.enum(["review", "action_requi
 export const operatorWithdrawalPatchSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("approved") }).strict(),
   z.object({ status: z.literal("rejected"), reason: z.string().min(3).max(500) }).strict(),
+  z
+    .object({ status: z.literal("cancelled"), reason: z.string().min(3).max(500).optional() })
+    .strict(),
 ]);
 export const operatorWithdrawalCompleteSchema = z
   .object({
@@ -262,6 +265,31 @@ export const withdrawalMutationResponseSchema = z
     completionNote: z.string().nullable().optional(),
     completedBy: z.string().uuid().nullable().optional(),
     completedAt: z.string().nullable().optional(),
+    payoutInitiation: z
+      .object({
+        id: z.string().uuid(),
+        withdrawalId: z.string().uuid(),
+        actorId: z.string().uuid(),
+        correlationId: z.string().uuid(),
+        idempotencyKey: z.string(),
+        externalReference: z.string().nullable(),
+        createdAt: z.string(),
+      })
+      .nullable()
+      .optional(),
+    payoutFailure: z
+      .object({
+        id: z.string().uuid(),
+        withdrawalId: z.string().uuid(),
+        actorId: z.string().uuid(),
+        correlationId: z.string().uuid(),
+        idempotencyKey: z.string(),
+        externalReference: z.string(),
+        reason: z.string(),
+        createdAt: z.string(),
+      })
+      .nullable()
+      .optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
   })

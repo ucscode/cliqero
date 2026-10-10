@@ -60,6 +60,21 @@ export class PostgresTreasuryRepository implements TreasuryRepository {
     ).rows[0];
     return row ? map(row) : null;
   }
+  async sumBySource(input: {
+    sourceKind: string;
+    sourceId: string;
+    direction: "credit" | "debit";
+  }) {
+    const row = (
+      await this.sql.query<{ total: string }>(
+        `select coalesce(sum(amount_minor), 0)::text as total
+           from treasury_capability.entries
+          where source_kind=$1 and source_id=$2 and direction=$3`,
+        [input.sourceKind, input.sourceId, input.direction],
+      )
+    ).rows[0];
+    return BigInt(row?.total ?? "0");
+  }
   async list(input: { cursor?: string; limit: number; direction?: "credit" | "debit" }) {
     const values: any[] = [];
     const where: string[] = [];

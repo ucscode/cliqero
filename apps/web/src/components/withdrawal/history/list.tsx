@@ -37,6 +37,13 @@ export function WithdrawalHistoryList({
             <strong>
               <Money minor={withdrawal.amount_minor} currency={withdrawal.currency} />
             </strong>
+            <span className="text-xs text-slate-600">
+              Platform fee · <Money minor={withdrawal.fee_minor} currency={withdrawal.currency} />
+            </span>
+            <span className="text-xs font-medium text-slate-700">
+              Net payable ·{" "}
+              <Money minor={withdrawal.net_amount_minor} currency={withdrawal.currency} />
+            </span>
             <span className="break-words text-sm text-slate-500">
               {withdrawal.destination.method_name} · {withdrawal.destination.name}
             </span>
