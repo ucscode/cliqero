@@ -77,6 +77,14 @@ suite("package entitlement integration API", () => {
     return (await response.json()) as Record<string, any>;
   }
 
+  function publicErrorShape(payload: Record<string, any>) {
+    return {
+      error: payload.error,
+      code: payload.code,
+      ...(payload.fields ? { fields: payload.fields } : {}),
+    };
+  }
+
   it("authenticates integration credentials and hides missing/out-of-scope resources identically", async () => {
     const first = await createEntitlement();
     const second = await createEntitlement();
@@ -114,8 +122,8 @@ suite("package entitlement integration API", () => {
     const notFoundBody = await json(notFound);
     expect(outsideScope.status).toBe(404);
     expect(outsideScopePatch.status).toBe(404);
-    expect(await json(outsideScope)).toEqual(notFoundBody);
-    expect(await json(outsideScopePatch)).toEqual(notFoundBody);
+    expect(publicErrorShape(await json(outsideScope))).toEqual(publicErrorShape(notFoundBody));
+    expect(publicErrorShape(await json(outsideScopePatch))).toEqual(publicErrorShape(notFoundBody));
   });
 
   it("enforces strict patch shape, safe state transitions, and expiry semantics", async () => {

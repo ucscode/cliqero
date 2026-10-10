@@ -18,6 +18,7 @@ export type DevelopmentDiagnostic = {
   event: string;
   method?: string;
   path?: string;
+  requestId?: string;
   publicCode?: string;
   error?: unknown;
   metadata?: Record<string, unknown>;
@@ -120,6 +121,7 @@ function writeToDevelopmentLog(entry: DevelopmentDiagnostic, fileName: string): 
       event: entry.event,
       ...(entry.method ? { method: entry.method } : {}),
       ...(entry.path ? { path: entry.path } : {}),
+      ...(entry.requestId ? { request_id: entry.requestId } : {}),
       ...(entry.publicCode ? { public_code: entry.publicCode } : {}),
       ...(entry.error ? safeError(entry.error) : {}),
       ...(entry.metadata ? { metadata: safeValue(entry.metadata) } : {}),
@@ -187,4 +189,29 @@ export function logDevelopmentError(
   level: DevelopmentDiagnostic["level"] = "error",
 ): void {
   writeApiDevelopmentDiagnostic({ ...context, level, error });
+}
+
+/** Logs unexpected API failures in every environment without making logging part of the response path. */
+export function logApiBoundaryError(
+  error: unknown,
+  context: Omit<DevelopmentDiagnostic, "level" | "error">,
+  level: DevelopmentDiagnostic["level"],
+): void {
+  if (process.env.NODE_ENV === "development") {
+    logDevelopmentError(error, context, level);
+    return;
+  }
+  if (level !== "error") return;
+  try {
+    console.error(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level,
+        ...(safeValue(context) as Record<string, DiagnosticValue>),
+        error: safeError(error),
+      }),
+    );
+  } catch {
+    // Server logging is best effort; an unavailable logger must not break a request.
+  }
 }

@@ -1,34 +1,25 @@
-import { logDevelopmentError } from "@/infrastructure/development-log";
-import { apiErrorResult, publicErrorPayload, validationErrorPayload } from "../error";
+import { logApiBoundaryError } from "@/infrastructure/development-log";
+import { apiErrorResult, requestCorrelationId } from "../error";
 import type { ApiContext } from "./context";
 
 export function domainError(c: ApiContext, error: unknown): never {
-  const publicError = publicErrorPayload(error);
-  const validation = validationErrorPayload(error);
-  logDevelopmentError(
+  const requestId = requestCorrelationId(c.req.raw);
+  const result = apiErrorResult(error, requestId);
+  logApiBoundaryError(
     error,
     {
       event: "api.error",
       method: c.req.raw.method,
       path: new URL(c.req.raw.url).pathname,
-      ...(publicError
-        ? { publicCode: publicError.payload.code }
-        : validation
-          ? { publicCode: validation.code }
-          : {}),
+      publicCode: result.payload.code,
+      requestId,
     },
-    publicError || validation
-      ? publicError?.status === 401 || publicError?.status === 403
+    result.status >= 500
+      ? "error"
+      : result.status === 401 || result.status === 403
         ? "warn"
-        : "info"
-      : "error",
+        : "info",
   );
-  if (publicError)
-    return c.json(
-      publicError.payload,
-      publicError.status as 400 | 401 | 403 | 404 | 409 | 429 | 500,
-    ) as never;
-  if (validation) return c.json(validation, 400) as never;
-  const result = apiErrorResult(error);
-  return c.json(result.payload, result.status) as never;
+  c.header("x-request-id", requestId);
+  return c.json(result.payload, result.status as never) as never;
 }

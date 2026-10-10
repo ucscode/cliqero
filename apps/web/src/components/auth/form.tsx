@@ -6,7 +6,7 @@ import { GoogleLogoIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
 import { ApiClientError, apiFetch, presentFormApiError, safeContinuation } from "@/lib/api-client";
 import { fetchCanonicalApplicationSession } from "@/lib/application-session";
-import { Alert } from "../ui/alert";
+import { FormErrorSummary, FieldError } from "../form/feedback";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -41,7 +41,7 @@ export function AuthForm({
   const [country, setCountry] = useState("");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | ApiClientError | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const onCaptchaToken = useCallback((token: string | null) => setCaptchaToken(token), []);
@@ -127,9 +127,9 @@ export function AuthForm({
       );
     } catch (cause) {
       if (cause instanceof ApiClientError) {
-        const presented = presentFormApiError(cause, ["username", "email"]);
+        const presented = presentFormApiError(cause, ["username", "email", "password"]);
         setFieldErrors(presented.fields);
-        setError(presented.message);
+        setError(cause);
       } else {
         setError("Authentication failed. Please try again.");
       }
@@ -165,9 +165,7 @@ export function AuthForm({
       }
     >
       {error && (
-        <Alert role="alert" className="mb-5 border-red-200 bg-red-50 text-red-900">
-          {error}
-        </Alert>
+        <FormErrorSummary error={error} visibleFields={["username", "email", "password"]} />
       )}
       <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
         {mode === "register" && (
@@ -176,7 +174,10 @@ export function AuthForm({
             <Input
               id="username"
               value={username}
-              onChange={(event) => setUsername(event.target.value.toLowerCase())}
+              onChange={(event) => {
+                setFieldErrors((current) => ({ ...current, username: "" }));
+                setUsername(event.target.value.toLowerCase());
+              }}
               required
               minLength={3}
               maxLength={32}
@@ -186,11 +187,7 @@ export function AuthForm({
               aria-invalid={Boolean(fieldErrors.username)}
               aria-describedby={fieldErrors.username ? "register-username-error" : undefined}
             />
-            {fieldErrors.username && (
-              <p id="register-username-error" className="text-sm text-red-700">
-                {fieldErrors.username}
-              </p>
-            )}
+            <FieldError id="register-username-error" message={fieldErrors.username} />
             <CountrySelect value={country} onChange={setCountry} />
           </>
         )}
@@ -199,30 +196,34 @@ export function AuthForm({
           id="email"
           type="email"
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={(event) => {
+            setFieldErrors((current) => ({ ...current, email: "" }));
+            setEmail(event.target.value);
+          }}
           required
           autoComplete="email"
           placeholder="you@example.com"
           aria-invalid={Boolean(fieldErrors.email)}
           aria-describedby={fieldErrors.email ? "register-email-error" : undefined}
         />
-        {fieldErrors.email && (
-          <p id="register-email-error" className="text-sm text-red-700">
-            {fieldErrors.email}
-          </p>
-        )}
+        <FieldError id="register-email-error" message={fieldErrors.email} />
         <Label htmlFor="password">Password</Label>
         <div className="relative">
           <Input
             id="password"
             type={showPassword ? "text" : "password"}
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => {
+              setFieldErrors((current) => ({ ...current, password: "" }));
+              setPassword(event.target.value);
+            }}
             required
             minLength={PASSWORD_MIN_LENGTH}
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`}
             className="pr-11"
+            aria-invalid={Boolean(fieldErrors.password)}
+            aria-describedby={fieldErrors.password ? "register-password-error" : undefined}
           />
           <Button
             type="button"
@@ -235,6 +236,7 @@ export function AuthForm({
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </Button>
         </div>
+        <FieldError id="register-password-error" message={fieldErrors.password} />
         {mode === "register" && <Captcha config={captcha} onToken={onCaptchaToken} />}
         <Button type="submit" disabled={busy}>
           {busy

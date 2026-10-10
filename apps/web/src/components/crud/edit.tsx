@@ -7,6 +7,8 @@ import { OperatorErrorState } from "../operator/ui/error-state";
 import { OperatorLoadingState } from "../operator/ui/loading-state";
 import { OperatorPage, OperatorPageHeader } from "../operator/ui/page";
 import { OperatorSection } from "../operator/ui/section";
+import { FormErrorSummary } from "../form/feedback";
+import { ApiClientError } from "@/lib/api-client";
 
 export function CrudEdit({
   mode,
@@ -26,6 +28,7 @@ export function CrudEdit({
   sidebar,
   footer,
   error,
+  errorFields,
   success,
   submitLabel,
   savingLabel,
@@ -50,7 +53,8 @@ export function CrudEdit({
   afterFields?: ReactNode;
   sidebar?: ReactNode;
   footer?: ReactNode;
-  error?: string | null;
+  error?: string | ApiClientError | null;
+  errorFields?: readonly string[];
   success?: ReactNode;
   submitLabel?: string;
   savingLabel?: string;
@@ -81,7 +85,12 @@ export function CrudEdit({
           </>
         }
       />
-      {error && <OperatorErrorState message={error} />}
+      {error &&
+        (typeof error === "string" ? (
+          <OperatorErrorState message={error} />
+        ) : (
+          <FormErrorSummary error={error} visibleFields={errorFields} />
+        ))}
       {success}
       {loading ? (
         <OperatorLoadingState variant="section" label={loadingLabel ?? `Loading ${title}`} />

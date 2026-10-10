@@ -1,8 +1,8 @@
 import type { Account } from "@/modules/identity/account";
 import { isAuthenticatedPrincipal, type ApiPrincipal } from "@/modules/identity/api/principal";
 import { getContainer } from "@/infrastructure/container";
-import { apiErrorResult, publicErrorPayload, validationErrorPayload } from "./error";
-import { logDevelopmentError } from "@/infrastructure/development-log";
+import { apiErrorResult, requestCorrelationId } from "./error";
+import { logApiBoundaryError } from "@/infrastructure/development-log";
 import { resolvedRequestPrincipal } from "./shared/request-principal";
 import type { ApplicationContainer } from "@/infrastructure/container";
 
@@ -45,27 +45,24 @@ function cookieSource(request: Request, name: string): string | undefined {
 }
 
 export function apiError(error: unknown, request?: Request): Response {
-  const publicError = publicErrorPayload(error);
-  const validation = validationErrorPayload(error);
-  logDevelopmentError(
+  const requestId = requestCorrelationId(request);
+  const result = apiErrorResult(error, requestId);
+  logApiBoundaryError(
     error,
     {
       event: "api.error",
       ...(request ? { method: request.method, path: new URL(request.url).pathname } : {}),
-      ...(publicError
-        ? { publicCode: publicError.payload.code }
-        : validation
-          ? { publicCode: validation.code }
-          : {}),
+      publicCode: result.payload.code,
+      requestId,
     },
-    publicError || validation
-      ? publicError?.status === 401 || publicError?.status === 403
+    result.status >= 500
+      ? "error"
+      : result.status === 401 || result.status === 403
         ? "warn"
-        : "info"
-      : "error",
+        : "info",
   );
-  if (publicError) return Response.json(publicError.payload, { status: publicError.status });
-  if (validation) return Response.json(validation, { status: 400 });
-  const result = apiErrorResult(error);
-  return Response.json(result.payload, { status: result.status });
+  return Response.json(result.payload, {
+    status: result.status,
+    headers: { "x-request-id": requestId },
+  });
 }

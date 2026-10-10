@@ -8,7 +8,6 @@ import { apiAuthorizer } from "@/api/shared/authorization";
 import { crudMaxRows } from "@/config/crud";
 import { listingCreateSchema } from "./contracts";
 import { deleteResourceIds, resourceDeleteSchema } from "@/api/shared/resource-delete";
-import { listingRequestError } from "./errors";
 
 const sorts = ["date", "price", "title", "rating"] as const;
 const directions = ["asc", "desc"] as const;
@@ -56,7 +55,7 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
-    return apiError(listingRequestError(error), request);
+    return apiError(error, request);
   }
 }
 export async function GET(

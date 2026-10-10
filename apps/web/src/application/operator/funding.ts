@@ -3,7 +3,7 @@ import type { UnitOfWork } from "@/kernel/unit-of-work";
 import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 import type { WalletService } from "@/application/wallet/service";
 import { newId } from "@/kernel/ids";
-import { PublicApplicationError } from "@/kernel/errors";
+import { DomainInvariantError, PublicApplicationError } from "@/kernel/errors";
 import type { AccountDebtService } from "@/application/finance/account-debt";
 
 export type AdministrativeFundingState = "confirmed" | "failed" | "blocked" | "cancelled";
@@ -313,7 +313,8 @@ export class OperatorFundingService {
     const reference = this.normalizeReference(input.reference);
     return uow.transaction(async () => {
       const current = await repository.findForUpdate(id);
-      if (!current) throw new Error("Administrative funding not found");
+      if (!current)
+        throw new PublicApplicationError("Administrative funding not found.", "not_found", 404);
       await repository.lockAccount(current.accountId);
       const currentEffective = current.state === "confirmed" ? current.amountMinor : 0n;
       const nextEffective = input.state === "confirmed" ? amountMinor : 0n;
@@ -359,7 +360,8 @@ export class OperatorFundingService {
     await operators.requireCapability(actorId, "finance.manage");
     return uow.transaction(async () => {
       const current = await repository.findForUpdate(id);
-      if (!current) throw new Error("Administrative funding not found");
+      if (!current)
+        throw new PublicApplicationError("Administrative funding not found.", "not_found", 404);
       await repository.lockAccount(current.accountId);
       if (
         current.state === "confirmed" &&
@@ -441,20 +443,27 @@ export class OperatorFundingService {
 
   private positiveMinor(value: string) {
     if (!/^\d+$/.test(value) || BigInt(value) <= 0n)
-      throw new Error("Funding amount must be positive.");
+      throw new DomainInvariantError("Funding amount must be positive.", {
+        amount_minor: "Funding amount must be positive.",
+      });
     return BigInt(value);
   }
 
   private requiredReason(value: string) {
     const reason = value.trim();
-    if (!reason) throw new Error("A reason is required for administrative funding.");
+    if (!reason)
+      throw new DomainInvariantError("A reason is required for administrative funding.", {
+        reason: "A reason is required for administrative funding.",
+      });
     return reason;
   }
 
   private normalizeReference(value?: string | null) {
     const reference = value?.trim() || null;
     if (reference && reference.length > 200)
-      throw new Error("Reference must be 200 characters or fewer.");
+      throw new DomainInvariantError("Reference must be 200 characters or fewer.", {
+        reference: "Reference must be 200 characters or fewer.",
+      });
     return reference;
   }
 

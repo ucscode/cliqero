@@ -100,7 +100,7 @@ describe("apiFetch validation errors", () => {
             code: "validation_error",
             fields: { username: "Username must use 3–32 lowercase letters, numbers, _ or -" },
           },
-          { status: 400 },
+          { status: 400, headers: { "x-request-id": "trace-validation-1" } },
         ),
       ),
     );
@@ -109,6 +109,7 @@ describe("apiFetch validation errors", () => {
       name: ApiClientError.name,
       code: "validation_error",
       fields: { username: "Username must use 3–32 lowercase letters, numbers, _ or -" },
+      requestId: "trace-validation-1",
     });
   });
 
@@ -169,6 +170,21 @@ describe("apiFetch validation errors", () => {
   ])("normalizes structured error payloads", async (body, message) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(body, { status: 400 })));
     await expect(apiFetch("/api/test")).rejects.toMatchObject({ message });
+  });
+
+  it("preserves a request identifier from the error body for log correlation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { error: "Invalid input", code: "validation_error", request_id: "body-trace" },
+            { status: 400, headers: { "x-request-id": "header-trace" } },
+          ),
+        ),
+    );
+    await expect(apiFetch("/api/test")).rejects.toMatchObject({ requestId: "body-trace" });
   });
 
   it("normalizes plain-text and malformed error responses without object coercion", async () => {

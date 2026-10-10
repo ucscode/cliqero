@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { apiFetch, ApiClientError, presentFormApiError, safeContinuation } from "@/lib/api-client";
 import { authClient } from "@/lib/auth-client";
-import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -13,6 +12,7 @@ import { Skeleton } from "./ui/skeleton";
 import { CountrySelect } from "./country-select";
 import { HoneypotField } from "./honeypot-field";
 import { AuthShell } from "./auth/shell";
+import { FieldError, FormErrorSummary } from "./form/feedback";
 import { HONEYPOT_FIELD_NAME, HONEYPOT_HEADER_NAME } from "@/lib/honeypot";
 import { PASSWORD_MIN_LENGTH } from "@/modules/identity/password-policy";
 
@@ -27,7 +27,7 @@ export function OnboardingForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | ApiClientError | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
@@ -83,7 +83,7 @@ export function OnboardingForm() {
         const presented = presentFormApiError(cause, ["username", "password"]);
         setUsernameError(presented.fields.username ?? null);
         setPasswordError(presented.fields.password ?? null);
-        setError(presented.message);
+        setError(cause);
       } else setError("We couldn’t complete onboarding.");
     } finally {
       setBusy(false);
@@ -102,17 +102,16 @@ export function OnboardingForm() {
       title="Make your account yours."
       description="Choose the account details we’ll use across your account."
     >
-      {error && (
-        <Alert role="alert" className="mb-5 border-red-200 bg-red-50 text-red-900">
-          {error}
-        </Alert>
-      )}
+      {error && <FormErrorSummary error={error} visibleFields={["username", "password"]} />}
       <form onSubmit={submit} className="grid gap-4" aria-busy={busy}>
         <Label htmlFor="onboarding-username">Username</Label>
         <Input
           id="onboarding-username"
           value={username}
-          onChange={(event) => setUsername(event.target.value.toLowerCase())}
+          onChange={(event) => {
+            setUsernameError(null);
+            setUsername(event.target.value.toLowerCase());
+          }}
           required
           minLength={3}
           maxLength={32}
@@ -122,11 +121,7 @@ export function OnboardingForm() {
           placeholder="username"
           pattern="[a-z0-9][a-z0-9_-]{2,31}"
         />
-        {usernameError && (
-          <p id="onboarding-username-error" className="text-sm text-red-700">
-            {usernameError}
-          </p>
-        )}
+        <FieldError id="onboarding-username-error" message={usernameError} />
         <CountrySelect value={country} onChange={setCountry} />
         {!hasPassword && (
           <>
@@ -136,7 +131,10 @@ export function OnboardingForm() {
                 id="onboarding-password"
                 type={showPassword ? "text" : "password"}
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPasswordError(null);
+                  setPassword(event.target.value);
+                }}
                 required
                 minLength={PASSWORD_MIN_LENGTH}
                 autoComplete="new-password"
@@ -156,11 +154,7 @@ export function OnboardingForm() {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
-            {passwordError && (
-              <p id="onboarding-password-error" className="text-sm text-red-700">
-                {passwordError}
-              </p>
-            )}
+            <FieldError id="onboarding-password-error" message={passwordError} />
           </>
         )}
         <Button type="submit" disabled={busy}>

@@ -219,10 +219,12 @@ describe("bank-transfer evidence API", () => {
     );
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
+    const payload = await response.json();
+    expect(payload).toMatchObject({
       error: "Add a transfer reference or proof file before submitting.",
       code: "evidence_required",
     });
+    expect(payload.request_id).toBe(response.headers.get("x-request-id"));
     expect(submitEvidence).not.toHaveBeenCalled();
   });
 });

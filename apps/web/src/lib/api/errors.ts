@@ -4,6 +4,7 @@ export class ApiClientError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly fields?: Record<string, string>,
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = "ApiClientError";
@@ -14,6 +15,7 @@ type NormalizedApiError = {
   message: string;
   code?: string;
   fields?: Record<string, string>;
+  requestId?: string;
 };
 
 function readable(value: unknown): string | undefined {
@@ -56,8 +58,13 @@ export function normalizeApiError(value: unknown): NormalizedApiError {
   return {
     message: readable(value) ?? "Something went wrong",
     ...(typeof record.code === "string" ? { code: record.code } : {}),
+    ...(typeof record.request_id === "string" ? { requestId: record.request_id } : {}),
     ...(fields && Object.keys(fields).length ? { fields } : {}),
   };
+}
+
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiClientError ? error.message : fallback;
 }
 
 export function presentFormApiError(

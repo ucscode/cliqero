@@ -5,7 +5,6 @@ import { listingWithMediaView } from "@/application/listing/service";
 import { apiAuthorizer } from "@/api/shared/authorization";
 import { verifyListingPreviewToken } from "@/security/listing-preview";
 import { listingPatchSchema } from "../contracts";
-import { listingRequestError } from "../errors";
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ listingId: string }> },
@@ -125,6 +124,6 @@ export async function PATCH(
       ),
     );
   } catch (error) {
-    return apiError(listingRequestError(error), request);
+    return apiError(error, request);
   }
 }

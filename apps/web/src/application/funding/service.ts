@@ -13,7 +13,7 @@ import type { FundingRepository, FundingTransaction } from "@/modules/funding/fu
 import { isVerificationResolved } from "@/modules/funding/funding";
 import type { FundingVerificationProcessor } from "./verification";
 import type { LifecycleDiagnosticWriter } from "@/kernel/diagnostics";
-import { PublicApplicationError } from "@/kernel/errors";
+import { DomainInvariantError, PublicApplicationError } from "@/kernel/errors";
 
 export class FundingService {
   constructor(
@@ -33,19 +33,29 @@ export class FundingService {
     fundingOptionId?: string;
     requireFundingOption?: boolean;
   }) {
-    if (input.amountMinor <= 0n) throw new Error("Funding amount must be positive");
+    if (input.amountMinor <= 0n)
+      throw new DomainInvariantError("Funding amount must be positive", {
+        amount_minor: "Funding amount must be positive",
+      });
     const account = await this.accounts.findById?.(input.accountId);
-    if (!account) throw new Error("Account not found");
-    if (!account.country) throw new Error("Account country is required for funding");
+    if (!account) throw new PublicApplicationError("Account not found.", "not_found", 404);
+    if (!account.country)
+      throw new DomainInvariantError("Account country is required for funding", {
+        country: "Account country is required for funding",
+      });
     const provider = this.providers.get(input.providerName, { country: account.country });
     const fundingOptions = provider.fundingOptions?.({ country: account.country }) ?? [];
     const selectedFundingOption = input.fundingOptionId
       ? fundingOptions.find((option) => option.id === input.fundingOptionId)
       : undefined;
     if (input.fundingOptionId && !selectedFundingOption)
-      throw new Error("The selected receiving account is not eligible");
+      throw new DomainInvariantError("The selected receiving account is not eligible", {
+        funding_option_id: "The selected receiving account is not eligible",
+      });
     if (input.requireFundingOption && fundingOptions.length > 0 && !selectedFundingOption)
-      throw new Error("Select a receiving bank account");
+      throw new DomainInvariantError("Select a receiving bank account", {
+        funding_option_id: "Select a receiving bank account",
+      });
     const collectionCurrency =
       provider.collectionCurrencyFor?.({
         country: account.country,
@@ -138,7 +148,10 @@ export class FundingService {
     paymentCurrency?: string;
     fundingOptionId?: string;
   }) {
-    if (input.amountMinor <= 0n) throw new Error("Funding amount must be positive");
+    if (input.amountMinor <= 0n)
+      throw new DomainInvariantError("Funding amount must be positive", {
+        amount_minor: "Funding amount must be positive",
+      });
     const resolved = await this.resolvePreparation({ ...input, requireFundingOption: true });
     const existing = await this.funding.findByIdempotency(input.accountId, input.idempotencyKey);
     const canonical = resolved.canonicalAmount;
@@ -150,7 +163,11 @@ export class FundingService {
         existing.collectionAmount.currency !== resolved.collectionCurrency ||
         (existingPaymentCurrency ?? undefined) !== (resolved.paymentCurrency ?? undefined)
       )
-        throw new Error("Idempotency key conflicts with existing funding request");
+        throw new PublicApplicationError(
+          "Idempotency key conflicts with existing funding request.",
+          "idempotency_conflict",
+          409,
+        );
       return existing;
     }
     const prepared = await this.prepareResolved(resolved);

@@ -19,7 +19,8 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
   }
   if (!response.ok) {
     const error = normalizeApiError(body);
-    throw new ApiClientError(error.message, response.status, error.code, error.fields);
+    const requestId = error.requestId ?? response.headers.get("x-request-id") ?? undefined;
+    throw new ApiClientError(error.message, response.status, error.code, error.fields, requestId);
   }
   return body as T;
 }

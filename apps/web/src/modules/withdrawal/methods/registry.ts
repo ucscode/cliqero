@@ -1,6 +1,7 @@
 import countryList from "country-list";
 import { z } from "zod";
 import { loadYamlConfiguration } from "@/config/yaml";
+import { DomainInvariantError, PublicApplicationError } from "@/kernel/errors";
 import type { Account } from "@/modules/identity/account";
 import type { DestinationField } from "@/modules/withdrawal/withdrawal";
 
@@ -241,7 +242,9 @@ export class WithdrawalMethodRegistry {
   requireAvailable(id: string, account: Pick<Account, "country">) {
     const method = this.find(id);
     if (!method || !method.enabled || !this.isEligible(method, account.country))
-      throw new Error("Withdrawal method is unavailable for this account");
+      throw new DomainInvariantError("Withdrawal method is unavailable for this account", {
+        method_id: "Withdrawal method is unavailable for this account",
+      });
     return method;
   }
 
@@ -252,7 +255,10 @@ export class WithdrawalMethodRegistry {
         .map((field) => field.name),
     );
     for (const name of Object.keys(values)) {
-      if (!editable.has(name)) throw new Error(`Unknown or non-editable withdrawal field: ${name}`);
+      if (!editable.has(name))
+        throw new DomainInvariantError(`Unknown or non-editable withdrawal field: ${name}`, {
+          [name]: "This withdrawal field is not editable",
+        });
     }
 
     const enriched: DestinationField[] = [];
@@ -272,13 +278,19 @@ export class WithdrawalMethodRegistry {
       const raw = values[field.name];
       const value = raw?.trim();
       if (!value) {
-        if (field.required) throw new Error(`${field.label} is required`);
+        if (field.required)
+          throw new DomainInvariantError(`${field.label} is required`, {
+            [field.name]: `${field.label} is required`,
+          });
         continue;
       }
 
       if (field.type === "select") {
         const option = field.options.find((candidate) => candidate.key === value);
-        if (!option) throw new Error(`${field.label} has an invalid value`);
+        if (!option)
+          throw new DomainInvariantError(`${field.label} has an invalid value`, {
+            [field.name]: `${field.label} has an invalid value`,
+          });
         enriched.push({
           name: field.name,
           label: field.label,
@@ -291,11 +303,16 @@ export class WithdrawalMethodRegistry {
       }
 
       if (field.enum && !field.enum.includes(value))
-        throw new Error(`${field.label} has an invalid value`);
+        throw new DomainInvariantError(`${field.label} has an invalid value`, {
+          [field.name]: `${field.label} has an invalid value`,
+        });
 
       if (field.regex) {
         const match = new RegExp(field.regex).exec(value);
-        if (!match || match[0] !== value) throw new Error(`${field.label} has an invalid format`);
+        if (!match || match[0] !== value)
+          throw new DomainInvariantError(`${field.label} has an invalid format`, {
+            [field.name]: `${field.label} has an invalid format`,
+          });
       }
 
       enriched.push({
@@ -315,21 +332,27 @@ export class WithdrawalMethodRegistry {
       if (configured.type !== "fixed" && configured.type !== "hidden") continue;
       const saved = fields.find((field) => field.name === configured.name);
       if (!saved || saved.type !== configured.type || saved.value !== configured.value)
-        throw new Error(
-          "Saved withdrawal destination no longer matches its method; update it before use",
+        throw new PublicApplicationError(
+          "Saved withdrawal destination no longer matches its method; update it before use.",
+          "withdrawal_destination_conflict",
+          409,
         );
     }
 
     for (const field of fields) {
       const configured = method.fields.find((candidate) => candidate.name === field.name);
       if (!configured || field.type !== configured.type)
-        throw new Error(
-          "Saved withdrawal destination no longer matches its method; update it before use",
+        throw new PublicApplicationError(
+          "Saved withdrawal destination no longer matches its method; update it before use.",
+          "withdrawal_destination_conflict",
+          409,
         );
       if (configured.type === "fixed" || configured.type === "hidden") {
         if (field.value !== configured.value)
-          throw new Error(
-            "Saved withdrawal destination no longer matches its method; update it before use",
+          throw new PublicApplicationError(
+            "Saved withdrawal destination no longer matches its method; update it before use.",
+            "withdrawal_destination_conflict",
+            409,
           );
       } else {
         values[configured.name] = field.value;

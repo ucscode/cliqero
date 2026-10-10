@@ -7,10 +7,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  ApiClientError,
   apiFetch,
   formatMinorUsd,
   minorToUsdInput,
   parseUsdMinor,
+  presentFormApiError,
   type ListingMedia,
   type Listing,
   type Integration,
@@ -59,6 +61,7 @@ import {
   saveCataloguePreviewDraft,
 } from "./catalogue/preview-storage";
 import { ExternalImagePreview } from "./catalogue/external-image-preview";
+import { FieldError } from "../form/feedback";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -744,7 +747,8 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | ApiClientError | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [stagedMedia, setStagedMedia] = useState<ReturnType<typeof createCatalogueImagePreview>[]>(
     [],
   );
@@ -813,12 +817,20 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       : {};
     setSaving(true);
     setError(null);
+    setFieldErrors({});
     const metadata = { ...(listing?.metadata ?? {}) };
     if (form.imageSource === "external" && form.externalImageUrl.trim())
       metadata.external_image_url = form.externalImageUrl.trim();
     else delete metadata.external_image_url;
     try {
       const priceMinor = parseUsdMinor(form.price, { allowZero: true });
+      const compareAtMinor = form.compareAtPrice.trim() ? parseUsdMinor(form.compareAtPrice) : null;
+      if (compareAtMinor !== null && BigInt(compareAtMinor) <= BigInt(priceMinor)) {
+        setFieldErrors({
+          compare_at_price_minor: "Compare-at price must be greater than the listing price.",
+        });
+        return;
+      }
       if (editing) {
         const next = await apiFetch<OperatorListing>(`/api/listings/${listingId}`, {
           method: "PATCH",
@@ -830,9 +842,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             currency: "USD",
             destination: form.destination.trim(),
             featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
-            compare_at_price_minor: form.compareAtPrice.trim()
-              ? parseUsdMinor(form.compareAtPrice)
-              : null,
+            compare_at_price_minor: compareAtMinor,
             visibility: form.visibility,
             state: form.state,
             metadata,
@@ -854,9 +864,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             metadata,
             external_key: form.externalKey.trim() || undefined,
             featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
-            compare_at_price_minor: form.compareAtPrice.trim()
-              ? parseUsdMinor(form.compareAtPrice)
-              : null,
+            compare_at_price_minor: compareAtMinor,
             visibility: form.visibility,
             state: form.state,
             category_ids: form.categoryIds,
@@ -881,11 +889,34 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         }
         router.replace(`/operator/catalogue/${next.id}`);
       }
+      setFieldErrors({});
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (cause instanceof ApiClientError) {
+        const presented = presentFormApiError(cause, [
+          "title",
+          "short_description",
+          "long_description",
+          "price_minor",
+          "compare_at_price_minor",
+          "destination",
+        ]);
+        setFieldErrors(presented.fields);
+        setError(cause);
+      } else {
+        setError(errorMessage(cause));
+      }
     } finally {
       setSaving(false);
     }
+  }
+
+  function clearFieldErrors(...fields: string[]) {
+    setError(null);
+    setFieldErrors((current) => {
+      const next = { ...current };
+      for (const field of fields) delete next[field];
+      return next;
+    });
   }
 
   function openDraftPreview() {
@@ -960,6 +991,14 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       loading={loading}
       loadingLabel="Loading listing"
       error={error}
+      errorFields={[
+        "title",
+        "short_description",
+        "long_description",
+        "price_minor",
+        "compare_at_price_minor",
+        "destination",
+      ]}
       sectionTitle={editing ? "Listing details" : "New listing details"}
       sectionDescription="Save catalogue fields through the existing listing workflow."
       headerActions={
@@ -1001,8 +1040,14 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           id="listing-title"
           required
           value={form.title}
-          onChange={(event) => setForm({ ...form, title: event.target.value })}
+          aria-invalid={Boolean(fieldErrors.title)}
+          aria-describedby={fieldErrors.title ? "listing-title-error" : undefined}
+          onChange={(event) => {
+            clearFieldErrors("title");
+            setForm({ ...form, title: event.target.value });
+          }}
         />
+        <FieldError id="listing-title-error" message={fieldErrors.title} />
       </div>
       <div className="grid gap-2">
         <RequiredLabel htmlFor="listing-short-description">Short description</RequiredLabel>
@@ -1012,8 +1057,16 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           maxLength={200}
           required
           value={form.shortDescription}
-          onChange={(event) => setForm({ ...form, shortDescription: event.target.value })}
+          aria-invalid={Boolean(fieldErrors.short_description)}
+          aria-describedby={
+            fieldErrors.short_description ? "listing-short-description-error" : undefined
+          }
+          onChange={(event) => {
+            clearFieldErrors("short_description");
+            setForm({ ...form, shortDescription: event.target.value });
+          }}
         />
+        <FieldError id="listing-short-description-error" message={fieldErrors.short_description} />
         <p className="text-xs leading-5 text-slate-500">
           Plain-text customer summary, up to 200 characters.
         </p>
@@ -1022,8 +1075,12 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         <Label htmlFor="listing-long-description">Long description</Label>
         <MarkdownEditor
           markdown={form.longDescription}
-          onChange={(longDescription) => setForm({ ...form, longDescription })}
+          onChange={(longDescription) => {
+            clearFieldErrors("long_description");
+            setForm({ ...form, longDescription });
+          }}
         />
+        <FieldError id="listing-long-description-error" message={fieldErrors.long_description} />
         <p className="text-xs leading-5 text-slate-500">
           Detailed listing content saved as Markdown.
         </p>
@@ -1033,12 +1090,18 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <RequiredLabel htmlFor="listing-price">Price (USD)</RequiredLabel>
           <Input
             id="listing-price"
+            aria-invalid={Boolean(fieldErrors.price_minor)}
+            aria-describedby={fieldErrors.price_minor ? "listing-price-error" : undefined}
             required
             inputMode="decimal"
             placeholder="10.00"
             value={form.price}
-            onChange={(event) => setForm({ ...form, price: event.target.value })}
+            onChange={(event) => {
+              clearFieldErrors("price_minor", "compare_at_price_minor");
+              setForm({ ...form, price: event.target.value });
+            }}
           />
+          <FieldError id="listing-price-error" message={fieldErrors.price_minor} />
           <p className="text-xs leading-5 text-slate-500">
             Set 0.00 for a free listing. Amounts are stored in exact USD minor units.
           </p>
@@ -1047,10 +1110,21 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           <Label htmlFor="listing-compare-price">Compare-at price (USD, optional)</Label>
           <Input
             id="listing-compare-price"
+            aria-invalid={Boolean(fieldErrors.compare_at_price_minor)}
+            aria-describedby={
+              fieldErrors.compare_at_price_minor ? "listing-compare-price-error" : undefined
+            }
             inputMode="decimal"
             placeholder="40.00"
             value={form.compareAtPrice}
-            onChange={(event) => setForm({ ...form, compareAtPrice: event.target.value })}
+            onChange={(event) => {
+              clearFieldErrors("compare_at_price_minor");
+              setForm({ ...form, compareAtPrice: event.target.value });
+            }}
+          />
+          <FieldError
+            id="listing-compare-price-error"
+            message={fieldErrors.compare_at_price_minor}
           />
           <p className="text-xs leading-5 text-slate-500">
             Previous/reference price shown crossed out; must exceed the listing price.
@@ -1063,8 +1137,14 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             required
             type="url"
             value={form.destination}
-            onChange={(event) => setForm({ ...form, destination: event.target.value })}
+            aria-invalid={Boolean(fieldErrors.destination)}
+            aria-describedby={fieldErrors.destination ? "listing-access-url-error" : undefined}
+            onChange={(event) => {
+              clearFieldErrors("destination");
+              setForm({ ...form, destination: event.target.value });
+            }}
           />
+          <FieldError id="listing-access-url-error" message={fieldErrors.destination} />
           <p className="text-xs leading-5 text-slate-500">
             Customer delivery/access destination provided after purchase; not the public listing
             page.

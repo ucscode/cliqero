@@ -46,10 +46,15 @@ export class Listing {
     state?: ListingState;
   }): Listing {
     const title = input.title.trim();
-    if (!title) throw new DomainInvariantError("Listing title is required");
+    if (!title)
+      throw new DomainInvariantError("Listing title is required", {
+        title: "Listing title is required",
+      });
     const destination = new URL(input.destination);
     if (!["http:", "https:"].includes(destination.protocol))
-      throw new DomainInvariantError("Listing destination must use HTTP or HTTPS");
+      throw new DomainInvariantError("Listing destination must use HTTP or HTTPS", {
+        destination: "Listing destination must use HTTP or HTTPS",
+      });
     const state = input.state ?? "draft";
     const shortDescription = normalizeShortDescription(input.shortDescription);
     if (state === "published") ensurePublishedShortDescription(shortDescription);
@@ -119,10 +124,15 @@ export class Listing {
     state?: ListingState;
   }): void {
     const title = input.title.trim();
-    if (!title) throw new DomainInvariantError("Listing title is required");
+    if (!title)
+      throw new DomainInvariantError("Listing title is required", {
+        title: "Listing title is required",
+      });
     const destination = new URL(input.destination);
     if (!["http:", "https:"].includes(destination.protocol))
-      throw new DomainInvariantError("Listing destination must use HTTP or HTTPS");
+      throw new DomainInvariantError("Listing destination must use HTTP or HTTPS", {
+        destination: "Listing destination must use HTTP or HTTPS",
+      });
     const shortDescription = normalizeShortDescription(input.shortDescription);
     const state = input.state ?? this.stateValue;
     if (state === "published") ensurePublishedShortDescription(shortDescription);
@@ -192,12 +202,18 @@ function normalizeShortDescription(value: string) {
   if (normalized.length > LISTING_SHORT_DESCRIPTION_MAX_LENGTH)
     throw new DomainInvariantError(
       `Listing short description must be ${LISTING_SHORT_DESCRIPTION_MAX_LENGTH} characters or fewer`,
+      {
+        short_description: `Listing short description must be ${LISTING_SHORT_DESCRIPTION_MAX_LENGTH} characters or fewer`,
+      },
     );
   return normalized;
 }
 
 function ensurePublishedShortDescription(value: string) {
-  if (!value) throw new DomainInvariantError("Published listing short description is required");
+  if (!value)
+    throw new DomainInvariantError("Published listing short description is required", {
+      short_description: "Published listing short description is required",
+    });
 }
 
 export abstract class ListingRepository extends CrudRepository<
@@ -233,9 +249,13 @@ export abstract class ListingRepository extends CrudRepository<
 
 function validateCompareAtPrice(price: Money, compareAtPrice: Money | null) {
   if (compareAtPrice && compareAtPrice.currency !== price.currency)
-    throw new DomainInvariantError("Compare-at price must use the listing currency");
+    throw new DomainInvariantError("Compare-at price must use the listing currency", {
+      compare_at_price_minor: "Compare-at price must use the listing currency",
+    });
   if (compareAtPrice && compareAtPrice.minorAmount <= price.minorAmount)
-    throw new DomainInvariantError("Compare-at price must be greater than the listing price");
+    throw new DomainInvariantError("Compare-at price must be greater than the listing price", {
+      compare_at_price_minor: "Compare-at price must be greater than the listing price",
+    });
   return compareAtPrice;
 }
 

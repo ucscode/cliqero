@@ -1,5 +1,12 @@
+/** Stable across duplicated bundles; only explicitly classified invariants cross HTTP boundaries. */
+export const DOMAIN_INVARIANT_ERROR = Symbol.for("cliqero.domain-invariant-error");
+
 export class DomainInvariantError extends Error {
-  constructor(message: string) {
+  readonly [DOMAIN_INVARIANT_ERROR] = true;
+  constructor(
+    message: string,
+    readonly fields: Record<string, string> = {},
+  ) {
     super(message);
     this.name = "DomainInvariantError";
   }
