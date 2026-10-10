@@ -17,7 +17,10 @@ export async function POST(request: Request) {
     const key = request.headers.get("idempotency-key");
     if (!key) throw new Error("A valid Idempotency-Key is required");
     const body = withdrawalCreateSchema.parse(await request.json());
-    const withdrawal = await getContainer().withdrawals.create({
+    const container = getContainer();
+    await container.authentication.requireVerifiedEmail(principal.accountId);
+    await container.transactionPin.requireValidPin(principal.accountId, body.transaction_pin);
+    const withdrawal = await container.withdrawals.create({
       accountId: principal.accountId,
       amountMinor: BigInt(body.amount_minor),
       currency: body.currency.toUpperCase(),

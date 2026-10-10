@@ -351,6 +351,20 @@ describe("operator capability administration", () => {
     expect(source).toContain("credential_setup:");
   });
 
+  it("provides a permission-gated administrative password reset without displaying credentials", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/operator/users.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("canManage && !account.deletedAt");
+    expect(source).toContain("/password-reset");
+    expect(source).toContain("Existing sessions will be revoked.");
+    expect(source).toContain('id="operator-account-new-password"');
+    expect(source).toContain('id="operator-account-confirm-password"');
+    expect(source).not.toContain("password_hash");
+    expect(source).toContain("Password reset. Existing sessions were revoked.");
+  });
+
   it("returns account edit Cancel to the user collection", () => {
     const source = readFileSync(
       resolve(process.cwd(), "src/components/operator/users.tsx"),

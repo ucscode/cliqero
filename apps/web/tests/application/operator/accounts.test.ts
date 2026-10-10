@@ -6,7 +6,14 @@ import { Account } from "@/modules/identity/account";
 const actorId = "00000000-0000-4000-8000-000000000001";
 const target = new Account("00000000-0000-4000-8000-000000000002", "new_user", "NG");
 
-function fixture(options: { failReset?: boolean; deletionContext?: Record<string, unknown> } = {}) {
+function fixture(
+  options: {
+    failReset?: boolean;
+    deletionContext?: Record<string, unknown>;
+    targetRoot?: boolean;
+    actorRoot?: boolean;
+  } = {},
+) {
   const audits: AuditRecordInput[] = [];
   let email = "new@example.test";
   const register = vi.fn(async () => target);
@@ -21,6 +28,7 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     requestPasswordSetup,
     sendOperatorAccountCreatedEmail: vi.fn(async () => undefined),
     removeAccountIdentity: vi.fn(async () => undefined),
+    resetAccountPassword: vi.fn(async () => undefined),
   };
   const profiles = {
     get: async () => ({
@@ -67,6 +75,15 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     tombstone: vi.fn(async () => undefined),
     removeHierarchyEdge: vi.fn(async () => undefined),
   };
+  const operators = {
+    requireCapability: vi.fn(async () => undefined),
+    hasCapability: vi.fn(
+      async (id: string, capability: string) =>
+        capability === "system.root" &&
+        Boolean(id === actorId ? options.actorRoot : options.targetRoot),
+    ),
+    capabilities: vi.fn(async () => []),
+  };
   const service = new OperatorAccountManagementService(
     authentication as never,
     profiles as never,
@@ -74,6 +91,7 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     { record: async (input) => void audits.push(input) },
     { transaction: async (operation) => operation() },
     deletion,
+    operators,
   );
   return {
     service,
@@ -86,6 +104,7 @@ function fixture(options: { failReset?: boolean; deletionContext?: Record<string
     accounts,
     deletion,
     authentication,
+    operators,
   };
 }
 
@@ -115,6 +134,41 @@ describe("OperatorAccountManagementService", () => {
       passwordSetupEmailRequested: true,
     });
     expect(created).not.toHaveProperty("password");
+  });
+
+  it("resets an eligible account password through the identity boundary and audits no secret", async () => {
+    const { service, audits, authentication } = fixture();
+    await service.resetPassword(actorId, target.id, "a-new-long-password");
+    expect(authentication.resetAccountPassword).toHaveBeenCalledWith(
+      target.id,
+      "a-new-long-password",
+    );
+    expect(audits.at(-1)).toMatchObject({
+      actorId,
+      action: "operator.account_password_reset",
+      subjectId: target.id,
+      newState: { credential: "password", passwordRecorded: false, sessionsRevoked: true },
+    });
+    expect(JSON.stringify(audits)).not.toContain("a-new-long-password");
+  });
+
+  it("requires root authority to reset another root account", async () => {
+    const { service, authentication, audits } = fixture({ targetRoot: true });
+    await expect(
+      service.resetPassword(actorId, target.id, "a-new-long-password"),
+    ).rejects.toMatchObject({
+      code: "forbidden",
+      status: 403,
+    });
+    expect(authentication.resetAccountPassword).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(0);
+  });
+
+  it("allows a root operator to reset a root account through the same audited workflow", async () => {
+    const { service, authentication, audits } = fixture({ targetRoot: true, actorRoot: true });
+    await service.resetPassword(actorId, target.id, "a-new-long-password");
+    expect(authentication.resetAccountPassword).toHaveBeenCalledOnce();
+    expect(audits).toHaveLength(1);
   });
 
   it("preserves successful account creation and reports reset-email delivery failure", async () => {

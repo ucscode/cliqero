@@ -4388,4 +4388,23 @@ $$;
 COMMENT ON FUNCTION ledger_capability.available_earnings_minor(bigint,text) IS
   'Authoritative spendable Earnings balance after effective ledger entries, adjustments, debt settlements, withdrawal reservations, and funding-reversal recovery.';
 
+-- Transaction PINs are security credentials, not financial evidence. Their
+-- salted Better Auth hashes and lockout state are mutable; security events are
+-- recorded through the application audit stream.
+CREATE TABLE identity_capability.transaction_pin_credentials (
+    account_id bigint NOT NULL,
+    pin_hash text NOT NULL,
+    failed_attempts integer DEFAULT 0 NOT NULL,
+    locked_until timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT transaction_pin_account_unique UNIQUE (account_id),
+    CONSTRAINT transaction_pin_account_fk FOREIGN KEY (account_id)
+      REFERENCES identity_capability.accounts(id),
+    CONSTRAINT transaction_pin_hash_nonempty CHECK (length(btrim(pin_hash)) > 0),
+    CONSTRAINT transaction_pin_attempts_nonnegative CHECK (failed_attempts >= 0)
+);
+COMMENT ON TABLE identity_capability.transaction_pin_credentials IS
+  'Mutable Better Auth password-hashed six-digit transaction PIN credentials with persisted online-guess lockout state; plaintext PINs are never stored.';
+
 -- End of canonical PostgreSQL baseline.

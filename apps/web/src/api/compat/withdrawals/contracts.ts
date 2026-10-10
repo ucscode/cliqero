@@ -5,6 +5,7 @@ export const withdrawalCreateSchema = z
     amount_minor: z.string().regex(/^\d+$/),
     currency: z.string().length(3),
     destination_id: z.string().uuid(),
+    transaction_pin: z.string().regex(/^\d{6}$/),
   })
   .strict();
 

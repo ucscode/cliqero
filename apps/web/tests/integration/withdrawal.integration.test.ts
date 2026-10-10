@@ -1130,6 +1130,13 @@ suite("withdrawal lifecycle", () => {
   });
   it("creates, edits, transitions, and deletes mutable operator withdrawals atomically", async () => {
     const { seller, destinationId } = await setup();
+    await app.database.query(
+      `update better_auth."user" auth_user set "emailVerified"=true
+        from identity_capability.auth_account_links link
+        join identity_capability.accounts account on account.id=link.account_id
+       where link.auth_user_id=auth_user.id and account.uuid=$1`,
+      [seller.id],
+    );
     const initialAvailable = await app.fundsReservation.available(seller.id, "USD");
     const secondDestination = await app.withdrawalDestinations.create(seller.id, {
       method: "bank_ng",

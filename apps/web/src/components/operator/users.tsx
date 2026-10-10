@@ -458,6 +458,10 @@ export function OperatorUserDetail({
   const [capabilitySaving, setCapabilitySaving] = useState<Capability | "set" | null>(null);
   const [capabilityDraft, setCapabilityDraft] = useState<Capability[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
+  const [confirmResetPassword, setConfirmResetPassword] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [passwordResetError, setPasswordResetError] = useState<string | null>(null);
   const toast = useToast();
 
   async function load(): Promise<OperatorAccountDetail | null> {
@@ -635,6 +639,38 @@ export function OperatorUserDetail({
     }
   }
 
+  async function submitPasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!account || resettingPassword || resetPassword !== confirmResetPassword) return;
+    if (
+      !(await confirm({
+        title: "Reset account password?",
+        description: `Set a new password for @${account.username}. Existing sessions will be revoked.`,
+        confirmLabel: "Reset password",
+      }))
+    )
+      return;
+    setResettingPassword(true);
+    setPasswordResetError(null);
+    try {
+      await apiFetch(`/internal/accounts/${account.id}/password-reset`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          new_password: resetPassword,
+          confirm_password: confirmResetPassword,
+        }),
+      });
+      setResetPassword("");
+      setConfirmResetPassword("");
+      toast.success("Password reset. Existing sessions were revoked.");
+    } catch (cause) {
+      setPasswordResetError(message(cause));
+    } finally {
+      setResettingPassword(false);
+    }
+  }
+
   if (loading) return <CrudDetail eyebrow="Account inspection" title="User" loading />;
   if (!account)
     return (
@@ -683,6 +719,45 @@ export function OperatorUserDetail({
               This account was deleted on {new Date(account.deletedAt).toLocaleString()}. Historical
               records remain available.
             </div>
+          )}
+          {canManage && !account.deletedAt && (
+            <OperatorSection title="Password security" surface>
+              <form className="grid max-w-xl gap-3" onSubmit={submitPasswordReset}>
+                <p className="text-sm text-slate-600">
+                  Set a new password without viewing or retrieving the existing credential. All
+                  active sessions are revoked.
+                </p>
+                <Label htmlFor="operator-account-new-password">New password</Label>
+                <Input
+                  id="operator-account-new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={12}
+                  value={resetPassword}
+                  onChange={(event) => setResetPassword(event.target.value)}
+                  required
+                />
+                <Label htmlFor="operator-account-confirm-password">Confirm new password</Label>
+                <Input
+                  id="operator-account-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={12}
+                  value={confirmResetPassword}
+                  onChange={(event) => setConfirmResetPassword(event.target.value)}
+                  required
+                />
+                {passwordResetError && <Alert role="alert">{passwordResetError}</Alert>}
+                <Button
+                  className="w-fit"
+                  disabled={
+                    resettingPassword || !resetPassword || resetPassword !== confirmResetPassword
+                  }
+                >
+                  {resettingPassword ? "Resetting…" : "Reset password"}
+                </Button>
+              </form>
+            </OperatorSection>
           )}
           {error && <OperatorErrorState message={error} />}
           {!account.deletedAt && !capabilityLoading && capabilityView && (

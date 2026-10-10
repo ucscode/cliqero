@@ -22,6 +22,7 @@ export function WalletTransferForm({ onComplete }: { onComplete: () => void }) {
   const [from, setFrom] = useState<WalletName>("funding");
   const to: WalletName = from === "funding" ? "earnings" : "funding";
   const [amount, setAmount] = useState("");
+  const [transactionPin, setTransactionPin] = useState("");
   const [keyedQuote, setKeyedQuote] = useState<KeyedQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,9 +57,15 @@ export function WalletTransferForm({ onComplete }: { onComplete: () => void }) {
           "content-type": "application/json",
           "idempotency-key": `wallet-transfer-${crypto.randomUUID()}`,
         },
-        body: JSON.stringify({ from, to, amount_minor: amountMinor }),
+        body: JSON.stringify({
+          from,
+          to,
+          amount_minor: amountMinor,
+          transaction_pin: transactionPin,
+        }),
       });
       setAmount("");
+      setTransactionPin("");
       setKeyedQuote(null);
       onComplete();
     } catch (cause) {
@@ -90,6 +97,24 @@ export function WalletTransferForm({ onComplete }: { onComplete: () => void }) {
             <option value="funding">Funding</option>
             <option value="earnings">Earnings</option>
           </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="transfer-transaction-pin">Transaction PIN</Label>
+          <Input
+            id="transfer-transaction-pin"
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={6}
+            value={transactionPin}
+            onChange={(event) =>
+              setTransactionPin(event.target.value.replace(/\D/g, "").slice(0, 6))
+            }
+            required
+          />
+          <p className="text-xs text-slate-500">
+            Verify your email and set a transaction PIN in Settings before transferring.
+          </p>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="transfer-to">To</Label>

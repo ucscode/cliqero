@@ -11,6 +11,11 @@ import { verifyCaptchaToken } from "@/security/captcha";
 // module evaluation allows `next build` to collect route configuration without
 // requiring runtime database credentials.
 async function route(method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", request: Request) {
+  const authPath = new URL(request.url).pathname;
+  // The email-OTP plugin is used server-to-server for the transaction-PIN
+  // recovery workflow only; do not expose its broader authentication endpoints.
+  if (authPath.includes("/email-otp/"))
+    return Response.json({ error: "Not found", code: "not_found" }, { status: 404 });
   const honeypotSource = await requestHoneypotSource(request);
   if (honeypotSource) {
     writeApiDevelopmentDiagnostic({

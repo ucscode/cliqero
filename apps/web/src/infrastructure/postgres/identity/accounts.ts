@@ -136,6 +136,47 @@ export class PostgresAccountRepository
     return row?.email ?? null;
   }
 
+  async accountEmailVerified(accountId: string): Promise<boolean> {
+    const row = (
+      await this.sql.query<{ verified: boolean }>(
+        `select coalesce(auth_user."emailVerified", false) as verified
+           from identity_capability.auth_account_links link
+           join identity_capability.accounts account on account.id=link.account_id
+           join better_auth."user" auth_user on auth_user.id=link.auth_user_id
+          where account.uuid=$1 and account.deleted_at is null`,
+        [accountId],
+      )
+    ).rows[0];
+    return row?.verified ?? false;
+  }
+
+  async accountEmail(accountId: string): Promise<string | null> {
+    const row = (
+      await this.sql.query<{ email: string | null }>(
+        `select auth_user.email
+           from identity_capability.auth_account_links link
+           join identity_capability.accounts account on account.id=link.account_id
+           join better_auth."user" auth_user on auth_user.id=link.auth_user_id
+          where account.uuid=$1 and account.deleted_at is null`,
+        [accountId],
+      )
+    ).rows[0];
+    return row?.email ?? null;
+  }
+
+  async authUserIdForAccount(accountId: string): Promise<string | null> {
+    const row = (
+      await this.sql.query<{ auth_user_id: string }>(
+        `select link.auth_user_id
+           from identity_capability.auth_account_links link
+           join identity_capability.accounts account on account.id=link.account_id
+          where account.uuid=$1 and account.deleted_at is null`,
+        [accountId],
+      )
+    ).rows[0];
+    return row?.auth_user_id ?? null;
+  }
+
   async profileForAccount(accountId: string) {
     const row = (
       await this.sql.query<{

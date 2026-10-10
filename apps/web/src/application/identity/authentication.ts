@@ -219,7 +219,22 @@ export class AuthenticationService {
     return this.identity.authUserEmail(authUserId);
   }
 
+  async requireVerifiedEmail(accountId: string): Promise<void> {
+    if (!(await this.identity.accountEmailVerified(accountId)))
+      throw new PublicApplicationError(
+        "Verify your email address before moving money.",
+        "email_verification_required",
+        403,
+      );
+  }
+
   async resetPassword(authUserId: string, newPassword: string): Promise<void> {
+    await this.gateway.resetPassword(authUserId, newPassword);
+  }
+
+  async resetAccountPassword(accountId: string, newPassword: string): Promise<void> {
+    const authUserId = await this.identity.authUserIdForAccount(accountId);
+    if (!authUserId) throw new PublicApplicationError("Account not found.", "not_found", 404);
     await this.gateway.resetPassword(authUserId, newPassword);
   }
 

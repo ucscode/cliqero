@@ -11,6 +11,8 @@ describe("withdrawal request UI contract", () => {
     expect(source).toContain('"/api/withdrawal-destinations"');
     expect(source).toContain("destination_id: destination");
     expect(source).toContain("amount_minor: amountMinor");
+    expect(source).toContain("transaction_pin: transactionPin");
+    expect(source).toContain("Verify your email and set a transaction PIN in");
     expect(source).toContain("currency,");
     expect(source).toContain("Add a payout method before requesting a withdrawal.");
     expect(source).toContain("/dashboard/payout-methods/new");

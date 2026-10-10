@@ -1,4 +1,5 @@
 import { ProfileSettings } from "./profile";
+import { TransactionPinSettings } from "./transaction-pin";
 
 export function SettingsPanel() {
   return (
@@ -14,6 +15,7 @@ export function SettingsPanel() {
         </div>
       </div>
       <ProfileSettings />
+      <TransactionPinSettings />
     </section>
   );
 }

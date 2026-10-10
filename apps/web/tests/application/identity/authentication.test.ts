@@ -12,6 +12,7 @@ function dependencies(
   options: {
     identity?: AuthIdentityResolution;
     session?: { user: { id: string }; token?: string | null } | null;
+    emailVerified?: boolean;
   } = {},
 ) {
   const accounts: Account[] = [];
@@ -35,6 +36,9 @@ function dependencies(
     removeAccountAuthIdentity: async () => undefined,
     resolveAuthIdentity,
     authUserEmail: async () => "buyer@example.com",
+    accountEmailVerified: async () => options.emailVerified ?? true,
+    accountEmail: async () => "buyer@example.com",
+    authUserIdForAccount: async () => "auth-user",
   };
   const gateway: AuthenticationGateway = {
     signUpEmail: async () => ({ user: { id: "auth-user" }, token: "session-token" }),
@@ -48,6 +52,10 @@ function dependencies(
     hasPasswordCredential: async () => true,
     setPassword: async () => "credential",
     removePasswordCredential: async () => undefined,
+    hashTransactionPin: async (pin) => `hashed:${pin}`,
+    verifyTransactionPin: async (pin, hash) => hash === `hashed:${pin}`,
+    requestTransactionPinRecoveryCode: async () => undefined,
+    verifyTransactionPinRecoveryCode: async () => undefined,
     close: async () => undefined,
   };
   const service = new AuthenticationService(identity, gateway, {
@@ -57,6 +65,14 @@ function dependencies(
 }
 
 describe("AuthenticationService application contracts", () => {
+  it("blocks financial operations until the linked Better Auth email is verified", async () => {
+    const { service } = dependencies({ emailVerified: false });
+    await expect(service.requireVerifiedEmail("account-id")).rejects.toMatchObject({
+      code: "email_verification_required",
+      status: 403,
+    });
+  });
+
   it("orchestrates registration through persistence and authentication contracts", async () => {
     const { accounts, service } = dependencies();
     const account = await service.register({

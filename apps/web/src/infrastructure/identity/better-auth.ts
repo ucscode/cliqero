@@ -2,9 +2,15 @@ import { Pool } from "pg";
 import { betterAuth, type Auth } from "better-auth";
 import { bearer } from "better-auth/plugins/bearer";
 import { nextCookies } from "better-auth/next-js";
+import { emailOTP } from "better-auth/plugins/email-otp";
 import type { QueryExecutor } from "@/infrastructure/postgres/shared/query";
 import type { AuthenticationGateway, AuthSession } from "@/application/identity/contracts";
-import { sendAuthEmail, type AuthEmail, type AuthenticationEmailPurpose } from "@/lib/email";
+import {
+  sendAuthEmail,
+  sendTransactionPinRecoveryCode,
+  type AuthEmail,
+  type AuthenticationEmailPurpose,
+} from "@/lib/email";
 import { siteConfig } from "@/config/site";
 import { getOptionalSocialProviders } from "@/config/auth";
 import { writeDevelopmentDiagnostic } from "@/infrastructure/development-log";
@@ -93,6 +99,7 @@ export class BetterAuthBoundary implements AuthenticationGateway {
       emailAndPassword: {
         enabled: true,
         autoSignIn: false,
+        revokeSessionsOnPasswordReset: true,
         minPasswordLength: PASSWORD_MIN_LENGTH,
         maxPasswordLength: PASSWORD_MAX_LENGTH,
         requireEmailVerification: false,
@@ -114,7 +121,17 @@ export class BetterAuthBoundary implements AuthenticationGateway {
         },
       },
       socialProviders,
-      plugins: [bearer(), nextCookies()],
+      plugins: [
+        bearer(),
+        nextCookies(),
+        emailOTP({
+          disableSignUp: true,
+          storeOTP: "hashed",
+          rateLimit: { window: 60, max: 3 },
+          allowedAttempts: 3,
+          sendVerificationOTP: async ({ email, otp }) => sendTransactionPinRecoveryCode(email, otp),
+        }),
+      ],
       databaseHooks: {
         user: {
           create: {
@@ -261,5 +278,36 @@ export class BetterAuthBoundary implements AuthenticationGateway {
     const context = await this.auth.$context;
     const credential = await context.internalAdapter.findCredentialAccount(authUserId);
     if (credential?.id === credentialId) await context.internalAdapter.deleteAccount(credential.id);
+  }
+
+  async hashTransactionPin(pin: string): Promise<string> {
+    const context = await this.auth.$context;
+    return context.password.hash(pin);
+  }
+
+  async verifyTransactionPin(pin: string, hash: string): Promise<boolean> {
+    const context = await this.auth.$context;
+    return context.password.verify({ password: pin, hash });
+  }
+
+  async requestTransactionPinRecoveryCode(email: string): Promise<void> {
+    const api = this.auth.api as typeof this.auth.api & {
+      sendVerificationOTP(input: {
+        body: { email: string; type: "email-verification" };
+      }): Promise<unknown>;
+      verifyEmailOTP(input: { body: { email: string; otp: string } }): Promise<unknown>;
+    };
+    await api.sendVerificationOTP({
+      body: { email: email.trim().toLowerCase(), type: "email-verification" },
+    });
+  }
+
+  async verifyTransactionPinRecoveryCode(email: string, code: string): Promise<void> {
+    const api = this.auth.api as typeof this.auth.api & {
+      verifyEmailOTP(input: { body: { email: string; otp: string } }): Promise<unknown>;
+    };
+    await api.verifyEmailOTP({
+      body: { email: email.trim().toLowerCase(), otp: code },
+    });
   }
 }

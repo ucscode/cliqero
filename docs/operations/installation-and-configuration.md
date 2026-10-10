@@ -94,6 +94,13 @@ Copy `.env.example` to `.env` and review every value before non-local deployment
 
 Do not reuse development secrets in production.
 
+`APP_ENCRYPTION_KEY` is optional during bootstrap and required before using an
+application feature that stores recoverable Cliqero-owned encrypted data (such
+as newly issued API-key secrets). Generate a local 32-byte key with
+`openssl rand -base64 32`, store it only in the untracked root `.env`, and back
+it up securely. Losing it can make encrypted values unrecoverable. Never print
+it in logs, commit it, or reuse `BETTER_AUTH_SECRET`.
+
 Production requires `BETTER_AUTH_SECRET`, `POSTGRES_USER`, `POSTGRES_PASSWORD`,
 `POSTGRES_APP_USER`, and `POSTGRES_APP_PASSWORD`. PostgreSQL's production
 entrypoint rejects missing/weak credentials and known development role names

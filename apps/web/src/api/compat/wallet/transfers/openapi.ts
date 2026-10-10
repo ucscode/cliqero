@@ -27,6 +27,7 @@ export const compatibilityContracts = defineCompatibilityContracts({
         from: scalar("string", { enum: ["funding", "earnings"] }),
         to: scalar("string", { enum: ["funding", "earnings"] }),
         amount_minor: scalar("string", { pattern: "^[1-9]\\d*$" }),
+        transaction_pin: scalar("string", { pattern: "^[0-9]{6}$" }),
       }),
     ),
   },

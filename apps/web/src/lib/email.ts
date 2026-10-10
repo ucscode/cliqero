@@ -119,3 +119,25 @@ export async function sendAuthEmail(purpose: AuthenticationEmailPurpose, message
     html: content.html,
   });
 }
+
+export async function sendTransactionPinRecoveryCode(email: string, code: string) {
+  if (process.env.NODE_ENV === "test") return;
+  const configuration = loadEmailConfiguration();
+  const smtp = configuration.smtp;
+  const host = smtp.host?.trim();
+  if (!host) throw new Error("config/modules/email.yaml must define smtp.host");
+  const escapedCode = escapeHtml(code);
+  const transporter = nodemailer.createTransport({
+    host,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: smtp.user ? { user: smtp.user, pass: smtp.password ?? "" } : undefined,
+  });
+  await transporter.sendMail({
+    from: smtp.from ?? `${siteConfig.name} <no-reply@localhost>`,
+    to: email,
+    subject: `${siteConfig.name}: transaction PIN recovery code`,
+    text: `Transaction PIN recovery\n\nUse this one-time code to reset your transaction PIN: ${code}\n\nIt expires shortly and can be used once. If you did not request this, ignore this message.`,
+    html: `<!doctype html><html lang="en"><body><main><h1>Transaction PIN recovery</h1><p>Use this one-time code to reset your transaction PIN:</p><p style="font-size:24px;font-weight:700;letter-spacing:.2em">${escapedCode}</p><p>It expires shortly and can be used once. If you did not request this, ignore this message.</p></main></body></html>`,
+  });
+}

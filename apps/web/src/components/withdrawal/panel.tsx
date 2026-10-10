@@ -35,6 +35,7 @@ export function WithdrawalsPanel() {
   const [page, setPage] = useState<WithdrawalPage | null>(null);
   const [destinations, setDestinations] = useState<WithdrawalDestination[]>([]);
   const [amount, setAmount] = useState("");
+  const [transactionPin, setTransactionPin] = useState("");
   const [destination, setDestination] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -153,11 +154,13 @@ export function WithdrawalsPanel() {
           amount_minor: amountMinor,
           currency,
           destination_id: destination,
+          transaction_pin: transactionPin,
         }),
       });
       setSuccess("Withdrawal request received. We’ll update its status after review.");
       setAmount("");
       setDestination("");
+      setTransactionPin("");
       requestSignature.current = null;
       idempotencyKey.current = null;
       await load(true);
@@ -367,6 +370,29 @@ export function WithdrawalsPanel() {
                   Add a payout method before requesting a withdrawal.
                 </p>
               )}
+              <div className="grid gap-2">
+                <Label htmlFor="withdrawal-transaction-pin">Transaction PIN</Label>
+                <Input
+                  id="withdrawal-transaction-pin"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={6}
+                  value={transactionPin}
+                  onChange={(event) =>
+                    setTransactionPin(event.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                  disabled={!policy?.enabled || submitting}
+                  required
+                />
+                <p className="text-xs text-slate-500">
+                  Verify your email and set a transaction PIN in{" "}
+                  <Link className="underline" href="/dashboard?section=settings">
+                    Settings
+                  </Link>{" "}
+                  before requesting a withdrawal.
+                </p>
+              </div>
               <Button
                 type="submit"
                 disabled={!policy?.enabled || submitting || !destinations.length}

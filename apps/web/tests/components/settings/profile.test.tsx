@@ -10,8 +10,23 @@ const profileSource = readFileSync(
   new URL("../../../src/components/settings/profile.tsx", import.meta.url),
   "utf8",
 );
+const transactionPinSource = readFileSync(
+  new URL("../../../src/components/settings/transaction-pin.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("customer profile settings", () => {
+  it("provides separate PIN setup, change, and verified-email recovery controls", () => {
+    expect(transactionPinSource).toContain('"/internal/me/transaction-pin"');
+    expect(transactionPinSource).toContain('"set" | "change" | "request_recovery" | "recover"');
+    expect(transactionPinSource).toContain('recovering ? "recover"');
+    expect(transactionPinSource).toContain('"request_recovery"');
+    expect(transactionPinSource).toContain('id="transaction-pin-current"');
+    expect(transactionPinSource).toContain('id="transaction-pin-recovery-code"');
+    expect(transactionPinSource).toContain('type="password"');
+    expect(transactionPinSource).toMatch(/Your email must be\s+verified\./);
+    expect(transactionPinSource).not.toContain("localStorage");
+  });
   it("renders a single profile surface without a one-item tab bar or technical settings", () => {
     const html = renderToStaticMarkup(<SettingsPanel />);
 

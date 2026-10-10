@@ -22,6 +22,9 @@ export interface IdentityPersistence {
   removeAccountAuthIdentity(accountId: string): Promise<void>;
   resolveAuthIdentity(authUserId: string): Promise<AuthIdentityResolution>;
   authUserEmail(authUserId: string): Promise<string | null>;
+  accountEmailVerified(accountId: string): Promise<boolean>;
+  accountEmail(accountId: string): Promise<string | null>;
+  authUserIdForAccount(accountId: string): Promise<string | null>;
 }
 
 export interface ProfilePersistence {

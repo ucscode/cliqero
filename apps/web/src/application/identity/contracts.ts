@@ -19,5 +19,9 @@ export interface AuthenticationGateway {
   hasPasswordCredential(authUserId: string): Promise<boolean>;
   setPassword(authUserId: string, newPassword: string, headers: Headers): Promise<string>;
   removePasswordCredential(authUserId: string, credentialId: string): Promise<void>;
+  hashTransactionPin(pin: string): Promise<string>;
+  verifyTransactionPin(pin: string, hash: string): Promise<boolean>;
+  requestTransactionPinRecoveryCode(email: string): Promise<void>;
+  verifyTransactionPinRecoveryCode(email: string, code: string): Promise<void>;
   close(): Promise<void>;
 }

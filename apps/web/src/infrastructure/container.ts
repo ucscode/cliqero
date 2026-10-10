@@ -16,7 +16,9 @@ import {
 } from "./postgres/referral/referrals";
 import { PostgresReferralAttributionRepository } from "./postgres/referral/attributions";
 import { AuthenticationService } from "@/application/identity/authentication";
+import { TransactionPinService } from "@/application/identity/transaction-pin";
 import { BetterAuthBoundary } from "@/infrastructure/identity/better-auth";
+import { PostgresTransactionPinRepository } from "@/infrastructure/postgres/identity/transaction-pin";
 import { AuthorizationPolicy } from "@/modules/identity/authorization";
 import { AccessService } from "@/modules/access/access";
 import { PostgresIntegrationService } from "@/infrastructure/postgres/access/integrations";
@@ -345,6 +347,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         treasuryRepository(),
         auditRecorder(),
         accountDebt(),
+        authentication(),
       ),
   );
 
@@ -582,6 +585,19 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
       },
     ),
   );
+  const transactionPinRepository = lazy(
+    () => new PostgresTransactionPinRepository(database, database),
+  );
+  const transactionPin = lazy(
+    () =>
+      new TransactionPinService(
+        transactionPinRepository(),
+        betterAuth(),
+        accounts(),
+        betterAuth(),
+        auditRecorder(),
+      ),
+  );
   const apiKeyRepository = lazy(() => new PostgresApiKeyRepository(database));
   const applicationEncryption = lazy(() => new ApplicationEncryption());
   const apiKeys = lazy(
@@ -721,6 +737,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         auditRecorder(),
         database,
         operatorAccountDeletion(),
+        operators(),
       ),
   );
   const operatorDistributions = lazy(() => new OperatorDistributionService(database, database));
@@ -843,6 +860,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get authentication() {
       return authentication();
+    },
+    get transactionPin() {
+      return transactionPin();
     },
     get apiKeys() {
       return apiKeys();

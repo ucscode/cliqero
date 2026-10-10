@@ -501,6 +501,35 @@ suite("Better Auth and Cliqero identity boundary", () => {
     ).resolves.toMatchObject({ account: { id: account.id } });
   });
 
+  it("revokes existing Better Auth sessions after an administrative credential reset", async () => {
+    const email = "admin-password-reset@example.test";
+    const account = await app.authentication.register({
+      email,
+      username: "admin_password_reset",
+      password: "password-before-admin-reset",
+      country: "NG",
+    });
+    const signIn = await app.authentication.auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password: "password-before-admin-reset" }),
+      }),
+    );
+    expect(signIn.ok).toBe(true);
+    const cookie = signIn.headers.get("set-cookie")!.split(";")[0]!;
+    await app.authentication.resetAccountPassword(account.id, "password-after-admin-reset");
+    await expect(
+      app.authentication.auth.api.getSession({ headers: new Headers({ cookie }) }),
+    ).resolves.toBeNull();
+    await expect(
+      app.authentication.login(email, "password-after-admin-reset"),
+    ).resolves.toMatchObject({ account: { id: account.id } });
+    await expect(app.authentication.login(email, "password-before-admin-reset")).rejects.toThrow(
+      "Invalid email or password",
+    );
+  });
+
   it("resets a password with a fresh one-time Better Auth reset token", async () => {
     const email = "browser-reset@example.com";
     await app.authentication.register({

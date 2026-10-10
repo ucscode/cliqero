@@ -14,11 +14,6 @@ export const compatibilityContracts = defineCompatibilityContracts({
 });
 
 export const compatibilityExamples: Record<string, unknown> = {
-  "POST /api/withdrawals request": {
-    amount_minor: "3100",
-    currency: "USD",
-    destination_id: "8fa85f64-5717-4562-b3fc-2c963f66afa6",
-  },
   "POST /api/withdrawals response 201": {
     id: "8fa85f64-5717-4562-b3fc-2c963f66afa6",
     amount_minor: "3100",

@@ -18,6 +18,7 @@ import type { TreasuryRepository } from "@/modules/treasury/treasury";
 import { PublicApplicationError } from "@/kernel/errors";
 import { CrudService } from "@/kernel/crud";
 import type { AccountDebtService } from "@/application/finance/account-debt";
+import type { AuthenticationService } from "@/application/identity/authentication";
 
 export type WithdrawalCreateInput = {
   accountId: string;
@@ -60,6 +61,7 @@ export class WithdrawalService extends CrudService<
     private readonly treasury: TreasuryRepository,
     private readonly audit: AuditRecorder,
     private readonly debt?: AccountDebtService,
+    private readonly authentication?: Pick<AuthenticationService, "requireVerifiedEmail">,
   ) {
     super();
   }
@@ -73,6 +75,7 @@ export class WithdrawalService extends CrudService<
     },
   ) {
     await this.operators.requireCapability(actorId, "withdrawals.manage");
+    await this.authentication?.requireVerifiedEmail(input.accountId);
     if (!/^\d+$/.test(input.amountMinor) || BigInt(input.amountMinor) <= 0n)
       throw new PublicApplicationError(
         "Withdrawal amount must be positive.",

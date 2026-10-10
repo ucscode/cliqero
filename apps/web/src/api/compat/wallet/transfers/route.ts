@@ -8,6 +8,7 @@ const transferSchema = z
     from: z.enum(["funding", "earnings"]),
     to: z.enum(["funding", "earnings"]),
     amount_minor: z.string().regex(/^[1-9]\d*$/),
+    transaction_pin: z.string().regex(/^\d{6}$/),
   })
   .strict();
 
@@ -19,7 +20,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "An idempotency-key header is required." }, { status: 400 });
   try {
     const body = transferSchema.parse(await request.json());
-    const result = await getContainer().walletTransfers.transfer({
+    const container = getContainer();
+    await container.authentication.requireVerifiedEmail(account.id);
+    await container.transactionPin.requireValidPin(account.id, body.transaction_pin);
+    const result = await container.walletTransfers.transfer({
       accountId: account.id,
       from: body.from,
       to: body.to,

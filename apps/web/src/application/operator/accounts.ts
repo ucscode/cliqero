@@ -5,6 +5,7 @@ import type { UnitOfWork } from "@/kernel/unit-of-work";
 import { siteConfig } from "@/config/site";
 import { PublicApplicationError } from "@/kernel/errors";
 import { CrudService } from "@/kernel/crud";
+import type { OperatorAuthorizationService } from "@/modules/identity/operator";
 
 export interface OperatorAccountReader {
   updateEmail(accountId: string, email: string): Promise<void>;
@@ -88,6 +89,7 @@ export class OperatorAccountManagementService extends CrudService<
     private readonly audit: AuditRecorder,
     private readonly uow: UnitOfWork,
     private readonly deletion: OperatorAccountDeletionRepository,
+    private readonly operators: OperatorAuthorizationService,
   ) {
     super();
   }
@@ -180,6 +182,30 @@ export class OperatorAccountManagementService extends CrudService<
         newState: { username: updated.username, email: updated.email, country: updated.country },
       });
       return updated;
+    });
+  }
+
+  async resetPassword(actorId: string, accountId: string, newPassword: string) {
+    await this.operators.requireCapability(actorId, "accounts.manage");
+    const target = await this.accounts.get(accountId);
+    if (target.deletedAt) throw new PublicApplicationError("Account not found.", "not_found", 404);
+    if (
+      (await this.operators.hasCapability(accountId, "system.root")) &&
+      !(await this.operators.hasCapability(actorId, "system.root"))
+    )
+      throw new PublicApplicationError(
+        "Only a root operator may reset another root account's password.",
+        "forbidden",
+        403,
+      );
+    await this.authentication.resetAccountPassword(accountId, newPassword);
+    await this.audit.record({
+      actorId,
+      action: "operator.account_password_reset",
+      subjectType: "account",
+      subjectId: accountId,
+      previousState: null,
+      newState: { credential: "password", passwordRecorded: false, sessionsRevoked: true },
     });
   }
 
