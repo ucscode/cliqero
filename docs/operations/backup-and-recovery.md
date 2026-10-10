@@ -16,7 +16,10 @@ Blog SQLite, and files, so the backup recipe stops the web app and outbox worker
 before taking all three snapshots. Before starting it, stop any other process or
 integration that writes to those stores; pass the explicit no-other-writers
 confirmation. The recipe restarts only services that were running when it
-started, including after a failure.
+started, including after a failure. On restore, the application recognizes a
+known Blog SQLite schema checkpoint and applies later additive Blog migrations
+transactionally; it rejects unknown schemas instead of replacing the database.
+Existing articles and persisted media-provider locators are retained.
 
 ## What is not in a data bundle
 

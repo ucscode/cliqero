@@ -90,6 +90,10 @@ export const blogMediaAssets = sqliteTable(
     state: text("state", { enum: ["active", "deletion_pending"] }).notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+    deletionClaimToken: text("deletion_claim_token"),
+    deletionClaimedAt: integer("deletion_claimed_at", { mode: "timestamp_ms" }),
+    deletionAttempts: integer("deletion_attempts").notNull().default(0),
+    deletionRetryAt: integer("deletion_retry_at", { mode: "timestamp_ms" }),
   },
   (table) => [
     index("blog_media_assets_expiry_idx").on(table.expiresAt),

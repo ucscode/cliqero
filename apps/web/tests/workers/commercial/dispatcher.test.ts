@@ -35,6 +35,7 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
           processing("distribution")(purchaseId),
       },
       listingMediaDeletion: { findWork: async () => items("media"), process: processing("media") },
+      blogMedia: { processDeletionWork: async () => ({ deleted: 0, failed: 0 }) },
       treasuryProcessor: {
         findWork: async () => items("treasury"),
         process: processing("treasury"),
@@ -61,6 +62,21 @@ describe("CommercialWorkflowDispatcher failure isolation", () => {
         `${family}:${family === "wallet-credit" ? "funding" : family === "wallet-availability" ? "credit" : family}-healthy`,
       );
     expect(logger.error).toHaveBeenCalledTimes(8);
+  });
+  it("runs Blog media cleanup during worker maintenance and reports failed retries", async () => {
+    const events: string[] = [];
+    const app = application(events);
+    app.blogMedia.processDeletionWork = vi.fn(async () => ({ deleted: 2, failed: 1 }));
+    const logger = { error: vi.fn() };
+    const dispatcher = new CommercialWorkflowDispatcher(app, logger);
+
+    expect(await dispatcher.runOnce()).toBe(10);
+    expect(app.blogMedia.processDeletionWork).toHaveBeenCalledOnce();
+    expect(dispatcher.lastIterationHealthy).toBe(false);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ processor_family: "blog-media-deletion" }),
+      "worker.workflow.item.failed",
+    );
   });
   it("continues to unrelated families when discovery fails", async () => {
     const events: string[] = [],

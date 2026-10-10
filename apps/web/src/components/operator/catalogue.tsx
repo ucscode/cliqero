@@ -53,6 +53,7 @@ import { useOperatorConfirmation } from "./ui/confirmation";
 import { openResolvedWindow } from "./ui/async-window";
 import { ListingDetail } from "../listing/detail";
 import { openOperatorPreviewWindow, operatorPreviewWindowName } from "./ui/preview-window";
+import { saveCataloguePreviewDraft, takeCataloguePreviewDraft } from "./catalogue/preview-storage";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -926,7 +927,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         })),
       };
       const storageKey = `cliqero.operator.listing-preview:${previewIdentity.current}`;
-      localStorage.setItem(storageKey, JSON.stringify(previewListing));
+      saveCataloguePreviewDraft(previewIdentity.current, previewListing);
       const url = `/operator/catalogue/preview?session=${encodeURIComponent(previewIdentity.current)}&revision=${Date.now()}`;
       const tab = openOperatorPreviewWindow(
         url,
@@ -1246,12 +1247,9 @@ export function OperatorCatalogueDraftPreview() {
     try {
       const session = new URLSearchParams(window.location.search).get("session");
       if (!session || !/^(?:listing|editor)-[A-Za-z0-9-]+$/.test(session)) return;
-      const storageKey = `cliqero.operator.listing-preview:${session}`;
-      const value = localStorage.getItem(storageKey);
       // The private draft is external browser state and is only readable after mount.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (value) setListing(JSON.parse(value) as Listing);
-      localStorage.removeItem(storageKey);
+      setListing(takeCataloguePreviewDraft(session));
     } catch {
       setListing(null);
     }

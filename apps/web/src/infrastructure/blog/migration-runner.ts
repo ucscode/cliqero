@@ -22,30 +22,33 @@ export function applyBlogMigrations(
     .filter((file) => migrationFile.test(file))
     .sort();
   if (!files.length) throw new Error("Blog SQLite schema migrations are missing");
-  const current = schemaObjects(sqlite);
-  if (!current.length) {
-    sqlite.transaction(() => {
-      for (const file of files) sqlite.exec(fs.readFileSync(path.join(directory, file), "utf8"));
-    })();
-    return;
-  }
+  sqlite
+    .transaction(() => {
+      // Acquire the SQLite write lock before inspecting the checkpoint. The web
+      // process and outbox worker may open the same fresh database together.
+      const current = schemaObjects(sqlite);
+      if (!current.length) {
+        for (const file of files) sqlite.exec(fs.readFileSync(path.join(directory, file), "utf8"));
+        return;
+      }
 
-  const expectedDatabase = new Database(":memory:");
-  try {
-    let matchedPrefix = 0;
-    for (let index = 0; index < files.length; index++) {
-      expectedDatabase.exec(fs.readFileSync(path.join(directory, files[index]!), "utf8"));
-      if (sameSchemaObjects(current, schemaObjects(expectedDatabase))) matchedPrefix = index + 1;
-    }
-    if (!matchedPrefix)
-      throw new Error("Blog SQLite database does not match any known migration checkpoint.");
-    sqlite.transaction(() => {
-      for (const file of files.slice(matchedPrefix))
-        sqlite.exec(fs.readFileSync(path.join(directory, file), "utf8"));
-    })();
-  } finally {
-    expectedDatabase.close();
-  }
+      const expectedDatabase = new Database(":memory:");
+      try {
+        let matchedPrefix = 0;
+        for (let index = 0; index < files.length; index++) {
+          expectedDatabase.exec(fs.readFileSync(path.join(directory, files[index]!), "utf8"));
+          if (sameSchemaObjects(current, schemaObjects(expectedDatabase)))
+            matchedPrefix = index + 1;
+        }
+        if (!matchedPrefix)
+          throw new Error("Blog SQLite database does not match any known migration checkpoint.");
+        for (const file of files.slice(matchedPrefix))
+          sqlite.exec(fs.readFileSync(path.join(directory, file), "utf8"));
+      } finally {
+        expectedDatabase.close();
+      }
+    })
+    .immediate();
 }
 
 function schemaObjects(sqlite: Database.Database) {

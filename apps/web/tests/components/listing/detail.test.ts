@@ -3,9 +3,25 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ListingReviewSection, shouldRenderListingReviews } from "@/components/listing/detail";
+import {
+  listingDetailImageUrl,
+  ListingReviewSection,
+  shouldRenderListingReviews,
+} from "@/components/listing/detail";
 
 describe("listing detail review visibility", () => {
+  it("uses external imagery as the initial cover without overriding a selected gallery image", () => {
+    const metadata = { external_image_url: "https://images.example.test/cover.webp" };
+
+    expect(listingDetailImageUrl(metadata, undefined, "/media/gallery-1")).toBe(
+      "https://images.example.test/cover.webp",
+    );
+    expect(listingDetailImageUrl(metadata, "/media/gallery-2", "/media/gallery-1")).toBe(
+      "/media/gallery-2",
+    );
+    expect(listingDetailImageUrl({}, undefined, "/media/gallery-1")).toBe("/media/gallery-1");
+  });
+
   it("hides review UI when storefront reviews are disabled", () => {
     expect(shouldRenderListingReviews(false)).toBe(false);
   });

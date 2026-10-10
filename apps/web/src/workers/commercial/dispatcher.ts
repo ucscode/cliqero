@@ -83,6 +83,15 @@ export class CommercialWorkflowDispatcher {
       () => this.app.listingMediaDeletion.findWork(),
       (item) => this.app.listingMediaDeletion.process(item.id),
     );
+    const blogMediaCleanup = await this.app.blogMedia.processDeletionWork();
+    processed += blogMediaCleanup.deleted;
+    if (blogMediaCleanup.failed > 0)
+      this.failure(
+        "blog-media-deletion",
+        "maintenance",
+        new Error(`${blogMediaCleanup.failed} Blog media deletion attempt(s) failed`),
+        "worker.workflow.item.failed",
+      );
     return processed;
   }
   private async family<T extends { id: string }>(

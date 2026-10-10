@@ -4,6 +4,7 @@ import type { ObjectStorageRegistry, ObjectLocator } from "@/modules/storage/obj
 import type { BlogMediaAsset, BlogMediaRepository } from "./contracts";
 
 const stagingLifetimeMs = 60 * 60 * 1000;
+const deletionClaimLifetimeMs = 5 * 60 * 1000;
 
 export class BlogMediaService {
   constructor(
@@ -54,24 +55,42 @@ export class BlogMediaService {
   }
 
   async processDeletionWork() {
+    const now = this.now();
+    let deleted = 0;
+    let failed = 0;
+    try {
+      this.repository.markExpiredForDeletion(now);
+    } catch {
+      return { deleted, failed: 1 };
+    }
+    const claimToken = newId();
     let work: BlogMediaAsset[];
     try {
-      work = this.repository.deletionWork();
+      work = this.repository.claimDeletionWork({
+        now,
+        staleBefore: new Date(now.getTime() - deletionClaimLifetimeMs),
+        claimToken,
+      });
     } catch {
-      return;
+      return { deleted, failed: 1 };
     }
     for (const asset of work) {
       try {
         await this.storage.get(asset.storageProvider).delete(locator(asset));
-        this.repository.deleteById(asset.id);
+        if (this.repository.deleteById(asset.id, claimToken)) deleted++;
       } catch {
-        // Keep the locator and pending state so a later request can retry deletion.
+        failed++;
+        try {
+          this.repository.scheduleDeletionRetry(asset.id, claimToken, this.now());
+        } catch {
+          // The persisted claim expires and can be reclaimed after a worker restart.
+        }
       }
     }
+    return { deleted, failed };
   }
 
   private async cleanupExpired() {
-    this.repository.markExpiredForDeletion(this.now());
     await this.processDeletionWork();
   }
 }

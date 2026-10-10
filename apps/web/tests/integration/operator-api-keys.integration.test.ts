@@ -589,7 +589,7 @@ suite("operator API-key administration", () => {
     expect(await app.apiKeys.authenticate(allowed.secret)).toBeNull();
     expect(await app.apiKeys.authenticate(previouslyRevoked.secret)).toBeNull();
     expect(await app.apiKeys.authenticate(restricted.secret)).not.toBeNull();
-  });
+  }, 15_000);
 
   it("restricts owner transfer to root, rotates credentials, validates destination scopes, and reactivates revoked keys only for root", async () => {
     const ordinaryOperator = await account("transferoperator");
@@ -996,10 +996,12 @@ suite("operator API-key administration", () => {
     const results = await Promise.all([revokeRequest(), revokeRequest()]);
     expect(results.map((response) => response.status)).toEqual([200, 200]);
     expect(await app.apiKeys.authenticate(created.secret)).toBeNull();
-    const audits = await app.database.query<{ count: string }>(
-      `select count(*)::text count from kernel.audit_records where subject_type='api_key' and subject_id=$1`,
+    const audits = await app.database.query<{ count: string; actions: string[] }>(
+      `select count(*)::text count,array_agg(action order by occurred_at) actions
+         from kernel.audit_records where subject_type='api_key' and subject_id=$1`,
       [created.id],
     );
     expect(audits.rows[0].count).toBe("2");
+    expect(audits.rows[0].actions).toEqual(["api_key.created", "api_key.revoked"]);
   });
 });

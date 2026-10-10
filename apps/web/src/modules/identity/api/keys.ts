@@ -64,6 +64,7 @@ export abstract class ApiKeyManagementRepository extends CrudRepository<
     nextCursor: string | null;
   }>;
   abstract find(id: string, accountId?: string): Promise<ApiKeyRecord | null>;
+  abstract findForUpdate(id: string, accountId?: string): Promise<ApiKeyRecord | null>;
   abstract reassign(input: {
     id: string;
     accountId: string;

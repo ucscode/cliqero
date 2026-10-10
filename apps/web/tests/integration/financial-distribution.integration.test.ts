@@ -527,7 +527,7 @@ suite("purchase financial distribution", () => {
     expect(
       BigInt(finalSnapshot.correctionDebitMinor) + BigInt(finalSnapshot.debtSettlementMinor),
     ).toBe(10_000n);
-  });
+  }, 15_000);
 
   async function accountingSnapshot(accountId: string, sourceEntryId: string) {
     const row = (

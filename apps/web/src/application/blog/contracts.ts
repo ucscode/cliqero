@@ -33,8 +33,14 @@ export abstract class BlogMediaRepository {
   abstract findById(id: string): BlogMediaAsset | null;
   abstract markExpiredForDeletion(now: Date): void;
   abstract markUnattachedForDeletion(id: string, ownerAccountId: string): boolean;
-  abstract deletionWork(limit?: number): BlogMediaAsset[];
-  abstract deleteById(id: string): void;
+  abstract claimDeletionWork(input: {
+    now: Date;
+    staleBefore: Date;
+    claimToken: string;
+    limit?: number;
+  }): BlogMediaAsset[];
+  abstract scheduleDeletionRetry(id: string, claimToken: string, failedAt: Date): void;
+  abstract deleteById(id: string, claimToken: string): boolean;
 }
 
 export interface BlogListOptions {

@@ -17,6 +17,7 @@ afterEach(() => {
 });
 
 function fixture() {
+  let now = new Date("2026-10-10T00:00:00.000Z");
   const database = new Database(":memory:");
   databases.push(database);
   database.pragma("foreign_keys = ON");
@@ -41,7 +42,11 @@ function fixture() {
     database,
     repository,
     provider,
-    service: new BlogMediaService(repository, storage, provider.name),
+    storage,
+    setNow(value: Date) {
+      now = value;
+    },
+    service: new BlogMediaService(repository, storage, provider.name, () => now),
   };
 }
 
@@ -86,7 +91,7 @@ describe("Blog featured media lifecycle", () => {
   });
 
   it("removes discarded uploads but retains failed storage deletion work", async () => {
-    const { repository, provider, service } = fixture();
+    const { repository, provider, service, setNow } = fixture();
     const uploaded = await service.upload({
       ownerAccountId: "editor-1",
       bytes: fixturePng(32, 120, 95),
@@ -115,6 +120,81 @@ describe("Blog featured media lifecycle", () => {
     const retainedId = retained.url.split("/").at(-1)!;
     await service.discard(retainedId, "editor-1");
     expect(repository.findById(retainedId)?.state).toBe("deletion_pending");
+    expect(await service.processDeletionWork()).toEqual({ deleted: 0, failed: 0 });
+    setNow(new Date("2026-10-10T00:00:02.000Z"));
+    expect(await service.processDeletionWork()).toEqual({ deleted: 1, failed: 0 });
+    expect(repository.findById(retainedId)).toBeNull();
+  });
+
+  it("expires only unattached staged assets and retries stale claims after restart", async () => {
+    const { database, repository, provider, service, setNow } = fixture();
+    const expired = await service.upload({
+      ownerAccountId: "editor-1",
+      bytes: fixturePng(32, 120, 95),
+      mimeType: "image/png",
+      origin: "https://cliqero.example",
+    });
+    const expiredId = expired.url.split("/").at(-1)!;
+    database
+      .prepare("update blog_media_assets set expires_at=? where id=?")
+      .run(Date.parse("2026-10-10T00:00:00.000Z") - 1, expiredId);
+    database
+      .prepare(
+        `insert into blog_posts(id,slug,title,excerpt,content_markdown,status,created_at,updated_at)
+         values('post-expiry','post-expiry','Post','','Body','draft',1,1)`,
+      )
+      .run();
+    const attached = await service.upload({
+      ownerAccountId: "editor-1",
+      bytes: fixturePng(32, 120, 95),
+      mimeType: "image/png",
+      origin: "https://cliqero.example",
+    });
+    const attachedId = attached.url.split("/").at(-1)!;
+    database
+      .prepare("update blog_media_assets set post_id='post-expiry',expires_at=? where id=?")
+      .run(Date.parse("2026-10-10T00:00:00.000Z") - 1, attachedId);
+
+    expect(repository.findById(expiredId)).toBeNull();
+    expect(await service.processDeletionWork()).toEqual({ deleted: 0, failed: 0 });
+    expect(repository.findById(attachedId)?.state).toBe("active");
+
+    database
+      .prepare("update blog_media_assets set state='deletion_pending' where id=?")
+      .run(attachedId);
+    repository.claimDeletionWork({
+      now: new Date("2026-10-10T00:00:00.000Z"),
+      staleBefore: new Date("2026-10-09T23:55:00.000Z"),
+      claimToken: "crashed-worker-claim",
+    });
+    setNow(new Date("2026-10-10T00:06:00.000Z"));
+    expect(await service.processDeletionWork()).toEqual({ deleted: 1, failed: 0 });
+    expect(repository.findById(attachedId)).toBeNull();
+    expect(provider.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it("leases cleanup work so concurrent processors cannot delete one asset twice", async () => {
+    const { repository, provider, service } = fixture();
+    const uploaded = await service.upload({
+      ownerAccountId: "editor-1",
+      bytes: fixturePng(32, 120, 95),
+      mimeType: "image/png",
+      origin: "https://cliqero.example",
+    });
+    const id = uploaded.url.split("/").at(-1)!;
+    repository.markUnattachedForDeletion(id, "editor-1");
+
+    let finishDelete!: () => void;
+    vi.mocked(provider.delete).mockImplementation(
+      () => new Promise<void>((resolve) => (finishDelete = resolve)),
+    );
+    const first = service.processDeletionWork();
+    const second = service.processDeletionWork();
+    expect(await second).toEqual({ deleted: 0, failed: 0 });
+    finishDelete();
+    expect(await first).toEqual({ deleted: 1, failed: 0 });
+    expect(provider.delete).toHaveBeenCalledTimes(1);
+    expect(repository.findById(id)).toBeNull();
   });
 
   it("lets another authorized editor save an article without reassigning its attached image", async () => {

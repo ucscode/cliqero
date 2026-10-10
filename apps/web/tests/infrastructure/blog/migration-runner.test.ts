@@ -81,7 +81,11 @@ describe("authoritative Blog SQLite schema", () => {
     ).toContain("expires_at");
     expect(
       fs.readdirSync(migrationDirectory).filter((name) => /^\d{4}_.+\.sql$/.test(name)),
-    ).toEqual(["0001_initial_blog_schema.sql", "0002_blog_featured_media.sql"]);
+    ).toEqual([
+      "0001_initial_blog_schema.sql",
+      "0002_blog_featured_media.sql",
+      "0003_blog_media_deletion_claims.sql",
+    ]);
   });
 
   it("fails clearly when an incompatible stale Blog table already exists", () => {

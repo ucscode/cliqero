@@ -204,6 +204,16 @@ export class PostgresApiKeyRepository {
     );
     return result.rows[0] ?? null;
   }
+  async findForUpdate(id: string, accountId?: string) {
+    const result = await this.sql.query<ApiKeyRecord>(
+      `select k.uuid as id,a.uuid as "accountId",a.username as "accountUsername",p.email as "accountEmail",k.name,k.key_prefix as "keyPrefix",k.scopes,k.created_at as "createdAt",k.last_used_at as "lastUsedAt",k.expires_at as "expiresAt",k.revoked_at as "revokedAt"
+       from identity_capability.api_keys k join identity_capability.accounts a on a.id=k.account_id left join identity_capability.account_profiles p on p.id=a.id
+       where k.uuid=$1 and ($2::uuid is null or k.account_id=(select id from identity_capability.accounts where uuid=$2))
+       for update of k`,
+      [id, accountId ?? null],
+    );
+    return result.rows[0] ?? null;
+  }
   async update(
     id: string,
     input: {
@@ -350,6 +360,9 @@ export class ApiKeyService extends ApiKeyManagementRepository {
   }
   find(id: string, accountId?: string) {
     return this.repository.findById(id, accountId);
+  }
+  findForUpdate(id: string, accountId?: string) {
+    return this.repository.findForUpdate(id, accountId);
   }
   findById(id: string) {
     return this.repository.findById(id);

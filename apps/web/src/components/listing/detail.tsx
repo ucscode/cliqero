@@ -30,6 +30,14 @@ export function listingDetailDescription(listing: Pick<Listing, "long_descriptio
   return listing.long_description;
 }
 
+export function listingDetailImageUrl(
+  metadata: Listing["metadata"],
+  selectedMediaUrl: string | undefined,
+  defaultMediaUrl: string | undefined,
+) {
+  return selectedMediaUrl ?? externalListingImageUrl(metadata) ?? defaultMediaUrl;
+}
+
 export function ListingReviewSection({
   reviewsVisible,
   rating,
@@ -127,7 +135,8 @@ export function ListingDetail({
   const currentListing = listing;
   const image =
     currentListing.media.find((media) => media.id === selectedMediaId) ?? currentListing.media[0];
-  const imageUrl = externalListingImageUrl(currentListing.metadata) ?? image?.url;
+  const selectedImage = currentListing.media.find((media) => media.id === selectedMediaId);
+  const imageUrl = listingDetailImageUrl(currentListing.metadata, selectedImage?.url, image?.url);
   const hasApprovedReviews = (currentListing.rating?.count ?? 0) > 0;
   const approvedRating = hasApprovedReviews ? currentListing.rating! : null;
   function buy() {

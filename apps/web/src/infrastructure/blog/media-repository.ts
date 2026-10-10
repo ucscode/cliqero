@@ -58,20 +58,61 @@ export class SqliteBlogMediaRepository extends BlogMediaRepository {
     );
   }
 
-  override deletionWork(limit = 50) {
+  override claimDeletionWork(input: {
+    now: Date;
+    staleBefore: Date;
+    claimToken: string;
+    limit?: number;
+  }) {
     return (
       this.db
         .prepare(
-          "select * from blog_media_assets where state='deletion_pending' order by created_at,id limit ?",
+          `update blog_media_assets
+           set deletion_claim_token=?,deletion_claimed_at=?
+           where id in (
+             select id from blog_media_assets
+             where state='deletion_pending'
+               and (deletion_claim_token is null or deletion_claimed_at<=?)
+               and (deletion_retry_at is null or deletion_retry_at<=?)
+             order by created_at,id limit ?
+           )
+             and state='deletion_pending'
+             and (deletion_claim_token is null or deletion_claimed_at<=?)
+             and (deletion_retry_at is null or deletion_retry_at<=?)
+           returning *`,
         )
-        .all(limit) as Record<string, unknown>[]
+        .all(
+          input.claimToken,
+          input.now.getTime(),
+          input.staleBefore.getTime(),
+          input.now.getTime(),
+          input.limit ?? 50,
+          input.staleBefore.getTime(),
+          input.now.getTime(),
+        ) as Record<string, unknown>[]
     ).map(project);
   }
 
-  override deleteById(id: string) {
+  override scheduleDeletionRetry(id: string, claimToken: string, failedAt: Date) {
     this.db
-      .prepare("delete from blog_media_assets where id=? and state='deletion_pending'")
-      .run(id);
+      .prepare(
+        `update blog_media_assets
+         set deletion_attempts=deletion_attempts+1,
+             deletion_retry_at=? + min(300000,1000 * (1 << min(deletion_attempts,8))),
+             deletion_claim_token=null,deletion_claimed_at=null
+         where id=? and state='deletion_pending' and deletion_claim_token=?`,
+      )
+      .run(failedAt.getTime(), id, claimToken);
+  }
+
+  override deleteById(id: string, claimToken: string) {
+    return (
+      this.db
+        .prepare(
+          "delete from blog_media_assets where id=? and state='deletion_pending' and deletion_claim_token=?",
+        )
+        .run(id, claimToken).changes > 0
+    );
   }
 }
 

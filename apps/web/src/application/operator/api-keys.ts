@@ -336,7 +336,9 @@ export class OperatorApiKeyService extends CrudService<
     authorizedActorCapabilities?: readonly string[],
   ) {
     return this.uow.transaction(async () => {
-      const key = await loadKey();
+      const authorizedKey = await loadKey();
+      const key = await this.apiKeys.findForUpdate(keyId, authorizedKey.accountId);
+      if (!key) return this.keyNotFound();
       const actorCapabilities =
         authorizedActorCapabilities ?? (await this.operators.capabilities(actorId));
       const targetCapabilities = await this.operators.capabilities(key.accountId);
