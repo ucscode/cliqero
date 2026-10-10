@@ -86,6 +86,8 @@ describe("owner withdrawal resource mutation", () => {
         })),
       },
       withdrawals: { create },
+      authentication: { requireVerifiedEmail: vi.fn(async () => undefined) },
+      transactionPin: { requireValidPin: vi.fn(async () => undefined) },
     };
     const valid = await withdrawalCollectionRoute.POST(
       new Request("http://localhost/api/withdrawals", {
@@ -95,6 +97,7 @@ describe("owner withdrawal resource mutation", () => {
           amount_minor: "1250",
           currency: "USD",
           destination_id: withdrawal.destination.savedDestinationId,
+          transaction_pin: "123456",
         }),
       }),
     );
@@ -129,6 +132,7 @@ describe("owner withdrawal resource mutation", () => {
           amount_minor: "1250",
           currency: "USD",
           destination_id: withdrawal.destination.savedDestinationId,
+          transaction_pin: "123456",
           note: "please expedite",
         }),
       }),
