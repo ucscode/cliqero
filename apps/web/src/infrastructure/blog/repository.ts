@@ -35,6 +35,24 @@ function decodeSortCursor(token: string | undefined, sort: string, direction: st
   }
 }
 const date = (value: number | null | undefined) => (value == null ? null : new Date(Number(value)));
+function blogMediaAssetId(value: string | null) {
+  if (!value) return null;
+  try {
+    const path = new URL(value).pathname;
+    const match = /^\/media\/blog\/([0-9a-f-]{36})$/i.exec(path);
+    if (match) return match[1]!;
+    if (path.startsWith("/media/blog/"))
+      throw new PublicApplicationError(
+        "Uploaded featured image URL is invalid",
+        "invalid_featured_image",
+        400,
+      );
+    return null;
+  } catch (cause) {
+    if (cause instanceof PublicApplicationError) throw cause;
+    return null;
+  }
+}
 
 export class SqliteBlogRepository extends BlogRepository {
   private readonly categoriesRepository: SqliteBlogCategoryRepository;
@@ -132,6 +150,45 @@ export class SqliteBlogRepository extends BlogRepository {
   delete(id: string) {
     if (!this.db.prepare("delete from blog_posts where id=?").run(id).changes)
       throw new Error("Blog post not found");
+  }
+  syncFeaturedMedia(postId: string, ownerAccountId: string | null, imageUrl: string | null) {
+    const assetId = blogMediaAssetId(imageUrl);
+    let asset:
+      { id: string; owner_account_id: string; post_id: string | null; state: string } | undefined;
+    if (assetId) {
+      asset = this.db
+        .prepare("select id,owner_account_id,post_id,state from blog_media_assets where id=?")
+        .get(assetId) as typeof asset;
+      if (
+        !asset ||
+        !ownerAccountId ||
+        (asset.owner_account_id !== ownerAccountId && asset.post_id !== postId) ||
+        (asset.post_id !== null && asset.post_id !== postId) ||
+        asset.state !== "active"
+      )
+        throw new PublicApplicationError(
+          "Uploaded featured image is unavailable",
+          "invalid_featured_image",
+          400,
+        );
+    }
+    this.db
+      .prepare(
+        `update blog_media_assets set state='deletion_pending'
+          where post_id=? and state='active' and (? is null or id<>?)`,
+      )
+      .run(postId, assetId, assetId);
+    if (assetId)
+      this.db
+        .prepare("update blog_media_assets set post_id=?,expires_at=null where id=?")
+        .run(postId, assetId);
+  }
+  markFeaturedMediaForDeletion(postId: string) {
+    this.db
+      .prepare(
+        "update blog_media_assets set state='deletion_pending' where post_id=? and state='active'",
+      )
+      .run(postId);
   }
   get(idOrSlug: string, publishedOnly = false): BlogPost | null {
     const row = this.db

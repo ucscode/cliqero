@@ -3,3 +3,8 @@ parameters:
   # Omit media_provider (or the catalogue block) to use media.default_provider.
   catalogue:
     media_provider: filesystem
+  # Blog featured-image uploads may select another named media instance.
+  # Omit this provider (or the blog block) to use media.default_provider.
+  # Provider credentials and connection settings remain in media.yaml.
+  # blog:
+  #   media_provider: filesystem

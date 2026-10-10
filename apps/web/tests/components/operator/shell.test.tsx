@@ -24,6 +24,7 @@ describe("operator shell", () => {
     expect(html).toContain('aria-label="Open operator navigation"');
     expect(html).toContain('aria-label="Open operator account menu"');
     expect(html).toContain("Users page");
+    expect(html).toContain("Operator Console");
     expect(html).toContain("sticky top-0");
     expect(html).toContain("h-14");
     expect(html).toContain("ml-auto");

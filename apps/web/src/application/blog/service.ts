@@ -65,6 +65,7 @@ export class BlogService extends CrudService<
         : this.uniqueGeneratedSlug(save.slug);
       this.requireCategories(save.categoryIds);
       const post = this.repository.create(id, save, authorAccountId);
+      this.repository.syncFeaturedMedia(post.id, authorAccountId, post.featuredImageUrl);
       if (idempotencyKey) this.repository.saveIdempotency(idempotencyKey, requestHash, id);
       return post;
     });
@@ -98,13 +99,17 @@ export class BlogService extends CrudService<
       this.requireCategories(result.categoryIds);
       const post = this.repository.update(id, result, authorAccountId);
       if (!post) throw new BlogPostNotFoundError();
+      this.repository.syncFeaturedMedia(post.id, authorAccountId, post.featuredImageUrl);
       return post;
     });
   }
 
   override delete(id: string) {
     if (!this.repository.get(id)) throw new BlogPostNotFoundError();
-    this.repository.delete(id);
+    this.repository.transaction(() => {
+      this.repository.markFeaturedMediaForDeletion(id);
+      this.repository.delete(id);
+    });
   }
   override get(idOrSlug: string, publishedOnly = false): BlogPost | null {
     return this.repository.get(idOrSlug, publishedOnly);

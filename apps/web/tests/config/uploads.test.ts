@@ -2,7 +2,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadUploadsConfiguration, resolveCatalogueMediaProvider } from "@/config/uploads";
+import {
+  loadUploadsConfiguration,
+  resolveBlogMediaProvider,
+  resolveCatalogueMediaProvider,
+} from "@/config/uploads";
 import {
   ObjectStorageRegistry,
   type ObjectStorageProvider,
@@ -71,6 +75,38 @@ describe("catalogue uploads configuration", () => {
   it("documents the configured instance in the tracked example", () => {
     expect(loadUploadsConfiguration("config/storage/uploads.example.yaml")).toEqual({
       catalogue: { media_provider: "filesystem" },
+      blog: {},
+    });
+  });
+
+  it("selects the configured Blog image instance", async () => {
+    await withUploadsConfiguration("blog:\n  media_provider: blog_media", (path) => {
+      const config = loadUploadsConfiguration(path);
+      const storage = new ObjectStorageRegistry("filesystem")
+        .register(provider("filesystem"))
+        .register(provider("blog_media"));
+
+      expect(resolveBlogMediaProvider(config, storage).name).toBe("blog_media");
+    });
+  });
+
+  it("uses the global default for Blog uploads when no Blog provider is configured", async () => {
+    await withUploadsConfiguration("catalogue: {}", (path) => {
+      const config = loadUploadsConfiguration(path);
+      const storage = new ObjectStorageRegistry("filesystem").register(provider("filesystem"));
+
+      expect(resolveBlogMediaProvider(config, storage).name).toBe("filesystem");
+    });
+  });
+
+  it("rejects an explicitly named Blog instance that is not configured", async () => {
+    await withUploadsConfiguration("blog:\n  media_provider: missing", (path) => {
+      const config = loadUploadsConfiguration(path);
+      const storage = new ObjectStorageRegistry("filesystem").register(provider("filesystem"));
+
+      expect(() => resolveBlogMediaProvider(config, storage)).toThrow(
+        'Invalid uploads configuration: blog.media_provider "missing" is not configured in config/storage/media.yaml',
+      );
     });
   });
 });

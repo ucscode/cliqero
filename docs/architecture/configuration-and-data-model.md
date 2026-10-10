@@ -29,8 +29,11 @@ provider capability metadata, not a feature-level policy: each operation checks
 the capability it actually needs. Catalogue upload selection is configured
 separately in `config/storage/uploads.yaml`; its optional
 `catalogue.media_provider` references one of these instance keys and defaults
-to `media.default_provider`. Other provider-owned upload settings remain with
-their owning modules.
+to `media.default_provider`. Blog featured-image uploads may similarly specify
+the optional `blog.media_provider`; it has the same global-default behavior.
+Both settings select an existing storage instance only; provider connection
+settings remain exclusively in `media.yaml`. Other provider-owned upload
+settings remain with their owning modules.
 
 Withdrawal methods are data-collection/presentation definitions in
 `config/modules/withdrawal/methods.yaml`, not payout providers. Define explicit

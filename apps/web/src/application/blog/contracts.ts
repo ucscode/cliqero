@@ -6,6 +6,36 @@ import type {
   BlogTagRepository,
 } from "@/modules/blog/domain/blog";
 import { CrudRepository } from "@/kernel/crud";
+import type { StoredObject } from "@/modules/storage/object-storage";
+
+export type BlogMediaAsset = {
+  id: string;
+  ownerAccountId: string;
+  postId: string | null;
+  storageProvider: string;
+  storageContainer: string;
+  objectKey: string;
+  mimeType: string;
+  byteSize: number;
+  state: "active" | "deletion_pending";
+  createdAt: Date;
+  expiresAt: Date | null;
+};
+
+export abstract class BlogMediaRepository {
+  abstract create(input: {
+    id: string;
+    ownerAccountId: string;
+    stored: StoredObject;
+    createdAt: Date;
+    expiresAt: Date;
+  }): void;
+  abstract findById(id: string): BlogMediaAsset | null;
+  abstract markExpiredForDeletion(now: Date): void;
+  abstract markUnattachedForDeletion(id: string, ownerAccountId: string): boolean;
+  abstract deletionWork(limit?: number): BlogMediaAsset[];
+  abstract deleteById(id: string): void;
+}
 
 export interface BlogListOptions {
   search?: string;
@@ -82,4 +112,10 @@ export abstract class BlogRepository extends CrudRepository<
   abstract getPreview(id: string, accountId: string, now: number): BlogPreview | null;
   abstract deletePreview(id: string, accountId: string): void;
   abstract clearExpiredPreviews(now: number): void;
+  abstract syncFeaturedMedia(
+    postId: string,
+    ownerAccountId: string | null,
+    imageUrl: string | null,
+  ): void;
+  abstract markFeaturedMediaForDeletion(postId: string): void;
 }

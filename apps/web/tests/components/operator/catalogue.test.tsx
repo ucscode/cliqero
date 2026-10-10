@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createCatalogueImagePreview } from "@/components/operator/catalogue";
+import {
+  createCatalogueImagePreview,
+  newListingExternalKey,
+} from "@/components/operator/catalogue";
 
 describe("catalogue image preview", () => {
   it("uses a local object URL and revokes it when the preview is released", () => {
@@ -15,5 +18,15 @@ describe("catalogue image preview", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview");
     createObjectURL.mockRestore();
     revokeObjectURL.mockRestore();
+  });
+});
+
+describe("catalogue external keys", () => {
+  it("generates unique URL-safe keys for new listings", () => {
+    const first = newListingExternalKey();
+    const second = newListingExternalKey();
+    expect(first).toMatch(/^listing-[a-f0-9]{32}$/);
+    expect(second).toMatch(/^listing-[a-f0-9]{32}$/);
+    expect(second).not.toBe(first);
   });
 });

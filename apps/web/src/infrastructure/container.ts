@@ -102,8 +102,13 @@ import {
 import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing/media";
 import { PostgresListingReviewRepository } from "@/infrastructure/postgres/listing/reviews";
 import { loadMediaStorage } from "@/providers/storage/media-config";
-import { loadUploadsConfiguration, resolveCatalogueMediaProvider } from "@/config/uploads";
+import {
+  loadUploadsConfiguration,
+  resolveBlogMediaProvider,
+  resolveCatalogueMediaProvider,
+} from "@/config/uploads";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing/media";
+import { BlogMediaService } from "@/application/blog/media";
 import { ListingTransferService } from "@/application/listing/transfer";
 import { ListingReviewService } from "@/application/listing/reviews";
 import { ProfileService } from "@/application/account/profile";
@@ -147,6 +152,8 @@ import {
 } from "@/infrastructure/postgres/operator/distributions";
 import { OperatorWithdrawalService } from "@/infrastructure/postgres/operator/withdrawals";
 import { getBlogService } from "@/infrastructure/blog/service";
+import { getBlogDatabase } from "@/infrastructure/blog/database";
+import { SqliteBlogMediaRepository } from "@/infrastructure/blog/media-repository";
 import { PostgresAuditRecorder } from "@/infrastructure/postgres/shared/audit";
 import { PostgresWithdrawalPersistence } from "@/infrastructure/postgres/withdrawal/transaction";
 import { PostgresWithdrawalDestinationRepository } from "@/infrastructure/postgres/withdrawal/destinations";
@@ -786,6 +793,14 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
       ),
   );
   const blog = lazy(() => getBlogService());
+  const blogMedia = lazy(() => {
+    const storage = objectStorage();
+    return new BlogMediaService(
+      new SqliteBlogMediaRepository(getBlogDatabase().sqlite),
+      storage,
+      resolveBlogMediaProvider(loadUploadsConfiguration(), storage).name,
+    );
+  });
 
   return {
     database,
@@ -1100,6 +1115,9 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
     },
     get blog() {
       return blog();
+    },
+    get blogMedia() {
+      return blogMedia();
     },
   };
 }

@@ -1,4 +1,12 @@
-import { integer, primaryKey, sqliteTable, text, index } from "drizzle-orm/sqlite-core";
+import {
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 export const blogPosts = sqliteTable(
   "blog_posts",
@@ -67,3 +75,27 @@ export const blogIdempotency = sqliteTable("blog_idempotency", {
   postId: text("post_id").notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+export const blogMediaAssets = sqliteTable(
+  "blog_media_assets",
+  {
+    id: text("id").primaryKey(),
+    ownerAccountId: text("owner_account_id").notNull(),
+    postId: text("post_id").references(() => blogPosts.id, { onDelete: "set null" }),
+    storageProvider: text("storage_provider").notNull(),
+    storageContainer: text("storage_container").notNull(),
+    objectKey: text("object_key").notNull(),
+    mimeType: text("mime_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    state: text("state", { enum: ["active", "deletion_pending"] }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    index("blog_media_assets_expiry_idx").on(table.expiresAt),
+    index("blog_media_assets_cleanup_idx").on(table.state, table.createdAt),
+    uniqueIndex("blog_media_assets_active_post_idx")
+      .on(table.postId)
+      .where(sql`${table.postId} is not null and ${table.state} = 'active'`),
+  ],
+);

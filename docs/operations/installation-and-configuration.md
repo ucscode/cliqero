@@ -163,9 +163,12 @@ cp config/storage/uploads.example.yaml config/storage/uploads.yaml
 The default Docker filesystem root is `/var/lib/cliqero/media` and is persisted
 by the `media-data` volume. Listing media is one consumer of this shared
 registry. The real media and uploads YAML files are required at runtime and
-remain ignored. The uploads configuration selects the named storage instance
-for new catalogue media; when omitted, the registry's `default_provider` is
-used. Provider connection settings stay exclusively in `media.yaml`.
+remain ignored. The uploads configuration may select named storage instances
+for new catalogue and Blog featured-image uploads. `catalogue.media_provider`
+and `blog.media_provider` are optional; when either is omitted, the registry's
+`default_provider` is used. Provider connection settings stay exclusively in
+`media.yaml`. Blog images use a public, readable provider, while ownership and
+draft visibility are enforced by Cliqero's Blog media route.
 
 Every Cliqero configuration YAML uses `parameters` as its document envelope.
 `imports` is optional and is declared only when that file imports other

@@ -463,7 +463,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
         },
       },
     }),
-    (c) => {
+    async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
@@ -476,7 +476,9 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
         }
         const key = c.req.header("Idempotency-Key");
         if (!key) throw new Error("Idempotency-Key is required");
-        return c.json(operatorBlogJson(container.blog.create(body, p.accountId, key)), 201);
+        const created = container.blog.create(body, p.accountId, key);
+        await container.blogMedia.processDeletionWork();
+        return c.json(operatorBlogJson(created), 201);
       } catch (error) {
         return domainError(c, error);
       }
@@ -510,7 +512,7 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
         },
       },
     }),
-    (c) => {
+    async (c) => {
       const p = requirePrincipal(c);
       if (!(p instanceof Object) || !("accountId" in p)) return p;
       const denied = requireCapabilityScope(c, p, "content.manage", "blog:write");
@@ -522,10 +524,9 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
           const publishDenied = requireCapabilityScope(c, p, "content.manage", "blog:publish");
           if (publishDenied) return publishDenied;
         }
-        return c.json(
-          operatorBlogJson(container.blog.update(c.req.valid("param").postId, body, p.accountId)),
-          200,
-        );
+        const updated = container.blog.update(c.req.valid("param").postId, body, p.accountId);
+        await container.blogMedia.processDeletionWork();
+        return c.json(operatorBlogJson(updated), 200);
       } catch (error) {
         return domainError(c, error);
       }
@@ -571,7 +572,9 @@ export function registerBlogRoutes(app: OpenAPIHono<Env>, container: Application
       if (denied) return denied;
       try {
         const { ids } = c.req.valid("json");
-        return c.json(await deleteResourceIds(ids, (id) => container.blog.delete(id)), 200);
+        const result = await deleteResourceIds(ids, (id) => container.blog.delete(id));
+        await container.blogMedia.processDeletionWork();
+        return c.json(result, 200);
       } catch (error) {
         return domainError(c, error);
       }

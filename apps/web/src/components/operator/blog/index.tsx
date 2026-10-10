@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { BlogEditor } from "../../blog/editor";
 import { apiFetch } from "@/lib/api-client";
 import { Button } from "../../ui/button";
@@ -27,6 +27,7 @@ import { OperatorErrorState } from "../ui/error-state";
 import { OperatorBulkOutcome, type OperatorBulkOutcomeData } from "../ui/bulk-outcome";
 import { useToast } from "@/components/toast/provider";
 import { CrudSortSelect } from "@/components/crud/sort-select";
+import { openOperatorPreviewWindow, operatorPreviewWindowName } from "../ui/preview-window";
 
 export function OperatorBlogList({ canDelete = false }: { canDelete?: boolean }) {
   const confirm = useOperatorConfirmation();
@@ -223,7 +224,7 @@ export function OperatorBlogList({ canDelete = false }: { canDelete?: boolean })
       selection={canDelete ? { labelForItem: (post) => `article ${post.title}` } : undefined}
       bulkActions={bulkActions}
       actions={(post) => [
-        { type: "link", label: "View", href: `/operator/blog/${post.id}` },
+        { type: "link", label: "Edit", href: `/operator/blog/${post.id}` },
         ...(canDelete
           ? [
               {
@@ -276,13 +277,49 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   const [tags, setTags] = useState(initial?.tags.map((t) => t.name).join(", ") ?? "");
   const [seoTitle, setSeoTitle] = useState(initial?.seoTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(initial?.seoDescription ?? "");
-  const [featuredImageUrl, setFeaturedImageUrl] = useState(initial?.featuredImageUrl ?? "");
+  const initialBlogMediaId = initial?.featuredImageUrl
+    ? (/^\/media\/blog\/([0-9a-f-]{36})$/i.exec(
+        new URL(initial.featuredImageUrl, "http://cliqero.local").pathname,
+      )?.[1] ?? null)
+    : null;
+  const [imageSource, setImageSource] = useState<"uploaded" | "external">(
+    initialBlogMediaId ? "uploaded" : "external",
+  );
+  const [uploadedImageUrl, setUploadedImageUrl] = useState(
+    initialBlogMediaId ? (initial?.featuredImageUrl ?? "") : "",
+  );
+  const [externalImageUrl, setExternalImageUrl] = useState(
+    initialBlogMediaId ? "" : (initial?.featuredImageUrl ?? ""),
+  );
+  const [featuredImageAssetId, setFeaturedImageAssetId] = useState<string | null>(
+    initialBlogMediaId,
+  );
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [status, setStatus] = useState<"draft" | "published">(initial?.status ?? "draft");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<BlogPost | null>(initial ?? null);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const previewWindowName = useRef<string | null>(null);
+  const stagedImageId = useRef<string | null>(null);
+  const featuredImageUrl = imageSource === "uploaded" ? uploadedImageUrl : externalImageUrl;
+  useEffect(() => {
+    stagedImageId.current = featuredImageAssetId;
+  }, [featuredImageAssetId]);
+  useEffect(
+    () => () => {
+      const id = stagedImageId.current;
+      if (id)
+        void fetch(`/internal/blog/media/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          credentials: "same-origin",
+          keepalive: true,
+        });
+    },
+    [],
+  );
   useEffect(() => {
     let active = true;
     void apiFetch<{ items: BlogCategory[] }>("/api/blog/categories")
@@ -313,6 +350,34 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
       seo_description: seoDescription || undefined,
       featured_image_url: featuredImageUrl || undefined,
     };
+  }
+  async function uploadFeaturedImage(file: File | undefined) {
+    if (!file) return;
+    setImageUploading(true);
+    setImageError(null);
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const result = await apiFetch<{ id: string; url: string }>("/internal/blog/media", {
+        method: "POST",
+        body,
+      });
+      const replacedId = stagedImageId.current;
+      setFeaturedImageAssetId(result.id);
+      stagedImageId.current = result.id;
+      setUploadedImageUrl(result.url);
+      setImageSource("uploaded");
+      if (replacedId && replacedId !== result.id)
+        void fetch(`/internal/blog/media/${encodeURIComponent(replacedId)}`, {
+          method: "DELETE",
+          credentials: "same-origin",
+          keepalive: true,
+        });
+    } catch (cause) {
+      setImageError(cause instanceof Error ? cause.message : "Unable to upload featured image.");
+    } finally {
+      setImageUploading(false);
+    }
   }
   async function clearPreview() {
     if (previewId) {
@@ -349,9 +414,20 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
             body: JSON.stringify(body),
           });
       setSaved(post);
+      if (imageSource === "uploaded" && featuredImageAssetId) stagedImageId.current = null;
       setSlug(post.slug);
       setStatus(post.status);
       setCategoryIds(post.categories.map((c) => c.id));
+      if (imageSource === "external" && stagedImageId.current) {
+        const unusedUploadId = stagedImageId.current;
+        stagedImageId.current = null;
+        setFeaturedImageAssetId(null);
+        void fetch(`/internal/blog/media/${encodeURIComponent(unusedUploadId)}`, {
+          method: "DELETE",
+          credentials: "same-origin",
+          keepalive: true,
+        });
+      }
       if (previewId) await clearPreview();
       return post;
     } catch (cause) {
@@ -392,12 +468,15 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
   }
   async function preview() {
     if (previewing || saving) return;
-    const tab = window.open("about:blank", "_blank");
+    previewWindowName.current ??= operatorPreviewWindowName(
+      "blog",
+      saved?.id ?? crypto.randomUUID(),
+    );
+    const tab = openOperatorPreviewWindow("about:blank", previewWindowName.current);
     if (!tab) {
       setError("Allow pop-ups to open the private preview.");
       return;
     }
-    tab.opener = null;
     setPreviewing(true);
     setError(null);
     try {
@@ -407,7 +486,7 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
         body: JSON.stringify({ ...requestBody(), preview_id: previewId }),
       });
       setPreviewId(result.previewId);
-      tab.location.href = result.url;
+      tab.location.href = `${result.url}${result.url.includes("?") ? "&" : "?"}revision=${Date.now()}`;
     } catch (cause) {
       tab.close();
       setError(cause instanceof Error ? cause.message : "Unable to open preview.");
@@ -438,9 +517,6 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
             onClick={() => void preview()}
           >
             {previewing ? "Preparing preview…" : "Preview"}
-          </Button>
-          <Button asChild type="button" variant="outline">
-            <Link href="/operator/blog/categories">Manage categories</Link>
           </Button>
           {saved && (
             <Button type="button" variant="destructive" onClick={() => void remove()}>
@@ -513,14 +589,77 @@ export function OperatorBlogEditor({ initial }: { initial?: BlogPost }) {
             Saving applies the selected status and content to the canonical article.
           </p>
         </div>
-        <div>
-          <Label htmlFor="blog-image">Featured image URL</Label>
-          <Input
-            id="blog-image"
-            type="url"
-            value={featuredImageUrl}
-            onChange={(e) => setFeaturedImageUrl(e.target.value)}
-          />
+        <div className="grid gap-3">
+          <Label htmlFor="blog-image-source">Featured image source</Label>
+          <Select
+            id="blog-image-source"
+            value={imageSource}
+            onChange={(event) => {
+              const nextSource = event.target.value as "uploaded" | "external";
+              setImageSource(nextSource);
+            }}
+          >
+            <option value="uploaded">Uploaded image (Cliqero storage)</option>
+            <option value="external">External image URL</option>
+          </Select>
+          {imageSource === "uploaded" && featuredImageAssetId ? (
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <p className="break-all text-sm text-slate-600">
+                Uploaded image is ready for Cliqero storage.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={imageUploading}
+                onClick={() => {
+                  const stagedId = stagedImageId.current;
+                  if (stagedId) {
+                    stagedImageId.current = null;
+                    void fetch(`/internal/blog/media/${encodeURIComponent(stagedId)}`, {
+                      method: "DELETE",
+                      credentials: "same-origin",
+                      keepalive: true,
+                    });
+                  }
+                  setFeaturedImageAssetId(null);
+                  setUploadedImageUrl("");
+                }}
+              >
+                Remove image
+              </Button>
+            </div>
+          ) : imageSource === "uploaded" ? (
+            <>
+              <Label htmlFor="blog-image-upload">Choose uploaded image</Label>
+              <Input
+                id="blog-image-upload"
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                disabled={imageUploading}
+                onChange={(event) => void uploadFeaturedImage(event.target.files?.[0])}
+              />
+            </>
+          ) : (
+            <>
+              <Label htmlFor="blog-image-url">External image URL</Label>
+              <Input
+                id="blog-image-url"
+                type="url"
+                maxLength={2000}
+                value={externalImageUrl}
+                onChange={(event) => setExternalImageUrl(event.target.value)}
+              />
+            </>
+          )}
+          {imageUploading && <p role="status">Uploading featured image…</p>}
+          {imageError && (
+            <p className="text-sm text-red-700" role="alert">
+              {imageError}
+            </p>
+          )}
+          <p className="text-xs text-slate-500">
+            Uploaded images are validated and stored through the configured Cliqero media provider.
+          </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>

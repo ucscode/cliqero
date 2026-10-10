@@ -19,6 +19,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -222,6 +223,7 @@ export function OperatorShell({
             </SidebarHeader>
             <SidebarContent>
               <SidebarGroup>
+                <SidebarGroupLabel>Operator Console</SidebarGroupLabel>
                 <SidebarMenu id="operator-navigation" aria-label="Operator navigation">
                   {navigation
                     .filter((item) => item.key === "overview" && item.visible)

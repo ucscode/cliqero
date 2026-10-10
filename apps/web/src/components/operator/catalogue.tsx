@@ -19,6 +19,7 @@ import {
   type OperatorListingPage,
 } from "@/lib/api-client";
 import type { ListingCategory } from "@/modules/listing/category/category";
+import { externalListingImageUrl } from "@/modules/listing/external-image";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
@@ -51,6 +52,7 @@ import { runOperatorBulkAction } from "@/app/operator/bulk-actions";
 import { useOperatorConfirmation } from "./ui/confirmation";
 import { openResolvedWindow } from "./ui/async-window";
 import { ListingDetail } from "../listing/detail";
+import { openOperatorPreviewWindow, operatorPreviewWindowName } from "./ui/preview-window";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -84,6 +86,10 @@ export function createCatalogueImagePreview(file: File) {
     previewUrl,
     dispose: () => URL.revokeObjectURL(previewUrl),
   };
+}
+
+export function newListingExternalKey() {
+  return `listing-${crypto.randomUUID().replaceAll("-", "")}`;
 }
 
 export function operatorCatalogueRowActions(
@@ -720,6 +726,8 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
     price: "",
     destination: "",
     externalKey: "",
+    imageSource: "uploaded" as "uploaded" | "external",
+    externalImageUrl: "",
     featuredPosition: "",
     compareAtPrice: "",
     visibility: "public" as "public" | "authenticated",
@@ -734,11 +742,21 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
   const [stagedMedia, setStagedMedia] = useState<ReturnType<typeof createCatalogueImagePreview>[]>(
     [],
   );
+  const externalKeyTouched = useRef(false);
+  const previewIdentity = useRef<string | null>(null);
   const stagedMediaRef = useRef(stagedMedia);
 
   useEffect(() => {
     stagedMediaRef.current = stagedMedia;
   }, [stagedMedia]);
+
+  useEffect(() => {
+    if (editing || externalKeyTouched.current) return;
+    // Generate only after hydration to keep the server and client render identical.
+    setForm((current) =>
+      current.externalKey ? current : { ...current, externalKey: newListingExternalKey() },
+    );
+  }, [editing]);
 
   useEffect(() => () => stagedMediaRef.current.forEach((item) => item.dispose()), []);
 
@@ -762,6 +780,8 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           price: minorToUsdInput(value.price.minor_amount),
           destination: value.destination,
           externalKey: value.external_key ?? "",
+          imageSource: externalListingImageUrl(value.metadata) ? "external" : "uploaded",
+          externalImageUrl: externalListingImageUrl(value.metadata) ?? "",
           featuredPosition: value.featured_position?.toString() ?? "",
           compareAtPrice: value.compare_at_price
             ? minorToUsdInput(value.compare_at_price.minor_amount)
@@ -787,6 +807,10 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       : {};
     setSaving(true);
     setError(null);
+    const metadata = { ...(listing?.metadata ?? {}) };
+    if (form.imageSource === "external" && form.externalImageUrl.trim())
+      metadata.external_image_url = form.externalImageUrl.trim();
+    else delete metadata.external_image_url;
     try {
       const priceMinor = parseUsdMinor(form.price, { allowZero: true });
       if (editing) {
@@ -805,6 +829,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
               : null,
             visibility: form.visibility,
             state: form.state,
+            metadata,
             category_ids: form.categoryIds,
           }),
         });
@@ -820,6 +845,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
             price_minor: priceMinor,
             currency: "USD",
             destination: form.destination.trim(),
+            metadata,
             external_key: form.externalKey.trim() || undefined,
             featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
             compare_at_price_minor: form.compareAtPrice.trim()
@@ -862,8 +888,11 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         setError("Enter a title, short description, and access URL before previewing.");
         return;
       }
-      const listing: Listing = {
-        id: `preview-${crypto.randomUUID()}`,
+      previewIdentity.current ??= listingId
+        ? `listing-${listingId}`
+        : `editor-${crypto.randomUUID()}`;
+      const previewListing: Listing = {
+        id: `preview-${previewIdentity.current}`,
         title: form.title.trim(),
         short_description: form.shortDescription,
         long_description: form.longDescription,
@@ -876,7 +905,13 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         categories: categories
           .filter((category) => form.categoryIds.includes(category.id))
           .map(({ id, name, slug }) => ({ id, name, slug })),
-        metadata: {},
+        metadata: (() => {
+          const metadata = { ...(listing?.metadata ?? {}) };
+          if (form.imageSource === "external" && form.externalImageUrl.trim())
+            metadata.external_image_url = form.externalImageUrl.trim();
+          else delete metadata.external_image_url;
+          return metadata;
+        })(),
         state: form.state,
         featured_position: form.featuredPosition ? Number(form.featuredPosition) : null,
         rating: null,
@@ -890,13 +925,18 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           alt_text: file.name,
         })),
       };
-      sessionStorage.setItem("cliqero.operator.listing-preview", JSON.stringify(listing));
-      const tab = window.open("/operator/catalogue/preview", "_blank");
+      const storageKey = `cliqero.operator.listing-preview:${previewIdentity.current}`;
+      localStorage.setItem(storageKey, JSON.stringify(previewListing));
+      const url = `/operator/catalogue/preview?session=${encodeURIComponent(previewIdentity.current)}&revision=${Date.now()}`;
+      const tab = openOperatorPreviewWindow(
+        url,
+        operatorPreviewWindowName("catalogue", previewIdentity.current),
+      );
       if (!tab) {
+        localStorage.removeItem(storageKey);
         setError("Allow pop-ups to open the private preview.");
         return;
       }
-      tab.opener = null;
     } catch (cause) {
       setError(errorMessage(cause));
     }
@@ -920,39 +960,42 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       sectionTitle={editing ? "Listing details" : "New listing details"}
       sectionDescription="Save catalogue fields through the existing listing workflow."
       headerActions={
-        listing ? (
-          <Button asChild type="button" variant="secondary" size="xs">
-            <Link
-              href={listing.state === "published" ? `/listings/${listing.id}` : "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => {
-                if (listing.state === "published") return;
-                event.preventDefault();
-                void openResolvedWindow(
-                  async () =>
-                    (
-                      await apiFetch<{ url: string }>(
-                        `/internal/listings/${listing.id}/preview-token`,
-                      )
-                    ).url,
-                );
-              }}
-            >
-              Open listing
-            </Link>
-          </Button>
-        ) : (
+        <>
           <Button type="button" variant="secondary" size="xs" onClick={openDraftPreview}>
             Preview
           </Button>
-        )
+          {listing && (
+            <Button asChild type="button" variant="outline" size="xs">
+              <Link
+                href={listing.state === "published" ? `/listings/${listing.id}` : "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => {
+                  if (listing.state === "published") return;
+                  event.preventDefault();
+                  void openResolvedWindow(
+                    async () =>
+                      (
+                        await apiFetch<{ url: string }>(
+                          `/internal/listings/${listing.id}/preview-token`,
+                        )
+                      ).url,
+                  );
+                }}
+              >
+                Open listing
+              </Link>
+            </Button>
+          )}
+        </>
       }
       onSubmit={save}
       afterFields={
         editing && listing ? (
           <>
-            <CatalogueMedia listing={listing} onChange={setListing} />
+            {form.imageSource === "uploaded" && (
+              <CatalogueMedia listing={listing} onChange={setListing} />
+            )}
             <CatalogueIntegrations listingId={listing.id} />
           </>
         ) : null
@@ -1035,6 +1078,33 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
         </div>
       </div>
       <div className="grid gap-2">
+        <Label htmlFor="listing-image-source">Listing image source</Label>
+        <Select
+          id="listing-image-source"
+          value={form.imageSource}
+          onChange={(event) =>
+            setForm({ ...form, imageSource: event.target.value as "uploaded" | "external" })
+          }
+        >
+          <option value="uploaded">Uploaded image (Cliqero storage)</option>
+          <option value="external">External image URL</option>
+        </Select>
+        {form.imageSource === "external" && (
+          <Input
+            id="listing-external-image-url"
+            type="url"
+            maxLength={2000}
+            placeholder="https://example.test/image.webp"
+            aria-label="External image URL"
+            value={form.externalImageUrl}
+            onChange={(event) => setForm({ ...form, externalImageUrl: event.target.value })}
+          />
+        )}
+        <p className="text-xs leading-5 text-slate-500">
+          Uploaded image files use Cliqero storage; external images load from their URL.
+        </p>
+      </div>
+      <div className="grid gap-2">
         <Label htmlFor="listing-visibility">Visibility</Label>
         <Select
           id="listing-visibility"
@@ -1064,7 +1134,7 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
           Published listings require a short description.
         </p>
       </div>
-      {!editing && (
+      {!editing && form.imageSource === "uploaded" && (
         <div className="grid gap-3">
           <Label htmlFor="listing-staged-media">Listing images (optional)</Label>
           <Input
@@ -1127,11 +1197,26 @@ export function OperatorCatalogueEditor({ listingId }: { listingId?: string }) {
       {!editing && (
         <div className="grid gap-2">
           <Label htmlFor="listing-external-key">External key (optional)</Label>
-          <Input
-            id="listing-external-key"
-            value={form.externalKey}
-            onChange={(event) => setForm({ ...form, externalKey: event.target.value })}
-          />
+          <div className="flex gap-2">
+            <Input
+              id="listing-external-key"
+              value={form.externalKey}
+              onChange={(event) => {
+                externalKeyTouched.current = true;
+                setForm({ ...form, externalKey: event.target.value });
+              }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                externalKeyTouched.current = true;
+                setForm({ ...form, externalKey: newListingExternalKey() });
+              }}
+            >
+              Regenerate
+            </Button>
+          </div>
           <p className="text-xs leading-5 text-slate-500">
             Useful for deterministic imports and reconciliation.
           </p>
@@ -1159,10 +1244,14 @@ export function OperatorCatalogueDraftPreview() {
   const [listing, setListing] = useState<Listing | null>(null);
   useEffect(() => {
     try {
-      const value = sessionStorage.getItem("cliqero.operator.listing-preview");
+      const session = new URLSearchParams(window.location.search).get("session");
+      if (!session || !/^(?:listing|editor)-[A-Za-z0-9-]+$/.test(session)) return;
+      const storageKey = `cliqero.operator.listing-preview:${session}`;
+      const value = localStorage.getItem(storageKey);
       // The private draft is external browser state and is only readable after mount.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (value) setListing(JSON.parse(value) as Listing);
+      localStorage.removeItem(storageKey);
     } catch {
       setListing(null);
     }

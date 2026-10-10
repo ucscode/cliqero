@@ -299,6 +299,8 @@ describe("operator console shared page migration", () => {
     expect(html).toContain("Status");
     expect(html).toContain('value="draft" selected="">Draft');
     expect(html).toContain('value="published">Published');
+    expect(html).not.toContain("Manage categories");
+    expect(html).toContain(">Preview</button>");
   });
 
   it.each([

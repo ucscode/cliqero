@@ -690,16 +690,26 @@ export function OperatorUserDetail({
       fieldsTitle="Identity"
       fieldsSurface={false}
       headerActions={
-        canManage && !account.deletedAt ? (
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={deleting}
-            onClick={() => void deleteAccount()}
-          >
-            {deleting ? "Deleting…" : "Delete user"}
+        <>
+          <Button asChild type="button" variant="secondary">
+            <Link href="/operator/users">All accounts</Link>
           </Button>
-        ) : undefined
+          {canManage && !account.deletedAt && (
+            <>
+              <Button asChild type="button" variant="secondary">
+                <Link href={`/operator/users/${account.id}/edit`}>Edit account</Link>
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleting}
+                onClick={() => void deleteAccount()}
+              >
+                {deleting ? "Deleting…" : "Delete user"}
+              </Button>
+            </>
+          )}
+        </>
       }
       fields={[
         { label: "Account ID", value: account.id, className: "break-all" },
@@ -1035,8 +1045,10 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
             country: country || null,
           }),
         });
-        router.push(`/operator/users/${account.id}`);
-        router.refresh();
+        setUsername(account.username);
+        setEmail(account.email ?? "");
+        setCountry(account.country ?? "");
+        toast.success("Account changes saved.");
       }
     } catch (cause) {
       setError(message(cause));
@@ -1063,6 +1075,13 @@ export function OperatorUserForm({ accountId }: { accountId?: string }) {
       submitLabel={create ? "Create user" : "Save changes"}
       savingLabel={create ? "Creating…" : "Saving…"}
       sectionTitle={create ? "Account details" : "Editable profile fields"}
+      headerActions={
+        !create && accountId ? (
+          <Button asChild type="button" variant="secondary">
+            <Link href={`/operator/users/${accountId}`}>View account</Link>
+          </Button>
+        ) : undefined
+      }
     >
       <OperatorUserFormFields
         username={username}

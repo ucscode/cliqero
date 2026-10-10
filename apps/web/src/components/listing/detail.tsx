@@ -20,6 +20,7 @@ import { TextLink } from "../text-link";
 import { ListingReviews } from "./reviews";
 import { ListingPrice, isFreeListingPrice } from "./price";
 import { Star } from "lucide-react";
+import { externalListingImageUrl } from "@/modules/listing/external-image";
 
 export function shouldRenderListingReviews(reviewsVisible: boolean) {
   return reviewsVisible;
@@ -126,6 +127,7 @@ export function ListingDetail({
   const currentListing = listing;
   const image =
     currentListing.media.find((media) => media.id === selectedMediaId) ?? currentListing.media[0];
+  const imageUrl = externalListingImageUrl(currentListing.metadata) ?? image?.url;
   const hasApprovedReviews = (currentListing.rating?.count ?? 0) > 0;
   const approvedRating = hasApprovedReviews ? currentListing.rating! : null;
   function buy() {
@@ -163,11 +165,11 @@ export function ListingDetail({
         className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]"
       >
         <div className="grid content-start gap-4">
-          {image ? (
+          {imageUrl ? (
             <div className="flex aspect-[4/3] max-h-[620px] items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
               <img
-                src={image.url}
-                alt={image.alt_text || currentListing.title}
+                src={imageUrl}
+                alt={image?.alt_text || currentListing.title}
                 className="block max-h-full w-full object-contain"
               />
             </div>

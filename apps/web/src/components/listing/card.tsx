@@ -9,6 +9,7 @@ import { Card } from "../ui/card";
 import { ListingPrice } from "./price";
 import { ListingDescription } from "./description";
 import { LockKeyhole, Star } from "lucide-react";
+import { externalListingImageUrl } from "@/modules/listing/external-image";
 
 export function compactCategoryLabel(categories: readonly { name: string }[]) {
   const ordered = [...categories].sort((a, b) => {
@@ -28,14 +29,15 @@ export function ListingCard({
   reviewsVisible: boolean;
 }) {
   const image = listing.media[0];
+  const imageUrl = externalListingImageUrl(listing.metadata) ?? image?.url;
   return (
     <Card className="flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5 hover:border-emerald-300">
       <div className="relative">
         <Link href={`/listings/${listing.id}`} className="block">
-          {image ? (
+          {imageUrl ? (
             <img
-              src={image.url}
-              alt={image.alt_text || listing.title}
+              src={imageUrl}
+              alt={image?.alt_text || listing.title}
               className="block aspect-[1.34] w-full object-cover"
             />
           ) : (

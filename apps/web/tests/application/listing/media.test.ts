@@ -49,8 +49,10 @@ describe("listing media storage instance selection", () => {
       } as never,
       registry,
       { transaction: async (operation) => operation() },
-      resolveCatalogueMediaProvider({ catalogue: { media_provider: "catalogue_public" } }, registry)
-        .name,
+      resolveCatalogueMediaProvider(
+        { catalogue: { media_provider: "catalogue_public" }, blog: {} },
+        registry,
+      ).name,
     );
 
     const sellerMedia = await service.create(owner, listingId, {

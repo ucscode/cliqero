@@ -372,4 +372,18 @@ describe("operator capability administration", () => {
     );
     expect(source).toContain('backHref="/operator/users"');
   });
+
+  it("keeps successful account edits on the edit page and exposes explicit account navigation", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/operator/users.tsx"),
+      "utf8",
+    );
+    expect(source).toContain('toast.success("Account changes saved.")');
+    expect(source).toContain(">View account</Link>");
+    expect(source).toContain(">All accounts</Link>");
+    expect(source).toContain(">Edit account</Link>");
+    expect(source).toContain("setUsername(account.username)");
+    expect(source).toContain('setEmail(account.email ?? "")');
+    expect(source).toContain('setCountry(account.country ?? "")');
+  });
 });

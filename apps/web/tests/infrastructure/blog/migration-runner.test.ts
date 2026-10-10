@@ -41,6 +41,7 @@ describe("authoritative Blog SQLite schema", () => {
     expect(tables).toEqual([
       "blog_categories",
       "blog_idempotency",
+      "blog_media_assets",
       "blog_post_categories",
       "blog_post_tags",
       "blog_posts",
@@ -80,7 +81,7 @@ describe("authoritative Blog SQLite schema", () => {
     ).toContain("expires_at");
     expect(
       fs.readdirSync(migrationDirectory).filter((name) => /^\d{4}_.+\.sql$/.test(name)),
-    ).toEqual(["0001_initial_blog_schema.sql"]);
+    ).toEqual(["0001_initial_blog_schema.sql", "0002_blog_featured_media.sql"]);
   });
 
   it("fails clearly when an incompatible stale Blog table already exists", () => {
@@ -89,12 +90,12 @@ describe("authoritative Blog SQLite schema", () => {
     db.exec("create table blog_posts (legacy_id text primary key)");
 
     expect(() => applyBlogMigrations(db, migrationDirectory)).toThrow(
-      /does not match the current baseline.*explicitly reset/i,
+      /does not match any known migration checkpoint/i,
     );
     expect(db.pragma("table_info(blog_posts)")).toMatchObject([{ name: "legacy_id" }]);
   });
 
-  it("recognizes the previous baseline when only its IF NOT EXISTS spelling differs", () => {
+  it("upgrades the previous baseline additively without losing existing Blog records", () => {
     const db = new Database(":memory:");
     databases.push(db);
     const schema = fs
@@ -102,8 +103,20 @@ describe("authoritative Blog SQLite schema", () => {
       .replace(/create (table|index|unique index) /gi, "create $1 if not exists ");
     db.exec(schema);
 
+    db.prepare(
+      "insert into blog_posts(id,slug,title,excerpt,content_markdown,status,created_at,updated_at) values(?,?,?,?,?,?,?,?)",
+    ).run("existing-post", "existing", "Existing", "Excerpt", "Body", "draft", 1000, 1000);
+
     expect(() => applyBlogMigrations(db, migrationDirectory)).not.toThrow();
     expect(db.pragma("table_info(blog_posts)")).toHaveLength(14);
+    expect(db.prepare("select title from blog_posts where id='existing-post'").get()).toEqual({
+      title: "Existing",
+    });
+    expect(
+      db
+        .prepare("select name from sqlite_master where type='table' and name='blog_media_assets'")
+        .get(),
+    ).toBeTruthy();
   });
 
   it("initializes the application Blog database from the authoritative baseline", () => {
@@ -119,7 +132,7 @@ describe("authoritative Blog SQLite schema", () => {
         database.sqlite
           .prepare("select name from sqlite_master where type='table' and name like 'blog_%'")
           .all(),
-      ).toHaveLength(7);
+      ).toHaveLength(8);
     } finally {
       closeBlogDatabaseForTests();
       if (previousPath === undefined) delete process.env.BLOG_DATABASE_PATH;

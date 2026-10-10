@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 
-const initialSchema = "0001_initial_blog_schema.sql";
+const migrationFile = /^\d{4}_[a-z0-9_]+\.sql$/;
 
 export function blogMigrationDirectory(cwd = process.cwd()) {
   const webRoot =
@@ -17,22 +17,35 @@ export function applyBlogMigrations(
   sqlite: Database.Database,
   directory = blogMigrationDirectory(),
 ) {
-  const schema = fs.readFileSync(path.join(directory, initialSchema), "utf8");
+  const files = fs
+    .readdirSync(directory)
+    .filter((file) => migrationFile.test(file))
+    .sort();
+  if (!files.length) throw new Error("Blog SQLite schema migrations are missing");
   const current = schemaObjects(sqlite);
-  if (current.length) {
-    const expectedDatabase = new Database(":memory:");
-    try {
-      expectedDatabase.exec(schema);
-      if (!sameSchemaObjects(current, schemaObjects(expectedDatabase)))
-        throw new Error(
-          "Blog SQLite database does not match the current baseline; explicitly reset the development Blog database.",
-        );
-      return;
-    } finally {
-      expectedDatabase.close();
-    }
+  if (!current.length) {
+    sqlite.transaction(() => {
+      for (const file of files) sqlite.exec(fs.readFileSync(path.join(directory, file), "utf8"));
+    })();
+    return;
   }
-  sqlite.exec(schema);
+
+  const expectedDatabase = new Database(":memory:");
+  try {
+    let matchedPrefix = 0;
+    for (let index = 0; index < files.length; index++) {
+      expectedDatabase.exec(fs.readFileSync(path.join(directory, files[index]!), "utf8"));
+      if (sameSchemaObjects(current, schemaObjects(expectedDatabase))) matchedPrefix = index + 1;
+    }
+    if (!matchedPrefix)
+      throw new Error("Blog SQLite database does not match any known migration checkpoint.");
+    sqlite.transaction(() => {
+      for (const file of files.slice(matchedPrefix))
+        sqlite.exec(fs.readFileSync(path.join(directory, file), "utf8"));
+    })();
+  } finally {
+    expectedDatabase.close();
+  }
 }
 
 function schemaObjects(sqlite: Database.Database) {
