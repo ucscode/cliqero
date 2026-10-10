@@ -214,6 +214,7 @@ describe("YAML environment placeholders", () => {
       "config/security/captcha.example.yaml",
       "config/site.example.yaml",
       "config/storage/media.example.yaml",
+      "config/storage/uploads.example.yaml",
       "config/storefront.example.yaml",
     ];
 

@@ -150,11 +150,15 @@ The platform media registry is configured in
 ```bash
 mkdir -p config/storage
 cp config/storage/media.example.yaml config/storage/media.yaml
+cp config/storage/uploads.example.yaml config/storage/uploads.yaml
 ```
 
 The default Docker filesystem root is `/var/lib/cliqero/media` and is persisted
 by the `media-data` volume. Listing media is one consumer of this shared
-registry. The real media YAML is required at runtime and remains ignored.
+registry. The real media and uploads YAML files are required at runtime and
+remain ignored. The uploads configuration selects the named storage instance
+for new catalogue media; when omitted, the registry's `default_provider` is
+used. Provider connection settings stay exclusively in `media.yaml`.
 
 Every Cliqero configuration YAML uses `parameters` as its document envelope.
 `imports` is optional and is declared only when that file imports other

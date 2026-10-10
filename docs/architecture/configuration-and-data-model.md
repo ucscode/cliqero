@@ -26,8 +26,11 @@ the persisted storage instance identity; the nested `provider` value is only
 the driver implementation. `visibility: public` permits public URL generation,
 while `visibility: private` is reserved for server-side access. Visibility is
 provider capability metadata, not a feature-level policy: each operation checks
-the capability it actually needs. Module-level `media_provider` values
-reference these instance keys.
+the capability it actually needs. Catalogue upload selection is configured
+separately in `config/storage/uploads.yaml`; its optional
+`catalogue.media_provider` references one of these instance keys and defaults
+to `media.default_provider`. Other provider-owned upload settings remain with
+their owning modules.
 
 Withdrawal methods are data-collection/presentation definitions in
 `config/modules/withdrawal/methods.yaml`, not payout providers. Define explicit

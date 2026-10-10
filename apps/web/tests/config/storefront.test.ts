@@ -1,6 +1,9 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ObjectStorageRegistry } from "@/modules/storage/object-storage";
-import { loadStorefrontConfiguration, resolveStorefrontMediaProvider } from "@/config/storefront";
+import { loadStorefrontConfiguration } from "@/config/storefront";
+import { configurationEnvelope } from "./yaml-fixture";
 
 describe("storefront configuration", () => {
   it("loads validated YAML storefront limits", () => {
@@ -11,65 +14,26 @@ describe("storefront configuration", () => {
     });
   });
 
-  it("accepts an optional named media instance", () => {
-    expect(
-      loadStorefrontConfiguration("config/storefront.example.yaml").media_provider,
-    ).toBeUndefined();
-  });
-
-  it("resolves configured instances without enforcing feature visibility policy", () => {
-    const provider = (name: string, visibility: "public" | "private") => ({
-      name,
-      visibility,
-      put: async () => ({
-        provider: name,
-        container: "media",
-        key: "key",
-        byteSize: 1,
-        mimeType: "image/png",
-      }),
-      delete: async () => undefined,
-      publicUrl: () => "https://media.example/key",
-    });
-    const storage = new ObjectStorageRegistry("default_public")
-      .register(provider("default_public", "public"))
-      .register(provider("storefront_public", "public"))
-      .register(provider("private_media", "private"));
-    const config = loadStorefrontConfiguration("config/storefront.example.yaml");
-
-    expect(resolveStorefrontMediaProvider(config, storage).name).toBe("default_public");
-    expect(
-      resolveStorefrontMediaProvider({ ...config, media_provider: "storefront_public" }, storage)
-        .name,
-    ).toBe("storefront_public");
-    expect(
-      resolveStorefrontMediaProvider({ ...config, media_provider: "private_media" }, storage).name,
-    ).toBe("private_media");
-  });
-
-  it("allows a private default until an operation requires a public URL", () => {
-    const provider = {
-      name: "private_default",
-      visibility: "private" as const,
-      put: async () => ({
-        provider: "private_default",
-        container: "media",
-        key: "key",
-        byteSize: 1,
-        mimeType: "image/png",
-      }),
-      delete: async () => undefined,
-      publicUrl: () => "https://media.example/key",
-    };
-    const storage = new ObjectStorageRegistry("private_default").register(provider);
-
-    const resolved = resolveStorefrontMediaProvider(
-      loadStorefrontConfiguration("config/storefront.example.yaml"),
-      storage,
-    );
-    expect(resolved.name).toBe("private_default");
-    expect(() =>
-      storage.publicUrl({ provider: resolved.name, container: "media", key: "x" }),
-    ).toThrow("private");
+  it("rejects the former upload-provider setting instead of treating it as storefront policy", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cliqero-storefront-config-"));
+    try {
+      const path = join(root, "storefront.yaml");
+      await writeFile(
+        path,
+        configurationEnvelope(`
+media_provider: filesystem
+home:
+  featured_limit: 6
+catalogue:
+  page_size: 12
+reviews:
+  visible: true
+  page_size: 10
+`),
+      );
+      expect(() => loadStorefrontConfiguration(path)).toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

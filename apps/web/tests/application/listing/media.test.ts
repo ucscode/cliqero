@@ -6,6 +6,7 @@ import {
 } from "@/modules/storage/object-storage";
 import type { ListingMedia } from "@/modules/listing/media/media";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing/media";
+import { resolveCatalogueMediaProvider } from "@/config/uploads";
 import { fixturePng } from "@/infrastructure/postgres/seed/fixture-media";
 
 const listingId = "00000000-0000-4000-8000-000000000001";
@@ -23,17 +24,17 @@ function storageProvider(name: string, visibility: "public" | "private"): Object
       mimeType: input.mimeType,
     })),
     delete: vi.fn(async () => undefined),
-    publicUrl: (locator) => `https://media.example/${locator.key}`,
+    publicUrl: vi.fn((locator) => `https://media.example/${locator.key}`),
   };
 }
 
 describe("listing media storage instance selection", () => {
-  it("uploads new listing media to the selected public instance", async () => {
+  it("uses the configured catalogue instance for seller and Operator uploads", async () => {
     const defaultProvider = storageProvider("default_public", "public");
-    const storefrontProvider = storageProvider("storefront_public", "public");
+    const catalogueProvider = storageProvider("catalogue_public", "public");
     const registry = new ObjectStorageRegistry("default_public")
       .register(defaultProvider)
-      .register(storefrontProvider);
+      .register(catalogueProvider);
     let saved: any;
     const service = new ListingMediaService(
       { findById: async () => ({ sellerId: owner.id }) } as never,
@@ -48,21 +49,27 @@ describe("listing media storage instance selection", () => {
       } as never,
       registry,
       { transaction: async (operation) => operation() },
-      "storefront_public",
+      resolveCatalogueMediaProvider({ catalogue: { media_provider: "catalogue_public" } }, registry)
+        .name,
     );
 
-    const media = await service.create(owner, listingId, {
+    const sellerMedia = await service.create(owner, listingId, {
+      bytes: fixturePng(35, 120, 95),
+      mimeType: "image/png",
+    });
+    const operatorMedia = await service.createCatalogue(owner, listingId, {
       bytes: fixturePng(35, 120, 95),
       mimeType: "image/png",
     });
 
-    expect(media.storageProvider).toBe("storefront_public");
-    expect((storefrontProvider.put as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    expect(sellerMedia.storageProvider).toBe("catalogue_public");
+    expect(operatorMedia.storageProvider).toBe("catalogue_public");
+    expect((catalogueProvider.put as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
     expect((defaultProvider.put as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
-    expect(service.publicUrl(media)).toContain("https://media.example/");
+    expect(service.publicUrl(sellerMedia)).toContain("https://media.example/");
   });
 
-  it("allows a private selected storefront instance until public URL generation", () => {
+  it("allows a private selected catalogue instance until public URL generation", () => {
     const registry = new ObjectStorageRegistry("private_media").register(
       storageProvider("private_media", "private"),
     );
@@ -109,5 +116,23 @@ describe("listing media storage instance selection", () => {
     expect(deleteById).toHaveBeenCalledWith(value.id);
     expect(result).toMatchObject({ id: value.id, state: "deleted" });
     expect(value.state).toBe("deletion_pending");
+  });
+
+  it("retrieves existing media URLs through the persisted provider identity", () => {
+    const persistedProvider = storageProvider("historical_media", "public");
+    const defaultProvider = storageProvider("new_default", "public");
+    const registry = new ObjectStorageRegistry("new_default")
+      .register(defaultProvider)
+      .register(persistedProvider);
+    const service = new ListingMediaService({} as never, {} as never, registry, {} as never);
+
+    expect(
+      service.publicUrl({
+        storageProvider: "historical_media",
+        storageContainer: "legacy-container",
+        objectKey: "legacy/key.png",
+      } as ListingMedia),
+    ).toBe("https://media.example/legacy/key.png");
+    expect(defaultProvider.publicUrl).not.toHaveBeenCalled();
   });
 });

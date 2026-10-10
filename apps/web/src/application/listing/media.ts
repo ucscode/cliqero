@@ -13,7 +13,7 @@ export class ListingMediaService {
     private media: ListingMediaRepository,
     private storage: ObjectStorageRegistry,
     private uow: UnitOfWork,
-    private storefrontProviderName = storage.default().name,
+    private catalogueProviderName = storage.default().name,
   ) {}
   async create(
     owner: Account,
@@ -31,7 +31,7 @@ export class ListingMediaService {
     await this.owned(owner, listingId, catalogue);
     const image = inspectImage(input.bytes, input.mimeType);
     const id = newId(),
-      provider = this.storage.get(this.storefrontProviderName),
+      provider = this.storage.get(this.catalogueProviderName),
       key = generatedObjectKey(listingId, id, image.mimeType);
     const stored = await provider.put({ key, bytes: input.bytes, mimeType: image.mimeType });
     const value: ListingMedia = {

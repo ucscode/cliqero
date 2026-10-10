@@ -1,0 +1,5 @@
+parameters:
+  # Catalogue uploads select a named instance from config/storage/media.yaml.
+  # Omit media_provider (or the catalogue block) to use media.default_provider.
+  catalogue:
+    media_provider: filesystem

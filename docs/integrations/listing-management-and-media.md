@@ -47,8 +47,9 @@ template. Each map key under `providers` is a storage instance identity, while
 that instance's `provider` field selects the driver implementation. Persisted
 `storage_provider` values contain the instance key, so multiple filesystem,
 Supabase, or R2 instances can coexist without rewriting existing records.
-Listing media uses `storefront.media_provider` when present and otherwise uses
-`media.default_provider`. Bank-transfer proofs use
+Catalogue uploads use `catalogue.media_provider` in
+`config/storage/uploads.yaml` when present and otherwise use
+`default_provider` from `config/storage/media.yaml`. Bank-transfer proofs use
 `bank_transfer.config.media_provider`, which must name a configured instance.
 Neither feature imposes a product-level public/private storage policy;
 credentials never enter media records or API responses.

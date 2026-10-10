@@ -100,7 +100,7 @@ import {
 import { PostgresListingMediaRepository } from "@/infrastructure/postgres/listing/media";
 import { PostgresListingReviewRepository } from "@/infrastructure/postgres/listing/reviews";
 import { loadMediaStorage } from "@/providers/storage/media-config";
-import { loadStorefrontConfiguration, resolveStorefrontMediaProvider } from "@/config/storefront";
+import { loadUploadsConfiguration, resolveCatalogueMediaProvider } from "@/config/uploads";
 import { ListingMediaDeletionProcessor, ListingMediaService } from "@/application/listing/media";
 import { ListingTransferService } from "@/application/listing/transfer";
 import { ListingReviewService } from "@/application/listing/reviews";
@@ -187,8 +187,8 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
       onFailure: (error) => recordConfigurationFailure("storage", error.instanceName, error),
     }),
   );
-  const storefrontProviderName = lazy(
-    () => resolveStorefrontMediaProvider(loadStorefrontConfiguration(), objectStorage()).name,
+  const catalogueMediaProviderName = lazy(
+    () => resolveCatalogueMediaProvider(loadUploadsConfiguration(), objectStorage()).name,
   );
   const listingMedia = lazy(
     () =>
@@ -197,7 +197,7 @@ export function createContainer(databaseUrl: string, options: ContainerOptions =
         listingMediaRepository(),
         objectStorage(),
         database,
-        storefrontProviderName(),
+        catalogueMediaProviderName(),
       ),
   );
   const listingMediaDeletion = lazy(
